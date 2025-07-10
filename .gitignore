@@ -1,0 +1,32 @@
+# Secrets
+bot/.env
+bot/.env.local
+frontend/.env
+frontend/.env.local
+.evolution-go/.env
+
+# Build artifacts
+bot/bot-ocp
+bot/*.exe
+bot-ocp
+frontend/dist/
+frontend/node_modules/
+bot/vendor/
+
+# Uploads (large binary files, managed separately)
+bot/uploads/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log
+*.tmp
+*.swp
+
+# OpenCode / AI tooling
+.opencode/
+.agents/
+skills-lock.json
+AGENTS.md
