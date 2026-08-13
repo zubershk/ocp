@@ -1,0 +1,27 @@
+{
+  "name": "Orange Cheese Pizza",
+  "short_name": "OCP Pizza",
+  "description": "Order authentic cheesy pizzas online. Free delivery 11 AM – 4 AM.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fefcf8",
+  "theme_color": "#ea580c",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["food", "restaurants"],
+  "lang": "en",
+  "dir": "ltr"
+}
