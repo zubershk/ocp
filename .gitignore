@@ -3,7 +3,7 @@ bot/.env
 bot/.env.local
 frontend/.env
 frontend/.env.local
-.evolution-go/.env
+evolution-go/.env
 
 # Build artifacts
 bot/bot-ocp
@@ -12,6 +12,18 @@ bot-ocp
 frontend/dist/
 frontend/node_modules/
 bot/vendor/
+evolution-go/evolution-go-manager/node_modules/
+evolution-go/evolution-go-manager/dist/
+evolution-go/evolution-go-manager/tsconfig.tsbuildinfo
+
+# Evolution GO binaries and runtime
+evolution-go/bot/
+evolution-go/evolution-go
+evolution-go/evolution-go.err
+evolution-go/evolution-go.log
+evolution-go/manager.backup/
+evolution-go/logs/
+evolution-go/passkey-helper/
 
 # Uploads (large binary files, managed separately)
 bot/uploads/

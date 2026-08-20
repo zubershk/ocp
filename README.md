@@ -44,7 +44,7 @@ Full-stack pizza ordering platform with WhatsApp integration, real-time order ma
 
 ```
 Tech-OCP/
-├── bot/                          # Go backend
+├── bot/                          # Go backend (OCP API server)
 │   ├── main.go                   # Entry point, routes, graceful shutdown
 │   ├── config/config.go          # Environment variable loading
 │   ├── database/database.go      # PostgreSQL connection pool
@@ -79,8 +79,18 @@ Tech-OCP/
 │   │   ├── data/                 # Static data (menu fallback, outlets, offers)
 │   │   └── types/                # TypeScript interfaces
 │   ├── public/                   # PWA manifest, service worker, offline page
+│   ├── vercel.json               # Vercel deployment config
 │   ├── package.json
 │   └── vite.config.ts
+├── evolution-go/                 # WhatsApp API gateway (Evolution GO)
+│   ├── cmd/evolution-go/main.go  # Entry point
+│   ├── pkg/                      # Core library (chat, message, instance, etc.)
+│   ├── evolution-go-manager/     # Manager dashboard (Vue/React frontend)
+│   ├── docs/                     # Swagger API docs
+│   ├── docker/                   # Docker compose configs
+│   ├── Dockerfile
+│   ├── .env.example
+│   └── go.mod / go.sum
 ├── start-ocp.sh                  # Production startup script
 ├── OCP-ControlPanel.ps1          # Windows control panel
 └── .gitignore
@@ -169,6 +179,28 @@ cd bot && go build -o bot-ocp . && ./bot-ocp
 ```
 
 The backend serves the API on `:8090`. The frontend is built to `frontend/dist/` and served separately (nginx, Vite preview, etc.).
+
+### Deploying Frontend to Vercel
+
+1. Push the repo to GitHub
+2. Go to [vercel.com](https://vercel.com) and import the `zubershk/ocp` repo
+3. Set the root directory to `frontend`
+4. Add environment variable: `VITE_API_BASE_URL` = your backend URL (e.g., `https://your-server.com`)
+5. Deploy
+
+The `vercel.json` is already configured with SPA routing and security headers.
+
+### Deploying Backend
+
+The Go backend needs to run on a server with PostgreSQL access. Options:
+- **Railway** / **Render** — easy Go deployment with managed PostgreSQL
+- **VPS** (DigitalOcean, Hetzner) — full control, run `start-ocp.sh`
+- **Your own machine** — for local development only
+
+Set `CORS_ALLOWED_ORIGINS` in `bot/.env` to include your Vercel domain:
+```
+CORS_ALLOWED_ORIGINS=https://your-app.vercel.app
+```
 
 For development, run both simultaneously:
 ```bash
@@ -259,7 +291,7 @@ Login with your `BOT_ADMIN_KEY`. The key is stored in browser localStorage only.
 
 ## WhatsApp Integration
 
-This system uses **Evolution GO** as the WhatsApp API gateway.
+This system uses **Evolution GO** as the WhatsApp API gateway. The source code is included in `evolution-go/`.
 
 **How it works:**
 1. Customer places an order on the website
@@ -267,11 +299,27 @@ This system uses **Evolution GO** as the WhatsApp API gateway.
 3. When order status changes (Preparing → Out for Delivery), a WhatsApp message is sent to the customer
 4. Incoming WhatsApp messages are persisted in the database for the admin Live Chat tab
 
-**Setup:**
-1. Install Evolution GO and create an instance named `OCP`
-2. Scan the QR code with the restaurant's WhatsApp number
-3. Set the webhook URL in Evolution GO to `http://YOUR_SERVER:8090/webhook/evolution`
-4. Configure the instance token and API key in `bot/.env`
+**Setting up Evolution GO:**
+
+```bash
+cd evolution-go
+cp .env.example .env
+# Edit .env with your PostgreSQL connection and config
+
+# Build and run
+go build -o evolution-go ./cmd/evolution-go
+./evolution-go
+
+# Or use Docker
+docker compose -f docker/examples/docker-compose.yml up -d
+```
+
+**Connecting to OCP:**
+1. Open the Evolution GO manager at `http://localhost:8081`
+2. Create an instance named `OCP`
+3. Scan the QR code with the restaurant's WhatsApp number
+4. Set the webhook URL to `http://YOUR_SERVER:8090/webhook/evolution`
+5. Configure the instance token and API key in `bot/.env`
 
 ## Windows Control Panel
 
