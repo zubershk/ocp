@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -63,9 +64,14 @@ func RateLimit(limit int, window time.Duration) gin.HandlerFunc {
 	lim := newIPLimiter(limit, window)
 	go lim.cleanupLoop()
 	return func(c *gin.Context) {
-		ip := c.ClientIP()
+		// Use RemoteAddr directly to prevent spoofing via X-Forwarded-For.
+		// If behind a trusted reverse proxy (nginx/cloudflare), set TrustedProxies in gin instead.
+		ip := c.Request.RemoteAddr
+		if idx := strings.LastIndex(ip, ":"); idx != -1 {
+			ip = ip[:idx] // strip port
+		}
 		if ip == "" {
-			ip = c.Request.RemoteAddr
+			ip = "unknown"
 		}
 		if !lim.allow(ip) {
 			c.JSON(http.StatusTooManyRequests, gin.H{"error": "too many requests — please slow down"})
