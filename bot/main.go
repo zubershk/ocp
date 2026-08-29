@@ -18,6 +18,8 @@ import (
 	"orangecheesepizza/bot/services"
 )
 
+const maxRequestBodySize = 1 << 20 // 1 MB
+
 func main() {
 	// Load .env — try repo root then bot/ so `go run ./bot` and systemd both work.
 	// Production systemd supplies EnvironmentFile, so this is best-effort for dev.
@@ -86,25 +88,41 @@ func main() {
 	// Setup Gin router
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.Default()
+	// Enforce max request body size to prevent OOM via large payloads
+	router.Use(func(c *gin.Context) {
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxRequestBodySize)
+		c.Next()
+	})
 	router.Use(handlers.SecurityHeaders())
 	// SaaS media — menu images live here, served to site + bot via /uploads/<file>
 	_ = os.MkdirAll("./uploads", 0755)
 	router.Static("/uploads", "./uploads")
 
-	// Webhook endpoints — verify secret if EVOLUTION_WEBHOOK_SECRET is set
+	// Webhook endpoints — REJECT if secret is not configured (prevents impersonation)
 	webhookAuth := func(c *gin.Context) {
-		if cfg.WebhookSecret != "" && c.GetHeader("X-Webhook-Secret") != cfg.WebhookSecret && c.GetHeader("X-Api-Key") != cfg.WebhookSecret {
-			// allow Evolution instance token as fallback when secret equals instance token
-			if c.GetHeader("apikey") != cfg.WebhookSecret {
-				c.JSON(401, gin.H{"error": "invalid webhook secret"})
-				c.Abort()
-				return
-			}
+		if cfg.WebhookSecret == "" {
+			log.Println("SECURITY: EVOLUTION_WEBHOOK_SECRET not set — rejecting webhook")
+			c.JSON(500, gin.H{"error": "webhook not configured"})
+			c.Abort()
+			return
+		}
+		// Verify via X-Webhook-Secret, X-Api-Key, or apikey header
+		provided := c.GetHeader("X-Webhook-Secret")
+		if provided == "" {
+			provided = c.GetHeader("X-Api-Key")
+		}
+		if provided == "" {
+			provided = c.GetHeader("apikey")
+		}
+		if provided != cfg.WebhookSecret {
+			c.JSON(401, gin.H{"error": "unauthorized"})
+			c.Abort()
+			return
 		}
 		c.Next()
 	}
-	router.POST("/webhook/evolution", webhookAuth, webhookHandler.HandleWebhook)
-	router.POST("/webhook/button", webhookAuth, webhookHandler.HandleButtonClick)
+	router.POST("/webhook/evolution", webhookAuth, handlers.RateLimit(300, time.Minute), webhookHandler.HandleWebhook)
+	router.POST("/webhook/button", webhookAuth, handlers.RateLimit(300, time.Minute), webhookHandler.HandleButtonClick)
 
 	// Public website API
 	apiHandler := handlers.NewApiHandler(menuService, websiteOrderService)
@@ -161,6 +179,9 @@ func main() {
 		adminGroup.GET("/orders/:id", adminHandler.GetOrder)
 		adminGroup.PATCH("/orders/:id/status", adminHandler.RequireRole("owner", "manager", "kitchen"), adminHandler.UpdateOrderStatus)
 		adminGroup.GET("/debug/whatsapp/:phone", adminHandler.DebugWhatsApp)
+		// Campaign runner integration
+		adminGroup.GET("/customers", adminHandler.ListCustomers)
+		adminGroup.POST("/broadcast/send", adminHandler.RequireRole("owner", "manager"), adminHandler.BroadcastSend)
 	}
 
 	// Health / readiness — SaaS observability
@@ -169,7 +190,7 @@ func main() {
 	})
 	router.GET("/ready", func(c *gin.Context) {
 		if err := database.DB.Ping(); err != nil {
-			c.JSON(503, gin.H{"status": "not ready", "db": err.Error()})
+			c.JSON(503, gin.H{"status": "not ready"})
 			return
 		}
 		// Evolution is best-effort — don't fail readiness if WA gateway is down, just report
