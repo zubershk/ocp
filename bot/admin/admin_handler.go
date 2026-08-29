@@ -3,11 +3,13 @@ package admin
 import (
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -98,6 +100,12 @@ func auditLog(c *gin.Context, action, target string, details interface{}) {
 	}
 }
 
+// safeError returns a generic message for internal errors, logging the real error server-side.
+func safeError(err error) string {
+	log.Printf("[admin-error] %v", err)
+	return "internal error"
+}
+
 func (h *AdminHandler) RequireAdminKey() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		apiKey := c.GetHeader("X-Admin-Key")
@@ -114,8 +122,8 @@ func (h *AdminHandler) RequireAdminKey() gin.HandlerFunc {
 			c.Next()
 			return
 		}
-		// Fallback to env owner (legacy single-tenant)
-		if apiKey == h.config.BotAdminKey && h.config.BotAdminKey != "" {
+		// Fallback to env owner (legacy single-tenant) — constant-time compare to prevent timing attacks
+		if h.config.BotAdminKey != "" && subtle.ConstantTimeCompare([]byte(apiKey), []byte(h.config.BotAdminKey)) == 1 {
 			c.Set("adminUser", &adminUserCtx{ID: 0, Name: "env_owner", Role: "owner"})
 			c.Set("adminRole", "owner")
 			c.Next()
@@ -151,10 +159,133 @@ func (h *AdminHandler) Health(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
 
+// ListCustomers returns all customers from the database for campaign runner integration.
+func (h *AdminHandler) ListCustomers(c *gin.Context) {
+	limit := 500
+	if l := c.Query("limit"); l != "" {
+		if v, err := strconv.Atoi(l); err == nil && v > 0 && v <= 2000 {
+			limit = v
+		}
+	}
+	offset := 0
+	if o := c.Query("offset"); o != "" {
+		if v, err := strconv.Atoi(o); err == nil && v >= 0 {
+			offset = v
+		}
+	}
+	search := c.Query("search")
+
+	query := `SELECT id, whatsapp_number, COALESCE(name,''), COALESCE(email,''),
+	                 total_orders, total_spent, created_at, last_seen_at
+	          FROM customers`
+	args := []interface{}{}
+	argN := 1
+	if search != "" {
+		query += ` WHERE whatsapp_number ILIKE $` + strconv.Itoa(argN) + ` OR name ILIKE $` + strconv.Itoa(argN)
+		args = append(args, "%"+search+"%")
+		argN++
+	}
+	query += ` ORDER BY last_seen_at DESC NULLS LAST LIMIT $` + strconv.Itoa(argN) + ` OFFSET $` + strconv.Itoa(argN+1)
+	args = append(args, limit, offset)
+
+	rows, err := database.DB.Query(query, args...)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
+		return
+	}
+	defer rows.Close()
+
+	type custResp struct {
+		ID             int     `json:"id"`
+		Phone          string  `json:"phone"`
+		Name           string  `json:"name"`
+		Email          string  `json:"email"`
+		TotalOrders    int     `json:"total_orders"`
+		TotalSpent     float64 `json:"total_spent"`
+		CreatedAt      string  `json:"created_at"`
+		LastSeenAt     *string `json:"last_seen_at"`
+	}
+	var list []custResp
+	for rows.Next() {
+		var cr custResp
+		if err := rows.Scan(&cr.ID, &cr.Phone, &cr.Name, &cr.Email, &cr.TotalOrders, &cr.TotalSpent, &cr.CreatedAt, &cr.LastSeenAt); err != nil {
+			continue
+		}
+		list = append(list, cr)
+	}
+	var total int
+	_ = database.DB.QueryRow(`SELECT COUNT(*) FROM customers`).Scan(&total)
+	c.JSON(http.StatusOK, gin.H{"customers": list, "total": total})
+}
+
+// BroadcastSend sends a text message to multiple phone numbers via Evolution GO.
+func (h *AdminHandler) BroadcastSend(c *gin.Context) {
+	var req struct {
+		Phones   []string `json:"phones" binding:"required"`
+		Message  string   `json:"message" binding:"required"`
+		ImageURL string   `json:"image_url"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
+		return
+	}
+	if len(req.Phones) > 200 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "max 200 recipients per request"})
+		return
+	}
+	if len(req.Message) > 4096 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "message too long (max 4096 chars)"})
+		return
+	}
+
+	type result struct {
+		Phone string `json:"phone"`
+		OK    bool   `json:"ok"`
+		Error string `json:"error,omitempty"`
+	}
+	var results []result
+	success, failed := 0, 0
+
+	for _, raw := range req.Phones {
+		phone := strings.TrimSpace(raw)
+		if phone == "" {
+			continue
+		}
+		// ensure 10-digit
+		phone = strings.ReplaceAll(phone, "+", "")
+		if len(phone) > 10 {
+			phone = phone[len(phone)-10:]
+		}
+		dest := phone
+		if len(phone) == 10 {
+			dest = "91" + phone
+		}
+
+		var sendErr error
+		if req.ImageURL != "" {
+			sendErr = h.evolutionClient.SendMedia(dest, req.ImageURL, "image", req.Message)
+		} else {
+			sendErr = h.evolutionClient.SendText(dest, req.Message)
+		}
+
+		if sendErr != nil {
+			results = append(results, result{Phone: phone, OK: false, Error: sendErr.Error()})
+			failed++
+		} else {
+			// persist outgoing message
+			_ = services.SaveWhatsAppMessage(phone, "out", req.Message, "")
+			results = append(results, result{Phone: phone, OK: true})
+			success++
+		}
+	}
+	auditLog(c, "broadcast_send", "campaign", map[string]interface{}{"total": len(req.Phones), "success": success, "failed": failed})
+	c.JSON(http.StatusOK, gin.H{"success": success, "failed": failed, "results": results})
+}
+
 func (h *AdminHandler) GetMenu(c *gin.Context) {
 	categories, err := h.menuService.GetCategories()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
 	}
 
@@ -188,7 +319,7 @@ func (h *AdminHandler) CreateMenuItem(c *gin.Context) {
 		Available        *bool    `json:"available"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
 		return
 	}
 	slug := strings.TrimSpace(req.Slug)
@@ -229,7 +360,7 @@ func (h *AdminHandler) CreateMenuItem(c *gin.Context) {
 		req.ImageURL, available, req.SortOrder,
 		dietary, req.PizzaSubcategory, req.PizzaType, isSpicy, isJain, isNew).Scan(&id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
 	}
 	item, _ := h.menuService.GetItemByID(id)
@@ -285,7 +416,7 @@ func (h *AdminHandler) UpdateMenuItem(c *gin.Context) {
 		IsNew            *bool    `json:"is_new"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
 		return
 	}
 	existing, err := h.menuService.GetItemByID(id)
@@ -377,7 +508,7 @@ func (h *AdminHandler) UpdateMenuItem(c *gin.Context) {
 		WHERE id=$1
 	`, id, catID, name, slug, desc, price, pr, pm, pl, img, available, sortOrder, dietary, subcat, ptype, isSpicy, isJain, isNew)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
 	}
 	updated, _ := h.menuService.GetItemByID(id)
@@ -393,7 +524,7 @@ func (h *AdminHandler) DeleteMenuItem(c *gin.Context) {
 	}
 
 	if err := h.menuService.DeleteItem(id); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
 	}
 	auditLog(c, "delete_menu_item", strconv.Itoa(id), nil)
@@ -408,13 +539,13 @@ func (h *AdminHandler) CreateCategory(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
 		return
 	}
 
 	cat, err := h.menuService.CreateCategory(req.Name, req.Description, req.SortOrder)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
 	}
 	auditLog(c, "create_category", req.Name, map[string]interface{}{"id": cat.ID})
@@ -477,7 +608,7 @@ func (h *AdminHandler) UploadImage(c *gin.Context) {
 func (h *AdminHandler) GetCategoriesAdmin(c *gin.Context) {
 	cats, err := h.menuService.GetCategoriesWithSlug()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"categories": cats})
@@ -512,7 +643,7 @@ func (h *AdminHandler) GetOrders(c *gin.Context) {
 
 	orders, err := h.orderService.GetAllOrders(limit, offset)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
 	}
 
@@ -536,7 +667,7 @@ func (h *AdminHandler) GetOrder(c *gin.Context) {
 
 	order, err := h.orderService.GetOrderByID(id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
 	}
 	if order == nil {
@@ -559,7 +690,7 @@ func (h *AdminHandler) UpdateOrderStatus(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
 		return
 	}
 
@@ -584,7 +715,7 @@ func (h *AdminHandler) UpdateOrderStatus(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Order not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
 	}
 	if order == nil {
@@ -606,7 +737,7 @@ func (h *AdminHandler) DebugWhatsApp(c *gin.Context) {
 	phone := cleanPhoneParam(c.Param("phone"))
 	state, ctx, err := services.LoadConversationForPhone(phone)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
 	}
 	cart, _ := h.menuService.GetCartDebug(phone)
@@ -637,7 +768,7 @@ func (h *AdminHandler) ListConversations(c *gin.Context) {
 	}
 	list, err := services.ListConversations(limit, offset)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"conversations": list})
@@ -653,7 +784,7 @@ func (h *AdminHandler) GetChatMessages(c *gin.Context) {
 	}
 	msgs, err := services.ListMessages(phone, limit)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
 	}
 	state, ctx, _ := services.LoadConversationForPhone(phone)
@@ -680,7 +811,7 @@ func (h *AdminHandler) SendChatMessage(c *gin.Context) {
 	// Ensure customer exists and put conversation in human mode
 	cust, err := services.GetOrCreateCustomer(phone)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
 	}
 	// Send via Evolution (human) — ensure 91 prefix for India
@@ -711,7 +842,7 @@ func (h *AdminHandler) SetConversationState(c *gin.Context) {
 		return
 	}
 	if err := services.SetConversationState(phone, req.State); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"state": req.State})
@@ -730,7 +861,7 @@ func (h *AdminHandler) GetMeAdmin(c *gin.Context) {
 func (h *AdminHandler) ListAdminUsers(c *gin.Context) {
 	rows, err := database.DB.Query(`SELECT id, name, role, active, created_at::text, last_seen_at::text FROM admin_users ORDER BY id`)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
 	}
 	defer rows.Close()
@@ -754,7 +885,7 @@ func (h *AdminHandler) CreateAdminUser(c *gin.Context) {
 		Role string `json:"role" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
 		return
 	}
 	if req.Role != "owner" && req.Role != "manager" && req.Role != "kitchen" && req.Role != "viewer" {
@@ -769,7 +900,7 @@ func (h *AdminHandler) CreateAdminUser(c *gin.Context) {
 	var id int
 	err := database.DB.QueryRow(`INSERT INTO admin_users (name, key_hash, role) VALUES ($1,$2,$3) RETURNING id`, req.Name, hash, req.Role).Scan(&id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
 	}
 	auditLog(c, "create_admin_user", req.Name, map[string]string{"role": req.Role, "id": strconv.Itoa(id)})
@@ -780,7 +911,7 @@ func (h *AdminHandler) DeleteAdminUser(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 	_, err := database.DB.Exec(`DELETE FROM admin_users WHERE id=$1`, id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
 	}
 	auditLog(c, "delete_admin_user", strconv.Itoa(id), nil)
@@ -796,7 +927,7 @@ func (h *AdminHandler) GetAuditLog(c *gin.Context) {
 	}
 	rows, err := database.DB.Query(`SELECT id, COALESCE(admin_name,'') , action, COALESCE(target,''), COALESCE(details::text,'{}'), COALESCE(ip,''), created_at::text FROM admin_audit_log ORDER BY id DESC LIMIT $1`, limit)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
 	}
 	defer rows.Close()
@@ -897,7 +1028,7 @@ func (h *AdminHandler) GetAnalytics(c *gin.Context) {
 func (h *AdminHandler) GetOutletsAdmin(c *gin.Context) {
 	rows, err := database.DB.Query(`SELECT id, slug, name, address_lines, phones, delivery_hours, online_ordering, active, sort_order FROM restaurant_outlets ORDER BY sort_order, name`)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
 	}
 	defer rows.Close()
@@ -926,7 +1057,7 @@ func (h *AdminHandler) GetOutletsAdmin(c *gin.Context) {
 			_ = phStr
 			_ = addr
 			_ = ph
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 			return
 		}
 		out = append(out, o)
@@ -945,7 +1076,7 @@ func (h *AdminHandler) CreateOutlet(c *gin.Context) {
 		SortOrder      int      `json:"sort_order"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
 		return
 	}
 	online := true
@@ -961,7 +1092,7 @@ func (h *AdminHandler) CreateOutlet(c *gin.Context) {
 		VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id
 	`, req.Slug, req.Name, stringSlice(req.AddressLines), stringSlice(req.Phones), req.DeliveryHours, online, req.SortOrder).Scan(&id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
 	}
 	c.JSON(http.StatusCreated, gin.H{"id": id, "slug": req.Slug})
@@ -979,7 +1110,7 @@ func (h *AdminHandler) UpdateOutlet(c *gin.Context) {
 		SortOrder      *int     `json:"sort_order"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
 		return
 	}
 	// build dynamic update
@@ -1029,7 +1160,7 @@ func (h *AdminHandler) UpdateOutlet(c *gin.Context) {
 	args = append(args, id)
 	_, err := database.DB.Exec(`UPDATE restaurant_outlets SET `+strings.Join(set, ", ")+` WHERE id=$`+strconv.Itoa(n), args...)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"updated": true})
@@ -1039,7 +1170,7 @@ func (h *AdminHandler) DeleteOutlet(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 	_, err := database.DB.Exec(`DELETE FROM restaurant_outlets WHERE id=$1`, id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"deleted": true})
@@ -1059,7 +1190,7 @@ func (h *AdminHandler) GetConfigAdmin(c *gin.Context) {
 	}
 	err := database.DB.QueryRow(`SELECT id, name, phone, address, map_url, opening_hours::text, delivery_area::text, payment_info::text, support_phone FROM restaurant_config LIMIT 1`).Scan(&row.ID, &row.Name, &row.Phone, &row.Address, &row.MapURL, &row.OpeningHours, &row.DeliveryArea, &row.PaymentInfo, &row.SupportPhone)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
 	}
 	c.JSON(http.StatusOK, row)
@@ -1077,7 +1208,7 @@ func (h *AdminHandler) UpdateConfigAdmin(c *gin.Context) {
 		SupportPhone *string `json:"support_phone"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
 		return
 	}
 	set := []string{}
@@ -1130,7 +1261,7 @@ func (h *AdminHandler) UpdateConfigAdmin(c *gin.Context) {
 	set = append(set, "updated_at=CURRENT_TIMESTAMP")
 	_, err := database.DB.Exec(`UPDATE restaurant_config SET `+strings.Join(set, ", ")+` WHERE id=(SELECT id FROM restaurant_config LIMIT 1)`, args...)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"updated": true})
