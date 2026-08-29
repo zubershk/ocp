@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"errors"
+	"log"
 	"net/http"
 
 	"orangecheesepizza/bot/database"
@@ -40,8 +41,10 @@ func CORSMiddleware(allowedOriginsCSV string) gin.HandlerFunc {
 	}
 	// Ensure dev defaults if env omitted
 	if len(allowed) == 0 {
+		// Production: no CORS defaults — must be explicitly configured
 		allowed["http://localhost:5173"] = true
 		allowed["http://127.0.0.1:5173"] = true
+		log.Println("WARNING: CORS_ALLOWED_ORIGINS not set — using localhost defaults for development only")
 	}
 	return func(c *gin.Context) {
 		origin := c.GetHeader("Origin")
@@ -90,6 +93,7 @@ func SecurityHeaders() gin.HandlerFunc {
 		c.Header("X-Frame-Options", "DENY")
 		c.Header("Referrer-Policy", "strict-origin-when-cross-origin")
 		c.Header("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+		c.Header("Strict-Transport-Security", "max-age=63072000; includeSubDomains")
 		// CSP is page-level; for API we keep restrictive but allow JSON
 		c.Header("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
 		c.Next()
@@ -165,9 +169,6 @@ func (h *ApiHandler) CreateOrder(c *gin.Context) {
 // token whose phone matches the order's customer_phone (syncs web+WhatsApp).
 func (h *ApiHandler) GetOrder(c *gin.Context) {
 	token := c.GetHeader("X-Order-Token")
-	if token == "" {
-		token = c.Query("token")
-	}
 	order, err := h.orders.Get(c.Param("id"), token)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load order"})
