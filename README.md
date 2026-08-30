@@ -115,27 +115,59 @@ Tech-OCP/
 
 ## Prerequisites
 
-- **Node.js** 18+ and npm
-- **Go** 1.21+
-- **PostgreSQL** 14+
-- **Evolution GO** WhatsApp API instance (running on port 8080)
-- **Windows** or **Linux** (scripts provided for both)
+- **Docker** and **Docker Compose** (recommended)
+- Or: **Node.js** 18+, **Go** 1.21+, **PostgreSQL** 14+
 
-## Setup
+## Quick Start (Docker)
 
-### 1. Clone the repo
+One command to run everything:
 
 ```bash
 git clone https://github.com/zubershk/ocp.git
-cd Tech-OCP
+cd ocp
+bash setup.sh
+docker compose up -d
+```
+
+That's it. The setup wizard generates secrets, creates `.env`, and prints your admin key.
+
+**Services after startup:**
+
+| Service | URL | Description |
+|---------|-----|-------------|
+| Frontend | http://localhost:3000 | Customer site + admin dashboard |
+| Bot API | http://localhost:8090 | Backend API |
+| Evolution GO | http://localhost:8080 | WhatsApp gateway |
+| Campaign Runner | http://localhost:3001 | WhatsApp marketing tool |
+
+**Useful commands:**
+
+```bash
+docker compose up -d          # Start all services
+docker compose logs -f        # View live logs
+docker compose logs -f bot    # View bot logs only
+docker compose down           # Stop all services
+docker compose down -v        # Stop and delete data
+docker compose build          # Rebuild after code changes
+```
+
+## Setup (Manual / Development)
+
+If you prefer running without Docker:
+
+### 1. Clone and configure
+
+```bash
+git clone https://github.com/zubershk/ocp.git
+cd ocp
+cp .env.example .env
+# Edit .env with your values (or run: bash setup.sh)
 ```
 
 ### 2. Database
 
-Migrations run automatically on bot startup. The database is created and migrated from SQL files in `bot/migrations/`.
-
 ```bash
-createdb orange_cheese_pizza_bot
+createdb ocp
 # Migrations run automatically when the bot starts
 ```
 
@@ -143,15 +175,9 @@ createdb orange_cheese_pizza_bot
 
 ```bash
 cd bot
-cp .env.example .env
-# Edit .env with your database URL, Evolution API keys, and admin key
 go mod tidy
 go build -o bot-ocp .
-```
-
-Generate a secure admin key:
-```bash
-openssl rand -hex 16
+./bot-ocp
 ```
 
 ### 4. Frontend
@@ -160,7 +186,6 @@ openssl rand -hex 16
 cd frontend
 npm install
 npm run dev      # Development server on :5173
-npm run build    # Production build
 ```
 
 ### 5. Campaign Runner (optional)
@@ -168,12 +193,8 @@ npm run build    # Production build
 ```bash
 cd campaign-runner
 npm install
-npm run dev      # Starts server on :3001 + frontend on :5173
+npm run dev      # Server on :3001 + frontend on :5173
 ```
-
-### 6. Environment Variables
-
-**bot/.env** — Backend configuration:
 
 | Variable | Description | Example |
 |----------|-------------|---------|

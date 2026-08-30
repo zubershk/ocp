@@ -1,0 +1,105 @@
+services:
+  # ── PostgreSQL ──
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ocp
+      POSTGRES_USER: ocp
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-ocp_secret_2026}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ocp"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ── Evolution GO (WhatsApp API) ──
+  evolution:
+    image: atendai/evolution-go:latest
+    restart: unless-stopped
+    environment:
+      - SERVER_URL=http://localhost:8080
+      - AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY:-}
+      - DATABASE_ENABLED=true
+      - DATABASE_PROVIDER=postgresql
+      - DATABASE_CONNECTION_URI=postgresql://ocp:${DB_PASSWORD:-ocp_secret_2026}@postgres:5432/ocp
+      - DATABASE_CONNECTION_CLIENT_NAME=evolution
+      - DATABASE_SAVE_DATA_INSTANCE=true
+      - DATABASE_SAVE_DATA_NEW_MESSAGE=true
+      - DATABASE_SAVE_MESSAGE_UPDATE=true
+      - DATABASE_SAVE_DATA_CONTACTS=true
+      - DATABASE_SAVE_DATA_CHATS=true
+      - CORS_ORIGIN=*
+      - DELIVERY_RETRIES=5
+      - WEBHOOK_GLOBAL_ENABLED=false
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ── OCP Bot (Go API) ──
+  bot:
+    build:
+      context: .
+      dockerfile: bot/Dockerfile
+    restart: unless-stopped
+    environment:
+      - BOT_PORT=8090
+      - BOT_DATABASE_URL=postgresql://ocp:${DB_PASSWORD:-ocp_secret_2026}@postgres:5432/ocp?sslmode=disable
+      - EVOLUTION_API_URL=http://evolution:8080
+      - EVOLUTION_API_KEY=${EVOLUTION_API_KEY:-}
+      - EVOLUTION_INSTANCE=${EVOLUTION_INSTANCE:-OCP}
+      - EVOLUTION_INSTANCE_TOKEN=${EVOLUTION_INSTANCE_TOKEN:-}
+      - EVOLUTION_WEBHOOK_SECRET=${EVOLUTION_WEBHOOK_SECRET:-changeme_in_production}
+      - BOT_ADMIN_KEY=${BOT_ADMIN_KEY:-changeme_in_production}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost,http://localhost:3000}
+      - RESTAURANT_WHATSAPP_NUMBER=${RESTAURANT_WHATSAPP_NUMBER:-}
+      - RESTAURANT_NAME=${RESTAURANT_NAME:-Orange Cheese Pizza}
+      - DELIVERY_FEE=${DELIVERY_FEE:-0}
+    ports:
+      - "8090:8090"
+    volumes:
+      - bot_uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ── Frontend (React + nginx) ──
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - bot
+
+  # ── Campaign Runner ──
+  campaign:
+    build:
+      context: .
+      dockerfile: campaign-runner/Dockerfile
+    restart: unless-stopped
+    environment:
+      - PORT=3001
+    ports:
+      - "3001:3001"
+    volumes:
+      - campaign_data:/app/data
+      - campaign_uploads:/app/uploads
+    depends_on:
+      - bot
+
+volumes:
+  pgdata:
+  bot_uploads:
+  campaign_data:
+  campaign_uploads:
