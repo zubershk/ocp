@@ -8,6 +8,7 @@ import {
   Activity, IndianRupee,
 } from 'lucide-react';
 import { adminFetch, getAdminKey, setAdminKey } from '../services/api';
+import OnboardingWizard, { isOnboardingComplete } from '../components/OnboardingWizard';
 
 // ── Lifecycle (mirrors services/order_status_service.go) ──
 const NEXT_STATUSES: Record<string, { to: string; label: string; primary?: boolean }[]> = {
@@ -82,6 +83,7 @@ export default function Admin() {
   const [soundOn, setSoundOn] = useState(() => { try { return localStorage.getItem('ocp_admin_sound') !== 'off'; } catch { return true; } });
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [confirmCancel, setConfirmCancel] = useState<AdminOrder | null>(null);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const queryClient = useQueryClient();
   const prevIdsRef = useRef<Set<number>>(new Set());
   const searchRef = useRef<HTMLInputElement>(null);
@@ -104,6 +106,19 @@ export default function Admin() {
     refetchInterval: autoRefresh ? 8000 : false,
     retry: 1,
   });
+
+  const configQuery = useQuery({
+    queryKey: ['admin-config'],
+    queryFn: () => adminFetch<{ phone: string }>('/admin/config'),
+    enabled: authed,
+  });
+
+  useEffect(() => {
+    if (authed && configQuery.data && !isOnboardingComplete()) {
+      const phone = configQuery.data.phone || '';
+      if (!phone.trim()) setShowOnboarding(true);
+    }
+  }, [authed, configQuery.data]);
 
   // new-order chime (Web Audio)
   useEffect(() => {
@@ -359,7 +374,16 @@ export default function Admin() {
                   {filtered.map((o) => {
                     const meta = STATUS_META[o.status] ?? STATUS_META.placed;
                     const urgent = isUrgent(o);
-                    return (
+  if (showOnboarding) {
+    return (
+      <OnboardingWizard
+        phone={configQuery.data?.phone || ''}
+        onComplete={() => { setShowOnboarding(false); configQuery.refetch(); }}
+      />
+    );
+  }
+
+  return (
                       <tr key={o.id} className={`hover:bg-zinc-50/70 ${urgent ? 'bg-red-50/40' : ''}`}>
                         <td className="px-4 py-3">
                           <div className="font-mono text-xs font-bold">{o.order_number}</div>
