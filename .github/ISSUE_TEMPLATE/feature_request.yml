@@ -1,0 +1,44 @@
+name: Feature Request
+description: Suggest a new feature or improvement
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe the feature you'd like to see.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      placeholder: I'm always frustrated when...
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: What's your proposed solution?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Any alternatives you considered?
+    validations:
+      required: false
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Which component?
+      options:
+        - Bot (Go API)
+        - Frontend (React)
+        - Campaign Runner
+        - Docker / Deployment
+        - Documentation
+        - Other
+    validations:
+      required: true
