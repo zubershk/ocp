@@ -12,7 +12,7 @@ export default function Reviews() {
         In the meantime, order your favourite pizza and let us know what you think!
       </p>
       <a
-        href="/menu"
+        href="/r/menu"
         className="inline-flex mt-6 px-6 py-3 rounded-xl bg-orange-600 text-white font-semibold hover:bg-orange-700"
       >
         Browse Menu

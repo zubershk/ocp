@@ -57,7 +57,7 @@ export default function Home() {
         <div className="container-page py-3 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
           <LocationPill />
           <Link
-            to="/menu"
+            to="/r/menu"
             className="flex-1 flex items-center gap-3 px-4 py-2.5 rounded-xl bg-stone-50 border border-stone-200 text-sm text-zinc-400 hover:border-stone-300 transition-all"
           >
             <Search size={16} className="text-zinc-400 shrink-0" />
@@ -85,7 +85,7 @@ export default function Home() {
       <div className="container-page mt-8">
         <div className="flex items-end justify-between mb-4">
           <h2 className="text-lg sm:text-xl font-heading font-bold">Browse Categories</h2>
-          <Link to="/menu" className="text-sm font-semibold text-brand-600 hover:text-brand-700 inline-flex items-center gap-1 transition-colors">
+          <Link to="/r/menu" className="text-sm font-semibold text-brand-600 hover:text-brand-700 inline-flex items-center gap-1 transition-colors">
             See all <ChevronRight size={14} />
           </Link>
         </div>
@@ -99,7 +99,7 @@ export default function Home() {
             <h2 className="text-lg sm:text-xl font-heading font-bold">Popular Right Now</h2>
             <p className="text-zinc-500 mt-0.5 text-sm">Customer favourites — add in one tap</p>
           </div>
-          <Link to="/menu" className="shrink-0 text-sm font-semibold text-brand-600 hover:text-brand-700 inline-flex items-center gap-1 transition-colors">
+          <Link to="/r/menu" className="shrink-0 text-sm font-semibold text-brand-600 hover:text-brand-700 inline-flex items-center gap-1 transition-colors">
             Full menu <ChevronRight size={14} />
           </Link>
         </div>
@@ -189,7 +189,7 @@ export default function Home() {
       {/* ── Family pack CTA ── */}
       {packCount > 0 && (
         <div className="container-page mt-10 reveal-item">
-          <Link to="/offers" className="block bg-zinc-900 rounded-2xl p-6 sm:p-8 lg:p-10 group hover:shadow-lg transition-shadow">
+          <Link to="/r/offers" className="block bg-zinc-900 rounded-2xl p-6 sm:p-8 lg:p-10 group hover:shadow-lg transition-shadow">
             <div className="flex flex-col sm:flex-row sm:items-center gap-4">
               <div className="flex-1">
                 <p className="text-zinc-400 text-xs font-bold tracking-widest uppercase">Feeding the whole family?</p>
@@ -251,7 +251,7 @@ export default function Home() {
             Pay by cash or UPI when your food arrives. Free delivery 11 AM – 4 AM.
           </p>
           <div className="mt-5 flex flex-wrap justify-center gap-3">
-            <Link to="/menu" className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-brand-600 text-white font-semibold hover:bg-brand-700 transition-all">
+            <Link to="/r/menu" className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-brand-600 text-white font-semibold hover:bg-brand-700 transition-all">
               Start Your Order <ArrowRight size={16} />
             </Link>
             <a href={`tel:+91${RESTAURANT.phones[0]}`} className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-white/10 text-white font-semibold hover:bg-white/20 transition-all">

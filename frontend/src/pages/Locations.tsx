@@ -53,7 +53,7 @@ export default function Locations() {
 
             {o.onlineOrdering && (
               <a
-                href="/menu"
+                href="/r/menu"
                 className="inline-flex mt-4 px-5 py-2.5 rounded-xl bg-orange-600 text-white text-sm font-semibold hover:bg-orange-700"
               >
                 Order from this outlet

@@ -24,7 +24,7 @@ export default function Cart() {
       <h2 className="text-2xl font-heading font-bold">Your cart is empty</h2>
       <p className="text-sm text-zinc-500 mt-2 max-w-xs mx-auto">Add some cheesy pizzas and sides to get started</p>
       <Link
-        to="/menu"
+        to="/r/menu"
         className="inline-flex items-center gap-2 mt-8 px-8 py-3.5 rounded-2xl bg-brand-600 text-white font-semibold hover:bg-brand-700 transition-all duration-200 shadow-sm hover:shadow-md"
       >
         Browse Menu <ArrowRight size={16} />
@@ -181,13 +181,13 @@ export default function Cart() {
             </p>
 
             <Link
-              to="/checkout"
+              to="/r/checkout"
               className="block w-full mt-5 py-3.5 rounded-2xl bg-brand-600 text-white font-semibold hover:bg-brand-700 transition-all duration-200 text-center shadow-sm hover:shadow-md inline-flex items-center justify-center gap-2"
             >
               Proceed to Checkout <ArrowRight size={16} />
             </Link>
             <Link
-              to="/menu"
+              to="/r/menu"
               className="block text-center mt-3 text-sm text-zinc-500 hover:text-zinc-900 transition-colors"
             >
               Continue shopping

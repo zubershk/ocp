@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Navbar from './components/layout/Navbar';
 import Footer from './components/layout/Footer';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import Landing from './pages/Landing';
 import Home from './pages/Home';
 import Menu from './pages/Menu';
 import Product from './pages/Product';
@@ -45,6 +46,10 @@ function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
+function EmptyLayout({ children }: { children: React.ReactNode }) {
+  return <>{children}</>;
+}
+
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -65,19 +70,22 @@ export default function App() {
                     </div>
                   }>
                     <Routes>
-                    <Route path="/" element={<Home />} />
-                    <Route path="/menu" element={<Menu />} />
-                    <Route path="/menu/item/:id" element={<Product />} />
-                    <Route path="/cart" element={<Cart />} />
-                    <Route path="/checkout" element={<Checkout />} />
-                    <Route path="/order/:id" element={<Order />} />
-                    <Route path="/offers" element={<Offers />} />
-                    <Route path="/locations" element={<Locations />} />
-                    <Route path="/about" element={<About />} />
-                    <Route path="/faq" element={<FAQ />} />
-                    <Route path="/contact" element={<Contact />} />
-                    <Route path="/privacy" element={<Privacy />} />
-                    <Route path="/terms" element={<Terms />} />
+                    <Route path="/" element={<EmptyLayout><Landing /></EmptyLayout>} />
+                    <Route path="/r" element={<Layout><Home /></Layout>} />
+                    <Route path="/r/menu" element={<Layout><Menu /></Layout>} />
+                    <Route path="/r/menu/item/:id" element={<Layout><Product /></Layout>} />
+                    <Route path="/r/cart" element={<Layout><Cart /></Layout>} />
+                    <Route path="/r/checkout" element={<Layout><Checkout /></Layout>} />
+                    <Route path="/r/order/:id" element={<Layout><Order /></Layout>} />
+                    <Route path="/r/offers" element={<Layout><Offers /></Layout>} />
+                    <Route path="/r/locations" element={<Layout><Locations /></Layout>} />
+                    <Route path="/r/about" element={<Layout><About /></Layout>} />
+                    <Route path="/r/faq" element={<Layout><FAQ /></Layout>} />
+                    <Route path="/r/contact" element={<Layout><Contact /></Layout>} />
+                    <Route path="/r/privacy" element={<Layout><Privacy /></Layout>} />
+                    <Route path="/r/terms" element={<Layout><Terms /></Layout>} />
+                    <Route path="/r/login" element={<Layout><Login /></Layout>} />
+                    <Route path="/r/account" element={<Layout><Account /></Layout>} />
                     <Route path="/admin" element={<Admin />} />
                     <Route path="/admin/catalog" element={<AdminCatalog />} />
                     <Route path="/admin/chats" element={<AdminLiveChat />} />
@@ -85,8 +93,6 @@ export default function App() {
                     <Route path="/admin/analytics" element={<AdminAnalytics />} />
                   <Route path="/admin/team" element={<AdminTeam />} />
                   <Route path="/admin/logs" element={<AdminAudit />} />
-                    <Route path="/login" element={<Login />} />
-                    <Route path="/account" element={<Account />} />
                     <Route path="*" element={<Navigate to="/" replace />} />
                   </Routes>
                 </Suspense>

@@ -27,7 +27,7 @@ export default function Product() {
         <ShoppingCart size={28} className="text-stone-300" />
       </div>
       <h2 className="text-xl font-heading font-bold">Product not found</h2>
-      <Link to="/menu" className="text-brand-600 hover:underline mt-2 inline-block">Back to menu</Link>
+      <Link to="/r/menu" className="text-brand-600 hover:underline mt-2 inline-block">Back to menu</Link>
     </div>
   );
 
@@ -48,7 +48,7 @@ export default function Product() {
 
   return (
     <div className="container-page py-6">
-      <Link to="/menu" className="inline-flex items-center gap-2 text-sm text-zinc-500 hover:text-zinc-900 transition-colors">
+      <Link to="/r/menu" className="inline-flex items-center gap-2 text-sm text-zinc-500 hover:text-zinc-900 transition-colors">
         <ArrowLeft size={16} /> Back to menu
       </Link>
 
@@ -217,7 +217,7 @@ export default function Product() {
               <ShoppingCart size={18} /> Add to Cart · ₹{total}
             </button>
             <button
-              onClick={() => { addItem(item, size, crust, qty); nav('/checkout'); }}
+              onClick={() => { addItem(item, size, crust, qty); nav('/r/checkout'); }}
               className="px-8 py-4 rounded-2xl bg-zinc-900 text-white font-semibold hover:bg-zinc-800 transition-all duration-200 cursor-pointer inline-flex items-center gap-2"
             >
               <Zap size={16} /> Buy Now
