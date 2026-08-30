@@ -1,6 +1,8 @@
 # Secrets
 bot/.env
 bot/.env.local
+.env
+.env.local
 frontend/.env
 frontend/.env.local
 evolution-go/.env
