@@ -1,11 +1,11 @@
 # Orange Cheese Pizza — Online Ordering System
 
-Full-stack pizza ordering platform with WhatsApp integration, real-time order management, and a production-ready admin dashboard. Built for small food businesses that want an online ordering presence without paying third-party commissions.
+Full-stack pizza ordering platform with WhatsApp integration, real-time order management, a production-ready admin dashboard, and a WhatsApp marketing campaign runner. Built for small food businesses that want an online ordering presence without paying third-party commissions.
 
 ## What This Does
 
 **For customers:**
-- Browse the full menu with real product photos, prices, and dietary info (veg/non-veg)
+- Browse the full menu with real product photos, prices, and dietary info
 - Filter by category, spice level, budget, or family packs
 - Customise pizzas (size, crust, toppings) and see price updates live
 - Place orders with address autocomplete and delivery radius check
@@ -27,6 +27,16 @@ Full-stack pizza ordering platform with WhatsApp integration, real-time order ma
 - Audit log tracking every admin action
 - Rate limiting on auth and order endpoints to prevent abuse
 
+**WhatsApp Campaign Runner:**
+- Bulk send WhatsApp messages to customers
+- Campaign wizard with WhatsApp-style live preview
+- Customer segments via tags (regular, vip, etc.)
+- Message templates with merge tags ({name}, {discount}, {brand_name})
+- Media library for campaign images
+- Scheduled campaigns with auto-trigger
+- Live progress tracking with per-recipient status
+- Connects to the Go bot — no direct Evolution GO access needed
+
 ## Tech Stack
 
 | Layer | Technology |
@@ -37,6 +47,7 @@ Full-stack pizza ordering platform with WhatsApp integration, real-time order ma
 | Styling | Tailwind CSS |
 | State | React Context + TanStack Query |
 | WhatsApp | Evolution GO (self-hosted WhatsApp API) |
+| Campaigns | Express.js + React (standalone tool) |
 | Animations | GSAP (GreenSock) |
 | PWA | Service Worker + Web Manifest |
 
@@ -50,24 +61,25 @@ Tech-OCP/
 │   ├── database/database.go      # PostgreSQL connection pool
 │   ├── models/models.go          # Data structures
 │   ├── handlers/
-│   │   ├── api_handler.go        # Public menu/order API, CORS
+│   │   ├── api_handler.go        # Public menu/order API, CORS, security headers
 │   │   ├── webhook_handler.go    # Evolution GO WhatsApp webhook
 │   │   ├── auth_handler.go       # WhatsApp OTP login
 │   │   └── rate_limit.go         # IP-based rate limiting
 │   ├── admin/
-│   │   └── admin_handler.go      # Admin CRUD, analytics, team, audit
+│   │   └── admin_handler.go      # Admin CRUD, analytics, team, audit, broadcast
 │   ├── services/
 │   │   ├── menu_service.go       # Menu CRUD, item lookups
 │   │   ├── order_service.go      # WhatsApp order processing
 │   │   ├── website_order_service.go  # Web order creation, pricing
 │   │   ├── customer_service.go   # Customer lookup, phone canonicalization
-│   │   ├── customer_auth_service.go  # OTP/session management
+│   │   ├── customer_auth_service.go  # OTP/session management (transactional)
+│   │   ├── conversation_engine.go    # WhatsApp conversation state machine
 │   │   └── live_chat_service.go  # WhatsApp message persistence
 │   ├── migrations/               # 13 SQL migration files
 │   ├── uploads/                  # Menu item product photos
 │   ├── .env.example              # Environment template
 │   └── go.mod / go.sum
-├── frontend/                     # React frontend
+├── frontend/                     # React frontend (customer site + admin)
 │   ├── src/
 │   │   ├── pages/                # Home, Menu, Product, Cart, Checkout, etc.
 │   │   ├── components/           # Reusable UI components
@@ -82,17 +94,22 @@ Tech-OCP/
 │   ├── vercel.json               # Vercel deployment config
 │   ├── package.json
 │   └── vite.config.ts
+├── campaign-runner/              # WhatsApp marketing campaign tool
+│   ├── server/
+│   │   └── index.js              # Express API — customers, campaigns, templates
+│   ├── src/
+│   │   └── App.jsx               # React dashboard — 6 tabs
+│   ├── package.json
+│   └── vite.config.js
 ├── evolution-go/                 # WhatsApp API gateway (Evolution GO)
 │   ├── cmd/evolution-go/main.go  # Entry point
 │   ├── pkg/                      # Core library (chat, message, instance, etc.)
-│   ├── evolution-go-manager/     # Manager dashboard (Vue/React frontend)
 │   ├── docs/                     # Swagger API docs
 │   ├── docker/                   # Docker compose configs
-│   ├── Dockerfile
-│   ├── .env.example
 │   └── go.mod / go.sum
-├── start-ocp.sh                  # Production startup script
-├── OCP-ControlPanel.ps1          # Windows control panel
+├── start-ocp.sh                  # Production startup script (Linux/WSL)
+├── OCP-ControlPanel.bat          # Windows control panel launcher
+├── OCP-ControlPanel.ps1          # Windows control panel (GUI)
 └── .gitignore
 ```
 
@@ -109,22 +126,18 @@ Tech-OCP/
 ### 1. Clone the repo
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/Tech-OCP.git
+git clone https://github.com/zubershk/ocp.git
 cd Tech-OCP
 ```
 
 ### 2. Database
 
-Create the database and run migrations:
+Migrations run automatically on bot startup. The database is created and migrated from SQL files in `bot/migrations/`.
 
 ```bash
 createdb orange_cheese_pizza_bot
-psql -d orange_cheese_pizza_bot -f bot/migrations/001_initial_schema.sql
-psql -d orange_cheese_pizza_bot -f bot/migrations/002_seed_data.sql
-# ... run remaining migration files in order (003 through 013)
+# Migrations run automatically when the bot starts
 ```
-
-Or use the startup script which handles this automatically.
 
 ### 3. Backend
 
@@ -150,7 +163,15 @@ npm run dev      # Development server on :5173
 npm run build    # Production build
 ```
 
-### 5. Environment Variables
+### 5. Campaign Runner (optional)
+
+```bash
+cd campaign-runner
+npm install
+npm run dev      # Starts server on :3001 + frontend on :5173
+```
+
+### 6. Environment Variables
 
 **bot/.env** — Backend configuration:
 
@@ -162,54 +183,74 @@ npm run build    # Production build
 | `EVOLUTION_API_KEY` | Global Evolution API key | Your key |
 | `EVOLUTION_INSTANCE` | WhatsApp instance name | `OCP` |
 | `EVOLUTION_INSTANCE_TOKEN` | Instance auth token (UUID) | Your UUID |
+| `EVOLUTION_WEBHOOK_SECRET` | **Required.** Webhook verification secret | `openssl rand -hex 16` |
 | `BOT_ADMIN_KEY` | Admin dashboard password (hex string) | `openssl rand -hex 16` |
+| `CORS_ALLOWED_ORIGINS` | Comma-separated allowed origins | `https://your-app.vercel.app` |
 | `RESTAURANT_WHATSAPP_NUMBER` | Number for order notifications | `919876543210` |
 | `DELIVERY_FEE` | Default delivery fee | `0` |
-| `LOG_LEVEL` | Logging level | `info` |
 
 ## Running in Production
 
-```bash
-# Option 1: Startup script (handles DB setup + binary compilation)
-chmod +x start-ocp.sh
-./start-ocp.sh
+### Linux / WSL (systemd)
 
-# Option 2: Manual
-cd bot && go build -o bot-ocp . && ./bot-ocp
+```bash
+# Build and install as systemd user service
+cd bot && go build -o bot-ocp .
+
+# Create service file at ~/.config/systemd/user/orange-cheese-pizza-bot.service
+# Then:
+systemctl --user daemon-reload
+systemctl --user start orange-cheese-pizza-bot
+systemctl --user status orange-cheese-pizza-bot
 ```
 
-The backend serves the API on `:8090`. The frontend is built to `frontend/dist/` and served separately (nginx, Vite preview, etc.).
+### Windows Control Panel
+
+```powershell
+# Right-click OCP-ControlPanel.bat → Run as administrator
+# Or from PowerShell:
+.\OCP-ControlPanel.ps1
+```
+
+The control panel shows status for all 3 services (Evolution GO, Bot, Campaign Runner) and provides Start/Stop/Restart buttons.
+
+### Manual
+
+```bash
+cd bot && go build -o bot-ocp . && ./bot-ocp
+```
 
 ### Deploying Frontend to Vercel
 
 1. Push the repo to GitHub
 2. Go to [vercel.com](https://vercel.com) and import the `zubershk/ocp` repo
 3. Set the root directory to `frontend`
-4. Add environment variable: `VITE_API_BASE_URL` = your backend URL (e.g., `https://your-server.com`)
+4. Add environment variable: `VITE_API_BASE_URL` = your backend URL
 5. Deploy
-
-The `vercel.json` is already configured with SPA routing and security headers.
 
 ### Deploying Backend
 
 The Go backend needs to run on a server with PostgreSQL access. Options:
 - **Railway** / **Render** — easy Go deployment with managed PostgreSQL
-- **VPS** (DigitalOcean, Hetzner) — full control, run `start-ocp.sh`
+- **VPS** (DigitalOcean, Hetzner) — full control, run via systemd
 - **Your own machine** — for local development only
 
-Set `CORS_ALLOWED_ORIGINS` in `bot/.env` to include your Vercel domain:
-```
-CORS_ALLOWED_ORIGINS=https://your-app.vercel.app
-```
+Set `CORS_ALLOWED_ORIGINS` in `bot/.env` to include your Vercel domain.
 
-For development, run both simultaneously:
-```bash
-# Terminal 1: Backend
-cd bot && go run .
+## Security
 
-# Terminal 2: Frontend (proxies /api to :8090)
-cd frontend && npm run dev
-```
+The codebase has been audited and hardened for production use:
+
+- **Webhook authentication** — requires `EVOLUTION_WEBHOOK_SECRET` to be set; rejects webhooks when unconfigured
+- **Admin key comparison** — constant-time via `crypto/subtle` to prevent timing attacks
+- **Rate limiting** — IP-based window counters on all endpoints (auth, API, admin, webhooks)
+- **OTP verification** — transactional with `SELECT ... FOR UPDATE` to prevent brute-force race conditions
+- **Request body limits** — 1MB global max to prevent OOM
+- **Error sanitization** — internal errors logged server-side, generic messages returned to clients
+- **Security headers** — HSTS, CSP, X-Frame-Options, Referrer-Policy, Permissions-Policy
+- **CORS** — explicit origin allowlist (no wildcards)
+- **Input validation** — broadcast limited to 200 recipients, messages max 4096 chars
+- **Memory management** — conversation locks cleaned up every 30 minutes
 
 ## API Endpoints
 
@@ -221,6 +262,7 @@ cd frontend && npm run dev
 | `POST` | `/api/orders` | Place a new order |
 | `GET` | `/api/orders/:id` | Get order status |
 | `GET` | `/health` | Health check |
+| `GET` | `/ready` | Readiness (DB + Evolution status) |
 
 ### Auth
 
@@ -237,36 +279,33 @@ cd frontend && npm run dev
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/admin/orders` | List all orders |
-| `PATCH` | `/admin/orders/:id` | Update order status |
+| `GET` | `/admin/orders/:id` | Get order details |
+| `PATCH` | `/admin/orders/:id/status` | Update order status |
 | `GET` | `/admin/menu` | Menu items with full details |
 | `POST` | `/admin/menu` | Create menu item |
-| `PATCH` | `/admin/menu/:id` | Update menu item |
+| `PUT` | `/admin/menu/:id` | Update menu item |
 | `DELETE` | `/admin/menu/:id` | Delete menu item |
 | `POST` | `/admin/upload` | Upload product photo |
 | `GET` | `/admin/analytics` | Sales/order analytics |
-| `GET` | `/admin/team` | List team members |
-| `POST` | `/admin/team` | Add team member |
+| `GET` | `/admin/users` | List admin users |
+| `POST` | `/admin/users` | Create admin user |
+| `DELETE` | `/admin/users/:id` | Delete admin user |
 | `GET` | `/admin/audit` | Audit log |
-| `GET` | `/admin/settings` | Restaurant settings |
-| `PUT` | `/admin/settings` | Update restaurant settings |
-| `GET` | `/admin/chat` | WhatsApp chat history |
+| `GET` | `/admin/config` | Restaurant settings |
+| `PUT` | `/admin/config` | Update restaurant settings |
+| `GET` | `/admin/conversations` | WhatsApp chat list |
+| `GET` | `/admin/conversations/:phone/messages` | Chat messages |
+| `POST` | `/admin/conversations/:phone/send` | Send chat message |
+| `GET` | `/admin/customers` | List all customers |
+| `POST` | `/admin/broadcast/send` | Bulk send WhatsApp messages |
+| `GET` | `/admin/me` | Current admin user info |
 
 ### Webhook
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/webhook/evolution` | Evolution GO event receiver |
-
-## Menu Images
-
-Upload product photos to `bot/uploads/`. The backend stores image paths in the database. To bulk-upload:
-
-```bash
-# Place images in bot/uploads/ with filenames matching item slugs
-# Or use the admin dashboard to upload individual photos
-```
-
-93 of 98 menu items have real product photos. Items without photos fall back to the default image.
+| `POST` | `/webhook/evolution` | Evolution GO event receiver (rate limited: 300/min) |
+| `POST` | `/webhook/button` | Evolution GO button click receiver |
 
 ## Admin Dashboard
 
@@ -289,6 +328,31 @@ Login with your `BOT_ADMIN_KEY`. The key is stored in browser localStorage only.
 - `kitchen` — Can view/update order status only
 - `viewer` — Read-only access
 
+## Campaign Runner
+
+A standalone WhatsApp marketing tool that connects to the Go bot.
+
+```bash
+cd campaign-runner
+npm install
+npm run dev
+```
+
+Open `http://localhost:5173` — go to Settings → enter Bot API URL (`http://localhost:8090`) and your admin key.
+
+**6 tabs:**
+- **Dashboard** — Stats cards, 7-day activity chart, recent campaigns, tag breakdown
+- **Customers** — Search, filter by tag, paginated table, CSV import/export, bulk operations
+- **Campaigns** — 3-step wizard (Compose → Recipients → Review), WhatsApp-style live preview, scheduling, live progress
+- **Templates** — Reusable messages with merge tags ({name}, {discount}, {brand_name}), 6 presets
+- **Media** — Upload images, grid gallery, copy URL
+- **Settings** — Brand name/logo/color, bot connection, delay config
+
+**How it sends:**
+- Customers sync from the bot's PostgreSQL via `/admin/customers`
+- Messages send through the bot's `/admin/broadcast/send` endpoint
+- No direct Evolution GO access — all WhatsApp operations go through the bot
+
 ## WhatsApp Integration
 
 This system uses **Evolution GO** as the WhatsApp API gateway. The source code is included in `evolution-go/`.
@@ -298,6 +362,7 @@ This system uses **Evolution GO** as the WhatsApp API gateway. The source code i
 2. Backend creates the order and sends a WhatsApp notification to the restaurant
 3. When order status changes (Preparing → Out for Delivery), a WhatsApp message is sent to the customer
 4. Incoming WhatsApp messages are persisted in the database for the admin Live Chat tab
+5. Campaign runner sends bulk messages through the bot's broadcast endpoint
 
 **Setting up Evolution GO:**
 
@@ -319,19 +384,8 @@ docker compose -f docker/examples/docker-compose.yml up -d
 2. Create an instance named `OCP`
 3. Scan the QR code with the restaurant's WhatsApp number
 4. Set the webhook URL to `http://YOUR_SERVER:8090/webhook/evolution`
-5. Configure the instance token and API key in `bot/.env`
-
-## Windows Control Panel
-
-For Windows users, a PowerShell control panel is included:
-
-```powershell
-# Right-click OCP-ControlPanel.ps1 → Run with PowerShell
-# Or from terminal:
-.\OCP-ControlPanel.ps1
-```
-
-Provides menu options to start/stop services, view logs, and manage the system.
+5. Set `EVOLUTION_WEBHOOK_SECRET` in `bot/.env` to the same value
+6. Configure the instance token and API key in `bot/.env`
 
 ## License
 
