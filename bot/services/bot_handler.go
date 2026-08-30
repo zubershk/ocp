@@ -1,8 +1,10 @@
 package services
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"strings"
 	"time"
 
@@ -902,6 +904,7 @@ func getContextMap(context map[string]interface{}, key string) map[string]interf
 }
 
 func generateOrderNumber() string {
-	// Simple order number generation
-	return fmt.Sprintf("OCP-%d", time.Now().Unix()%100000)
+	// Use timestamp + random suffix to avoid collisions
+	n, _ := rand.Int(rand.Reader, big.NewInt(9999))
+	return fmt.Sprintf("OCP-%d%04d", time.Now().Unix()%100000, n.Int64())
 }

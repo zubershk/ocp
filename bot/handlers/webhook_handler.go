@@ -45,7 +45,7 @@ func (h *WebhookHandler) HandleWebhook(c *gin.Context) {
 	}
 	var payload WebhookPayload
 	if err := json.Unmarshal(raw, &payload); err != nil {
-		log.Printf("[wa-debug] unparsable body (%d bytes): %.500s", len(raw), string(raw))
+		log.Printf("[wa-debug] unparsable body (%d bytes)", len(raw))
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid payload"})
 		return
 	}
@@ -62,7 +62,7 @@ func (h *WebhookHandler) HandleWebhook(c *gin.Context) {
 	// Extract message data
 	data := payload.Data
 	if data == nil {
-		log.Printf("[wa-debug] bail: no data. body=%.600s", string(raw))
+		log.Printf("[wa-debug] bail: no data (bytes=%d)", len(raw))
 		c.JSON(http.StatusOK, gin.H{"status": "no data"})
 		return
 	}
@@ -197,15 +197,16 @@ func (h *WebhookHandler) HandleWebhook(c *gin.Context) {
 	// Process message (Phase 3 conversation engine; legacy fallback)
 	if h.engine != nil {
 		if err := h.engine.HandleInbound(phone, actionID, messageID); err != nil {
-			c.JSON(http.StatusOK, gin.H{"status": "error", "message": err.Error()})
+			log.Printf("[webhook] engine error: %v", err)
+			c.JSON(http.StatusOK, gin.H{"status": "error"})
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"status": "processed"})
 		return
 	}
 	if err := h.botHandler.ProcessMessage(phone, actionID, messageID); err != nil {
-		// Log error but don't return error to webhook
-		c.JSON(http.StatusOK, gin.H{"status": "error", "message": err.Error()})
+		log.Printf("[webhook] bot error: %v", err)
+		c.JSON(http.StatusOK, gin.H{"status": "error"})
 		return
 	}
 
@@ -253,7 +254,8 @@ func (h *WebhookHandler) HandleButtonClick(c *gin.Context) {
 	// Phase 3: route button/list responses through the engine too.
 	if h.engine != nil {
 		if err := h.engine.HandleInbound(phone, buttonID, messageID); err != nil {
-			c.JSON(http.StatusOK, gin.H{"status": "error", "message": err.Error()})
+			log.Printf("[webhook] engine button error: %v", err)
+			c.JSON(http.StatusOK, gin.H{"status": "error"})
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"status": "processed"})
@@ -262,7 +264,8 @@ func (h *WebhookHandler) HandleButtonClick(c *gin.Context) {
 
 	// Process button click as a message
 	if err := h.botHandler.ProcessMessage(phone, buttonID, messageID+"_btn"); err != nil {
-		c.JSON(http.StatusOK, gin.H{"status": "error", "message": err.Error()})
+		log.Printf("[webhook] bot button error: %v", err)
+		c.JSON(http.StatusOK, gin.H{"status": "error"})
 		return
 	}
 

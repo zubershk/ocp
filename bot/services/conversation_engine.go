@@ -6,6 +6,7 @@ import (
 	"log"
 	"strings"
 	"sync"
+	"time"
 
 	"orangecheesepizza/bot/config"
 	"orangecheesepizza/bot/database"
@@ -81,8 +82,9 @@ func (c *conversation) reset(state string) {
 // per-customer locks serialize rapid taps; different customers stay independent.
 var custLocks = struct {
 	sync.Mutex
-	m map[string]*sync.Mutex
-}{m: map[string]*sync.Mutex{}}
+	m     map[string]*sync.Mutex
+	ages  map[string]time.Time
+}{m: map[string]*sync.Mutex{}, ages: map[string]time.Time{}}
 
 func lockFor(phone string) *sync.Mutex {
 	custLocks.Lock()
@@ -90,7 +92,25 @@ func lockFor(phone string) *sync.Mutex {
 	if custLocks.m[phone] == nil {
 		custLocks.m[phone] = &sync.Mutex{}
 	}
+	custLocks.ages[phone] = time.Now()
 	return custLocks.m[phone]
+}
+
+// cleanupCustLocks removes mutexes not touched in 30 minutes to prevent memory growth.
+func init() {
+	go func() {
+		for range time.Tick(30 * time.Minute) {
+			custLocks.Lock()
+			cutoff := time.Now().Add(-30 * time.Minute)
+			for phone, t := range custLocks.ages {
+				if t.Before(cutoff) {
+					delete(custLocks.m, phone)
+					delete(custLocks.ages, phone)
+				}
+			}
+			custLocks.Unlock()
+		}
+	}()
 }
 
 func shortPhone(p string) string {

@@ -3,6 +3,7 @@ package services
 import (
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"database/sql"
 	"encoding/hex"
 	"fmt"
@@ -151,11 +152,19 @@ func VerifyOTP(phone, code, name string) (string, *Customer, error) {
 	if code == "" {
 		return "", nil, &ValidationError{Msg: "enter the 6-digit code"}
 	}
+
+	// Use a transaction to prevent OTP brute-force race condition
+	tx, err := database.DB.Begin()
+	if err != nil {
+		return "", nil, err
+	}
+	defer tx.Rollback()
+
 	var rowID int
-	var stored, expiresStr string
+	var stored string
 	var attempts int
 	var expiresAt time.Time
-	err = database.DB.QueryRow(`SELECT id, code, attempts, expires_at FROM customer_otps WHERE phone=$1 ORDER BY id DESC LIMIT 1`, normalized).Scan(&rowID, &stored, &attempts, &expiresAt)
+	err = tx.QueryRow(`SELECT id, code, attempts, expires_at FROM customer_otps WHERE phone=$1 ORDER BY id DESC LIMIT 1 FOR UPDATE`, normalized).Scan(&rowID, &stored, &attempts, &expiresAt)
 	if err == sql.ErrNoRows {
 		return "", nil, &ValidationError{Msg: "no code found — request a new one"}
 	}
@@ -164,26 +173,32 @@ func VerifyOTP(phone, code, name string) (string, *Customer, error) {
 	}
 	// expired cleanup
 	if time.Now().After(expiresAt) {
-		database.DB.Exec(`DELETE FROM customer_otps WHERE phone=$1`, normalized)
-		_ = expiresStr
+		tx.Exec(`DELETE FROM customer_otps WHERE phone=$1`, normalized)
+		_ = tx.Commit()
 		return "", nil, &ValidationError{Msg: "code expired — request a new one"}
 	}
 	if attempts >= 3 {
-		database.DB.Exec(`DELETE FROM customer_otps WHERE phone=$1`, normalized)
+		tx.Exec(`DELETE FROM customer_otps WHERE phone=$1`, normalized)
+		_ = tx.Commit()
 		return "", nil, &ValidationError{Msg: "too many attempts — request a new code"}
 	}
-	// stored is SHA256 hex; compare hash; backward-compat for old plaintext rows (6 chars)
+	// stored is SHA256 hex; compare hash; constant-time for plaintext fallback
 	if len(stored) == 6 {
-		if stored != code {
-			database.DB.Exec(`UPDATE customer_otps SET attempts=attempts+1 WHERE id=$1`, rowID)
+		if subtle.ConstantTimeCompare([]byte(stored), []byte(code)) != 1 {
+			tx.Exec(`UPDATE customer_otps SET attempts=attempts+1 WHERE id=$1`, rowID)
+			_ = tx.Commit()
 			return "", nil, &ValidationError{Msg: "incorrect code"}
 		}
 	} else if stored != hashHex(code) {
-		database.DB.Exec(`UPDATE customer_otps SET attempts=attempts+1 WHERE id=$1`, rowID)
+		tx.Exec(`UPDATE customer_otps SET attempts=attempts+1 WHERE id=$1`, rowID)
+		_ = tx.Commit()
 		return "", nil, &ValidationError{Msg: "incorrect code"}
 	}
 	// success: consume OTP
-	database.DB.Exec(`DELETE FROM customer_otps WHERE phone=$1`, normalized)
+	tx.Exec(`DELETE FROM customer_otps WHERE phone=$1`, normalized)
+	if err := tx.Commit(); err != nil {
+		return "", nil, err
+	}
 
 	// ensure customer exists
 	if _, err := GetOrCreateCustomer(normalized); err != nil {
