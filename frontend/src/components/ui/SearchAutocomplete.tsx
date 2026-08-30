@@ -49,7 +49,7 @@ export default function SearchAutocomplete({ items, onSelect }: SearchAutocomple
     setRecentSearches(getRecent());
     setQ('');
     setFocused(false);
-    nav(`/menu/item/${item.id}`);
+    nav(`/r/menu/item/${item.id}`);
     onSelect?.(item);
   };
 
@@ -58,7 +58,7 @@ export default function SearchAutocomplete({ items, onSelect }: SearchAutocomple
       saveRecent(q.trim());
       setRecentSearches(getRecent());
       setFocused(false);
-      nav(`/menu?q=${encodeURIComponent(q.trim())}`);
+      nav(`/r/menu?q=${encodeURIComponent(q.trim())}`);
     }
   };
 

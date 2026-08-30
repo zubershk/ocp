@@ -38,7 +38,7 @@ export default function Account() {
   });
 
   useEffect(() => {
-    if (!loading && !customer) nav('/login?redirect=/account', { replace: true });
+    if (!loading && !customer) nav('/r/login?redirect=/r/account', { replace: true });
   }, [loading, customer, nav]);
 
   if (loading) return <div className="max-w-3xl mx-auto px-4 py-12 text-center text-sm text-zinc-500">Loading…</div>;
@@ -53,7 +53,7 @@ export default function Account() {
           <h1 className="text-2xl font-bold tracking-tight">Your account</h1>
           <p className="text-sm text-zinc-500 mt-1">Same number for web &amp; WhatsApp — one history, one tap reorder.</p>
         </div>
-        <button onClick={async () => { await logout(); nav('/login'); }} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-zinc-200 bg-white text-sm font-semibold hover:bg-zinc-50">
+        <button onClick={async () => { await logout(); nav('/r/login'); }} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-zinc-200 bg-white text-sm font-semibold hover:bg-zinc-50">
           <LogOut size={14} /> Sign out
         </button>
       </div>
@@ -90,7 +90,7 @@ export default function Account() {
               <span>WhatsApp bot uses the same number. Chat “hi” on WhatsApp to see this history there too.</span>
             </div>
             <div className="mt-4 flex gap-2">
-              <Link to="/menu" className="flex-1 py-2.5 rounded-xl bg-zinc-900 text-white text-center text-sm font-semibold hover:bg-black">Order again</Link>
+              <Link to="/r/menu" className="flex-1 py-2.5 rounded-xl bg-zinc-900 text-white text-center text-sm font-semibold hover:bg-black">Order again</Link>
               <a href="https://wa.me/918369293998" target="_blank" rel="noreferrer" className="flex-1 py-2.5 rounded-xl bg-white border border-zinc-200 text-center text-sm font-semibold hover:bg-zinc-50">Chat on WhatsApp</a>
             </div>
           </div>
@@ -112,7 +112,7 @@ export default function Account() {
               <div className="w-14 h-14 mx-auto rounded-2xl bg-zinc-50 border grid place-items-center text-zinc-400"><ShoppingBag size={20} /></div>
               <p className="font-semibold mt-3">No orders yet</p>
               <p className="text-sm text-zinc-500 mt-1">Your web and WhatsApp orders will appear here once you order with this number.</p>
-              <Link to="/menu" className="inline-flex mt-4 px-5 py-2.5 rounded-xl bg-orange-600 text-white text-sm font-semibold hover:bg-orange-700">Browse menu <ArrowRight size={14} className="ml-1" /></Link>
+              <Link to="/r/menu" className="inline-flex mt-4 px-5 py-2.5 rounded-xl bg-orange-600 text-white text-sm font-semibold hover:bg-orange-700">Browse menu <ArrowRight size={14} className="ml-1" /></Link>
             </div>
           ) : (
             <div className="divide-y divide-zinc-100">

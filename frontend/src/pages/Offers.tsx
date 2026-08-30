@@ -120,7 +120,7 @@ export default function Offers() {
       <div className="mt-10 bg-zinc-900 rounded-[2rem] p-8 text-center">
         <h2 className="text-white text-xl lg:text-2xl font-bold">Feeding a crowd?</h2>
         <p className="text-zinc-400 text-sm mt-2 max-w-md mx-auto">Build your own feast from 41 pizzas, sides and desserts — everything is tax-inclusive.</p>
-        <Link to="/menu" className="inline-flex mt-5 px-6 py-3 rounded-xl bg-orange-600 text-white font-semibold hover:bg-orange-700 transition">Browse Full Menu</Link>
+        <Link to="/r/menu" className="inline-flex mt-5 px-6 py-3 rounded-xl bg-orange-600 text-white font-semibold hover:bg-orange-700 transition">Browse Full Menu</Link>
       </div>
     </div>
   );

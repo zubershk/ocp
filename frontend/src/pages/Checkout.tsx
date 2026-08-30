@@ -69,7 +69,7 @@ export default function Checkout() {
       </div>
       <h2 className="text-xl font-heading font-bold">Your cart is empty</h2>
       <p className="text-sm text-zinc-500 mt-1">Add items before checking out</p>
-      <Link to="/menu" className="inline-flex items-center gap-2 mt-6 px-6 py-3 rounded-2xl bg-brand-600 text-white font-semibold hover:bg-brand-700 transition-all duration-200">
+      <Link to="/r/menu" className="inline-flex items-center gap-2 mt-6 px-6 py-3 rounded-2xl bg-brand-600 text-white font-semibold hover:bg-brand-700 transition-all duration-200">
         Browse Menu
       </Link>
     </div>
@@ -104,7 +104,7 @@ export default function Checkout() {
       });
       clear();
       push({ type: 'success', title: `Order ${order.orderNumber} placed!` });
-      nav(`/order/${order.id}`);
+      nav(`/r/order/${order.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not place order. Please try again.');
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -153,13 +153,13 @@ export default function Checkout() {
                 </span>
                 Signed in as <strong>{customer.name || customer.phone}</strong>
               </span>
-              <Link to="/account" className="text-xs font-semibold text-emerald-700 hover:underline">View orders</Link>
+              <Link to="/r/account" className="text-xs font-semibold text-emerald-700 hover:underline">View orders</Link>
             </div>
           ) : (
             <div className="px-4 py-3 rounded-2xl bg-brand-50 border border-brand-200 flex items-center justify-between gap-3">
               <span className="text-sm text-brand-800">Sign in to sync with WhatsApp &amp; reorder faster</span>
               <Link
-                to="/login?redirect=/checkout"
+                to="/r/login?redirect=/r/checkout"
                 className="inline-flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-xl bg-brand-600 text-white hover:bg-brand-700 transition-colors"
               >
                 <LogIn size={12} /> Login

@@ -5,11 +5,11 @@ import { useAuth } from '../../context/AuthContext';
 import { useState, useEffect } from 'react';
 
 const navItems = [
-  { label: 'Home', to: '/' },
-  { label: 'Menu', to: '/menu' },
-  { label: 'Offers', to: '/offers' },
-  { label: 'About', to: '/about' },
-  { label: 'Contact', to: '/contact' },
+  { label: 'Home', to: '/r/' },
+  { label: 'Menu', to: '/r/menu' },
+  { label: 'Offers', to: '/r/offers' },
+  { label: 'About', to: '/r/about' },
+  { label: 'Contact', to: '/r/contact' },
 ];
 
 export default function Navbar() {
@@ -92,7 +92,7 @@ export default function Navbar() {
             <div className="flex items-center gap-2">
               {/* Account */}
               <Link
-                to={customer ? '/account' : '/login'}
+                to={customer ? '/r/account' : '/r/login'}
                 className={`
                   hidden sm:inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium
                   transition-all duration-200
@@ -108,7 +108,7 @@ export default function Navbar() {
 
               {/* Cart */}
               <Link
-                to="/cart"
+                to="/r/cart"
                 className="relative p-2.5 rounded-xl hover:bg-stone-50 transition-colors duration-200 group"
                 aria-label={`Cart with ${count} items`}
               >
@@ -122,7 +122,7 @@ export default function Navbar() {
 
               {/* CTA */}
               <Link
-                to="/menu"
+                to="/r/menu"
                 className="hidden sm:inline-flex items-center gap-1.5 ml-1 px-4 py-2 rounded-xl bg-brand-600 text-white text-sm font-semibold hover:bg-brand-700 transition-all duration-200 shadow-sm hover:shadow-md active:scale-[0.98]"
               >
                 Order Now
@@ -190,7 +190,7 @@ export default function Navbar() {
                 <div className="divider my-3" />
 
                 <Link
-                  to="/cart"
+                  to="/r/cart"
                   onClick={() => setOpen(false)}
                   className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-zinc-700 hover:bg-stone-50 transition-all"
                 >
@@ -204,7 +204,7 @@ export default function Navbar() {
                 </Link>
 
                 <Link
-                  to={customer ? '/account' : '/login'}
+                  to={customer ? '/r/account' : '/r/login'}
                   onClick={() => setOpen(false)}
                   className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-zinc-700 hover:bg-stone-50 transition-all"
                 >
@@ -216,7 +216,7 @@ export default function Navbar() {
               {/* CTA at bottom */}
               <div className="p-4 border-t border-stone-100">
                 <Link
-                  to="/menu"
+                  to="/r/menu"
                   onClick={() => setOpen(false)}
                   className="flex items-center justify-center gap-2 w-full py-3 rounded-xl bg-brand-600 text-white font-semibold hover:bg-brand-700 transition-all duration-200 shadow-sm"
                 >

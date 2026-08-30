@@ -50,7 +50,7 @@ export default function Order() {
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (state === 'loading') return <div className="container-page py-12 text-center text-sm text-zinc-500">Loading order…</div>;
-  if (state === 'missing' || !order) return <div className="container-page py-12 text-center"><h2 className="text-xl font-bold">Order not found</h2><p className="text-sm text-zinc-500 mt-1">Check your order ID or place a new order</p><Link to="/menu" className="inline-flex mt-4 px-5 py-2 rounded-xl bg-brand-600 text-white">Go to Menu</Link></div>;
+  if (state === 'missing' || !order) return <div className="container-page py-12 text-center"><h2 className="text-xl font-bold">Order not found</h2><p className="text-sm text-zinc-500 mt-1">Check your order ID or place a new order</p><Link to="/r/menu" className="inline-flex mt-4 px-5 py-2 rounded-xl bg-brand-600 text-white">Go to Menu</Link></div>;
 
   const statusIndex = Math.max(0, orderSteps.indexOf(order.status));
   const current = orderSteps[statusIndex];
@@ -149,7 +149,7 @@ export default function Order() {
           </div>
 
           <div className="mt-6 flex gap-2">
-            <Link to="/menu" className="flex-1 py-3 rounded-xl bg-zinc-900 text-white text-center font-semibold hover:bg-zinc-800 transition-colors">Order Again</Link>
+            <Link to="/r/menu" className="flex-1 py-3 rounded-xl bg-zinc-900 text-white text-center font-semibold hover:bg-zinc-800 transition-colors">Order Again</Link>
             <a href={`https://wa.me/${waNumber}?text=Hi!%20About%20my%20order%20${order.orderNumber}`} target="_blank" rel="noreferrer" className="flex-1 py-3 rounded-xl bg-emerald-600 text-white text-center font-semibold hover:bg-emerald-700 transition-colors">WhatsApp Support</a>
           </div>
 

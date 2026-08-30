@@ -6,18 +6,18 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 
 const PROMOS = [
-  { icon: Gift, badge: 'Family Pack', title: 'Family Pack from ₹515', desc: '2 pizzas + garlic bread + choco lava cake', to: '/offers' },
-  { icon: Truck, badge: 'Free Delivery', title: 'Free delivery 11 AM – 4 AM', desc: 'Mira Road · Vasai · Bhayandar — no minimum', to: '/locations' },
-  { icon: Award, badge: 'Real Mozzarella', title: '100% real mozzarella', desc: 'Fresh, never processed cheese on every pizza', to: '/about' },
-  { icon: Clock3, badge: 'BOGO', title: 'Buy 1, Get 2nd at Special Price', desc: '2nd pizza from ₹150 — call or WhatsApp', to: '/offers' },
-  { icon: UtensilsCrossed, badge: '6 Crusts', title: '6 Crusts · Tossed to Cheese Burst', desc: 'Choose your base, same pricing online & in-store', to: '/menu' },
-  { icon: MapPin, badge: '3 Outlets', title: 'Mira Road · Vasai · Bhayandar', desc: 'Same menu, same pricing across all kitchens', to: '/locations' },
+  { icon: Gift, badge: 'Family Pack', title: 'Family Pack from ₹515', desc: '2 pizzas + garlic bread + choco lava cake', to: '/r/offers' },
+  { icon: Truck, badge: 'Free Delivery', title: 'Free delivery 11 AM – 4 AM', desc: 'Mira Road · Vasai · Bhayandar — no minimum', to: '/r/locations' },
+  { icon: Award, badge: 'Real Mozzarella', title: '100% real mozzarella', desc: 'Fresh, never processed cheese on every pizza', to: '/r/about' },
+  { icon: Clock3, badge: 'BOGO', title: 'Buy 1, Get 2nd at Special Price', desc: '2nd pizza from ₹150 — call or WhatsApp', to: '/r/offers' },
+  { icon: UtensilsCrossed, badge: '6 Crusts', title: '6 Crusts · Tossed to Cheese Burst', desc: 'Choose your base, same pricing online & in-store', to: '/r/menu' },
+  { icon: MapPin, badge: '3 Outlets', title: 'Mira Road · Vasai · Bhayandar', desc: 'Same menu, same pricing across all kitchens', to: '/r/locations' },
 ];
 
 export default function Login() {
   const nav = useNavigate();
   const [params] = useSearchParams();
-  const redirect = params.get('redirect') ?? '/account';
+  const redirect = params.get('redirect') ?? '/r/account';
   const { customer, setCustomer } = useAuth();
   const { push } = useToast();
 

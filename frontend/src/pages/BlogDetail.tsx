@@ -17,7 +17,7 @@ export default function BlogDetail(){
       <div className="mt-10 p-6 bg-orange-50 border border-orange-100 rounded-2xl">
         <h3 className="font-semibold">Craving now?</h3>
         <p className="text-sm text-zinc-600 mt-1">Order your favourite pizza — veg, non-veg, desi tadka, cheese burst.</p>
-        <Link to="/menu" className="inline-flex mt-3 px-5 py-2.5 rounded-xl bg-orange-600 text-white text-sm font-semibold">Explore Menu</Link>
+        <Link to="/r/menu" className="inline-flex mt-3 px-5 py-2.5 rounded-xl bg-orange-600 text-white text-sm font-semibold">Explore Menu</Link>
       </div>
     </div>
   )

@@ -27,12 +27,12 @@ export default function Footer() {
             <h4 className="text-white font-heading font-semibold mb-4 text-sm">Quick Links</h4>
             <ul className="space-y-2.5">
               {[
-                { label: 'Menu', to: '/menu' },
-                { label: 'Offers', to: '/offers' },
-                { label: 'Locations', to: '/locations' },
-                { label: 'About', to: '/about' },
-                { label: 'FAQ', to: '/faq' },
-                { label: 'Contact', to: '/contact' },
+                { label: 'Menu', to: '/r/menu' },
+                { label: 'Offers', to: '/r/offers' },
+                { label: 'Locations', to: '/r/locations' },
+                { label: 'About', to: '/r/about' },
+                { label: 'FAQ', to: '/r/faq' },
+                { label: 'Contact', to: '/r/contact' },
               ].map((link) => (
                 <li key={link.to}>
                   <Link to={link.to} className="text-sm text-zinc-500 hover:text-white transition-colors duration-200 inline-flex items-center gap-1 group">
@@ -42,9 +42,9 @@ export default function Footer() {
                 </li>
               ))}
               <li className="pt-2">
-                <Link to="/privacy" className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors">Privacy Policy</Link>
+                <Link to="/r/privacy" className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors">Privacy Policy</Link>
                 <span className="text-zinc-700 mx-2">·</span>
-                <Link to="/terms" className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors">Terms</Link>
+                <Link to="/r/terms" className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors">Terms</Link>
               </li>
             </ul>
           </div>
@@ -76,7 +76,7 @@ export default function Footer() {
               <div>Bhayandar West: <span className="text-zinc-400">85916 43998</span></div>
             </div>
             <Link
-              to="/locations"
+              to="/r/locations"
               className="inline-flex items-center gap-1.5 mt-4 px-4 py-2 rounded-xl bg-brand-600 text-white text-xs font-semibold hover:bg-brand-700 transition-all duration-200"
             >
               View All Locations
