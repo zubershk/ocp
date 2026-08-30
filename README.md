@@ -1,6 +1,28 @@
 # Orange Cheese Pizza — Online Ordering System
 
+[![CI](https://github.com/zubershk/ocp/actions/workflows/ci.yml/badge.svg)](https://github.com/zubershk/ocp/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Docker](https://img.shields.io/badge/Docker-ready-blue.svg)](docker-compose.yml)
+
 Full-stack pizza ordering platform with WhatsApp integration, real-time order management, a production-ready admin dashboard, and a WhatsApp marketing campaign runner. Built for small food businesses that want an online ordering presence without paying third-party commissions.
+
+### Quick Start
+
+```bash
+git clone https://github.com/zubershk/ocp.git && cd ocp && bash setup.sh && docker compose up -d
+```
+
+Or install to a custom directory:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/zubershk/ocp/master/install.sh | bash
+```
+
+### Deploy to Cloud
+
+[![Deploy to Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/zubershk/ocp/tree/master/frontend&env=VITE_API_BASE_URL)
+
+[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/template/ocp)
 
 ## What This Does
 
@@ -107,6 +129,22 @@ Tech-OCP/
 │   ├── docs/                     # Swagger API docs
 │   ├── docker/                   # Docker compose configs
 │   └── go.mod / go.sum
+├── docs/
+│   └── ARCHITECTURE.md           # System diagram, data flow, security model
+├── .github/
+│   ├── workflows/
+│   │   ├── ci.yml                # Build + vet on every push/PR
+│   │   └── release.yml           # Docker publish + GitHub release on tags
+│   ├── ISSUE_TEMPLATE/
+│   │   ├── bug_report.yml
+│   │   └── feature_request.yml
+│   └── PULL_REQUEST_TEMPLATE.md
+├── docker-compose.yml            # One-command full stack
+├── setup.sh                      # Interactive setup wizard
+├── install.sh                    # One-liner installer
+├── .env.example                  # All environment variables documented
+├── CONTRIBUTING.md               # How to contribute
+├── LICENSE                       # MIT
 ├── start-ocp.sh                  # Production startup script (Linux/WSL)
 ├── OCP-ControlPanel.bat          # Windows control panel launcher
 ├── OCP-ControlPanel.ps1          # Windows control panel (GUI)
