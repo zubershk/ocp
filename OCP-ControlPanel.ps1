@@ -8,13 +8,15 @@ Add-Type -AssemblyName System.Drawing
 
 $script:BotSvc = 'orange-cheese-pizza-bot'
 $script:EvoSvc = 'evolution-go'
+$script:CampaignSvc = 'ocp-campaign-runner'
 $script:Sync = [hashtable]::Synchronized(@{
-    BotStatus  = '...'
-    EvoStatus  = '...'
-    Running    = $true
-    Logs       = [System.Collections.Queue]::Synchronized([System.Collections.Queue]::new())
-    Command    = ''
-    CommandReady = $false
+    BotStatus      = '...'
+    EvoStatus      = '...'
+    CampaignStatus = '...'
+    Running        = $true
+    Logs           = [System.Collections.Queue]::Synchronized([System.Collections.Queue]::new())
+    Command        = ''
+    CommandReady   = $false
 })
 
 # ================= BACKGROUND RUNSPACE =================
@@ -46,12 +48,12 @@ $psCmd.AddScript({
             switch ($cmd) {
                 'start_all' {
                     $Sync.Logs.Enqueue('[INFO] Starting all services...')
-                    Send-Cmd 'export XDG_RUNTIME_DIR=/run/user/$(id -u); systemctl --user start evolution-go orange-cheese-pizza-bot'
+                    Send-Cmd 'export XDG_RUNTIME_DIR=/run/user/$(id -u); systemctl --user start evolution-go orange-cheese-pizza-bot ocp-campaign-runner'
                     $Sync.Logs.Enqueue('[OK] Services started')
                 }
                 'stop_all' {
                     $Sync.Logs.Enqueue('[INFO] Stopping all services...')
-                    Send-Cmd 'export XDG_RUNTIME_DIR=/run/user/$(id -u); systemctl --user stop evolution-go orange-cheese-pizza-bot'
+                    Send-Cmd 'export XDG_RUNTIME_DIR=/run/user/$(id -u); systemctl --user stop evolution-go orange-cheese-pizza-bot ocp-campaign-runner'
                     $Sync.Logs.Enqueue('[OK] Services stopped')
                 }
                 'start_bot' {
@@ -62,12 +64,21 @@ $psCmd.AddScript({
                     $Sync.Logs.Enqueue('[INFO] Starting Evolution GO...')
                     Send-Cmd 'export XDG_RUNTIME_DIR=/run/user/$(id -u); systemctl --user start evolution-go'
                 }
+                'start_campaign' {
+                    $Sync.Logs.Enqueue('[INFO] Starting Campaign Runner...')
+                    Send-Cmd 'export XDG_RUNTIME_DIR=/run/user/$(id -u); systemctl --user start ocp-campaign-runner'
+                }
+                'stop_campaign' {
+                    $Sync.Logs.Enqueue('[INFO] Stopping Campaign Runner...')
+                    Send-Cmd 'export XDG_RUNTIME_DIR=/run/user/$(id -u); systemctl --user stop ocp-campaign-runner'
+                }
             }
         }
 
         # poll status
         $Sync.BotStatus = Get-Svc $BotSvc
         $Sync.EvoStatus = Get-Svc $EvoSvc
+        $Sync.CampaignStatus = Get-Svc $CampaignSvc
 
         # drain log queue from service journal
         try {
@@ -88,7 +99,7 @@ $psCmd.BeginInvoke() | Out-Null
 # ================= UI THREAD =================
 $form = New-Object System.Windows.Forms.Form
 $form.Text = 'OCP Control Panel v2'
-$form.Size = New-Object System.Drawing.Size(620, 620)
+$form.Size = New-Object System.Drawing.Size(620, 640)
 $form.StartPosition = 'CenterScreen'
 $form.FormBorderStyle = 'FixedSingle'
 $form.MaximizeBox = $false
@@ -124,7 +135,7 @@ $y = 75
 # Evolution card
 $cardEvo = New-Object System.Windows.Forms.Panel
 $cardEvo.Location = New-Object System.Drawing.Point(20, $y)
-$cardEvo.Size = New-Object System.Drawing.Size(280, 80)
+$cardEvo.Size = New-Object System.Drawing.Size(185, 80)
 $cardEvo.BackColor = [System.Drawing.Color]::FromArgb(28, 28, 40)
 $form.Controls.Add($cardEvo)
 
@@ -133,7 +144,7 @@ $lblEvoName.Text = 'EVOLUTION GO'
 $lblEvoName.Font = New-Object System.Drawing.Font('Segoe UI', 8, [System.Drawing.FontStyle]::Bold)
 $lblEvoName.ForeColor = [System.Drawing.Color]::Gray
 $lblEvoName.Location = New-Object System.Drawing.Point(10, 8)
-$lblEvoName.Size = New-Object System.Drawing.Size(150, 16)
+$lblEvoName.Size = New-Object System.Drawing.Size(120, 16)
 $cardEvo.Controls.Add($lblEvoName)
 
 $lblEvoPort = New-Object System.Windows.Forms.Label
@@ -141,14 +152,14 @@ $lblEvoPort.Text = ':8080'
 $lblEvoPort.Font = New-Object System.Drawing.Font('Consolas', 9)
 $lblEvoPort.ForeColor = [System.Drawing.Color]::FromArgb(140, 140, 160)
 $lblEvoPort.Location = New-Object System.Drawing.Point(10, 24)
-$lblEvoPort.Size = New-Object System.Drawing.Size(80, 18)
+$lblEvoPort.Size = New-Object System.Drawing.Size(60, 18)
 $cardEvo.Controls.Add($lblEvoPort)
 
 $dotEvo = New-Object System.Windows.Forms.Label
 $dotEvo.Text = [char]0x25CF
 $dotEvo.Font = New-Object System.Drawing.Font('Arial', 16)
 $dotEvo.ForeColor = [System.Drawing.Color]::Gray
-$dotEvo.Location = New-Object System.Drawing.Point(245, 30)
+$dotEvo.Location = New-Object System.Drawing.Point(150, 30)
 $dotEvo.Size = New-Object System.Drawing.Size(30, 30)
 $cardEvo.Controls.Add($dotEvo)
 
@@ -157,13 +168,13 @@ $lblEvoState.Text = '---'
 $lblEvoState.Font = New-Object System.Drawing.Font('Consolas', 9)
 $lblEvoState.ForeColor = [System.Drawing.Color]::Gray
 $lblEvoState.Location = New-Object System.Drawing.Point(10, 50)
-$lblEvoState.Size = New-Object System.Drawing.Size(200, 18)
+$lblEvoState.Size = New-Object System.Drawing.Size(150, 18)
 $cardEvo.Controls.Add($lblEvoState)
 
 # Bot card
 $cardBot = New-Object System.Windows.Forms.Panel
-$cardBot.Location = New-Object System.Drawing.Point(315, $y)
-$cardBot.Size = New-Object System.Drawing.Size(280, 80)
+$cardBot.Location = New-Object System.Drawing.Point(215, $y)
+$cardBot.Size = New-Object System.Drawing.Size(185, 80)
 $cardBot.BackColor = [System.Drawing.Color]::FromArgb(28, 28, 40)
 $form.Controls.Add($cardBot)
 
@@ -172,7 +183,7 @@ $lblBotName.Text = 'PIZZA BOT API'
 $lblBotName.Font = New-Object System.Drawing.Font('Segoe UI', 8, [System.Drawing.FontStyle]::Bold)
 $lblBotName.ForeColor = [System.Drawing.Color]::Gray
 $lblBotName.Location = New-Object System.Drawing.Point(10, 8)
-$lblBotName.Size = New-Object System.Drawing.Size(150, 16)
+$lblBotName.Size = New-Object System.Drawing.Size(120, 16)
 $cardBot.Controls.Add($lblBotName)
 
 $lblBotPort = New-Object System.Windows.Forms.Label
@@ -180,14 +191,14 @@ $lblBotPort.Text = ':8090'
 $lblBotPort.Font = New-Object System.Drawing.Font('Consolas', 9)
 $lblBotPort.ForeColor = [System.Drawing.Color]::FromArgb(140, 140, 160)
 $lblBotPort.Location = New-Object System.Drawing.Point(10, 24)
-$lblBotPort.Size = New-Object System.Drawing.Size(80, 18)
+$lblBotPort.Size = New-Object System.Drawing.Size(60, 18)
 $cardBot.Controls.Add($lblBotPort)
 
 $dotBot = New-Object System.Windows.Forms.Label
 $dotBot.Text = [char]0x25CF
 $dotBot.Font = New-Object System.Drawing.Font('Arial', 16)
 $dotBot.ForeColor = [System.Drawing.Color]::Gray
-$dotBot.Location = New-Object System.Drawing.Point(245, 30)
+$dotBot.Location = New-Object System.Drawing.Point(150, 30)
 $dotBot.Size = New-Object System.Drawing.Size(30, 30)
 $cardBot.Controls.Add($dotBot)
 
@@ -196,8 +207,47 @@ $lblBotState.Text = '---'
 $lblBotState.Font = New-Object System.Drawing.Font('Consolas', 9)
 $lblBotState.ForeColor = [System.Drawing.Color]::Gray
 $lblBotState.Location = New-Object System.Drawing.Point(10, 50)
-$lblBotState.Size = New-Object System.Drawing.Size(200, 18)
+$lblBotState.Size = New-Object System.Drawing.Size(150, 18)
 $cardBot.Controls.Add($lblBotState)
+
+# Campaign Runner card
+$cardCampaign = New-Object System.Windows.Forms.Panel
+$cardCampaign.Location = New-Object System.Drawing.Point(410, $y)
+$cardCampaign.Size = New-Object System.Drawing.Size(185, 80)
+$cardCampaign.BackColor = [System.Drawing.Color]::FromArgb(28, 28, 40)
+$form.Controls.Add($cardCampaign)
+
+$lblCampaignName = New-Object System.Windows.Forms.Label
+$lblCampaignName.Text = 'CAMPAIGN RUNNER'
+$lblCampaignName.Font = New-Object System.Drawing.Font('Segoe UI', 8, [System.Drawing.FontStyle]::Bold)
+$lblCampaignName.ForeColor = [System.Drawing.Color]::Gray
+$lblCampaignName.Location = New-Object System.Drawing.Point(10, 8)
+$lblCampaignName.Size = New-Object System.Drawing.Size(130, 16)
+$cardCampaign.Controls.Add($lblCampaignName)
+
+$lblCampaignPort = New-Object System.Windows.Forms.Label
+$lblCampaignPort.Text = ':3001'
+$lblCampaignPort.Font = New-Object System.Drawing.Font('Consolas', 9)
+$lblCampaignPort.ForeColor = [System.Drawing.Color]::FromArgb(140, 140, 160)
+$lblCampaignPort.Location = New-Object System.Drawing.Point(10, 24)
+$lblCampaignPort.Size = New-Object System.Drawing.Size(60, 18)
+$cardCampaign.Controls.Add($lblCampaignPort)
+
+$dotCampaign = New-Object System.Windows.Forms.Label
+$dotCampaign.Text = [char]0x25CF
+$dotCampaign.Font = New-Object System.Drawing.Font('Arial', 16)
+$dotCampaign.ForeColor = [System.Drawing.Color]::Gray
+$dotCampaign.Location = New-Object System.Drawing.Point(150, 30)
+$dotCampaign.Size = New-Object System.Drawing.Size(30, 30)
+$cardCampaign.Controls.Add($dotCampaign)
+
+$lblCampaignState = New-Object System.Windows.Forms.Label
+$lblCampaignState.Text = '---'
+$lblCampaignState.Font = New-Object System.Drawing.Font('Consolas', 9)
+$lblCampaignState.ForeColor = [System.Drawing.Color]::Gray
+$lblCampaignState.Location = New-Object System.Drawing.Point(10, 50)
+$lblCampaignState.Size = New-Object System.Drawing.Size(150, 18)
+$cardCampaign.Controls.Add($lblCampaignState)
 
 # ---- action buttons ----
 $by = 170
@@ -248,7 +298,7 @@ $btnWebsite.FlatStyle = 'Flat'
 $btnWebsite.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(60, 60, 80)
 $btnWebsite.Cursor = 'Hand'
 $btnWebsite.Location = New-Object System.Drawing.Point(20, 225)
-$btnWebsite.Size = New-Object System.Drawing.Size(180, 32)
+$btnWebsite.Size = New-Object System.Drawing.Size(120, 32)
 $form.Controls.Add($btnWebsite)
 
 $btnAdmin = New-Object System.Windows.Forms.Button
@@ -259,16 +309,28 @@ $btnAdmin.ForeColor = [System.Drawing.Color]::FromArgb(200, 200, 220)
 $btnAdmin.FlatStyle = 'Flat'
 $btnAdmin.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(60, 60, 80)
 $btnAdmin.Cursor = 'Hand'
-$btnAdmin.Location = New-Object System.Drawing.Point(215, 225)
-$btnAdmin.Size = New-Object System.Drawing.Size(180, 32)
+$btnAdmin.Location = New-Object System.Drawing.Point(150, 225)
+$btnAdmin.Size = New-Object System.Drawing.Size(120, 32)
 $form.Controls.Add($btnAdmin)
+
+$btnCampaign = New-Object System.Windows.Forms.Button
+$btnCampaign.Text = 'Campaign Runner'
+$btnCampaign.Font = New-Object System.Drawing.Font('Segoe UI', 9)
+$btnCampaign.BackColor = [System.Drawing.Color]::FromArgb(35, 35, 50)
+$btnCampaign.ForeColor = [System.Drawing.Color]::FromArgb(200, 200, 220)
+$btnCampaign.FlatStyle = 'Flat'
+$btnCampaign.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(60, 60, 80)
+$btnCampaign.Cursor = 'Hand'
+$btnCampaign.Location = New-Object System.Drawing.Point(280, 225)
+$btnCampaign.Size = New-Object System.Drawing.Size(120, 32)
+$form.Controls.Add($btnCampaign)
 
 # ---- log section ----
 $logHeader = New-Object System.Windows.Forms.Label
 $logHeader.Text = 'LIVE LOGS'
 $logHeader.Font = New-Object System.Drawing.Font('Consolas', 9, [System.Drawing.FontStyle]::Bold)
 $logHeader.ForeColor = [System.Drawing.Color]::FromArgb(100, 200, 100)
-$logHeader.Location = New-Object System.Drawing.Point(20, 270)
+$logHeader.Location = New-Object System.Drawing.Point(20, 265)
 $logHeader.Size = New-Object System.Drawing.Size(200, 18)
 $form.Controls.Add($logHeader)
 
@@ -281,8 +343,8 @@ $logBox.Font = New-Object System.Drawing.Font('Consolas', 8.5)
 $logBox.BackColor = [System.Drawing.Color]::FromArgb(8, 8, 14)
 $logBox.ForeColor = [System.Drawing.Color]::FromArgb(120, 220, 120)
 $logBox.BorderStyle = 'None'
-$logBox.Location = New-Object System.Drawing.Point(20, 292)
-$logBox.Size = New-Object System.Drawing.Size(575, 270)
+$logBox.Location = New-Object System.Drawing.Point(20, 285)
+$logBox.Size = New-Object System.Drawing.Size(575, 285)
 $form.Controls.Add($logBox)
 
 # ---- footer status bar ----
@@ -310,6 +372,7 @@ $uiTimer.Add_Tick({
         # update status dots + labels
         $botUp = $Sync.BotStatus -eq 'active'
         $evoUp = $Sync.EvoStatus -eq 'active'
+        $campaignUp = $Sync.CampaignStatus -eq 'active'
 
         $green = [System.Drawing.Color]::Lime
         $red = [System.Drawing.Color]::FromArgb(255, 80, 80)
@@ -317,9 +380,11 @@ $uiTimer.Add_Tick({
 
         $dotBot.ForeColor = if ($botUp) { $green } elseif ($Sync.BotStatus -eq '...') { $gray } else { $red }
         $dotEvo.ForeColor = if ($evoUp) { $green } elseif ($Sync.EvoStatus -eq '...') { $gray } else { $red }
+        $dotCampaign.ForeColor = if ($campaignUp) { $green } elseif ($Sync.CampaignStatus -eq '...') { $gray } else { $red }
 
         $lblBotState.Text = $Sync.BotStatus.ToUpper()
         $lblEvoState.Text = $Sync.EvoStatus.ToUpper()
+        $lblCampaignState.Text = $Sync.CampaignStatus.ToUpper()
 
         # drain new logs
         while ($Sync.Logs.Count -gt 0) {
@@ -340,9 +405,9 @@ $uiTimer.Add_Tick({
         if ($Sync.CommandReady) {
             $lblFooter.Text = 'Processing command...'
         } else {
-            $status = if ($botUp -and $evoUp) { 'All services running' }
-                      elseif ($botUp) { 'Bot running, Evolution stopped' }
-                      elseif ($evoUp) { 'Evolution running, Bot stopped' }
+            $status = if ($botUp -and $evoUp -and $campaignUp) { 'All services running' }
+                      elseif ($botUp -and $evoUp) { 'Bot + Evolution running' }
+                      elseif ($botUp) { 'Bot running only' }
                       else { 'All services stopped' }
             $lblFooter.Text = $status
         }
@@ -412,6 +477,10 @@ $btnAdmin.Add_Click({
     }
 })
 
+$btnCampaign.Add_Click({
+    [System.Diagnostics.Process]::Start('http://localhost:5173')
+})
+
 # ================= CLEANUP ON CLOSE =================
 $form.Add_FormClosed({
     $Sync.Running = $false
@@ -437,8 +506,13 @@ function Update-Status {
             $dotEvo.ForeColor = $gray
         } elseif ($evoUp) { $dotEvo.ForeColor = $green } else { $dotEvo.ForeColor = $red }
 
+        if ($Sync.CampaignStatus -eq '...') {
+            $dotCampaign.ForeColor = $gray
+        } elseif ($campaignUp) { $dotCampaign.ForeColor = $green } else { $dotCampaign.ForeColor = $red }
+
         $lblBotState.Text = $Sync.BotStatus.ToUpper()
         $lblEvoState.Text = $Sync.EvoStatus.ToUpper()
+        $lblCampaignState.Text = $Sync.CampaignStatus.ToUpper()
     } catch {}
 }
 

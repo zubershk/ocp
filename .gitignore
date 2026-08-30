@@ -12,6 +12,10 @@ bot-ocp
 frontend/dist/
 frontend/node_modules/
 bot/vendor/
+campaign-runner/node_modules/
+campaign-runner/dist/
+campaign-runner/data/
+campaign-runner/uploads/
 evolution-go/evolution-go-manager/node_modules/
 evolution-go/evolution-go-manager/dist/
 evolution-go/evolution-go-manager/tsconfig.tsbuildinfo
