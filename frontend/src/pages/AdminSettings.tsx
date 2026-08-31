@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { Save, Plus, Pencil, Trash2, MapPin, Phone, Clock, Store, AlertTriangle } from 'lucide-react';
+import { Save, Plus, Pencil, Trash2, MapPin, Phone, Clock, Store, AlertTriangle, Palette, FileText, Tag, Image } from 'lucide-react';
 import { adminFetch, getAdminKey } from '../services/api';
+import { useToast } from '../context/ToastContext';
+import ConfirmDialog from '../components/ui/ConfirmDialog';
 
 interface Outlet {
   id: number;
@@ -30,6 +32,8 @@ interface Config {
 export default function AdminSettings() {
   const [authed] = useState(() => getAdminKey().length > 0);
   const qc = useQueryClient();
+  const toast = useToast();
+  const [confirmDelete, setConfirmDelete] = useState<{ id: number; name: string } | null>(null);
   const [editingOutlet, setEditingOutlet] = useState<Outlet | null>(null);
   const [showOutletModal, setShowOutletModal] = useState(false);
   const [outletForm, setOutletForm] = useState({ slug: '', name: '', address: '', phones: '', delivery_hours: '11:00 AM to 04:00 AM', online_ordering: true, sort_order: '0' });
@@ -51,16 +55,16 @@ export default function AdminSettings() {
 
   const updateConfigMut = useMutation({
     mutationFn: (body: Record<string, unknown>) => adminFetch('/admin/config', { method: 'PUT', body: JSON.stringify(body) }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-config'] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-config'] }); toast.push({ type: 'success', title: 'Settings saved' }); },
   });
 
   const createOutletMut = useMutation({
     mutationFn: (body: Record<string, unknown>) => adminFetch('/admin/outlets', { method: 'POST', body: JSON.stringify(body) }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-outlets'] }); setShowOutletModal(false); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-outlets'] }); setShowOutletModal(false); toast.push({ type: 'success', title: 'Outlet created' }); },
   });
   const updateOutletMut = useMutation({
     mutationFn: ({ id, body }: { id: number; body: Record<string, unknown> }) => adminFetch(`/admin/outlets/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-outlets'] }); setShowOutletModal(false); setEditingOutlet(null); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-outlets'] }); setShowOutletModal(false); setEditingOutlet(null); toast.push({ type: 'success', title: 'Outlet updated' }); },
   });
   const deleteOutletMut = useMutation({
     mutationFn: (id: number) => adminFetch(`/admin/outlets/${id}`, { method: 'DELETE' }),
@@ -112,7 +116,7 @@ export default function AdminSettings() {
       online_ordering: outletForm.online_ordering,
       sort_order: Number(outletForm.sort_order) || 0,
     };
-    if (!body.name) return alert('Name required');
+    if (!body.name) { toast.push({ type: 'warning', title: 'Name required' }); return; }
     if (editingOutlet) updateOutletMut.mutate({ id: editingOutlet.id, body });
     else createOutletMut.mutate(body);
   };
@@ -135,7 +139,7 @@ export default function AdminSettings() {
     // opening_hours as JSON string
     const hours = getVal('cfg-hours');
     if (hours) body.opening_hours = JSON.stringify({ hours });
-    if (Object.keys(body).length === 0) return alert('No changes');
+    if (Object.keys(body).length === 0) { toast.push({ type: 'warning', title: 'No changes' }); return; }
     updateConfigMut.mutate(body);
     setCfgForm({});
   };
@@ -224,7 +228,7 @@ export default function AdminSettings() {
                 <div className="text-[11px] font-mono text-zinc-400 mt-1">/{o.slug} • sort {o.sort_order}</div>
                 <div className="mt-3 flex gap-2">
                   <button onClick={() => openEdit(o)} className="flex-1 py-2 rounded-xl border hover:bg-zinc-50 text-xs font-semibold flex items-center justify-center gap-1"><Pencil size={12} /> Edit</button>
-                  <button onClick={() => { if (confirm(`Delete ${o.name}?`)) deleteOutletMut.mutate(o.id); }} className="px-3 py-2 rounded-xl border hover:bg-red-50 text-red-600"><Trash2 size={14} /></button>
+                  <button onClick={() => setConfirmDelete({ id: o.id, name: o.name })} className="px-3 py-2 rounded-xl border hover:bg-red-50 text-red-600"><Trash2 size={14} /></button>
                 </div>
               </div>
             ))}
@@ -259,7 +263,42 @@ export default function AdminSettings() {
         </div>
       )}
 
+      {/* Site Customization */}
+      <div className="mt-6 bg-white rounded-2xl border p-6">
+        <h2 className="font-semibold flex items-center gap-2"><Palette size={16} /> Site Customization</h2>
+        <p className="text-xs text-zinc-500 mt-1">Customize your brand, content pages, offers, and banners.</p>
+        <div className="mt-4 grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <Link to="/admin/brand" className="flex items-center gap-3 p-4 rounded-xl border hover:bg-zinc-50 transition-colors">
+            <div className="w-10 h-10 rounded-xl bg-orange-100 grid place-items-center"><Palette size={18} className="text-orange-600" /></div>
+            <div><div className="text-sm font-semibold">Brand</div><div className="text-xs text-zinc-500">Colors, logo, fonts</div></div>
+          </Link>
+          <Link to="/admin/pages" className="flex items-center gap-3 p-4 rounded-xl border hover:bg-zinc-50 transition-colors">
+            <div className="w-10 h-10 rounded-xl bg-blue-100 grid place-items-center"><FileText size={18} className="text-blue-600" /></div>
+            <div><div className="text-sm font-semibold">Pages</div><div className="text-xs text-zinc-500">About, Terms, Privacy</div></div>
+          </Link>
+          <Link to="/admin/offers" className="flex items-center gap-3 p-4 rounded-xl border hover:bg-zinc-50 transition-colors">
+            <div className="w-10 h-10 rounded-xl bg-emerald-100 grid place-items-center"><Tag size={18} className="text-emerald-600" /></div>
+            <div><div className="text-sm font-semibold">Offers</div><div className="text-xs text-zinc-500">Promotions & deals</div></div>
+          </Link>
+          <Link to="/admin/banners" className="flex items-center gap-3 p-4 rounded-xl border hover:bg-zinc-50 transition-colors">
+            <div className="w-10 h-10 rounded-xl bg-purple-100 grid place-items-center"><Image size={18} className="text-purple-600" /></div>
+            <div><div className="text-sm font-semibold">Banners</div><div className="text-xs text-zinc-500">Carousel & promos</div></div>
+          </Link>
+        </div>
+      </div>
+
       <p className="text-center text-[11px] text-zinc-400 mt-6">Edits are live — no restart. Bot and site read same tables.</p>
+      {confirmDelete && (
+        <ConfirmDialog
+          open
+          title={`Delete ${confirmDelete.name}?`}
+          message="This action cannot be undone."
+          danger
+          confirmLabel="Delete"
+          onConfirm={() => { deleteOutletMut.mutate(confirmDelete.id); setConfirmDelete(null); }}
+          onCancel={() => setConfirmDelete(null)}
+        />
+      )}
     </div>
   );
 }
