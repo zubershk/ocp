@@ -1,4 +1,3 @@
-export const RESTAURANT = {
-  name: 'Orange Cheese Pizza',
-  primaryOutlet: 'Mira Road East',
-} as const;
+// Fallback — all data comes from /api/config in production.
+export const RESTAURANT_NAME = '';
+export const PRIMARY_OUTLET = '';
