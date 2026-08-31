@@ -22,6 +22,8 @@ import Account from './pages/Account';
 import { CartProvider } from './context/CartContext';
 import { ToastProvider } from './context/ToastContext';
 import { AuthProvider } from './context/AuthContext';
+import { RestaurantProvider } from './context/RestaurantContext';
+import { SiteSettingsProvider } from './context/SiteSettingsContext';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 const Admin = lazy(() => import('./pages/Admin'));
@@ -31,6 +33,10 @@ const AdminSettings = lazy(() => import('./pages/AdminSettings'));
 const AdminAnalytics = lazy(() => import('./pages/AdminAnalytics'));
 const AdminTeam = lazy(() => import('./pages/AdminTeam'));
 const AdminAudit = lazy(() => import('./pages/AdminAudit'));
+const AdminBrand = lazy(() => import('./pages/AdminBrand'));
+const AdminPages = lazy(() => import('./pages/AdminPages'));
+const AdminOffers = lazy(() => import('./pages/AdminOffers'));
+const AdminBanners = lazy(() => import('./pages/AdminBanners'));
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { refetchOnWindowFocus: false, retry: 1 } },
@@ -53,6 +59,8 @@ export default function App() {
         <AuthProvider>
           <CartProvider>
             <ToastProvider>
+              <RestaurantProvider>
+              <SiteSettingsProvider>
               <ErrorBoundary>
                   <Suspense fallback={
                     <div className="min-h-[50vh] flex items-center justify-center">
@@ -88,10 +96,16 @@ export default function App() {
                     <Route path="/admin/analytics" element={<AdminAnalytics />} />
                   <Route path="/admin/team" element={<AdminTeam />} />
                   <Route path="/admin/logs" element={<AdminAudit />} />
+                  <Route path="/admin/brand" element={<AdminBrand />} />
+                  <Route path="/admin/pages" element={<AdminPages />} />
+                  <Route path="/admin/offers" element={<AdminOffers />} />
+                  <Route path="/admin/banners" element={<AdminBanners />} />
                     <Route path="*" element={<Navigate to="/" replace />} />
                   </Routes>
                 </Suspense>
             </ErrorBoundary>
+              </SiteSettingsProvider>
+              </RestaurantProvider>
             </ToastProvider>
           </CartProvider>
         </AuthProvider>
