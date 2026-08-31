@@ -46,10 +46,6 @@ function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
-function EmptyLayout({ children }: { children: React.ReactNode }) {
-  return <>{children}</>;
-}
-
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -58,7 +54,6 @@ export default function App() {
           <CartProvider>
             <ToastProvider>
               <ErrorBoundary>
-                <Layout>
                   <Suspense fallback={
                     <div className="min-h-[50vh] flex items-center justify-center">
                       <div className="text-center">
@@ -70,7 +65,7 @@ export default function App() {
                     </div>
                   }>
                     <Routes>
-                    <Route path="/" element={<EmptyLayout><Landing /></EmptyLayout>} />
+                    <Route path="/" element={<Landing />} />
                     <Route path="/r" element={<Layout><Home /></Layout>} />
                     <Route path="/r/menu" element={<Layout><Menu /></Layout>} />
                     <Route path="/r/menu/item/:id" element={<Layout><Product /></Layout>} />
@@ -96,7 +91,6 @@ export default function App() {
                     <Route path="*" element={<Navigate to="/" replace />} />
                   </Routes>
                 </Suspense>
-              </Layout>
             </ErrorBoundary>
             </ToastProvider>
           </CartProvider>
