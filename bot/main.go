@@ -85,6 +85,9 @@ func main() {
 	// Initialize admin handler
 	adminHandler := admin.NewAdminHandler(menuService, orderService, evolutionClient, cfg)
 
+	// Site settings handler
+	siteHandler := handlers.NewSiteSettingsHandler()
+
 	// Setup Gin router
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.Default()
@@ -135,6 +138,9 @@ func main() {
 		apiGroup.GET("/menu/:id", apiHandler.GetItem)
 		apiGroup.GET("/outlets", apiHandler.GetOutlets)
 		apiGroup.GET("/config", apiHandler.GetConfig)
+		apiGroup.GET("/site-settings", siteHandler.GetSiteSettings)
+		apiGroup.GET("/site-pages/:slug", siteHandler.GetPage)
+		apiGroup.GET("/menu-categories", siteHandler.GetMenuCategories)
 		apiGroup.POST("/orders", handlers.RateLimit(20, time.Minute), apiHandler.CreateOrder)
 		apiGroup.GET("/orders/:id", apiHandler.GetOrder)
 		// Customer auth — phone synced to WhatsApp bot (customers.whatsapp_number)
@@ -180,8 +186,23 @@ func main() {
 		adminGroup.PATCH("/orders/:id/status", adminHandler.RequireRole("owner", "manager", "kitchen"), adminHandler.UpdateOrderStatus)
 		adminGroup.GET("/debug/whatsapp/:phone", adminHandler.DebugWhatsApp)
 		// Campaign runner integration
-		adminGroup.GET("/customers", adminHandler.ListCustomers)
+		adminGroup.GET("/customers", adminHandler.RequireRole("owner", "manager"), adminHandler.ListCustomers)
 		adminGroup.POST("/broadcast/send", adminHandler.RequireRole("owner", "manager"), adminHandler.BroadcastSend)
+		// Site settings admin endpoints
+		adminGroup.GET("/site-settings", siteHandler.GetSiteSettingsAdmin)
+		adminGroup.PUT("/site-settings/:key", siteHandler.UpdateSiteSetting)
+		adminGroup.GET("/site-pages", siteHandler.ListPages)
+		adminGroup.GET("/site-pages/:slug", siteHandler.GetPageAdmin)
+		adminGroup.PUT("/site-pages/:slug", siteHandler.UpsertPage)
+		adminGroup.DELETE("/site-pages/:slug", siteHandler.DeletePage)
+		adminGroup.GET("/menu-categories", siteHandler.GetMenuCategoriesAdmin)
+		adminGroup.POST("/menu-categories", siteHandler.CreateCategory)
+		adminGroup.PUT("/menu-categories/:id", siteHandler.UpdateCategory)
+		adminGroup.DELETE("/menu-categories/:id", siteHandler.DeleteCategory)
+		adminGroup.GET("/offers", siteHandler.GetOffers)
+		adminGroup.PUT("/offers", siteHandler.UpdateOffers)
+		adminGroup.GET("/banners", siteHandler.GetBanners)
+		adminGroup.PUT("/banners", siteHandler.UpdateBanners)
 	}
 
 	// Health / readiness — SaaS observability
