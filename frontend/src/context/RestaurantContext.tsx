@@ -7,7 +7,7 @@ interface RestaurantConfig {
   address: string;
   map_url: string;
   opening_hours: string;
-  delivery_area: string[];
+  delivery_area: string;
   payment_info: string;
   support_phone: string;
 }
