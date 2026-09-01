@@ -158,6 +158,7 @@ func (h *ApiHandler) CreateOrder(c *gin.Context) {
 	if result.Replayed {
 		status = http.StatusOK // idempotent replay returns the stored order
 	}
+	result.AccessToken = "" // don't leak access token in response
 	c.JSON(status, gin.H{
 		"order":        result,
 		"notification": result.WhatsApp,

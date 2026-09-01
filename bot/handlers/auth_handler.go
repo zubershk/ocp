@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"log"
 	"net/http"
 	"strings"
 
@@ -41,7 +42,8 @@ func (h *AuthHandler) SendOTP(c *gin.Context) {
 			return
 		}
 		// whatsapp send failure still counts as 500 but OTP is stored
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not send WhatsApp code — is WhatsApp connected? " + err.Error()})
+		log.Printf("[auth] send otp failed: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not send code. Please try again."})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"sent": true, "message": "code sent on WhatsApp"})

@@ -233,7 +233,7 @@ func ValidateSession(token string) (string, *Customer, error) {
 	var phone string
 	var expiresAt time.Time
 	// Support both new hashed rows and legacy plaintext (48-char) during migration window
-	err := database.DB.QueryRow(`SELECT phone, expires_at FROM customer_sessions WHERE token=$1 OR token=$2 LIMIT 1`, hashed, token).Scan(&phone, &expiresAt)
+	err := database.DB.QueryRow(`SELECT phone, expires_at FROM customer_sessions WHERE token=$1 LIMIT 1`, hashed).Scan(&phone, &expiresAt)
 	if err == sql.ErrNoRows {
 		return "", nil, fmt.Errorf("invalid token")
 	}
@@ -242,7 +242,7 @@ func ValidateSession(token string) (string, *Customer, error) {
 	}
 	if time.Now().After(expiresAt) {
 		// delete both hash and legacy plain
-		database.DB.Exec(`DELETE FROM customer_sessions WHERE token=$1 OR token=$2`, hashed, token)
+		database.DB.Exec(`DELETE FROM customer_sessions WHERE token=$1`, hashed)
 		return "", nil, fmt.Errorf("session expired")
 	}
 	cust, err := getCustomer(phone)
@@ -256,7 +256,7 @@ func ValidateSession(token string) (string, *Customer, error) {
 // DeleteSession removes a token (logout).
 func DeleteSession(token string) error {
 	hashed := hashHex(strings.TrimSpace(token))
-	_, err := database.DB.Exec(`DELETE FROM customer_sessions WHERE token=$1 OR token=$2`, hashed, strings.TrimSpace(token))
+	_, err := database.DB.Exec(`DELETE FROM customer_sessions WHERE token=$1`, hashed)
 	return err
 }
 
