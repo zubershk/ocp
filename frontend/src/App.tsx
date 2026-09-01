@@ -24,6 +24,7 @@ import { ToastProvider } from './context/ToastContext';
 import { AuthProvider } from './context/AuthContext';
 import { RestaurantProvider } from './context/RestaurantContext';
 import { SiteSettingsProvider } from './context/SiteSettingsContext';
+import { CrustProvider } from './context/CrustContext';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 const Admin = lazy(() => import('./pages/Admin'));
@@ -37,6 +38,8 @@ const AdminBrand = lazy(() => import('./pages/AdminBrand'));
 const AdminPages = lazy(() => import('./pages/AdminPages'));
 const AdminOffers = lazy(() => import('./pages/AdminOffers'));
 const AdminBanners = lazy(() => import('./pages/AdminBanners'));
+const AdminBotWorkflows = lazy(() => import('./pages/AdminBotWorkflows'));
+const AdminBusinessConfig = lazy(() => import('./pages/AdminBusinessConfig'));
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { refetchOnWindowFocus: false, retry: 1 } },
@@ -58,6 +61,7 @@ export default function App() {
       <BrowserRouter>
         <AuthProvider>
           <CartProvider>
+            <CrustProvider>
             <ToastProvider>
               <RestaurantProvider>
               <SiteSettingsProvider>
@@ -100,6 +104,8 @@ export default function App() {
                   <Route path="/admin/pages" element={<AdminPages />} />
                   <Route path="/admin/offers" element={<AdminOffers />} />
                   <Route path="/admin/banners" element={<AdminBanners />} />
+                  <Route path="/admin/bot-workflows" element={<AdminBotWorkflows />} />
+                  <Route path="/admin/business-config" element={<AdminBusinessConfig />} />
                     <Route path="*" element={<Navigate to="/" replace />} />
                   </Routes>
                 </Suspense>
@@ -107,6 +113,7 @@ export default function App() {
               </SiteSettingsProvider>
               </RestaurantProvider>
             </ToastProvider>
+            </CrustProvider>
           </CartProvider>
         </AuthProvider>
       </BrowserRouter>

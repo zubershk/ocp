@@ -1,7 +1,7 @@
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import { Minus, Plus, ArrowLeft, Flame, Clock, BadgeCheck, ChevronRight, ShoppingCart, Zap } from 'lucide-react';
-import { crusts } from '../data/menu';
+import { useCrusts } from '../context/CrustContext';
 import { useMenuItems } from '../hooks/useMenu';
 import { useCart } from '../context/CartContext';
 import { useToast } from '../context/ToastContext';
@@ -13,6 +13,7 @@ import type { MenuItem } from '../types';
 export default function Product() {
   const { id } = useParams();
   const { items, loading } = useMenuItems();
+  const { crusts, getCrustExtra } = useCrusts();
   const item = items.find((i) => i.id === id);
   const nav = useNavigate();
   const { addItem } = useCart();
@@ -34,8 +35,8 @@ export default function Product() {
   );
 
   const base = item.priceBySize ? (item.priceBySize[size] ?? item.price) : item.price;
-  const crustObj = crusts.find((c) => c.id === crust);
-  const crustExtra = crustObj ? (crustObj.extraCharge[size] ?? 0) : 0;
+  const crustObj = crusts.find((c) => c.slug === crust);
+  const crustExtra = getCrustExtra(crust, size);
   const unit = base + crustExtra;
   const total = unit * qty;
 
@@ -153,26 +154,29 @@ export default function Product() {
           <fieldset className="mt-6">
             <legend className="text-sm font-semibold text-zinc-700 mb-3">Choose Crust</legend>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {crusts.map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  onClick={() => setCrust(c.id)}
-                  aria-pressed={crust === c.id}
-                  className={`
-                    text-left p-3.5 rounded-2xl border-2 transition-all duration-200 cursor-pointer
-                    ${crust === c.id
-                      ? 'bg-zinc-900 text-white border-zinc-900 shadow-sm'
-                      : 'bg-white border-stone-200 hover:border-brand-300 hover:bg-brand-50/30'
-                    }
-                  `}
-                >
-                  <div className="text-sm font-medium">{c.name}</div>
-                  <div className={`text-xs mt-0.5 ${crust === c.id ? 'text-white/70' : 'text-zinc-400'}`}>
-                    {c.description} {c.extraCharge[size] ? `(+₹${c.extraCharge[size]})` : '(no extra)'}
-                  </div>
-                </button>
-              ))}
+              {crusts.map((c) => {
+                const extra = getCrustExtra(c.slug, size);
+                return (
+                  <button
+                    key={c.slug}
+                    type="button"
+                    onClick={() => setCrust(c.slug)}
+                    aria-pressed={crust === c.slug}
+                    className={`
+                      text-left p-3.5 rounded-2xl border-2 transition-all duration-200 cursor-pointer
+                      ${crust === c.slug
+                        ? 'bg-zinc-900 text-white border-zinc-900 shadow-sm'
+                        : 'bg-white border-stone-200 hover:border-brand-300 hover:bg-brand-50/30'
+                      }
+                    `}
+                  >
+                    <div className="text-sm font-medium">{c.name}</div>
+                    <div className={`text-xs mt-0.5 ${crust === c.slug ? 'text-white/70' : 'text-zinc-400'}`}>
+                      {c.description} {extra > 0 ? `(+₹${extra})` : '(no extra)'}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </fieldset>
 
