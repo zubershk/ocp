@@ -6,7 +6,7 @@ interface PushState {
   subscribed: boolean;
 }
 
-export function usePushNotifications() {
+export function usePushNotifications(restaurantName?: string) {
   const [state, setState] = useState<PushState>({
     supported: 'Notification' in window,
     permission: typeof Notification !== 'undefined' ? Notification.permission : 'denied',
@@ -25,7 +25,7 @@ export function usePushNotifications() {
     try {
       // In production, you'd register with your push service (e.g., Firebase Cloud Messaging)
       // For now, show a test notification
-      new Notification('Orange Cheese Pizza', {
+      new Notification(restaurantName || 'Orange Cheese Pizza', {
         body: 'You\'ll be notified when your order status changes!',
         icon: '/favicon.svg',
         badge: '/favicon.svg',
