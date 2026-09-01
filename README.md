@@ -58,7 +58,10 @@ curl -fsSL https://raw.githubusercontent.com/zubershk/ocp/master/install.sh | ba
 - **SEO settings** — meta title, description, OG image, favicon
 - **Social links** — Instagram, Facebook, Twitter, YouTube, WhatsApp
 - **Footer** — copyright text, tagline, delivery hours, outlet info — all dynamic
-- **Notification templates** — customizable order status messages with merge tags
+- **Bot message templates** — every WhatsApp response stored in DB, editable via admin with live WhatsApp preview, variable reference, per-message reset
+- **Business configuration** — sizes, payment methods, category icons, order prefix, currency, delivery fee, min order — all configurable for any business type
+- **Crust management** — crust names and per-size prices managed via admin CRUD API
+- **Menu categories** — names, descriptions, icons configurable from admin
 
 **WhatsApp Campaign Runner:**
 - Bulk send WhatsApp messages to customers
@@ -108,8 +111,13 @@ Tech-OCP/
 │   │   ├── customer_service.go   # Customer lookup, phone canonicalization
 │   │   ├── customer_auth_service.go  # OTP/session management (transactional)
 │   │   ├── conversation_engine.go    # WhatsApp conversation state machine
+│   │   ├── conversation_handlers.go  # Conversation action handlers
+│   │   ├── bot_message_service.go    # Template rendering engine (DB + fallback)
+│   │   ├── bot_message_defaults.go   # Compiled-in default messages
+│   │   ├── business_config.go        # Sizes, payments, icons from DB
+│   │   ├── wa_emoji.go              # WhatsApp emoji constants
 │   │   └── live_chat_service.go  # WhatsApp message persistence
-│   ├── migrations/               # 14 SQL migration files
+│   ├── migrations/               # 16 SQL migration files
 │   ├── uploads/                  # Menu item product photos
 │   ├── .env.example              # Environment template
 │   └── go.mod / go.sum
@@ -119,7 +127,7 @@ Tech-OCP/
 │   │   ├── components/           # Reusable UI components
 │   │   │   ├── ui/               # Button, Card, Badge, Modal, ConfirmDialog
 │   │   │   └── layout/           # Navbar, Footer
-│   │   ├── context/              # Cart, Toast, Auth, Restaurant, SiteSettings
+│   │   ├── context/              # Cart, Toast, Auth, Restaurant, SiteSettings, Crusts
 │   │   ├── hooks/                # Custom hooks (GSAP, geolocation, etc.)
 │   │   ├── services/             # API calls, cart persistence
 │   │   ├── data/                 # Static data (fallback outlets, restaurant)
@@ -340,6 +348,8 @@ The codebase has been audited and hardened for production use:
 | `GET` | `/api/orders/:id` | Get order status |
 | `GET` | `/api/config` | Restaurant configuration |
 | `GET` | `/api/outlets` | Outlet locations |
+| `GET` | `/api/crusts` | Crust catalog with per-size prices |
+| `GET` | `/api/business-config` | Sizes, payments, icons, delivery config |
 | `GET` | `/api/site-settings` | Brand, SEO, social, footer settings |
 | `GET` | `/api/site-pages/:slug` | CMS page content |
 | `GET` | `/api/menu-categories` | Menu categories |
@@ -394,6 +404,19 @@ The codebase has been audited and hardened for production use:
 | `PUT` | `/admin/offers` | Update offers |
 | `GET` | `/admin/banners` | Get banner configuration |
 | `PUT` | `/admin/banners` | Update banners |
+| `GET` | `/admin/bot-messages` | List all bot message templates |
+| `GET` | `/admin/bot-messages/:key` | Get a bot message template |
+| `PUT` | `/admin/bot-messages/:key` | Update a bot message template |
+| `POST` | `/admin/bot-messages/reset/:key` | Reset a template to default |
+| `POST` | `/admin/bot-messages/reset-all` | Reset all templates to defaults |
+| `POST` | `/admin/bot-messages/preview/:key` | Render a template with sample data |
+| `GET` | `/admin/business-config` | Get business configuration |
+| `PUT` | `/admin/business-config` | Update business configuration |
+| `POST` | `/admin/business-config/reload` | Reload config from DB |
+| `GET` | `/admin/crusts` | List all crusts |
+| `POST` | `/admin/crusts` | Create a crust |
+| `PUT` | `/admin/crusts/:id` | Update a crust |
+| `DELETE` | `/admin/crusts/:id` | Delete a crust |
 
 ### Webhook
 
@@ -419,9 +442,11 @@ Login with your `BOT_ADMIN_KEY`. The key is stored in browser localStorage only.
 
 **Site Customization (under Settings):**
 - **Brand** — Logo, favicon, primary/secondary/accent colors, heading and body fonts with live preview
+- **Business Config** — Sizes, payment methods, category icons, order prefix, currency, delivery fee, min order
 - **Pages** — CMS editor for About, Terms, Privacy, FAQ with meta tags
 - **Offers** — Create promotions with badges, codes, discount amounts, min order values
 - **Banners** — Manage home page carousel with background colors and CTA buttons
+- **Bot Messages** — Edit all WhatsApp bot responses with live phone preview and variable reference
 
 **Roles:**
 - `owner` — Full access to everything
