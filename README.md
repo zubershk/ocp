@@ -49,6 +49,17 @@ curl -fsSL https://raw.githubusercontent.com/zubershk/ocp/master/install.sh | ba
 - Audit log tracking every admin action
 - Rate limiting on auth and order endpoints to prevent abuse
 
+**Fully configurable — every detail is editable from the admin dashboard:**
+
+- **Brand settings** — logo, favicon, primary/secondary/accent colors, heading and body fonts
+- **Content pages** — About, Terms, Privacy, FAQ managed via CMS editor
+- **Offers & promotions** — create deals with badges, codes, discount amounts, min order
+- **Banner carousel** — add/edit home page banners with background colors and CTA buttons
+- **SEO settings** — meta title, description, OG image, favicon
+- **Social links** — Instagram, Facebook, Twitter, YouTube, WhatsApp
+- **Footer** — copyright text, tagline, delivery hours, outlet info — all dynamic
+- **Notification templates** — customizable order status messages with merge tags
+
 **WhatsApp Campaign Runner:**
 - Bulk send WhatsApp messages to customers
 - Campaign wizard with WhatsApp-style live preview
@@ -86,6 +97,7 @@ Tech-OCP/
 │   │   ├── api_handler.go        # Public menu/order API, CORS, security headers
 │   │   ├── webhook_handler.go    # Evolution GO WhatsApp webhook
 │   │   ├── auth_handler.go       # WhatsApp OTP login
+│   │   ├── site_settings_handler.go  # Site settings, pages, categories API
 │   │   └── rate_limit.go         # IP-based rate limiting
 │   ├── admin/
 │   │   └── admin_handler.go      # Admin CRUD, analytics, team, audit, broadcast
@@ -97,7 +109,7 @@ Tech-OCP/
 │   │   ├── customer_auth_service.go  # OTP/session management (transactional)
 │   │   ├── conversation_engine.go    # WhatsApp conversation state machine
 │   │   └── live_chat_service.go  # WhatsApp message persistence
-│   ├── migrations/               # 13 SQL migration files
+│   ├── migrations/               # 14 SQL migration files
 │   ├── uploads/                  # Menu item product photos
 │   ├── .env.example              # Environment template
 │   └── go.mod / go.sum
@@ -105,12 +117,12 @@ Tech-OCP/
 │   ├── src/
 │   │   ├── pages/                # Home, Menu, Product, Cart, Checkout, etc.
 │   │   ├── components/           # Reusable UI components
-│   │   │   ├── ui/               # Button, Card, Badge, Modal, etc.
+│   │   │   ├── ui/               # Button, Card, Badge, Modal, ConfirmDialog
 │   │   │   └── layout/           # Navbar, Footer
-│   │   ├── context/              # Cart, Toast, Auth contexts
+│   │   ├── context/              # Cart, Toast, Auth, Restaurant, SiteSettings
 │   │   ├── hooks/                # Custom hooks (GSAP, geolocation, etc.)
 │   │   ├── services/             # API calls, cart persistence
-│   │   ├── data/                 # Static data (menu fallback, outlets, offers)
+│   │   ├── data/                 # Static data (fallback outlets, restaurant)
 │   │   └── types/                # TypeScript interfaces
 │   ├── public/                   # PWA manifest, service worker, offline page
 │   ├── vercel.json               # Vercel deployment config
@@ -308,8 +320,14 @@ The codebase has been audited and hardened for production use:
 - **Error sanitization** — internal errors logged server-side, generic messages returned to clients
 - **Security headers** — HSTS, CSP, X-Frame-Options, Referrer-Policy, Permissions-Policy
 - **CORS** — explicit origin allowlist (no wildcards)
-- **Input validation** — broadcast limited to 200 recipients, messages max 4096 chars
+- **Input validation** — all fields length-bounded, numeric ranges checked, enums enforced
+- **SQL injection** — 100% parameterized queries across all handlers
+- **XSS prevention** — no `dangerouslySetInnerHTML`, React auto-escaping, CSP `script-src 'self'`
+- **File uploads** — content-type sniffing, 5MB limit, random filenames (no path traversal)
+- **Session tokens** — 192-bit entropy, SHA-256 hashed at rest, server-side invalidation on logout
+- **IDOR protection** — order access requires token or Bearer ownership
 - **Memory management** — conversation locks cleaned up every 30 minutes
+- **Docker security** — required env vars (no defaults), locked CORS, minimal base images
 
 ## API Endpoints
 
@@ -320,6 +338,11 @@ The codebase has been audited and hardened for production use:
 | `GET` | `/api/menu` | Full menu with categories |
 | `POST` | `/api/orders` | Place a new order |
 | `GET` | `/api/orders/:id` | Get order status |
+| `GET` | `/api/config` | Restaurant configuration |
+| `GET` | `/api/outlets` | Outlet locations |
+| `GET` | `/api/site-settings` | Brand, SEO, social, footer settings |
+| `GET` | `/api/site-pages/:slug` | CMS page content |
+| `GET` | `/api/menu-categories` | Menu categories |
 | `GET` | `/health` | Health check |
 | `GET` | `/ready` | Readiness (DB + Evolution status) |
 
@@ -358,6 +381,19 @@ The codebase has been audited and hardened for production use:
 | `GET` | `/admin/customers` | List all customers |
 | `POST` | `/admin/broadcast/send` | Bulk send WhatsApp messages |
 | `GET` | `/admin/me` | Current admin user info |
+| `GET` | `/admin/site-settings` | All site settings |
+| `PUT` | `/admin/site-settings/:key` | Update a site setting |
+| `GET` | `/admin/site-pages` | List all CMS pages |
+| `PUT` | `/admin/site-pages/:slug` | Create/update a page |
+| `DELETE` | `/admin/site-pages/:slug` | Delete a page |
+| `GET` | `/admin/menu-categories` | List all menu categories |
+| `POST` | `/admin/menu-categories` | Create a category |
+| `PUT` | `/admin/menu-categories/:id` | Update a category |
+| `DELETE` | `/admin/menu-categories/:id` | Delete a category |
+| `GET` | `/admin/offers` | Get offers configuration |
+| `PUT` | `/admin/offers` | Update offers |
+| `GET` | `/admin/banners` | Get banner configuration |
+| `PUT` | `/admin/banners` | Update banners |
 
 ### Webhook
 
@@ -378,8 +414,14 @@ Login with your `BOT_ADMIN_KEY`. The key is stored in browser localStorage only.
 - **Live Chat** — WhatsApp conversation viewer
 - **Analytics** — Sales charts, daily/weekly/monthly breakdowns
 - **Team** — Manage staff accounts with role-based access
-- **Settings** — Restaurant name, hours, delivery config, tax settings
+- **Settings** — Restaurant name, hours, delivery config + site customization links
 - **Audit Log** — Who did what, when
+
+**Site Customization (under Settings):**
+- **Brand** — Logo, favicon, primary/secondary/accent colors, heading and body fonts with live preview
+- **Pages** — CMS editor for About, Terms, Privacy, FAQ with meta tags
+- **Offers** — Create promotions with badges, codes, discount amounts, min order values
+- **Banners** — Manage home page carousel with background colors and CTA buttons
 
 **Roles:**
 - `owner` — Full access to everything
@@ -448,4 +490,4 @@ docker compose -f docker/examples/docker-compose.yml up -d
 
 ## License
 
-Private — for Orange Cheese Pizza internal use. Not licensed for redistribution.
+MIT — see [LICENSE](LICENSE) for details.
