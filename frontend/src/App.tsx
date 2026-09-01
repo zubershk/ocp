@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import Navbar from './components/layout/Navbar';
 import Footer from './components/layout/Footer';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -45,6 +45,22 @@ const queryClient = new QueryClient({
   defaultOptions: { queries: { refetchOnWindowFocus: false, retry: 1 } },
 });
 
+function PageShell({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div className={`page-enter ${className}`}>
+      {children}
+    </div>
+  );
+}
+
+function AdminPageShell({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="page-enter">
+      {children}
+    </div>
+  );
+}
+
 function Layout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen flex flex-col bg-[#fefcf8]">
@@ -52,6 +68,62 @@ function Layout({ children }: { children: React.ReactNode }) {
       <main className="flex-1">{children}</main>
       <Footer />
     </div>
+  );
+}
+
+function AdminSuspense({ children }: { children: React.ReactNode }) {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-stone-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-12 h-12 mx-auto rounded-2xl bg-zinc-900 flex items-center justify-center animate-pulse">
+            <div className="w-6 h-6 rounded-lg bg-white/20" />
+          </div>
+          <p className="text-sm text-zinc-500 mt-3 font-medium">Loading…</p>
+        </div>
+      </div>
+    }>
+      {children}
+    </Suspense>
+  );
+}
+
+function AppRoutes() {
+  const location = useLocation();
+
+  return (
+    <Routes location={location} key={location.pathname}>
+      <Route path="/" element={<PageShell><Landing /></PageShell>} />
+      <Route path="/r" element={<PageShell><Layout><Home /></Layout></PageShell>} />
+      <Route path="/r/menu" element={<PageShell><Layout><Menu /></Layout></PageShell>} />
+      <Route path="/r/menu/item/:id" element={<PageShell><Layout><Product /></Layout></PageShell>} />
+      <Route path="/r/cart" element={<PageShell><Layout><Cart /></Layout></PageShell>} />
+      <Route path="/r/checkout" element={<PageShell><Layout><Checkout /></Layout></PageShell>} />
+      <Route path="/r/order/:id" element={<PageShell><Layout><Order /></Layout></PageShell>} />
+      <Route path="/r/offers" element={<PageShell><Layout><Offers /></Layout></PageShell>} />
+      <Route path="/r/locations" element={<PageShell><Layout><Locations /></Layout></PageShell>} />
+      <Route path="/r/about" element={<PageShell><Layout><About /></Layout></PageShell>} />
+      <Route path="/r/faq" element={<PageShell><Layout><FAQ /></Layout></PageShell>} />
+      <Route path="/r/contact" element={<PageShell><Layout><Contact /></Layout></PageShell>} />
+      <Route path="/r/privacy" element={<PageShell><Layout><Privacy /></Layout></PageShell>} />
+      <Route path="/r/terms" element={<PageShell><Layout><Terms /></Layout></PageShell>} />
+      <Route path="/r/login" element={<PageShell><Layout><Login /></Layout></PageShell>} />
+      <Route path="/r/account" element={<PageShell><Layout><Account /></Layout></PageShell>} />
+      <Route path="/admin" element={<AdminSuspense><AdminPageShell><Admin /></AdminPageShell></AdminSuspense>} />
+      <Route path="/admin/catalog" element={<AdminSuspense><AdminPageShell><AdminCatalog /></AdminPageShell></AdminSuspense>} />
+      <Route path="/admin/chats" element={<AdminSuspense><AdminPageShell><AdminLiveChat /></AdminPageShell></AdminSuspense>} />
+      <Route path="/admin/settings" element={<AdminSuspense><AdminPageShell><AdminSettings /></AdminPageShell></AdminSuspense>} />
+      <Route path="/admin/analytics" element={<AdminSuspense><AdminPageShell><AdminAnalytics /></AdminPageShell></AdminSuspense>} />
+      <Route path="/admin/team" element={<AdminSuspense><AdminPageShell><AdminTeam /></AdminPageShell></AdminSuspense>} />
+      <Route path="/admin/logs" element={<AdminSuspense><AdminPageShell><AdminAudit /></AdminPageShell></AdminSuspense>} />
+      <Route path="/admin/brand" element={<AdminSuspense><AdminPageShell><AdminBrand /></AdminPageShell></AdminSuspense>} />
+      <Route path="/admin/pages" element={<AdminSuspense><AdminPageShell><AdminPages /></AdminPageShell></AdminSuspense>} />
+      <Route path="/admin/offers" element={<AdminSuspense><AdminPageShell><AdminOffers /></AdminPageShell></AdminSuspense>} />
+      <Route path="/admin/banners" element={<AdminSuspense><AdminPageShell><AdminBanners /></AdminPageShell></AdminSuspense>} />
+      <Route path="/admin/bot-workflows" element={<AdminSuspense><AdminPageShell><AdminBotWorkflows /></AdminPageShell></AdminSuspense>} />
+      <Route path="/admin/business-config" element={<AdminSuspense><AdminPageShell><AdminBusinessConfig /></AdminPageShell></AdminSuspense>} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   );
 }
 
@@ -66,50 +138,8 @@ export default function App() {
               <RestaurantProvider>
               <SiteSettingsProvider>
               <ErrorBoundary>
-                  <Suspense fallback={
-                    <div className="min-h-[50vh] flex items-center justify-center">
-                      <div className="text-center">
-                        <div className="w-10 h-10 mx-auto rounded-xl bg-brand-100 flex items-center justify-center animate-pulse">
-                          <div className="w-5 h-5 rounded-lg bg-brand-400" />
-                        </div>
-                        <p className="text-sm text-zinc-500 mt-3">Loading…</p>
-                      </div>
-                    </div>
-                  }>
-                    <Routes>
-                    <Route path="/" element={<Landing />} />
-                    <Route path="/r" element={<Layout><Home /></Layout>} />
-                    <Route path="/r/menu" element={<Layout><Menu /></Layout>} />
-                    <Route path="/r/menu/item/:id" element={<Layout><Product /></Layout>} />
-                    <Route path="/r/cart" element={<Layout><Cart /></Layout>} />
-                    <Route path="/r/checkout" element={<Layout><Checkout /></Layout>} />
-                    <Route path="/r/order/:id" element={<Layout><Order /></Layout>} />
-                    <Route path="/r/offers" element={<Layout><Offers /></Layout>} />
-                    <Route path="/r/locations" element={<Layout><Locations /></Layout>} />
-                    <Route path="/r/about" element={<Layout><About /></Layout>} />
-                    <Route path="/r/faq" element={<Layout><FAQ /></Layout>} />
-                    <Route path="/r/contact" element={<Layout><Contact /></Layout>} />
-                    <Route path="/r/privacy" element={<Layout><Privacy /></Layout>} />
-                    <Route path="/r/terms" element={<Layout><Terms /></Layout>} />
-                    <Route path="/r/login" element={<Layout><Login /></Layout>} />
-                    <Route path="/r/account" element={<Layout><Account /></Layout>} />
-                    <Route path="/admin" element={<Admin />} />
-                    <Route path="/admin/catalog" element={<AdminCatalog />} />
-                    <Route path="/admin/chats" element={<AdminLiveChat />} />
-                    <Route path="/admin/settings" element={<AdminSettings />} />
-                    <Route path="/admin/analytics" element={<AdminAnalytics />} />
-                  <Route path="/admin/team" element={<AdminTeam />} />
-                  <Route path="/admin/logs" element={<AdminAudit />} />
-                  <Route path="/admin/brand" element={<AdminBrand />} />
-                  <Route path="/admin/pages" element={<AdminPages />} />
-                  <Route path="/admin/offers" element={<AdminOffers />} />
-                  <Route path="/admin/banners" element={<AdminBanners />} />
-                  <Route path="/admin/bot-workflows" element={<AdminBotWorkflows />} />
-                  <Route path="/admin/business-config" element={<AdminBusinessConfig />} />
-                    <Route path="*" element={<Navigate to="/" replace />} />
-                  </Routes>
-                </Suspense>
-            </ErrorBoundary>
+                <AppRoutes />
+              </ErrorBoundary>
               </SiteSettingsProvider>
               </RestaurantProvider>
             </ToastProvider>

@@ -4,7 +4,7 @@ import { useCart } from '../../context/CartContext';
 import { useAuth } from '../../context/AuthContext';
 import { useRestaurantName } from '../../context/RestaurantContext';
 import { useBrand } from '../../context/SiteSettingsContext';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 const navItems = [
   { label: 'Home', to: '/r/' },
@@ -21,6 +21,18 @@ export default function Navbar() {
   const brand = useBrand();
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const prevCountRef = useRef(count);
+  const [badgePulse, setBadgePulse] = useState(false);
+
+  useEffect(() => {
+    if (count > prevCountRef.current) {
+      setBadgePulse(true);
+      const t = setTimeout(() => setBadgePulse(false), 400);
+      prevCountRef.current = count;
+      return () => clearTimeout(t);
+    }
+    prevCountRef.current = count;
+  }, [count]);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 10);
@@ -128,7 +140,7 @@ export default function Navbar() {
               >
                 <ShoppingCart size={19} className="text-zinc-600 group-hover:text-brand-600 transition-colors" />
                 {count > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 bg-brand-600 text-white text-[10px] min-w-[18px] h-[18px] rounded-full flex items-center justify-center font-bold animate-scale-in shadow-sm">
+                  <span className={`absolute -top-0.5 -right-0.5 bg-brand-600 text-white text-[10px] min-w-[18px] h-[18px] rounded-full flex items-center justify-center font-bold shadow-sm ${badgePulse ? 'badge-pulse' : 'animate-scale-in'}`}>
                     {count > 99 ? '99+' : count}
                   </span>
                 )}
