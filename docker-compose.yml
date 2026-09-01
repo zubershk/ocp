@@ -6,7 +6,7 @@ services:
     environment:
       POSTGRES_DB: ocp
       POSTGRES_USER: ocp
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-ocp_secret_2026}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
     volumes:
       - pgdata:/var/lib/postgresql/data
     ports:
@@ -26,14 +26,14 @@ services:
       - AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY:-}
       - DATABASE_ENABLED=true
       - DATABASE_PROVIDER=postgresql
-      - DATABASE_CONNECTION_URI=postgresql://ocp:${DB_PASSWORD:-ocp_secret_2026}@postgres:5432/ocp
+      - DATABASE_CONNECTION_URI=postgresql://ocp:${DB_PASSWORD:?Set DB_PASSWORD in .env}@postgres:5432/ocp
       - DATABASE_CONNECTION_CLIENT_NAME=evolution
       - DATABASE_SAVE_DATA_INSTANCE=true
       - DATABASE_SAVE_DATA_NEW_MESSAGE=true
       - DATABASE_SAVE_MESSAGE_UPDATE=true
       - DATABASE_SAVE_DATA_CONTACTS=true
       - DATABASE_SAVE_DATA_CHATS=true
-      - CORS_ORIGIN=*
+      - CORS_ORIGIN=http://localhost:5173,http://localhost:3000,http://localhost:8090
       - DELIVERY_RETRIES=5
       - WEBHOOK_GLOBAL_ENABLED=false
     ports:
@@ -50,13 +50,13 @@ services:
     restart: unless-stopped
     environment:
       - BOT_PORT=8090
-      - BOT_DATABASE_URL=postgresql://ocp:${DB_PASSWORD:-ocp_secret_2026}@postgres:5432/ocp?sslmode=disable
+      - BOT_DATABASE_URL=postgresql://ocp:${DB_PASSWORD:?Set DB_PASSWORD in .env}@postgres:5432/ocp?sslmode=disable
       - EVOLUTION_API_URL=http://evolution:8080
       - EVOLUTION_API_KEY=${EVOLUTION_API_KEY:-}
       - EVOLUTION_INSTANCE=${EVOLUTION_INSTANCE:-OCP}
       - EVOLUTION_INSTANCE_TOKEN=${EVOLUTION_INSTANCE_TOKEN:-}
-      - EVOLUTION_WEBHOOK_SECRET=${EVOLUTION_WEBHOOK_SECRET:-changeme_in_production}
-      - BOT_ADMIN_KEY=${BOT_ADMIN_KEY:-changeme_in_production}
+      - EVOLUTION_WEBHOOK_SECRET=${EVOLUTION_WEBHOOK_SECRET:?Set EVOLUTION_WEBHOOK_SECRET in .env}
+      - BOT_ADMIN_KEY=${BOT_ADMIN_KEY:?Set BOT_ADMIN_KEY in .env}
       - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost,http://localhost:3000}
       - RESTAURANT_WHATSAPP_NUMBER=${RESTAURANT_WHATSAPP_NUMBER:-}
       - RESTAURANT_NAME=${RESTAURANT_NAME:-Orange Cheese Pizza}
