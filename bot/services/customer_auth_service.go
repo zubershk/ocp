@@ -134,7 +134,7 @@ func SendOTP(phone string, evolution *EvolutionClient) (string, error) {
 	if dest == "" {
 		return "", &ValidationError{Msg: "invalid phone number"}
 	}
-	msg := fmt.Sprintf("🍕 Orange Cheese Pizza\n\nYour login code is *%s*\nValid for 5 minutes. Do not share this code.\n\nIf you didn't request this, ignore this message.", code)
+	msg := Msg("notification_otp", map[string]interface{}{"Code": code})
 	if err := evolution.SendText(dest, msg); err != nil {
 		// keep OTP but surface warning; client sees sent:false
 		return "", fmt.Errorf("whatsapp send failed: %w", err)

@@ -100,9 +100,6 @@ func badRequest(format string, args ...interface{}) *ValidationError {
 
 var phoneDigits = regexp.MustCompile(`^[0-9]{10,13}$`)
 
-var validSizes = map[string]bool{"regular": true, "medium": true, "large": true}
-var validPayments = map[string]bool{"cod": true, "upi": true, "online": true}
-
 type WebsiteOrderService struct {
 	menu      *MenuService
 	evolution *EvolutionClient
@@ -215,8 +212,12 @@ func (s *WebsiteOrderService) Create(req *WebsiteOrderRequest, idempotencyKey st
 	if req.DeliveryType == "delivery" && address == "" {
 		return nil, badRequest("address is required for delivery")
 	}
+	biz := GetBizConfig()
+	validPayments := biz.GetValidPaymentMethods()
+	validSizes := biz.GetValidSizes()
+
 	if !validPayments[req.PaymentMethod] {
-		return nil, badRequest("payment_method must be cod, upi or online")
+		return nil, badRequest("payment_method must be one of the configured methods")
 	}
 	if req.Customer.Email != "" {
 		emailRegex := regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)
@@ -291,7 +292,7 @@ func (s *WebsiteOrderService) Create(req *WebsiteOrderRequest, idempotencyKey st
 
 	deliveryFee := 0.0
 	if req.DeliveryType == "delivery" {
-		deliveryFee = s.cfg.DeliveryFee // free delivery is configured as 0
+		deliveryFee = biz.DeliveryFee
 	}
 	discount := 0.0
 	total := subtotal + deliveryFee - discount
@@ -307,7 +308,7 @@ func (s *WebsiteOrderService) Create(req *WebsiteOrderRequest, idempotencyKey st
 	if err := tx.QueryRow(`SELECT nextval('ocp_order_number_seq')`).Scan(&seq); err != nil {
 		return nil, fmt.Errorf("order number generation failed: %w", err)
 	}
-	orderNumber := fmt.Sprintf("OCP-%s-%04d", time.Now().Format("20060102"), seq)
+	orderNumber := fmt.Sprintf("%s-%s-%04d", strings.ToUpper(biz.OrderPrefix), time.Now().Format("20060102"), seq)
 
 	source := req.Source
 	if source != "whatsapp" {
@@ -508,10 +509,11 @@ func (s *WebsiteOrderService) notifyWhatsApp(order *WebsiteOrderResult) WhatsApp
 	}
 
 	var b strings.Builder
-	header := "\U0001F355 Orange Cheese Pizza\nNew Website Order"
+	headerKey := "notification_new_website_order"
 	if order.Source == "whatsapp" {
-		header = "\U0001F355 Orange Cheese Pizza\nNEW WHATSAPP ORDER"
+		headerKey = "notification_new_wa_order"
 	}
+	header := Msg(headerKey, nil)
 	b.WriteString(header + "\n\n")
 	fmt.Fprintf(&b, "Order: %s\n", order.OrderNumber)
 	fmt.Fprintf(&b, "Customer: %s\n", order.CustomerName)

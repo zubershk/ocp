@@ -48,20 +48,7 @@ const (
 	emChefCook = emChefMan + " " // spacing helper
 )
 
-var categoryIcons = map[string]string{
-	"veg-pizzas":         emPizza,
-	"nonveg-pizzas":      emChicken,
-	"value-pizza":        emMoney,
-	"pasta":              emPasta,
-	"garlic-bread":       emBread,
-	"tacos":              emTaco,
-	"appetizers":         emDumpling,
-	"speciality-chicken": emChicken,
-	"momos":              emDumpling,
-	"burgers":            emBurger,
-	"french-fries":       emFries,
-	"desserts":           emCake,
-}
+var categoryIcons = map[string]string{}
 
 var statusEmoji = map[string]string{
 	"placed":           "\U0001F4DD",

@@ -1452,3 +1452,297 @@ func cleanPhoneParam(phone string) string {
 	}
 	return cleaned
 }
+
+// ------------------------------------------------------------------
+// Bot Message Templates (configurable WhatsApp responses)
+// ------------------------------------------------------------------
+
+// BotMessageService is a lazy accessor — initialized once in main.go.
+var botMsgSvc *services.BotMessageService
+
+func SetBotMessageService(svc *services.BotMessageService) {
+	botMsgSvc = svc
+}
+
+// ListBotMessages returns all message templates grouped by category.
+func (h *AdminHandler) ListBotMessages(c *gin.Context) {
+	if botMsgSvc == nil {
+		c.JSON(500, gin.H{"error": "bot message service not initialized"})
+		return
+	}
+	messages := botMsgSvc.GetAllMessages()
+	c.JSON(200, gin.H{"messages": messages, "categories": botMsgSvc.GetMessageCategories()})
+}
+
+// GetBotMessage returns a single message template by key.
+func (h *AdminHandler) GetBotMessage(c *gin.Context) {
+	if botMsgSvc == nil {
+		c.JSON(500, gin.H{"error": "bot message service not initialized"})
+		return
+	}
+	key := c.Param("key")
+	msg, found := botMsgSvc.GetMessage(key)
+	if !found {
+		c.JSON(404, gin.H{"error": "message not found"})
+		return
+	}
+	c.JSON(200, gin.H{"message": msg})
+}
+
+// UpdateBotMessage updates a single message template.
+func (h *AdminHandler) UpdateBotMessage(c *gin.Context) {
+	if botMsgSvc == nil {
+		c.JSON(500, gin.H{"error": "bot message service not initialized"})
+		return
+	}
+	key := c.Param("key")
+	var req struct {
+		MessageText string `json:"message_text"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(400, gin.H{"error": "invalid request"})
+		return
+	}
+	if strings.TrimSpace(req.MessageText) == "" {
+		c.JSON(400, gin.H{"error": "message_text is required"})
+		return
+	}
+	if err := botMsgSvc.UpdateMessage(key, req.MessageText); err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	auditLog(c, "bot_message_updated", key, nil)
+	c.JSON(200, gin.H{"ok": true})
+}
+
+// ResetBotMessage resets a single message to compiled-in default.
+func (h *AdminHandler) ResetBotMessage(c *gin.Context) {
+	if botMsgSvc == nil {
+		c.JSON(500, gin.H{"error": "bot message service not initialized"})
+		return
+	}
+	key := c.Param("key")
+	if err := botMsgSvc.ResetMessage(key); err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	auditLog(c, "bot_message_reset", key, nil)
+	c.JSON(200, gin.H{"ok": true})
+}
+
+// ResetAllBotMessages resets all messages to compiled-in defaults.
+func (h *AdminHandler) ResetAllBotMessages(c *gin.Context) {
+	if botMsgSvc == nil {
+		c.JSON(500, gin.H{"error": "bot message service not initialized"})
+		return
+	}
+	if err := botMsgSvc.ResetAllMessages(); err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	auditLog(c, "bot_messages_reset_all", "all", nil)
+	c.JSON(200, gin.H{"ok": true})
+}
+
+// RenderBotMessagePreview renders a message with sample data for preview.
+func (h *AdminHandler) RenderBotMessagePreview(c *gin.Context) {
+	if botMsgSvc == nil {
+		c.JSON(500, gin.H{"error": "bot message service not initialized"})
+		return
+	}
+	key := c.Param("key")
+	var req struct {
+		Data map[string]interface{} `json:"data"`
+	}
+	_ = c.ShouldBindJSON(&req)
+	if req.Data == nil {
+		req.Data = sampleData(key)
+	}
+	rendered := botMsgSvc.Render(key, req.Data)
+	c.JSON(200, gin.H{"rendered": rendered})
+}
+
+func sampleData(key string) map[string]interface{} {
+	return map[string]interface{}{
+		"RestaurantName": "My Restaurant",
+		"Name":           "John",
+		"Phone":          "9876543210",
+		"ItemCount":      3,
+		"State":          "Category",
+		"CategoryName":   "Veg Pizzas",
+		"ItemName":       "Margherita",
+		"Size":           "Medium",
+		"CrustName":      "Thin Crust",
+		"Price":          385,
+		"Quantity":       2,
+		"Total":          770,
+		"Subtotal":       770,
+		"OrderNumber":    "OCP-20260901-0001",
+		"Address":        "123 Main Street, Mumbai",
+		"Payment":        "Cash",
+		"DeliveryType":   "Delivery",
+		"Emoji":          "\U0001F355",
+		"Status":         "Confirmed",
+		"Date":           "01 Sep, 3:00 PM",
+		"Error":          "Item unavailable",
+		"Count":          2,
+		"Code":           "123456",
+		"Order":          "OCP-20260901-0001",
+		"CartCount":      2,
+		"KitchenHours":   "11 AM - 11 PM",
+		"DeliveryHours":  "11 AM - 4 AM",
+		"Options":        "Type 'menu' to start over.",
+		"AddressBlock":   "123 Main Street, Mumbai",
+		"ThankSuffix":    ", John",
+		"Items":          "2 x Margherita\nMedium\nRs.770",
+	}
+}
+
+// ---------- Business Configuration ----------
+
+func (h *AdminHandler) GetBusinessConfig(c *gin.Context) {
+	cfg := services.GetBizConfig()
+	c.JSON(200, cfg)
+}
+
+func (h *AdminHandler) UpdateBusinessConfig(c *gin.Context) {
+	var cfg services.BusinessConfig
+	if err := c.ShouldBindJSON(&cfg); err != nil {
+		c.JSON(400, gin.H{"error": "invalid JSON"})
+		return
+	}
+	if err := services.SaveBusinessConfig(&cfg); err != nil {
+		c.JSON(500, gin.H{"error": "failed to save: " + err.Error()})
+		return
+	}
+	// Reload in all engines
+	services.ReloadBizConfig()
+	auditLog(c, "update_business_config", "updated business configuration", "business_config")
+	c.JSON(200, gin.H{"ok": true, "config": cfg})
+}
+
+func (h *AdminHandler) ReloadBusinessConfig(c *gin.Context) {
+	services.ReloadBizConfig()
+	auditLog(c, "reload_business_config", "reloaded business configuration from DB", "business_config")
+	c.JSON(200, gin.H{"ok": true, "config": services.GetBizConfig()})
+}
+
+// ---------- Crust Management ----------
+
+func (h *AdminHandler) GetCrustsAdmin(c *gin.Context) {
+	rows, err := database.DB.Query(`
+		SELECT id, slug, name, COALESCE(description,''),
+		       COALESCE(price_regular,0), COALESCE(price_medium,0), COALESCE(price_large,0),
+		       active, sort_order
+		FROM menu_crusts ORDER BY sort_order
+	`)
+	if err != nil {
+		c.JSON(500, gin.H{"error": "failed to load crusts"})
+		return
+	}
+	defer rows.Close()
+
+	type Crust struct {
+		ID          int     `json:"id"`
+		Slug        string  `json:"slug"`
+		Name        string  `json:"name"`
+		Description string  `json:"description"`
+		PriceRegular float64 `json:"price_regular"`
+		PriceMedium  float64 `json:"price_medium"`
+		PriceLarge   float64 `json:"price_large"`
+		Active       bool    `json:"active"`
+		SortOrder    int     `json:"sort_order"`
+	}
+	var crusts []Crust
+	for rows.Next() {
+		var cr Crust
+		if err := rows.Scan(&cr.ID, &cr.Slug, &cr.Name, &cr.Description, &cr.PriceRegular, &cr.PriceMedium, &cr.PriceLarge, &cr.Active, &cr.SortOrder); err != nil {
+			c.JSON(500, gin.H{"error": "failed to scan crust"})
+			return
+		}
+		crusts = append(crusts, cr)
+	}
+	c.JSON(200, crusts)
+}
+
+func (h *AdminHandler) CreateCrust(c *gin.Context) {
+	var req struct {
+		Slug         string  `json:"slug"`
+		Name         string  `json:"name"`
+		Description  string  `json:"description"`
+		PriceRegular float64 `json:"price_regular"`
+		PriceMedium  float64 `json:"price_medium"`
+		PriceLarge   float64 `json:"price_large"`
+		SortOrder    int     `json:"sort_order"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(400, gin.H{"error": "invalid JSON"})
+		return
+	}
+	if req.Slug == "" || req.Name == "" {
+		c.JSON(400, gin.H{"error": "slug and name required"})
+		return
+	}
+	var id int
+	err := database.DB.QueryRow(`
+		INSERT INTO menu_crusts (slug, name, description, price_regular, price_medium, price_large, sort_order)
+		VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id
+	`, req.Slug, req.Name, req.Description, req.PriceRegular, req.PriceMedium, req.PriceLarge, req.SortOrder).Scan(&id)
+	if err != nil {
+		c.JSON(500, gin.H{"error": "failed to create crust: " + err.Error()})
+		return
+	}
+	auditLog(c, "create_crust", "created crust: "+req.Name, req.Name)
+	c.JSON(201, gin.H{"id": id, "slug": req.Slug, "name": req.Name})
+}
+
+func (h *AdminHandler) UpdateCrust(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(400, gin.H{"error": "invalid id"})
+		return
+	}
+	var req struct {
+		Slug         string  `json:"slug"`
+		Name         string  `json:"name"`
+		Description  string  `json:"description"`
+		PriceRegular float64 `json:"price_regular"`
+		PriceMedium  float64 `json:"price_medium"`
+		PriceLarge   float64 `json:"price_large"`
+		Active       bool    `json:"active"`
+		SortOrder    int     `json:"sort_order"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(400, gin.H{"error": "invalid JSON"})
+		return
+	}
+	_, err = database.DB.Exec(`
+		UPDATE menu_crusts SET slug=$1, name=$2, description=$3,
+		       price_regular=$4, price_medium=$5, price_large=$6,
+		       active=$7, sort_order=$8
+		WHERE id=$9
+	`, req.Slug, req.Name, req.Description, req.PriceRegular, req.PriceMedium, req.PriceLarge, req.Active, req.SortOrder, id)
+	if err != nil {
+		c.JSON(500, gin.H{"error": "failed to update crust"})
+		return
+	}
+	auditLog(c, "update_crust", "updated crust: "+req.Name, req.Name)
+	c.JSON(200, gin.H{"ok": true})
+}
+
+func (h *AdminHandler) DeleteCrust(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(400, gin.H{"error": "invalid id"})
+		return
+	}
+	var name string
+	database.DB.QueryRow(`SELECT name FROM menu_crusts WHERE id=$1`, id).Scan(&name)
+	_, err = database.DB.Exec(`DELETE FROM menu_crusts WHERE id=$1`, id)
+	if err != nil {
+		c.JSON(500, gin.H{"error": "failed to delete crust"})
+		return
+	}
+	auditLog(c, "delete_crust", "deleted crust: "+name, name)
+	c.JSON(200, gin.H{"ok": true})
+}
