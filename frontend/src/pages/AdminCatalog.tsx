@@ -4,6 +4,8 @@ import { Link } from 'react-router-dom';
 import { Search, Plus, Pencil, Trash2, Upload, X, Check, AlertTriangle, Eye, EyeOff, Image as ImageIcon, Pizza, Sparkles } from 'lucide-react';
 import { adminFetch, getAdminKey } from '../services/api';
 import { apiGet } from '../services/api';
+import { useToast } from '../context/ToastContext';
+import ConfirmDialog from '../components/ui/ConfirmDialog';
 
 // Types mirroring backend
 interface Category { id: number; name: string; slug: string; sort_order: number; active: boolean; }
@@ -63,6 +65,8 @@ function slugify(s: string) {
 export default function AdminCatalog() {
   const [authed] = useState(() => getAdminKey().length > 0);
   const qc = useQueryClient();
+  const toast = useToast();
+  const [confirmDelete, setConfirmDelete] = useState<{ id: number; name: string } | null>(null);
   const [search, setSearch] = useState('');
   const [catFilter, setCatFilter] = useState<number | 'all'>('all');
   const [dietFilter, setDietFilter] = useState<string>('all');
@@ -87,11 +91,11 @@ export default function AdminCatalog() {
 
   const createMut = useMutation({
     mutationFn: (body: Record<string, unknown>) => adminFetch('/admin/menu', { method: 'POST', body: JSON.stringify(body) }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['catalog-menu'] }); setShowModal(false); setEditing(null); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['catalog-menu'] }); setShowModal(false); setEditing(null); toast.push({ type: 'success', title: 'Item created' }); },
   });
   const updateMut = useMutation({
     mutationFn: ({ id, body }: { id: number; body: Record<string, unknown> }) => adminFetch(`/admin/menu/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['catalog-menu'] }); setShowModal(false); setEditing(null); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['catalog-menu'] }); setShowModal(false); setEditing(null); toast.push({ type: 'success', title: 'Item updated' }); },
   });
   const deleteMut = useMutation({
     mutationFn: (id: number) => adminFetch(`/admin/menu/${id}`, { method: 'DELETE' }),
@@ -140,9 +144,9 @@ export default function AdminCatalog() {
   };
 
   const handleUpload = async (f: File) => {
-    if (f.size > 5 * 1024 * 1024) { alert('Max 5MB'); return; }
+    if (f.size > 5 * 1024 * 1024) { toast.push({ type: 'warning', title: 'Max 5MB' }); return; }
     const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-    if (!allowed.includes(f.type)) { alert('Use jpg, png, webp or gif'); return; }
+    if (!allowed.includes(f.type)) { toast.push({ type: 'warning', title: 'Use jpg, png, webp or gif' }); return; }
     setUploading(true);
     try {
       const fd = new FormData();
@@ -155,7 +159,7 @@ export default function AdminCatalog() {
       const data = await res.json().catch(() => null) as { url?: string; error?: string } | null;
       if (!res.ok) throw new Error(data?.error ?? `Upload failed ${res.status}`);
       if (data?.url) setForm((s) => ({ ...s, image_url: data.url as string }));
-    } catch (e) { alert(e instanceof Error ? e.message : 'Upload failed'); }
+    } catch (e) { toast.push({ type: 'error', title: e instanceof Error ? e.message : 'Upload failed' }); }
     finally { setUploading(false); }
   };
 
@@ -179,7 +183,7 @@ export default function AdminCatalog() {
       available: form.available,
       sort_order: Number(form.sort_order) || 0,
     };
-    if (!body.name || !body.category_id) { alert('Name and category required'); return; }
+    if (!body.name || !body.category_id) { toast.push({ type: 'warning', title: 'Name and category required' }); return; }
     if (editing) updateMut.mutate({ id: editing.id, body });
     else createMut.mutate(body);
   };
@@ -269,7 +273,7 @@ export default function AdminCatalog() {
                 </div>
                 <div className="absolute top-2 right-2 flex gap-1">
                   <button onClick={() => openEdit(it)} className="w-8 h-8 rounded-full bg-white/90 backdrop-blur border grid place-items-center hover:bg-white"><Pencil size={14} /></button>
-                  <button onClick={() => { if (confirm(`Delete ${it.name}?`)) deleteMut.mutate(it.id); }} className="w-8 h-8 rounded-full bg-white/90 backdrop-blur border grid place-items-center hover:bg-red-50 text-red-600"><Trash2 size={14} /></button>
+                  <button onClick={() => setConfirmDelete({ id: it.id, name: it.name })} className="w-8 h-8 rounded-full bg-white/90 backdrop-blur border grid place-items-center hover:bg-red-50 text-red-600"><Trash2 size={14} /></button>
                 </div>
               </div>
               <div className="p-4 flex-1 flex flex-col">
@@ -374,6 +378,17 @@ export default function AdminCatalog() {
             </div>
           </form>
         </div>
+      )}
+      {confirmDelete && (
+        <ConfirmDialog
+          open
+          title={`Delete ${confirmDelete.name}?`}
+          message="This action cannot be undone."
+          danger
+          confirmLabel="Delete"
+          onConfirm={() => { deleteMut.mutate(confirmDelete.id); setConfirmDelete(null); }}
+          onCancel={() => setConfirmDelete(null)}
+        />
       )}
     </div>
   );
