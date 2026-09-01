@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { Users, Plus, Trash2, Shield, Crown, ChefHat, Eye, Copy, Check } from 'lucide-react';
 import { adminFetch, getAdminKey } from '../services/api';
+import ConfirmDialog from '../components/ui/ConfirmDialog';
 
 interface AdminUser {
   id: number;
@@ -16,6 +17,7 @@ interface AdminUser {
 export default function AdminTeam() {
   const [authed] = useState(() => getAdminKey().length > 0);
   const qc = useQueryClient();
+  const [confirmDelete, setConfirmDelete] = useState<{ id: number; name: string } | null>(null);
   const [name, setName] = useState('');
   const [role, setRole] = useState('manager');
   const [newKey, setNewKey] = useState<string | null>(null);
@@ -123,13 +125,24 @@ export default function AdminTeam() {
                   <div className="text-sm font-semibold flex items-center gap-1.5">{roleIcon(u.role)} {u.name} <span className="text-xs px-1.5 py-0.5 rounded-full bg-zinc-100 border font-mono">{u.role}</span></div>
                   <div className="text-xs text-zinc-500 font-mono">#{u.id} • {u.active ? 'active' : 'inactive'} • last seen {u.last_seen_at ? new Date(u.last_seen_at.replace(' ', 'T')).toLocaleString() : '—'}</div>
                 </div>
-                <button onClick={() => { if (confirm(`Delete ${u.name}?`)) deleteMut.mutate(u.id); }} className="px-3 py-1.5 rounded-xl border hover:bg-red-50 text-red-600 text-xs font-semibold flex items-center gap-1"><Trash2 size={12} /> Delete</button>
+                <button onClick={() => setConfirmDelete({ id: u.id, name: u.name })} className="px-3 py-1.5 rounded-xl border hover:bg-red-50 text-red-600 text-xs font-semibold flex items-center gap-1"><Trash2 size={12} /> Delete</button>
               </div>
             ))}
             {(q.data?.length ?? 0) === 0 && <div className="p-6 text-center text-sm text-zinc-500">No team yet — owner is env key. Add manager/kitchen above.</div>}
           </div>
         )}
       </div>
+      {confirmDelete && (
+        <ConfirmDialog
+          open
+          title={`Delete ${confirmDelete.name}?`}
+          message="This action cannot be undone."
+          danger
+          confirmLabel="Delete"
+          onConfirm={() => { deleteMut.mutate(confirmDelete.id); setConfirmDelete(null); }}
+          onCancel={() => setConfirmDelete(null)}
+        />
+      )}
     </div>
   );
 }
