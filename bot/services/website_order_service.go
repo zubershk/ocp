@@ -218,6 +218,12 @@ func (s *WebsiteOrderService) Create(req *WebsiteOrderRequest, idempotencyKey st
 	if !validPayments[req.PaymentMethod] {
 		return nil, badRequest("payment_method must be cod, upi or online")
 	}
+	if req.Customer.Email != "" {
+		emailRegex := regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)
+		if !emailRegex.MatchString(req.Customer.Email) {
+			return nil, &ValidationError{Msg: "invalid email format"}
+		}
+	}
 	if err := ValidateQuantities(req.Items); err != nil {
 		return nil, err
 	}
@@ -415,7 +421,12 @@ func (s *WebsiteOrderService) Get(identifier string, token string) (*WebsiteOrde
 	if err != nil || order == nil {
 		return order, err
 	}
-	if order.AccessToken != "" && token != order.AccessToken {
+	if order.AccessToken == "" {
+		// Order has no access token (e.g. WhatsApp bot orders) — cannot be
+		// accessed via token auth; require Bearer ownership instead.
+		return nil, nil
+	}
+	if token != order.AccessToken {
 		// Unknown token == unknown order: do not confirm existence.
 		return nil, nil
 	}

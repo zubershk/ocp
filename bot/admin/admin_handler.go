@@ -322,6 +322,18 @@ func (h *AdminHandler) CreateMenuItem(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
 		return
 	}
+	if req.Price <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "price must be greater than zero"})
+		return
+	}
+	if len(req.Name) > 200 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "name too long (max 200 characters)"})
+		return
+	}
+	if len(req.Description) > 2000 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "description too long (max 2000 characters)"})
+		return
+	}
 	slug := strings.TrimSpace(req.Slug)
 	if slug == "" {
 		slug = slugify(req.Name)
@@ -384,8 +396,11 @@ func slugify(s string) string {
 	res := strings.Trim(b.String(), "-")
 	if res == "" {
 		b2 := make([]byte, 4)
-		rand.Read(b2)
-		res = "item-" + hex.EncodeToString(b2)[:6]
+		if _, err := rand.Read(b2); err != nil {
+			res = "item-" + hex.EncodeToString([]byte("xxxx"))
+		} else {
+			res = "item-" + hex.EncodeToString(b2)[:6]
+		}
 	}
 	return res
 }
@@ -417,6 +432,18 @@ func (h *AdminHandler) UpdateMenuItem(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
+		return
+	}
+	if req.Price != nil && *req.Price <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "price must be greater than zero"})
+		return
+	}
+	if req.Name != nil && len(*req.Name) > 200 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "name too long (max 200 characters)"})
+		return
+	}
+	if req.Description != nil && len(*req.Description) > 2000 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "description too long (max 2000 characters)"})
 		return
 	}
 	existing, err := h.menuService.GetItemByID(id)
@@ -542,6 +569,14 @@ func (h *AdminHandler) CreateCategory(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
 		return
 	}
+	if len(req.Name) > 100 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "name too long (max 100 characters)"})
+		return
+	}
+	if len(req.Description) > 1000 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "description too long (max 1000 characters)"})
+		return
+	}
 
 	cat, err := h.menuService.CreateCategory(req.Name, req.Description, req.SortOrder)
 	if err != nil {
@@ -586,7 +621,10 @@ func (h *AdminHandler) UploadImage(c *gin.Context) {
 	}
 	// random name
 	rnd := make([]byte, 8)
-	rand.Read(rnd)
+	if _, err := rand.Read(rnd); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot generate filename"})
+		return
+	}
 	name := hex.EncodeToString(rnd) + ext
 	dst := filepath.Join(dir, name)
 	out, err := os.Create(dst)
@@ -820,7 +858,8 @@ func (h *AdminHandler) SendChatMessage(c *gin.Context) {
 		dest = "91" + phone
 	}
 	if err := h.evolutionClient.SendText(dest, body); err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": "WhatsApp send failed: " + err.Error()})
+		log.Printf("[admin] WhatsApp send failed: %v", err)
+		c.JSON(http.StatusBadGateway, gin.H{"error": "failed to send message"})
 		return
 	}
 	_ = services.SaveWhatsAppMessage(phone, "out", body, "")
@@ -839,6 +878,18 @@ func (h *AdminHandler) SetConversationState(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "state is required"})
+		return
+	}
+	validStates := map[string]bool{
+		"IDLE": true, "MAIN_MENU": true, "CATEGORY": true, "ITEM": true,
+		"SIZE": true, "CRUST": true, "QUANTITY": true, "QUANTITY_MORE": true,
+		"CART_MENU": true, "CART_EDIT": true, "CART_EDIT_QTY": true,
+		"FULFILLMENT": true, "NAME": true, "ADDRESS": true, "ADDRESS_CONFIRM": true,
+		"LANDMARK": true, "PAYMENT": true, "CONFIRMATION": true,
+		"HUMAN_SUPPORT": true, "PROFILE_NAME": true, "PROFILE_ADDR": true,
+	}
+	if !validStates[req.State] {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid conversation state"})
 		return
 	}
 	if err := services.SetConversationState(phone, req.State); err != nil {
@@ -894,7 +945,10 @@ func (h *AdminHandler) CreateAdminUser(c *gin.Context) {
 	}
 	// generate key
 	b := make([]byte, 16)
-	rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot generate key"})
+		return
+	}
 	plain := hex.EncodeToString(b)
 	hash := hashAdminKey(plain)
 	var id int
@@ -908,8 +962,12 @@ func (h *AdminHandler) CreateAdminUser(c *gin.Context) {
 }
 
 func (h *AdminHandler) DeleteAdminUser(c *gin.Context) {
-	id, _ := strconv.Atoi(c.Param("id"))
-	_, err := database.DB.Exec(`DELETE FROM admin_users WHERE id=$1`, id)
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid ID"})
+		return
+	}
+	_, err = database.DB.Exec(`DELETE FROM admin_users WHERE id=$1`, id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
@@ -1079,6 +1137,14 @@ func (h *AdminHandler) CreateOutlet(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
 		return
 	}
+	if len(req.Slug) > 100 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "slug too long (max 100 characters)"})
+		return
+	}
+	if len(req.Name) > 200 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "name too long (max 200 characters)"})
+		return
+	}
 	online := true
 	if req.OnlineOrdering != nil {
 		online = *req.OnlineOrdering
@@ -1099,7 +1165,11 @@ func (h *AdminHandler) CreateOutlet(c *gin.Context) {
 }
 
 func (h *AdminHandler) UpdateOutlet(c *gin.Context) {
-	id, _ := strconv.Atoi(c.Param("id"))
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid ID"})
+		return
+	}
 	var req struct {
 		Name           *string  `json:"name"`
 		AddressLines   []string `json:"address_lines"`
@@ -1158,7 +1228,7 @@ func (h *AdminHandler) UpdateOutlet(c *gin.Context) {
 	}
 	set = append(set, "updated_at=CURRENT_TIMESTAMP")
 	args = append(args, id)
-	_, err := database.DB.Exec(`UPDATE restaurant_outlets SET `+strings.Join(set, ", ")+` WHERE id=$`+strconv.Itoa(n), args...)
+	_, err = database.DB.Exec(`UPDATE restaurant_outlets SET `+strings.Join(set, ", ")+` WHERE id=$`+strconv.Itoa(n), args...)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
@@ -1167,8 +1237,12 @@ func (h *AdminHandler) UpdateOutlet(c *gin.Context) {
 }
 
 func (h *AdminHandler) DeleteOutlet(c *gin.Context) {
-	id, _ := strconv.Atoi(c.Param("id"))
-	_, err := database.DB.Exec(`DELETE FROM restaurant_outlets WHERE id=$1`, id)
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid ID"})
+		return
+	}
+	_, err = database.DB.Exec(`DELETE FROM restaurant_outlets WHERE id=$1`, id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
@@ -1209,6 +1283,26 @@ func (h *AdminHandler) UpdateConfigAdmin(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
+		return
+	}
+	if req.Name != nil && len(*req.Name) > 200 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "name too long (max 200)"})
+		return
+	}
+	if req.Phone != nil && len(*req.Phone) > 15 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "phone too long (max 15)"})
+		return
+	}
+	if req.Address != nil && len(*req.Address) > 500 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "address too long (max 500)"})
+		return
+	}
+	if req.MapURL != nil && len(*req.MapURL) > 500 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "map_url too long (max 500)"})
+		return
+	}
+	if req.SupportPhone != nil && len(*req.SupportPhone) > 15 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "support_phone too long (max 15)"})
 		return
 	}
 	set := []string{}
