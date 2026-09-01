@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { CartItem, MenuItem } from '../types';
 import { cartService } from '../services/cartService';
-import { formatPrice } from '../utils/format';
+import { useCrusts } from './CrustContext';
 
 type CartContextType = {
   items: CartItem[];
@@ -18,10 +18,11 @@ export const useCart = () => useContext(CartContext);
 
 export function CartProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<CartItem[]>(() => cartService.getCart());
+  const { getCrustExtra } = useCrusts();
   useEffect(()=>{ cartService.saveCart(items); },[items]);
   const addItem = (menuItem: MenuItem, size: 'regular'|'medium'|'large', crust: string, qty: number) => {
     const price = menuItem.priceBySize ? (menuItem.priceBySize[size] ?? menuItem.price) : menuItem.price;
-    const crustExtra = crust === 'cheese-burst' ? (size==='regular'?85:size==='medium'?110:135) : crust==='wheat-thin' ? (size==='regular'?30:60) : crust==='dcc' ? 120 : 0;
+    const crustExtra = getCrustExtra(crust, size);
     const unit = price + crustExtra;
     const id = `${menuItem.id}-${size}-${crust}`;
     setItems(prev => {
@@ -40,4 +41,3 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const subtotal = items.reduce((a,b)=>a+b.subtotal,0);
   return <CartContext.Provider value={{ items, addItem, updateQty, removeItem, clear, count, subtotal }}>{children}</CartContext.Provider>;
 }
-export { formatPrice };

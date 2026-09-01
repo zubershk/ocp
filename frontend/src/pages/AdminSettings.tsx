@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { Save, Plus, Pencil, Trash2, MapPin, Phone, Clock, Store, AlertTriangle, Palette, FileText, Tag, Image } from 'lucide-react';
+import { Save, Plus, Pencil, Trash2, MapPin, Phone, Clock, Store, AlertTriangle, Palette, FileText, Tag, Image, MessageSquare, Settings } from 'lucide-react';
 import { adminFetch, getAdminKey } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
@@ -272,6 +272,10 @@ export default function AdminSettings() {
             <div className="w-10 h-10 rounded-xl bg-orange-100 grid place-items-center"><Palette size={18} className="text-orange-600" /></div>
             <div><div className="text-sm font-semibold">Brand</div><div className="text-xs text-zinc-500">Colors, logo, fonts</div></div>
           </Link>
+          <Link to="/admin/business-config" className="flex items-center gap-3 p-4 rounded-xl border hover:bg-zinc-50 transition-colors">
+            <div className="w-10 h-10 rounded-xl bg-indigo-100 grid place-items-center"><Settings size={18} className="text-indigo-600" /></div>
+            <div><div className="text-sm font-semibold">Business Config</div><div className="text-xs text-zinc-500">Sizes, payments, icons</div></div>
+          </Link>
           <Link to="/admin/pages" className="flex items-center gap-3 p-4 rounded-xl border hover:bg-zinc-50 transition-colors">
             <div className="w-10 h-10 rounded-xl bg-blue-100 grid place-items-center"><FileText size={18} className="text-blue-600" /></div>
             <div><div className="text-sm font-semibold">Pages</div><div className="text-xs text-zinc-500">About, Terms, Privacy</div></div>
@@ -283,6 +287,10 @@ export default function AdminSettings() {
           <Link to="/admin/banners" className="flex items-center gap-3 p-4 rounded-xl border hover:bg-zinc-50 transition-colors">
             <div className="w-10 h-10 rounded-xl bg-purple-100 grid place-items-center"><Image size={18} className="text-purple-600" /></div>
             <div><div className="text-sm font-semibold">Banners</div><div className="text-xs text-zinc-500">Carousel & promos</div></div>
+          </Link>
+          <Link to="/admin/bot-workflows" className="flex items-center gap-3 p-4 rounded-xl border hover:bg-zinc-50 transition-colors">
+            <div className="w-10 h-10 rounded-xl bg-cyan-100 grid place-items-center"><MessageSquare size={18} className="text-cyan-600" /></div>
+            <div><div className="text-sm font-semibold">Bot Messages</div><div className="text-xs text-zinc-500">WhatsApp bot responses</div></div>
           </Link>
         </div>
       </div>
