@@ -32,13 +32,13 @@ const steps = [
 export default function OnboardingWizard({ phone, onComplete }: Props) {
   const [step, setStep] = useState(0);
   const [form, setForm] = useState({
-    name: 'Orange Cheese Pizza',
+    name: '',
     phone: phone || '',
     address: '',
     support_phone: '',
-    opening_hours: '11:00 AM – 11:00 PM',
+    opening_hours: '',
     delivery_area: '',
-    payment_info: 'Cash, UPI on delivery',
+    payment_info: '',
   });
   const qc = useQueryClient();
 

@@ -2,6 +2,8 @@ import { Link, NavLink } from 'react-router-dom';
 import { ShoppingCart, Menu, X, Pizza, User, ChevronRight } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
 import { useAuth } from '../../context/AuthContext';
+import { useRestaurantName } from '../../context/RestaurantContext';
+import { useBrand } from '../../context/SiteSettingsContext';
 import { useState, useEffect } from 'react';
 
 const navItems = [
@@ -15,6 +17,8 @@ const navItems = [
 export default function Navbar() {
   const { count } = useCart();
   const { customer } = useAuth();
+  const restaurantName = useRestaurantName();
+  const brand = useBrand();
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
 
@@ -48,15 +52,23 @@ export default function Navbar() {
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
             <Link to="/" className="flex items-center gap-2.5 shrink-0 group">
-              <div className="w-9 h-9 rounded-xl bg-brand-600 flex items-center justify-center text-white group-hover:shadow-md transition-shadow duration-300">
-                <Pizza size={18} />
-              </div>
+              {brand.logoUrl ? (
+                <img
+                  src={brand.logoUrl}
+                  alt={restaurantName}
+                  className="h-9 w-auto object-contain rounded-xl"
+                />
+              ) : (
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white group-hover:shadow-md transition-shadow duration-300" style={{ backgroundColor: brand.primaryColor }}>
+                  <Pizza size={18} />
+                </div>
+              )}
               <div className="hidden sm:block">
                 <span className="font-heading font-bold text-lg tracking-tight text-zinc-900">
-                  Orange Cheese
+                  {restaurantName.split(' ').slice(0, -1).join(' ') || restaurantName}
                 </span>
-                <span className="font-heading font-bold text-lg tracking-tight text-brand-600">
-                  {' '}Pizza
+                <span className="font-heading font-bold text-lg tracking-tight" style={{ color: brand.primaryColor }}>
+                  {restaurantName.split(' ').length > 1 ? ` ${restaurantName.split(' ').slice(-1)}` : ''}
                 </span>
               </div>
             </Link>
@@ -71,16 +83,17 @@ export default function Navbar() {
                   className={({ isActive }) =>
                     `relative px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
                       isActive
-                        ? 'text-brand-600 bg-brand-50/60'
+                        ? 'bg-brand-50/60'
                         : 'text-zinc-600 hover:text-zinc-900 hover:bg-stone-50'
                     }`
                   }
+                  style={({ isActive }) => isActive ? { color: brand.primaryColor } : undefined}
                 >
                   {({ isActive }) => (
                     <>
                       {n.label}
                       {isActive && (
-                        <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-4 h-0.5 bg-brand-600 rounded-full" />
+                        <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-4 h-0.5 rounded-full" style={{ backgroundColor: brand.primaryColor }} />
                       )}
                     </>
                   )}
@@ -98,9 +111,10 @@ export default function Navbar() {
                   transition-all duration-200
                   ${customer
                     ? 'bg-zinc-900 text-white hover:bg-zinc-800 shadow-sm'
-                    : 'text-zinc-600 border border-stone-200 hover:border-brand-300 hover:text-brand-600 hover:bg-brand-50/50'
+                    : 'text-zinc-600 border border-stone-200 hover:text-zinc-900 hover:bg-stone-50'
                   }
                 `}
+                style={!customer ? { borderColor: undefined } : undefined}
               >
                 <User size={14} />
                 {customer ? (customer.name ? customer.name.split(' ')[0] : 'Account') : 'Login'}
@@ -123,7 +137,8 @@ export default function Navbar() {
               {/* CTA */}
               <Link
                 to="/r/menu"
-                className="hidden sm:inline-flex items-center gap-1.5 ml-1 px-4 py-2 rounded-xl bg-brand-600 text-white text-sm font-semibold hover:bg-brand-700 transition-all duration-200 shadow-sm hover:shadow-md active:scale-[0.98]"
+                className="hidden sm:inline-flex items-center gap-1.5 ml-1 px-4 py-2 rounded-xl text-white text-sm font-semibold hover:opacity-90 transition-all duration-200 shadow-sm hover:shadow-md active:scale-[0.98]"
+                style={{ backgroundColor: brand.primaryColor }}
               >
                 Order Now
                 <ChevronRight size={14} />
@@ -177,10 +192,11 @@ export default function Navbar() {
                     className={({ isActive }) =>
                       `flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 ${
                         isActive
-                          ? 'text-brand-600 bg-brand-50/60'
+                          ? 'bg-brand-50/60'
                           : 'text-zinc-700 hover:bg-stone-50'
                       }`
                     }
+                    style={({ isActive }) => isActive ? { color: brand.primaryColor } : undefined}
                   >
                     {n.label}
                     <ChevronRight size={14} className="ml-auto text-zinc-300" />
@@ -218,7 +234,8 @@ export default function Navbar() {
                 <Link
                   to="/r/menu"
                   onClick={() => setOpen(false)}
-                  className="flex items-center justify-center gap-2 w-full py-3 rounded-xl bg-brand-600 text-white font-semibold hover:bg-brand-700 transition-all duration-200 shadow-sm"
+                  className="flex items-center justify-center gap-2 w-full py-3 rounded-xl text-white font-semibold hover:opacity-90 transition-all duration-200 shadow-sm"
+                  style={{ backgroundColor: brand.primaryColor }}
                 >
                   Order Now
                   <ChevronRight size={16} />
