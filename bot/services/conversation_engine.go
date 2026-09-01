@@ -23,11 +23,23 @@ type ConversationEngine struct {
 	orders    *WebsiteOrderService
 	evolution *EvolutionClient
 	cfg       *config.Config
+	messages  *BotMessageService
+	biz       *BusinessConfig
 }
 
 func NewConversationEngine(menu *MenuService, orders *WebsiteOrderService,
-	evolution *EvolutionClient, cfg *config.Config) *ConversationEngine {
-	return &ConversationEngine{menu: menu, orders: orders, evolution: evolution, cfg: cfg}
+	evolution *EvolutionClient, cfg *config.Config, messages *BotMessageService) *ConversationEngine {
+	return &ConversationEngine{menu: menu, orders: orders, evolution: evolution, cfg: cfg, messages: messages, biz: GetBizConfig()}
+}
+
+// msg renders a bot message template by key with data.
+func (e *ConversationEngine) msg(key string, data map[string]interface{}) string {
+	return e.messages.Render(key, data)
+}
+
+// msgBrand renders a bot message template by key with no extra data (uses brand name).
+func (e *ConversationEngine) msgBrand(key string) string {
+	return e.messages.Render(key, nil)
 }
 
 // ------------------------- persistence ---------------------------
@@ -189,11 +201,9 @@ func (e *ConversationEngine) route(cust *Customer, conv *conversation, phone, in
 			return ""
 		}
 		count, _ := WACartCount(phone)
-		var wb strings.Builder
-		wb.WriteString(emWave + " Welcome back!\n")
 		if count > 0 {
-			fmt.Fprintf(&wb, "\nYou have %d item(s) in your cart.\n", count)
-			e.sendButtons(phone, "Continue where you left off?", wb.String(),
+			e.sendButtons(phone, e.msg("welcome_back_with_cart", map[string]interface{}{"ItemCount": count}),
+				e.msg("welcome_back_with_cart", map[string]interface{}{"ItemCount": count}),
 				[]Button{
 					{Type: "reply", ID: "view_cart", DisplayText: emCart + " View Cart"},
 					{Type: "reply", ID: "__continue__", DisplayText: emPizza + " Continue Ordering"},
@@ -201,9 +211,9 @@ func (e *ConversationEngine) route(cust *Customer, conv *conversation, phone, in
 				})
 			return ""
 		}
-		fmt.Fprintf(&wb, "\nYou were in the middle of: %s\n\nContinue below, or type 'cancel'.", pretty(conv.State))
-		wb.WriteString("\n\n" + e.stateOptions(conv))
-		e.evolution.SendText(phone, wb.String())
+		flowMsg := e.msg("welcome_back_in_flow", map[string]interface{}{"State": pretty(conv.State)})
+		flowMsg += "\n\n" + e.stateOptions(conv)
+		e.evolution.SendText(phone, flowMsg)
 		return ""
 	case "menu", "main menu":
 		conv.State = "MAIN_MENU"
@@ -214,14 +224,14 @@ func (e *ConversationEngine) route(cust *Customer, conv *conversation, phone, in
 		// resume wherever the customer was
 		return e.stateOptions(conv)
 	case "help":
-		return globalHelp()
+		return e.msgBrand("help")
 	case "cancel":
 		conv.reset("IDLE")
-		return emBroom + " Current flow cancelled. Your cart was kept - type 'cart' or 'menu'."
+		return e.msgBrand("cancel_message")
 	case "restart":
 		ClearWACart(phone)
 		conv.reset("IDLE")
-		return emArrows + " Fresh start! Cart cleared.\n\n"
+		return e.msgBrand("restart_message")
 	case "cart", "my cart", "view cart":
 		lines, _ := GetWACart(phone)
 		e.cartView(phone, lines)
@@ -248,9 +258,9 @@ func (e *ConversationEngine) route(cust *Customer, conv *conversation, phone, in
 			rowID := ids[n-1]
 			delete(conv.Context, "pending_ids")
 			_ = conv.save()
-			if !e.handleSelection(cust, conv, phone, rowID) {
-				return unknownInput("That option is no longer available. Type 'menu'.")
-			}
+		if !e.handleSelection(cust, conv, phone, rowID) {
+			return e.msg("unknown_input", map[string]interface{}{"Options": "That option is no longer available. Type 'menu'."})
+		}
 			return ""
 		}
 	}
@@ -273,7 +283,7 @@ func (e *ConversationEngine) route(cust *Customer, conv *conversation, phone, in
 	case "QUANTITY_MORE":
 		n := atoiSafe(strings.TrimSpace(input))
 		if n < 1 || n > 20 {
-			return "Please send a number between 1 and 20, or type 'cancel'."
+			return e.msgBrand("quantity_invalid")
 		}
 		e.addToCart(conv, phone, n)
 		return ""
@@ -281,7 +291,7 @@ func (e *ConversationEngine) route(cust *Customer, conv *conversation, phone, in
 	case "PROFILE_NAME":
 		name := strings.TrimSpace(input)
 		if len(name) < 2 || len(name) > 60 {
-			return "Please enter a valid name (2-60 characters)."
+			return e.msgBrand("name_invalid")
 		}
 		_ = UpdateCustomerProfile(phone, map[string]string{"name": name})
 		cust2, _ := GetOrCreateCustomer(phone)
@@ -293,7 +303,7 @@ func (e *ConversationEngine) route(cust *Customer, conv *conversation, phone, in
 	case "PROFILE_ADDR":
 		addr := strings.TrimSpace(input)
 		if len(addr) < 8 {
-			return "That address looks too short. Please send the complete address."
+			return e.msgBrand("address_too_short")
 		}
 		_ = UpdateCustomerProfile(phone, map[string]string{"default_address": addr})
 		cust2, _ := GetOrCreateCustomer(phone)
@@ -305,14 +315,14 @@ func (e *ConversationEngine) route(cust *Customer, conv *conversation, phone, in
 	case "NAME":
 		name := strings.TrimSpace(input)
 		if len(name) < 2 || len(name) > 60 {
-			return "Please enter a valid name (2-60 characters)."
+			return e.msgBrand("name_invalid")
 		}
 		conv.Context["name"] = name
 		_ = UpdateCustomerProfile(phone, map[string]string{"name": name})
 		if conv.Context["delivery_type"] == "delivery" && conv.Context["address"] == "" {
 			conv.State = "ADDRESS"
 			_ = conv.save()
-			return fmt.Sprintf("Nice to meet you, %s!\n\nWhat's your delivery address?", name)
+			return e.msg("name_greeting_delivery", map[string]interface{}{"Name": name})
 		}
 		e.askPayment(conv, phone)
 		return ""
@@ -320,13 +330,13 @@ func (e *ConversationEngine) route(cust *Customer, conv *conversation, phone, in
 	case "ADDRESS":
 		addr := strings.TrimSpace(input)
 		if len(addr) < 8 {
-			return "That address looks too short. Please enter your complete delivery address."
+			return e.msgBrand("address_too_short")
 		}
 		conv.Context["address"] = addr
 		_ = UpdateCustomerProfile(phone, map[string]string{"default_address": addr})
 		conv.State = "LANDMARK"
 		_ = conv.save()
-		return "Any landmark nearby? Type it, or type 'skip'."
+		return e.msgBrand("address_prompt")
 
 	case "LANDMARK":
 		lm := strings.TrimSpace(input)
@@ -342,10 +352,10 @@ func (e *ConversationEngine) route(cust *Customer, conv *conversation, phone, in
 
 	case "HUMAN_SUPPORT":
 		conv.reset("IDLE")
-		return "The team will reach out here.\nType 'menu' whenever you're ready."
+		return e.msgBrand("support_team_notified")
 
 	default:
-		return unknownInput(e.stateOptions(conv))
+		return e.msg("unknown_input", map[string]interface{}{"Options": e.stateOptions(conv)})
 	}
 }
 
@@ -383,7 +393,7 @@ func (e *ConversationEngine) handleSelection(cust *Customer, conv *conversation,
 	case "clear cart":
 		ClearWACart(phone)
 		conv.reset("IDLE")
-		e.evolution.SendText(phone, emBroom+" Cart cleared.\nType 'menu' to start fresh!")
+		e.evolution.SendText(phone, e.msgBrand("cart_cleared"))
 		return true
 	case "delivery":
 		if conv.State == "FULFILLMENT" || conv.State == "CART_MENU" || conv.State == "IDLE" {
@@ -454,13 +464,13 @@ func (e *ConversationEngine) handleSelection(cust *Customer, conv *conversation,
 	case input == "profile_edit_name":
 		conv.State = "PROFILE_NAME"
 		_ = conv.save()
-		e.evolution.SendText(phone, "Send the new name you'd like to use.")
+		e.evolution.SendText(phone, e.msgBrand("profile_edit_name"))
 		return true
 
 	case input == "profile_edit_addr":
 		conv.State = "PROFILE_ADDR"
 		_ = conv.save()
-		e.evolution.SendText(phone, "Send your new default delivery address.")
+		e.evolution.SendText(phone, e.msgBrand("profile_edit_addr"))
 		return true
 
 	case input == "maps_open":
@@ -505,7 +515,7 @@ func (e *ConversationEngine) handleSelection(cust *Customer, conv *conversation,
 		if q == "more" {
 			conv.State = "QUANTITY_MORE"
 			_ = conv.save()
-			e.evolution.SendText(phone, "How many would you like? Send a number (1-20).")
+			e.evolution.SendText(phone, e.msgBrand("quantity_more_prompt"))
 			return true
 		}
 		e.addToCart(conv, phone, atoiSafe(q))
@@ -523,13 +533,13 @@ func (e *ConversationEngine) handleSelection(cust *Customer, conv *conversation,
 	case input == "clear_cart" || input == "clr_cart":
 		ClearWACart(phone)
 		conv.reset("IDLE")
-		e.evolution.SendText(phone, emBroom+" Cart cleared.\nType 'menu' to start fresh!")
+		e.evolution.SendText(phone, e.msgBrand("cart_cleared"))
 		return true
 
 	case input == "checkout":
 		lines, _ := GetWACart(phone)
 		if len(lines) == 0 {
-			e.evolution.SendText(phone, "Your cart is empty. "+emCart+" Type 'menu' to add items.")
+			e.evolution.SendText(phone, e.msgBrand("cart_item_empty"))
 			return true
 		}
 		var pb strings.Builder
@@ -560,7 +570,7 @@ func (e *ConversationEngine) handleSelection(cust *Customer, conv *conversation,
 		ClearWACart(phone)
 		delete(conv.Context, "clear_pending")
 		conv.reset("IDLE")
-		e.evolution.SendText(phone, emBroom+" Cart cleared.\nType 'menu' to start a new order!")
+		e.evolution.SendText(phone, e.msgBrand("cart_cleared_alt"))
 		return true
 
 	case input == "clear_no":
@@ -575,7 +585,7 @@ func (e *ConversationEngine) handleSelection(cust *Customer, conv *conversation,
 		if line, err := GetWACartLineByID(phone, lineID); err == nil && line != nil {
 			e.sendLineEditButtons(conv, phone, *line)
 		} else {
-			e.evolution.SendText(phone, "That cart line no longer exists.")
+			e.evolution.SendText(phone, e.msgBrand("cart_line_gone"))
 		}
 		return true
 
@@ -633,7 +643,7 @@ func (e *ConversationEngine) handleSelection(cust *Customer, conv *conversation,
 		// Cancel aborts placement but KEEPS the cart for later.
 		lines, _ := GetWACart(phone)
 		conv.reset("CART_MENU")
-		e.evolution.SendText(phone, emCross+" Order not placed - your cart is safe.")
+		e.evolution.SendText(phone, e.msgBrand("confirm_cancel"))
 		e.cartView(phone, lines)
 		return true
 	}
@@ -652,26 +662,26 @@ func (e *ConversationEngine) replayListPage(conv *conversation, phone, pageKey s
 		size := strings.TrimPrefix(pageKey, "crust_page_")
 		e.sendCrustList(conv, phone, size)
 	default:
-		e.evolution.SendText(phone, "Session expired for that list - type 'menu' to browse again.")
+		e.evolution.SendText(phone, e.msgBrand("session_expired"))
 	}
 }
 
 func (e *ConversationEngine) stateOptions(conv *conversation) string {
 	switch conv.State {
 	case "NAME":
-		return "Please type your name, or 'cancel' to abort."
+		return e.msgBrand("state_name")
 	case "ADDRESS":
-		return "Please type your full delivery address, or 'cancel'."
+		return e.msgBrand("state_address")
 	case "LANDMARK":
-		return "Type a landmark or 'skip'."
+		return e.msgBrand("state_landmark")
 	case "PAYMENT":
-		return "Choose Cash, UPI or Online using the buttons above."
+		return e.msgBrand("state_payment")
 	case "CONFIRMATION":
-		return "Tap 'Place Order' or 'Cancel' above, or 'cancel' to exit."
+		return e.msgBrand("state_confirmation")
 	case "HUMAN_SUPPORT":
-		return "The team has been notified. Type 'menu' when ready."
+		return e.msgBrand("state_human_support")
 	default:
-		return globalHelp()
+		return e.msgBrand("help")
 	}
 }
 

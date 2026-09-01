@@ -76,29 +76,29 @@ func ValidateTransition(from, to string) error {
 // StatusUpdateText renders the customer-facing WhatsApp status ping.
 func StatusUpdateText(status, orderNumber string) string {
 	pretty := strings.ReplaceAll(strings.ToUpper(status[:1])+status[1:], "_", " ")
-	var line string
+	var lineKey string
 	switch status {
 	case "confirmed":
-		line = "We have received your order and it will start shortly. 🧑‍🍳"
+		lineKey = "status_confirmed"
 	case "preparing":
-		line = "Your order is being prepared."
+		lineKey = "status_preparing"
 	case "ready":
-		line = "Your order is ready!"
+		lineKey = "status_ready"
 	case "out_for_delivery":
-		line = "Your order is on its way! 🛵"
+		lineKey = "status_out_for_delivery"
 	case "delivered", "completed":
-		line = "Order completed. Thank you for ordering with us! ❤️"
+		lineKey = "status_delivered"
 	case "cancelled":
-		line = "This order has been cancelled. Contact us if this was a mistake."
+		lineKey = "status_cancelled"
 	default:
-		line = "Status updated."
+		lineKey = "status_default"
 	}
-	var b strings.Builder
-	b.WriteString("\U0001F355 Orange Cheese Pizza\n\n")
-	fmt.Fprintf(&b, "Order: %s\n", orderNumber)
-	fmt.Fprintf(&b, "Status: %s\n\n", pretty)
-	b.WriteString(line)
-	return b.String()
+	line := Msg(lineKey, nil)
+	return Msg("status_update", map[string]interface{}{
+		"OrderNumber": orderNumber,
+		"Status":      pretty,
+		"Message":     line,
+	})
 }
 
 // ApplyStatusChange validates the transition, persists it atomically,

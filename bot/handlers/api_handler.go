@@ -17,6 +17,7 @@ type MenuReader interface {
 	GetCategoriesWithSlug() ([]models.MenuCategory, error)
 	GetAllActiveItems() ([]models.MenuItem, error)
 	GetItemByIdentifier(identifier string) (*models.MenuItem, error)
+	GetActiveCrusts() ([]services.CrustInfo, error)
 }
 
 // ApiHandler serves the public, unauthenticated catalog endpoints
@@ -132,6 +133,16 @@ func (h *ApiHandler) GetItem(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"item": item})
+}
+
+// GetCrusts handles GET /api/crusts — public crust catalog.
+func (h *ApiHandler) GetCrusts(c *gin.Context) {
+	crusts, err := h.menu.GetActiveCrusts()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load crusts"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"crusts": crusts})
 }
 
 // CreateOrder handles POST /api/orders.

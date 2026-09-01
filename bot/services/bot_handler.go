@@ -506,8 +506,9 @@ func (h *BotHandler) handleCheckout(phone string, state *models.CustomerState) e
 	}
 
 	total, _ := h.cartService.GetCartTotal(phone)
-	if total < h.config.MinOrderAmount {
-		return h.evolutionClient.SendText(phone, fmt.Sprintf("Minimum order amount is ₹%.2f. Please add more items.", h.config.MinOrderAmount))
+	biz := GetBizConfig()
+	if total < biz.MinOrderAmount {
+		return h.evolutionClient.SendText(phone, fmt.Sprintf("Minimum order amount is %s%.2f. Please add more items.", biz.CurrencySymbol, biz.MinOrderAmount))
 	}
 
 	h.stateService.UpdateState(phone, string(StateDeliveryType), map[string]interface{}{})
@@ -904,7 +905,7 @@ func getContextMap(context map[string]interface{}, key string) map[string]interf
 }
 
 func generateOrderNumber() string {
-	// Use timestamp + random suffix to avoid collisions
+	biz := GetBizConfig()
 	n, _ := rand.Int(rand.Reader, big.NewInt(9999))
-	return fmt.Sprintf("OCP-%d%04d", time.Now().Unix()%100000, n.Int64())
+	return fmt.Sprintf("%s-%d%04d", strings.ToUpper(biz.OrderPrefix), time.Now().Unix()%100000, n.Int64())
 }

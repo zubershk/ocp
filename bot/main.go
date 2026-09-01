@@ -46,6 +46,9 @@ func main() {
 	// Seed owner from BOT_ADMIN_KEY if no admin_users yet (SaaS bootstrap)
 	admin.EnsureOwnerSeed(cfg)
 
+	// Load business config from DB (sizes, payments, icons, delivery fee, etc.)
+	services.LoadBusinessConfig()
+
 	// Initialize services
 	evolutionClient := services.NewEvolutionClient(cfg)
 	menuService := services.NewMenuService()
@@ -53,6 +56,16 @@ func main() {
 	orderService := services.NewOrderService()
 	stateService := services.NewCustomerStateService()
 	restaurantConfigService := services.NewRestaurantConfigService()
+	botMessageService := services.NewBotMessageService()
+
+	// Load brand name from restaurant_config for bot messages
+	if rc, _ := restaurantConfigService.GetConfig(); rc != nil && rc.Name != "" {
+		botMessageService.SetBrandName(rc.Name)
+	} else if cfg.RestaurantName != "" {
+		botMessageService.SetBrandName(cfg.RestaurantName)
+	} else {
+		botMessageService.SetBrandName("Orange Cheese Pizza")
+	}
 
 	// Initialize bot handler
 	botHandler := services.NewBotHandler(
@@ -72,7 +85,7 @@ func main() {
 	websiteOrderService := services.NewWebsiteOrderService(menuService, evolutionClient, cfg)
 
 	// Phase 3: stateful WhatsApp conversation engine (same PG menu/orders)
-	conversationEngine := services.NewConversationEngine(menuService, websiteOrderService, evolutionClient, cfg)
+	conversationEngine := services.NewConversationEngine(menuService, websiteOrderService, evolutionClient, cfg, botMessageService)
 	webhookHandler.AttachEngine(conversationEngine)
 
 	// Periodic auth cleanup (OTP/session expiry)
@@ -84,6 +97,7 @@ func main() {
 
 	// Initialize admin handler
 	adminHandler := admin.NewAdminHandler(menuService, orderService, evolutionClient, cfg)
+	admin.SetBotMessageService(botMessageService)
 
 	// Site settings handler
 	siteHandler := handlers.NewSiteSettingsHandler()
@@ -138,6 +152,10 @@ func main() {
 		apiGroup.GET("/menu/:id", apiHandler.GetItem)
 		apiGroup.GET("/outlets", apiHandler.GetOutlets)
 		apiGroup.GET("/config", apiHandler.GetConfig)
+		apiGroup.GET("/crusts", apiHandler.GetCrusts)
+		apiGroup.GET("/business-config", func(c *gin.Context) {
+			c.JSON(200, services.GetBizConfig())
+		})
 		apiGroup.GET("/site-settings", siteHandler.GetSiteSettings)
 		apiGroup.GET("/site-pages/:slug", siteHandler.GetPage)
 		apiGroup.GET("/menu-categories", siteHandler.GetMenuCategories)
@@ -203,6 +221,22 @@ func main() {
 		adminGroup.PUT("/offers", siteHandler.UpdateOffers)
 		adminGroup.GET("/banners", siteHandler.GetBanners)
 		adminGroup.PUT("/banners", siteHandler.UpdateBanners)
+		// Bot message templates
+		adminGroup.GET("/bot-messages", adminHandler.ListBotMessages)
+		adminGroup.GET("/bot-messages/:key", adminHandler.GetBotMessage)
+		adminGroup.PUT("/bot-messages/:key", adminHandler.RequireRole("owner", "manager"), adminHandler.UpdateBotMessage)
+		adminGroup.POST("/bot-messages/reset/:key", adminHandler.RequireRole("owner", "manager"), adminHandler.ResetBotMessage)
+		adminGroup.POST("/bot-messages/reset-all", adminHandler.RequireRole("owner"), adminHandler.ResetAllBotMessages)
+		adminGroup.POST("/bot-messages/preview/:key", adminHandler.RenderBotMessagePreview)
+		// Business configuration (sizes, payments, icons, delivery, etc.)
+		adminGroup.GET("/business-config", adminHandler.GetBusinessConfig)
+		adminGroup.PUT("/business-config", adminHandler.RequireRole("owner", "manager"), adminHandler.UpdateBusinessConfig)
+		adminGroup.POST("/business-config/reload", adminHandler.RequireRole("owner"), adminHandler.ReloadBusinessConfig)
+		// Crust management
+		adminGroup.GET("/crusts", adminHandler.GetCrustsAdmin)
+		adminGroup.POST("/crusts", adminHandler.RequireRole("owner", "manager"), adminHandler.CreateCrust)
+		adminGroup.PUT("/crusts/:id", adminHandler.RequireRole("owner", "manager"), adminHandler.UpdateCrust)
+		adminGroup.DELETE("/crusts/:id", adminHandler.RequireRole("owner", "manager"), adminHandler.DeleteCrust)
 	}
 
 	// Health / readiness — SaaS observability
