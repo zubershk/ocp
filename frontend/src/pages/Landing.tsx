@@ -4,6 +4,7 @@ import {
   CheckCircle2, XCircle, ChevronRight, Terminal, Layout,
   Smartphone, Bell, Users, Settings, Truck, Clock, Star, ExternalLink,
 } from 'lucide-react';
+import { useSocial, useSEO } from '../context/SiteSettingsContext';
 
 function GithubIcon({ size = 16, className = '' }: { size?: number; className?: string }) {
   return (
@@ -74,6 +75,12 @@ const techStack = [
 /* ──────────────── component ──────────────── */
 
 export default function Landing() {
+  const social = useSocial();
+  const seo = useSEO();
+
+  const heroTitle = seo.metaTitle || 'Your pizza shop. Your platform. Zero commission.';
+  const heroDescription = seo.metaDescription || 'Full-stack online ordering with WhatsApp integration, real-time management, and a marketing campaign runner — all self-hosted, all yours.';
+
   return (
     <div className="min-h-screen bg-[#faf9f7]">
       {/* ── Nav ── */}
@@ -117,13 +124,10 @@ export default function Landing() {
             Open Source &middot; Free Forever &middot; Self-Hosted
           </div>
           <h1 className="font-heading font-extrabold text-4xl sm:text-5xl lg:text-6xl text-zinc-900 leading-tight max-w-3xl mx-auto">
-            Your pizza shop.<br />Your platform.{' '}
-            <span className="text-brand-600">Zero commission.</span>
+            {heroTitle}
           </h1>
           <p className="mt-5 text-lg text-zinc-500 max-w-xl mx-auto leading-relaxed">
-            Full-stack online ordering with WhatsApp integration, real-time
-            management, and a marketing campaign runner — all self-hosted,
-            all yours.
+            {heroDescription}
           </p>
           <div className="mt-8 flex flex-wrap justify-center gap-3">
             <a
@@ -405,6 +409,21 @@ export default function Landing() {
             <a href="https://github.com/zubershk/ocp" target="_blank" rel="noopener noreferrer" className="hover:text-zinc-300 transition-colors">GitHub</a>
             <a href="https://github.com/zubershk/ocp/blob/master/LICENSE" target="_blank" rel="noopener noreferrer" className="hover:text-zinc-300 transition-colors">MIT License</a>
             <a href="https://github.com/zubershk/ocp/blob/master/CONTRIBUTING.md" target="_blank" rel="noopener noreferrer" className="hover:text-zinc-300 transition-colors">Contributing</a>
+            {social.instagram && (
+              <a href={social.instagram?.startsWith('https://') ? social.instagram : '#'} target="_blank" rel="noopener noreferrer" className="hover:text-zinc-300 transition-colors">Instagram</a>
+            )}
+            {social.facebook && (
+              <a href={social.facebook?.startsWith('https://') ? social.facebook : '#'} target="_blank" rel="noopener noreferrer" className="hover:text-zinc-300 transition-colors">Facebook</a>
+            )}
+            {social.twitter && (
+              <a href={social.twitter?.startsWith('https://') ? social.twitter : '#'} target="_blank" rel="noopener noreferrer" className="hover:text-zinc-300 transition-colors">Twitter</a>
+            )}
+            {social.youtube && (
+              <a href={social.youtube?.startsWith('https://') ? social.youtube : '#'} target="_blank" rel="noopener noreferrer" className="hover:text-zinc-300 transition-colors">YouTube</a>
+            )}
+            {social.whatsapp && (
+              <a href={social.whatsapp?.startsWith('https://') ? social.whatsapp : '#'} target="_blank" rel="noopener noreferrer" className="hover:text-zinc-300 transition-colors">WhatsApp</a>
+            )}
           </div>
         </div>
       </footer>

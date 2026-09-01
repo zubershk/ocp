@@ -7,6 +7,7 @@ import { useCart } from '../context/CartContext';
 import { useToast } from '../context/ToastContext';
 import ImageZoom from '../components/ui/ImageZoom';
 import StarRating from '../components/ui/StarRating';
+import { useDeliveryHours } from '../context/RestaurantContext';
 import type { MenuItem } from '../types';
 
 export default function Product() {
@@ -16,6 +17,7 @@ export default function Product() {
   const nav = useNavigate();
   const { addItem } = useCart();
   const { push } = useToast();
+  const deliveryHours = useDeliveryHours();
   const [size, setSize] = useState<'regular' | 'medium' | 'large'>('regular');
   const [crust, setCrust] = useState('tossed');
   const [qty, setQty] = useState(1);
@@ -225,7 +227,7 @@ export default function Product() {
           </div>
 
           <p className="text-xs text-zinc-500 mt-4 leading-relaxed">
-            All prices include tax · Free delivery 11 AM – 4 AM · Pay cash or UPI when your food arrives.
+            All prices include tax · Free delivery {deliveryHours || '11 AM – 4 AM'} · Pay cash or UPI when your food arrives.
           </p>
         </div>
       </div>

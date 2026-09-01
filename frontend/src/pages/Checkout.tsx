@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { orderService } from '../services/orderService';
 import { useToast } from '../context/ToastContext';
 import AddressAutocomplete from '../components/ui/AddressAutocomplete';
+import { useDeliveryHours, useRestaurantAddress, usePrimaryOutlet } from '../context/RestaurantContext';
 
 type FormState = {
   name: string; phone: string; email: string;
@@ -43,6 +44,9 @@ export default function Checkout() {
   const { customer } = useAuth();
   const nav = useNavigate();
   const { push } = useToast();
+  const deliveryHours = useDeliveryHours();
+  const restaurantAddress = useRestaurantAddress();
+  const primaryOutlet = usePrimaryOutlet();
   const [form, setForm] = useState<FormState>(initialForm);
   const [touched, setTouched] = useState<Partial<Record<keyof FormState, boolean>>>({});
   const [error, setError] = useState('');
@@ -319,7 +323,7 @@ export default function Checkout() {
                     aria-invalid={!!showFieldError('city')}
                     aria-describedby={showFieldError('city') ? 'err-city' : undefined}
                     className={`mt-1.5 w-full px-3.5 py-2.5 rounded-xl border focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-400 transition-all text-sm ${showFieldError('city') ? 'border-red-300 bg-red-50/50' : 'border-stone-200'}`}
-                    placeholder="Mira Road / Vasai / Bhayandar"
+                    placeholder="Your area or city"
                   />
                   {showFieldError('city') && <p id="err-city" className="text-xs text-red-600 mt-1">{showFieldError('city')}</p>}
                 </div>
@@ -346,7 +350,7 @@ export default function Checkout() {
 
             {!isDelivery && (
               <p className="text-xs text-zinc-500 mt-3 bg-stone-50 rounded-xl px-3 py-2">
-                Pickup from Shop 21, B Wing, Winstone PNK, Beverly Park, Mira Road East.
+                Pickup from {restaurantAddress || primaryOutlet?.address_lines?.join(', ') || 'our store'}.
               </p>
             )}
           </fieldset>
@@ -440,7 +444,7 @@ export default function Checkout() {
                 <dt className="text-zinc-900">Total</dt>
                 <dd className="text-zinc-900">₹{subtotal}</dd>
               </div>
-              <div className="text-xs text-zinc-500">All prices include tax · Free delivery 11 AM – 4 AM</div>
+              <div className="text-xs text-zinc-500">All prices include tax · Free delivery {deliveryHours || '11 AM – 4 AM'}</div>
             </dl>
           </div>
         </aside>

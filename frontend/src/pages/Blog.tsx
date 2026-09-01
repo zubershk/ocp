@@ -1,12 +1,14 @@
 import { Link } from 'react-router-dom';
 import { blogPosts } from '../data/blog';
+import { useRestaurantName } from '../context/RestaurantContext';
 
 export default function Blog(){
+  const restaurantName = useRestaurantName();
   const featured = blogPosts.find(b=>b.featured);
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <h1 className="text-3xl font-bold">Food Blog</h1>
-      <p className="text-zinc-500 mt-1">Stories from Orange Cheese Pizza — ingredients, desi tadka, new launches</p>
+      <p className="text-zinc-500 mt-1">Stories from {restaurantName || 'our restaurant'} — ingredients, desi tadka, new launches</p>
       {featured && (
         <Link to={`/blog/${featured.slug}`} className="mt-6 block bg-white rounded-2xl border overflow-hidden hover:shadow-lg transition">
           <div className="grid lg:grid-cols-2">

@@ -3,9 +3,10 @@ import { Link } from 'react-router-dom';
 import { Search, Clock, Flame, Plus, ShieldCheck, MapPin, Star, ChevronRight, Phone, ArrowRight, Leaf, ChefHat, Truck, Settings2 } from 'lucide-react';
 import { useMenuItems } from '../hooks/useMenu';
 import { pickPopular } from '../services/menuService';
-import { RESTAURANT } from '../data/outlets';
+import { useRestaurantName, useDeliveryHours, useOutletsList, useRestaurantPhone } from '../context/RestaurantContext';
 import { useCart } from '../context/CartContext';
 import { useToast } from '../context/ToastContext';
+import { useMenuCategories } from '../context/SiteSettingsContext';
 import LocationPill from '../components/ui/LocationPill';
 import OffersStrip from '../components/ui/OffersStrip';
 import CategoryScroll from '../components/ui/CategoryScroll';
@@ -36,9 +37,13 @@ export default function Home() {
   const { addItem } = useCart();
   const { push } = useToast();
   const [activeFilter, setActiveFilter] = useState('all');
+  const restaurantName = useRestaurantName();
+  const deliveryHours = useDeliveryHours();
+  const outlets = useOutletsList();
+  const restaurantPhone = useRestaurantPhone();
+  const siteCategories = useMenuCategories();
 
   const sectionRef = useGsapReveal('.reveal-item', { stagger: 0.06, y: 20 });
-
   const filteredPopular = useMemo(() => {
     if (activeFilter === 'all') return popular;
     if (activeFilter === 'veg') return popular.filter((i) => i.dietary === 'veg');
@@ -208,12 +213,12 @@ export default function Home() {
 
       {/* ── Why us ── */}
       <div className="container-page mt-10 reveal-item">
-        <h2 className="text-lg sm:text-xl font-heading font-bold mb-4">Why Orange Cheese Pizza?</h2>
+        <h2 className="text-lg sm:text-xl font-heading font-bold mb-4">Why {restaurantName}?</h2>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {[
             { icon: Leaf, title: 'Fresh Ingredients', desc: 'Locally sourced, delivered daily.' },
             { icon: ChefHat, title: 'Made to Order', desc: 'Every pizza prepared fresh.' },
-            { icon: Truck, title: 'Free Delivery', desc: '11 AM – 4 AM, no minimum.' },
+            { icon: Truck, title: 'Free Delivery', desc: `${deliveryHours}, no minimum.` },
             { icon: Settings2, title: '6 Crusts', desc: 'Tossed to Cheese Burst.' },
           ].map((f) => {
             const Icon = f.icon;
@@ -236,7 +241,7 @@ export default function Home() {
           <ShieldCheck size={13} className="text-emerald-600" /> All prices include tax
         </span>
         <span className="inline-flex items-center gap-1.5">
-          <MapPin size={13} className="text-brand-600" /> Mira Road East
+          <MapPin size={13} className="text-brand-600" /> {outlets[0]?.name || 'Order Online'}
         </span>
         <span className="inline-flex items-center gap-1.5">
           <Star size={12} className="text-amber-500" fill="currentColor" /> Signature, Supreme & Desi Tadka
@@ -248,15 +253,17 @@ export default function Home() {
         <div className="bg-zinc-900 rounded-2xl p-6 sm:p-8 lg:p-10 text-center">
           <h3 className="text-white text-xl sm:text-2xl font-heading font-bold">Ready to order?</h3>
           <p className="text-zinc-400 mt-2 max-w-md mx-auto text-sm">
-            Pay by cash or UPI when your food arrives. Free delivery 11 AM – 4 AM.
+            Pay by cash or UPI when your food arrives. Free delivery {deliveryHours}.
           </p>
           <div className="mt-5 flex flex-wrap justify-center gap-3">
             <Link to="/r/menu" className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-brand-600 text-white font-semibold hover:bg-brand-700 transition-all">
               Start Your Order <ArrowRight size={16} />
             </Link>
-            <a href={`tel:+91${RESTAURANT.phones[0]}`} className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-white/10 text-white font-semibold hover:bg-white/20 transition-all">
-              <Phone size={16} /> {RESTAURANT.phones[0]}
-            </a>
+            {restaurantPhone && (
+              <a href={`tel:+91${restaurantPhone}`} className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-white/10 text-white font-semibold hover:bg-white/20 transition-all">
+                <Phone size={16} /> {restaurantPhone}
+              </a>
+            )}
           </div>
         </div>
       </div>

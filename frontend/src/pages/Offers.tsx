@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Phone, MessageCircle, ShoppingBag } from 'lucide-react';
-import { RESTAURANT } from '../data/outlets';
+import { useAllPhones, useRestaurantPhone, useDeliveryHours, useOutletNames, useRestaurantName } from '../context/RestaurantContext';
 import { useMenuItems } from '../hooks/useMenu';
 
 const offers = [
@@ -51,6 +51,13 @@ const offers = [
 
 export default function Offers() {
   const { items } = useMenuItems();
+  const allPhones = useAllPhones();
+  const restaurantPhone = useRestaurantPhone();
+  const deliveryHours = useDeliveryHours();
+  const outletNames = useOutletNames();
+  const primaryOutlet = outletNames[0] || 'our outlet';
+  const restaurantName = useRestaurantName();
+  const primaryPhone = allPhones[0] || restaurantPhone;
   const slugs = new Set(items.map((i) => i.id));
   const anyOrderable = offers.some((o) => o.type === 'pack' && (slugs.has(o.vegSlug!) || slugs.has(o.nonvegSlug!)));
 
@@ -58,14 +65,14 @@ export default function Offers() {
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
       <h1 className="text-3xl">Offers &amp; Family Packs</h1>
       <p className="text-zinc-500 mt-2">
-        July 2026 promotions from Orange Cheese Pizza Mira Road East.
+        July 2026 promotions from {restaurantName || 'Orange Cheese Pizza'} {primaryOutlet}.
         All prices include tax.
       </p>
 
       {anyOrderable ? (
         <div className="bg-green-50 border border-green-200 rounded-2xl p-4 mt-6 text-sm text-green-800 flex items-start gap-2">
           <ShoppingBag size={16} className="mt-0.5 shrink-0 text-green-700" aria-hidden/>
-          <span>Great news — Family Packs are now orderable right here online, with free delivery 11 AM – 4 AM. Tap a pack below.</span>
+          <span>Great news — Family Packs are now orderable right here online, with free delivery {deliveryHours || '11 AM – 4 AM'}. Tap a pack below.</span>
         </div>
       ) : (
         <div className="bg-orange-50 border border-orange-200 rounded-2xl p-4 mt-6 text-sm text-orange-800">
@@ -105,10 +112,10 @@ export default function Offers() {
               })()
             ) : (
               <div className="flex flex-wrap gap-2 mt-4">
-                <a href={`tel:+91${RESTAURANT.phones[0]}`} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-orange-600 text-white text-sm font-semibold hover:bg-orange-700 transition">
+                <a href={`tel:+91${primaryPhone}`} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-orange-600 text-white text-sm font-semibold hover:bg-orange-700 transition">
                   <Phone size={14}/> Call to claim
                 </a>
-                <a href={`https://wa.me/${RESTAURANT.whatsappNumber}?text=Hi!%20I%20want%20the%20${encodeURIComponent(o.title)}%20offer`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-green-600 text-white text-sm font-semibold hover:bg-green-700 transition">
+                <a href={`https://wa.me/91${primaryPhone}?text=Hi!%20I%20want%20the%20${encodeURIComponent(o.title)}%20offer`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-green-600 text-white text-sm font-semibold hover:bg-green-700 transition">
                   <MessageCircle size={14}/> WhatsApp
                 </a>
               </div>

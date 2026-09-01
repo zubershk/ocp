@@ -3,11 +3,13 @@ import { Minus, Plus, Trash2, ShoppingBag, Plus as PlusIcon, ArrowRight, ShieldC
 import { useCart } from '../context/CartContext';
 import { useMenuItems } from '../hooks/useMenu';
 import { useToast } from '../context/ToastContext';
+import { useDeliveryHours } from '../context/RestaurantContext';
 
 export default function Cart() {
   const { items, updateQty, removeItem, clear, subtotal, addItem } = useCart();
   const { items: menuItems } = useMenuItems();
   const { push } = useToast();
+  const deliveryHours = useDeliveryHours();
 
   const totalItems = items.reduce((a, b) => a + b.quantity, 0);
 
@@ -177,7 +179,7 @@ export default function Cart() {
             </div>
 
             <p className="text-[11px] text-zinc-500 mt-3 leading-relaxed">
-              Free delivery 11 AM – 4 AM · Pay cash or UPI on arrival.
+              Free delivery {deliveryHours || '11 AM – 4 AM'} · Pay cash or UPI on arrival.
             </p>
 
             <Link
