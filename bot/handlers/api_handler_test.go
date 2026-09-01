@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"orangecheesepizza/bot/models"
+	"orangecheesepizza/bot/services"
 
 	"github.com/gin-gonic/gin"
 )
@@ -40,6 +41,10 @@ func (s *stubMenuReader) GetItemByIdentifier(identifier string) (*models.MenuIte
 	if item, ok := s.itemById[identifier]; ok {
 		return item, nil
 	}
+	return nil, nil
+}
+
+func (s *stubMenuReader) GetActiveCrusts() ([]services.CrustInfo, error) {
 	return nil, nil
 }
 
