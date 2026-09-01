@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { User, LogOut, Package, Phone, Mail, MapPin, Clock, ArrowRight, ShoppingBag, MessageCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { fetchMyOrders } from '../services/authService';
+import { useRestaurantPhone } from '../context/RestaurantContext';
 
 interface OrderRow {
   id: number;
@@ -30,6 +31,7 @@ const statusCls: Record<string, string> = {
 export default function Account() {
   const { customer, loading, logout } = useAuth();
   const nav = useNavigate();
+  const restaurantPhone = useRestaurantPhone();
 
   const ordersQuery = useQuery({
     queryKey: ['my-orders'],
@@ -91,7 +93,7 @@ export default function Account() {
             </div>
             <div className="mt-4 flex gap-2">
               <Link to="/r/menu" className="flex-1 py-2.5 rounded-xl bg-zinc-900 text-white text-center text-sm font-semibold hover:bg-black">Order again</Link>
-              <a href="https://wa.me/918369293998" target="_blank" rel="noreferrer" className="flex-1 py-2.5 rounded-xl bg-white border border-zinc-200 text-center text-sm font-semibold hover:bg-zinc-50">Chat on WhatsApp</a>
+              <a href={`https://wa.me/91${restaurantPhone}`} target="_blank" rel="noreferrer" className="flex-1 py-2.5 rounded-xl bg-white border border-zinc-200 text-center text-sm font-semibold hover:bg-zinc-50">Chat on WhatsApp</a>
             </div>
           </div>
         </div>

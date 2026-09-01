@@ -4,15 +4,7 @@ import { MessageCircle, ArrowLeft, RefreshCw, Gift, Truck, Clock3, Award, Utensi
 import { sendOtp, verifyOtp } from '../services/authService';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-
-const PROMOS = [
-  { icon: Gift, badge: 'Family Pack', title: 'Family Pack from ₹515', desc: '2 pizzas + garlic bread + choco lava cake', to: '/r/offers' },
-  { icon: Truck, badge: 'Free Delivery', title: 'Free delivery 11 AM – 4 AM', desc: 'Mira Road · Vasai · Bhayandar — no minimum', to: '/r/locations' },
-  { icon: Award, badge: 'Real Mozzarella', title: '100% real mozzarella', desc: 'Fresh, never processed cheese on every pizza', to: '/r/about' },
-  { icon: Clock3, badge: 'BOGO', title: 'Buy 1, Get 2nd at Special Price', desc: '2nd pizza from ₹150 — call or WhatsApp', to: '/r/offers' },
-  { icon: UtensilsCrossed, badge: '6 Crusts', title: '6 Crusts · Tossed to Cheese Burst', desc: 'Choose your base, same pricing online & in-store', to: '/r/menu' },
-  { icon: MapPin, badge: '3 Outlets', title: 'Mira Road · Vasai · Bhayandar', desc: 'Same menu, same pricing across all kitchens', to: '/r/locations' },
-];
+import { useOutletNames, useDeliveryHours } from '../context/RestaurantContext';
 
 export default function Login() {
   const nav = useNavigate();
@@ -20,6 +12,19 @@ export default function Login() {
   const redirect = params.get('redirect') ?? '/r/account';
   const { customer, setCustomer } = useAuth();
   const { push } = useToast();
+  const outletNames = useOutletNames();
+  const deliveryHours = useDeliveryHours();
+
+  const outletList = outletNames.length > 0 ? outletNames.join(' · ') : 'Mira Road · Vasai · Bhayandar';
+
+  const PROMOS = useMemo(() => [
+    { icon: Gift, badge: 'Family Pack', title: 'Family Pack from ₹515', desc: '2 pizzas + garlic bread + choco lava cake', to: '/r/offers' },
+    { icon: Truck, badge: 'Free Delivery', title: `Free delivery ${deliveryHours || '11 AM – 4 AM'}`, desc: `${outletList} — no minimum`, to: '/r/locations' },
+    { icon: Award, badge: 'Real Mozzarella', title: '100% real mozzarella', desc: 'Fresh, never processed cheese on every pizza', to: '/r/about' },
+    { icon: Clock3, badge: 'BOGO', title: 'Buy 1, Get 2nd at Special Price', desc: '2nd pizza from ₹150 — call or WhatsApp', to: '/r/offers' },
+    { icon: UtensilsCrossed, badge: '6 Crusts', title: '6 Crusts · Tossed to Cheese Burst', desc: 'Choose your base, same pricing online & in-store', to: '/r/menu' },
+    { icon: MapPin, badge: `${outletNames.length || 3} Outlets`, title: outletList, desc: 'Same menu, same pricing across all kitchens', to: '/r/locations' },
+  ], [deliveryHours, outletList, outletNames.length]);
 
   const [step, setStep] = useState<'phone' | 'otp'>('phone');
   const [phone, setPhone] = useState('');

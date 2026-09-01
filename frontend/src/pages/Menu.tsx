@@ -7,6 +7,7 @@ import { useToast } from '../context/ToastContext';
 import { useGsapReveal } from '../hooks/useGsap';
 import SearchAutocomplete from '../components/ui/SearchAutocomplete';
 import StarRating from '../components/ui/StarRating';
+import { useDeliveryHours } from '../context/RestaurantContext';
 
 const categories: { id: string; label: string; filter: (m: any) => boolean }[] = [
   { id: 'all', label: 'All', filter: () => true },
@@ -33,6 +34,7 @@ export default function Menu() {
   const { items: menuItems, loading } = useMenuItems();
   const { addItem } = useCart();
   const { push } = useToast();
+  const deliveryHours = useDeliveryHours();
 
   const filtered = useMemo(() => {
     let list = menuItems.filter(categories.find((c) => c.id === cat)!.filter);
@@ -60,7 +62,7 @@ export default function Menu() {
         <div>
           <h1 className="text-3xl sm:text-4xl font-heading font-bold">Our Menu</h1>
           <p className="text-zinc-500 mt-1.5 text-sm sm:text-base">
-            100% Real Mozzarella · All prices include tax · Free delivery 11 AM – 4 AM
+            100% Real Mozzarella · All prices include tax · Free delivery {deliveryHours || '11 AM – 4 AM'}
           </p>
         </div>
         <div className="flex items-center gap-2.5 w-full lg:w-auto">

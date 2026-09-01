@@ -2,7 +2,7 @@ import { useParams, Link } from 'react-router-dom';
 import { useEffect, useState, useRef } from 'react';
 import { PartyPopper, RefreshCw } from 'lucide-react';
 import { orderService, type OrderView } from '../services/orderService';
-import { RESTAURANT } from '../data/outlets';
+import { useRestaurantPhone, useDeliveryHours } from '../context/RestaurantContext';
 import { useGsapFadeIn } from '../hooks/useGsap';
 
 const labels: Record<string, string> = { placed: 'Order Placed', confirmed: 'Confirmed', preparing: 'Preparing', ready: 'Ready', out_for_delivery: 'Out for Delivery', delivered: 'Delivered', cancelled: 'Cancelled' };
@@ -22,6 +22,8 @@ export default function Order() {
   const [state, setState] = useState<'loading' | 'ready' | 'missing'>('loading');
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
   const titleRef = useGsapFadeIn({ y: 16 });
+  const restaurantPhone = useRestaurantPhone();
+  const deliveryHours = useDeliveryHours();
 
   // Real-time polling: refetch every 10s if order is still active
   useEffect(() => {
@@ -54,7 +56,7 @@ export default function Order() {
 
   const statusIndex = Math.max(0, orderSteps.indexOf(order.status));
   const current = orderSteps[statusIndex];
-  const waNumber = RESTAURANT.whatsappNumber;
+  const waNumber = restaurantPhone;
   const isLive = !['delivered', 'cancelled'].includes(order.status);
 
   return (
@@ -119,7 +121,7 @@ export default function Order() {
           <div className="mt-8 grid sm:grid-cols-2 gap-4 text-sm">
             <div className="bg-stone-50 rounded-xl p-4 border border-stone-100">
               <div className="font-semibold">Estimated delivery</div>
-              <div className="text-zinc-600 mt-1">~30 mins from order · Free delivery 11AM–4AM</div>
+              <div className="text-zinc-600 mt-1">~30 mins from order · Free delivery {deliveryHours || '11AM–4AM'}</div>
             </div>
             <div className="bg-stone-50 rounded-xl p-4 border border-stone-100">
               <div className="font-semibold">{order.deliveryType === 'delivery' ? 'Deliver to' : 'Pickup by'}</div>
