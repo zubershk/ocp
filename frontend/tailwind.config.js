@@ -73,6 +73,10 @@ export default {
           '0%': { opacity: '0', transform: 'translateY(8px) scale(0.98)' },
           '100%': { opacity: '1', transform: 'translateY(0) scale(1)' },
         },
+        'toast-out': {
+          '0%': { opacity: '1', transform: 'translateY(0) scale(1)' },
+          '100%': { opacity: '0', transform: 'translateY(-8px) scale(0.95)' },
+        },
         'shimmer': {
           '0%': { backgroundPosition: '-200% 0' },
           '100%': { backgroundPosition: '200% 0' },
@@ -85,6 +89,24 @@ export default {
           '0%, 100%': { transform: 'translateY(0)' },
           '50%': { transform: 'translateY(-4px)' },
         },
+        'cart-fly': {
+          '0%': { opacity: '1', transform: 'scale(1)' },
+          '50%': { opacity: '0.8', transform: 'scale(0.8) translateY(-20px)' },
+          '100%': { opacity: '0', transform: 'scale(0.3) translateY(-60px)' },
+        },
+        'ring-pop': {
+          '0%': { transform: 'scale(0.8)', opacity: '0.5' },
+          '50%': { transform: 'scale(1.2)', opacity: '1' },
+          '100%': { transform: 'scale(1)', opacity: '1' },
+        },
+        'slide-down': {
+          '0%': { opacity: '0', transform: 'translateY(-100%)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        'confetti-fall': {
+          '0%': { opacity: '1', transform: 'translateY(0) rotate(0deg)' },
+          '100%': { opacity: '0', transform: 'translateY(200px) rotate(720deg)' },
+        },
       },
       animation: {
         'fade-up': 'fade-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both',
@@ -93,9 +115,14 @@ export default {
         'slide-in-up': 'slide-in-up 0.35s cubic-bezier(0.16, 1, 0.3, 1) both',
         'scale-in': 'scale-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) both',
         'toast-in': 'toast-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) both',
+        'toast-out': 'toast-out 0.2s ease-in both',
         'shimmer': 'shimmer 2s infinite linear',
         'pulse-subtle': 'pulse-subtle 2s ease-in-out infinite',
         'bounce-subtle': 'bounce-subtle 1s ease-in-out infinite',
+        'cart-fly': 'cart-fly 0.5s cubic-bezier(0.16, 1, 0.3, 1) both',
+        'ring-pop': 'ring-pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both',
+        'slide-down': 'slide-down 0.3s cubic-bezier(0.16, 1, 0.3, 1) both',
+        'confetti-fall': 'confetti-fall 1.5s ease-out both',
       },
       spacing: {
         '18': '4.5rem',
@@ -112,6 +139,10 @@ export default {
       transitionDuration: {
         '250': '250ms',
         '350': '350ms',
+      },
+      ringColor: {
+        'brand-200': 'rgba(234, 88, 12, 0.2)',
+        'brand-300': 'rgba(234, 88, 12, 0.3)',
       },
     },
   },
