@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Docker](https://img.shields.io/badge/Docker-ready-blue.svg)](docker-compose.yml)
 
-Full-stack pizza ordering platform with WhatsApp integration, real-time order management, a production-ready admin dashboard, and a WhatsApp marketing campaign runner. Built for small food businesses that want an online ordering presence without paying third-party commissions.
+Full-stack food ordering platform with WhatsApp integration, real-time order management, a production-ready admin dashboard, and a WhatsApp marketing campaign runner. Built for small food businesses that want an online ordering presence without paying third-party commissions.
 
 ### Quick Start
 
@@ -24,44 +24,48 @@ curl -fsSL https://raw.githubusercontent.com/zubershk/ocp/master/install.sh | ba
 
 [![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/template/ocp)
 
+---
+
 ## What This Does
 
 **For customers:**
 - Browse the full menu with real product photos, prices, and dietary info
 - Filter by category, spice level, budget, or family packs
+- Search with autocomplete — recent searches saved, popular items highlighted, keyboard navigation
 - Customise pizzas (size, crust, toppings) and see price updates live
-- Place orders with address autocomplete and delivery radius check
+- Place orders with address autocomplete (Nominatim-powered) and delivery radius check
 - Pay by cash or UPI on arrival
-- Track order status in real-time (10-second polling)
+- Track order status in real-time (10-second polling) with a visual timeline
 - WhatsApp OTP login — no passwords, just a 6-digit code
 - View order history and reorder past orders
-- PWA support — works offline, installs to home screen
+- PWA support — works offline, installs to home screen, push notification ready
 
 **For the restaurant:**
 - Real-time order dashboard with live polling and sound alerts
-- Menu management — add/edit items, upload product photos, manage categories
-- Order lifecycle: New → Preparing → Out for Delivery → Delivered
+- Menu management — add/edit/delete items, upload product photos, manage categories and crust variants
+- Order lifecycle: New → Confirmed → Preparing → Ready → Out for Delivery → Delivered (with cancel)
 - WhatsApp notifications sent automatically on every status change
-- Customer chat via WhatsApp (reads incoming messages, persists conversation history)
+- Customer chat via WhatsApp — reads incoming messages, persists conversation history, send replies from admin
 - Team management with role-based access (owner, manager, kitchen, viewer)
 - Analytics dashboard with daily/weekly/monthly sales and order stats
 - Restaurant settings (name, hours, delivery fee, tax) editable from admin
-- Audit log tracking every admin action
+- Audit log tracking every admin action with timestamp and IP
 - Rate limiting on auth and order endpoints to prevent abuse
+- Broadcast messages to customers (max 200 recipients per batch, 4096 char limit)
 
 **Fully configurable — every detail is editable from the admin dashboard:**
 
-- **Brand settings** — logo, favicon, primary/secondary/accent colors, heading and body fonts
-- **Content pages** — About, Terms, Privacy, FAQ managed via CMS editor
+- **Brand settings** — logo, favicon, primary/secondary/accent colors, heading and body fonts with live preview
+- **Content pages** — About, Terms, Privacy, FAQ managed via CMS editor with meta tags
 - **Offers & promotions** — create deals with badges, codes, discount amounts, min order
 - **Banner carousel** — add/edit home page banners with background colors and CTA buttons
 - **SEO settings** — meta title, description, OG image, favicon
 - **Social links** — Instagram, Facebook, Twitter, YouTube, WhatsApp
 - **Footer** — copyright text, tagline, delivery hours, outlet info — all dynamic
-- **Bot message templates** — every WhatsApp response stored in DB, editable via admin with live WhatsApp preview, variable reference, per-message reset
+- **Bot message templates** — every WhatsApp response stored in DB, editable via admin with live WhatsApp preview, variable reference ({name}, {order_number}, {brand_name}, etc.), per-message reset to defaults
 - **Business configuration** — sizes, payment methods, category icons, order prefix, currency, delivery fee, min order — all configurable for any business type
 - **Crust management** — crust names and per-size prices managed via admin CRUD API
-- **Menu categories** — names, descriptions, icons configurable from admin
+- **Menu categories** — names, descriptions, sort order, icons configurable from admin
 
 **WhatsApp Campaign Runner:**
 - Bulk send WhatsApp messages to customers
@@ -73,6 +77,8 @@ curl -fsSL https://raw.githubusercontent.com/zubershk/ocp/master/install.sh | ba
 - Live progress tracking with per-recipient status
 - Connects to the Go bot — no direct Evolution GO access needed
 
+---
+
 ## Tech Stack
 
 | Layer | Technology |
@@ -82,10 +88,22 @@ curl -fsSL https://raw.githubusercontent.com/zubershk/ocp/master/install.sh | ba
 | Frontend | React 19 + TypeScript + Vite |
 | Styling | Tailwind CSS |
 | State | React Context + TanStack Query |
+| Animations | GSAP (GreenSock) |
 | WhatsApp | Evolution GO (self-hosted WhatsApp API) |
 | Campaigns | Express.js + React (standalone tool) |
-| Animations | GSAP (GreenSock) |
-| PWA | Service Worker + Web Manifest |
+| PWA | Service Worker + Web Manifest + Push Notifications |
+
+**Why these choices:**
+- **Go + Gin** — fast, single binary deployment, great for APIs handling concurrent orders
+- **PostgreSQL** — reliable, handles concurrent writes well, runs migrations cleanly
+- **React 19 + Vite** — instant HMR, type safety with TypeScript, fast dev cycle
+- **Tailwind CSS** — consistent design system without shipping bloated CSS
+- **TanStack Query** — server state, caching, polling for real-time order updates
+- **GSAP** — smooth scroll-triggered animations on the customer site
+- **Evolution GO** — self-hosted WhatsApp API, source included, no vendor dependency
+- **Express.js** — campaign runner is a separate tool, doesn't bloat the Go backend
+
+---
 
 ## Project Structure
 
@@ -107,7 +125,7 @@ Tech-OCP/
 │   ├── services/
 │   │   ├── menu_service.go       # Menu CRUD, item lookups
 │   │   ├── order_service.go      # WhatsApp order processing
-│   │   ├── website_order_service.go  # Web order creation, pricing
+│   │   ├── website_order_service.go  # Web order creation, pricing, idempotency
 │   │   ├── customer_service.go   # Customer lookup, phone canonicalization
 │   │   ├── customer_auth_service.go  # OTP/session management (transactional)
 │   │   ├── conversation_engine.go    # WhatsApp conversation state machine
@@ -116,24 +134,26 @@ Tech-OCP/
 │   │   ├── bot_message_defaults.go   # Compiled-in default messages
 │   │   ├── business_config.go        # Sizes, payments, icons from DB
 │   │   ├── wa_emoji.go              # WhatsApp emoji constants
-│   │   └── live_chat_service.go  # WhatsApp message persistence
+│   │   ├── live_chat_service.go  # WhatsApp message persistence
+│   │   ├── evolution_client.go   # Evolution GO HTTP client
+│   │   └── whatsapp_cart_service.go  # Persistent WhatsApp cart
 │   ├── migrations/               # 16 SQL migration files
 │   ├── uploads/                  # Menu item product photos
 │   ├── .env.example              # Environment template
 │   └── go.mod / go.sum
 ├── frontend/                     # React frontend (customer site + admin)
 │   ├── src/
-│   │   ├── pages/                # Home, Menu, Product, Cart, Checkout, etc.
+│   │   ├── pages/                # 20+ pages (see full list below)
 │   │   ├── components/           # Reusable UI components
-│   │   │   ├── ui/               # Button, Card, Badge, Modal, ConfirmDialog
+│   │   │   ├── ui/               # 18 components (see full list below)
 │   │   │   └── layout/           # Navbar, Footer
 │   │   ├── context/              # Cart, Toast, Auth, Restaurant, SiteSettings, Crusts
-│   │   ├── hooks/                # Custom hooks (GSAP, geolocation, etc.)
+│   │   ├── hooks/                # GSAP, geolocation, flying cart, push notifications
 │   │   ├── services/             # API calls, cart persistence
-│   │   ├── data/                 # Static data (fallback outlets, restaurant)
+│   │   ├── data/                 # Static fallback data (~100+ menu items, offers, blog)
 │   │   └── types/                # TypeScript interfaces
-│   ├── public/                   # PWA manifest, service worker, offline page
-│   ├── vercel.json               # Vercel deployment config
+│   ├── public/                   # PWA manifest, service worker, offline page, favicon
+│   ├── vercel.json               # Vercel deployment config with security headers
 │   ├── package.json
 │   └── vite.config.ts
 ├── campaign-runner/              # WhatsApp marketing campaign tool
@@ -171,10 +191,14 @@ Tech-OCP/
 └── .gitignore
 ```
 
+---
+
 ## Prerequisites
 
 - **Docker** and **Docker Compose** (recommended)
 - Or: **Node.js** 18+, **Go** 1.21+, **PostgreSQL** 14+
+
+---
 
 ## Quick Start (Docker)
 
@@ -209,6 +233,8 @@ docker compose down -v        # Stop and delete data
 docker compose build          # Rebuild after code changes
 ```
 
+---
+
 ## Setup (Manual / Development)
 
 If you prefer running without Docker:
@@ -228,6 +254,27 @@ cp .env.example .env
 createdb ocp
 # Migrations run automatically when the bot starts
 ```
+
+The bot runs 16 migrations on startup covering:
+
+| Migration | What it creates |
+|-----------|----------------|
+| 001 | Core tables — customers, menu_items, orders, order_items |
+| 002 | Admin users with hashed keys and roles |
+| 003 | Live chat message persistence |
+| 004 | Restaurant settings (name, hours, fees) |
+| 005 | Audit log |
+| 006 | Menu variants (size/crust pricing) |
+| 007 | Order access tokens (IDOR protection) |
+| 008 | Bot message templates |
+| 009 | Customer sessions |
+| 010 | Delivery zone configuration |
+| 011 | WhatsApp cart storage |
+| 012 | Idempotency keys (duplicate order prevention) |
+| 013 | Human-friendly order IDs (OCP-YYYYMMDD-NNNN) |
+| 014 | Site settings (banners, offers, contacts) |
+| 015 | Site pages (FAQ, Privacy, Terms) |
+| 016 | Business config (sizes, payments, fees) |
 
 ### 3. Backend
 
@@ -254,6 +301,10 @@ npm install
 npm run dev      # Server on :3001 + frontend on :5173
 ```
 
+---
+
+## Environment Variables
+
 | Variable | Description | Example |
 |----------|-------------|---------|
 | `BOT_PORT` | API server port | `8090` |
@@ -267,6 +318,8 @@ npm run dev      # Server on :3001 + frontend on :5173
 | `CORS_ALLOWED_ORIGINS` | Comma-separated allowed origins | `https://your-app.vercel.app` |
 | `RESTAURANT_WHATSAPP_NUMBER` | Number for order notifications | `919876543210` |
 | `DELIVERY_FEE` | Default delivery fee | `0` |
+
+---
 
 ## Running in Production
 
@@ -291,7 +344,7 @@ systemctl --user status orange-cheese-pizza-bot
 .\OCP-ControlPanel.ps1
 ```
 
-The control panel shows status for all 3 services (Evolution GO, Bot, Campaign Runner) and provides Start/Stop/Restart buttons.
+The control panel shows status for all 4 services (Evolution GO, Bot, Campaign Runner, Frontend) with Start All / Stop All / Restart buttons, live log viewer, and website/admin shortcuts.
 
 ### Manual
 
@@ -307,6 +360,8 @@ cd bot && go build -o bot-ocp . && ./bot-ocp
 4. Add environment variable: `VITE_API_BASE_URL` = your backend URL
 5. Deploy
 
+Vercel config includes security headers (HSTS, CSP, X-Frame-Options), SPA routing rewrites, and 1-year immutable asset caching.
+
 ### Deploying Backend
 
 The Go backend needs to run on a server with PostgreSQL access. Options:
@@ -316,26 +371,37 @@ The Go backend needs to run on a server with PostgreSQL access. Options:
 
 Set `CORS_ALLOWED_ORIGINS` in `bot/.env` to include your Vercel domain.
 
+---
+
 ## Security
 
 The codebase has been audited and hardened for production use:
 
-- **Webhook authentication** — requires `EVOLUTION_WEBHOOK_SECRET` to be set; rejects webhooks when unconfigured
-- **Admin key comparison** — constant-time via `crypto/subtle` to prevent timing attacks
-- **Rate limiting** — IP-based window counters on all endpoints (auth, API, admin, webhooks)
-- **OTP verification** — transactional with `SELECT ... FOR UPDATE` to prevent brute-force race conditions
+- **Webhook authentication** — HMAC-SHA256 signature verification; rejects webhooks when `EVOLUTION_WEBHOOK_SECRET` is empty
+- **Admin key comparison** — constant-time via `crypto/subtle` to prevent timing attacks; keys stored as SHA-256 hashes
+- **Rate limiting** — IP-based window counters on all endpoint groups:
+  - `/auth/send-otp` — 3 requests/min
+  - `/auth/verify-otp` — 10 requests/min
+  - `/api/*` — 120 requests/min
+  - `/admin/*` — 60 requests/min
+  - `/api/orders` — 20 requests/min
+  - `/webhook/*` — 300 requests/min
+- **OTP verification** — transactional with `SELECT ... FOR UPDATE` to prevent brute-force race conditions; 3 max attempts, 30s cooldown between sends
 - **Request body limits** — 1MB global max to prevent OOM
 - **Error sanitization** — internal errors logged server-side, generic messages returned to clients
-- **Security headers** — HSTS, CSP, X-Frame-Options, Referrer-Policy, Permissions-Policy
+- **Security headers** — HSTS, CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy on every response
 - **CORS** — explicit origin allowlist (no wildcards)
 - **Input validation** — all fields length-bounded, numeric ranges checked, enums enforced
 - **SQL injection** — 100% parameterized queries across all handlers
 - **XSS prevention** — no `dangerouslySetInnerHTML`, React auto-escaping, CSP `script-src 'self'`
 - **File uploads** — content-type sniffing, 5MB limit, random filenames (no path traversal)
-- **Session tokens** — 192-bit entropy, SHA-256 hashed at rest, server-side invalidation on logout
-- **IDOR protection** — order access requires token or Bearer ownership
+- **Session tokens** — 192-bit entropy, SHA-256 hashed at rest, 24-hour expiry, server-side invalidation on logout
+- **IDOR protection** — order access requires access token or Bearer ownership (no sequential IDs exposed)
+- **Idempotency** — unique key per order creation request prevents duplicate orders
 - **Memory management** — conversation locks cleaned up every 30 minutes
-- **Docker security** — required env vars (no defaults), locked CORS, minimal base images
+- **Docker security** — required env vars (no defaults), locked CORS, minimal base images (alpine)
+
+---
 
 ## API Endpoints
 
@@ -343,16 +409,21 @@ The codebase has been audited and hardened for production use:
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/api/menu` | Full menu with categories |
-| `POST` | `/api/orders` | Place a new order |
-| `GET` | `/api/orders/:id` | Get order status |
+| `GET` | `/api/menu` | Full menu with categories, filtered by category/search |
+| `GET` | `/api/categories` | List all menu categories |
+| `GET` | `/api/menu/:slug` | Get a single menu item by slug |
+| `GET` | `/api/crusts` | Crust catalog with per-size prices |
+| `GET` | `/api/crusts/:slug` | Get crust options for a given item |
+| `POST` | `/api/orders` | Place a new order (idempotency key, DB pricing) |
+| `GET` | `/api/orders/:token` | Get order details by access token |
+| `GET` | `/api/tracking/:token` | Public order tracking (status, ETA, items) |
 | `GET` | `/api/config` | Restaurant configuration |
 | `GET` | `/api/outlets` | Outlet locations |
-| `GET` | `/api/crusts` | Crust catalog with per-size prices |
 | `GET` | `/api/business-config` | Sizes, payments, icons, delivery config |
 | `GET` | `/api/site-settings` | Brand, SEO, social, footer settings |
 | `GET` | `/api/site-pages/:slug` | CMS page content |
-| `GET` | `/api/menu-categories` | Menu categories |
+| `GET` | `/api/menu-categories` | Menu categories with sort order |
+| `GET` | `/api/contact-info` | Restaurant contact information |
 | `GET` | `/health` | Health check |
 | `GET` | `/ready` | Readiness (DB + Evolution status) |
 
@@ -360,8 +431,8 @@ The codebase has been audited and hardened for production use:
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/api/auth/send-otp` | Send WhatsApp OTP (rate limited: 3/min) |
-| `POST` | `/api/auth/verify-otp` | Verify OTP, get session token |
+| `POST` | `/api/auth/send-otp` | Send WhatsApp OTP (rate limited: 3/min, 30s cooldown) |
+| `POST` | `/api/auth/verify-otp` | Verify OTP, get session token (24h expiry) |
 | `GET` | `/api/auth/me` | Get current user profile |
 | `GET` | `/api/auth/orders` | Get user's order history |
 | `POST` | `/api/auth/logout` | Invalidate session |
@@ -372,24 +443,24 @@ The codebase has been audited and hardened for production use:
 |--------|------|-------------|
 | `GET` | `/admin/orders` | List all orders |
 | `GET` | `/admin/orders/:id` | Get order details |
-| `PATCH` | `/admin/orders/:id/status` | Update order status |
+| `PATCH` | `/admin/orders/:id/status` | Update order status (triggers WhatsApp notification) |
 | `GET` | `/admin/menu` | Menu items with full details |
 | `POST` | `/admin/menu` | Create menu item |
 | `PUT` | `/admin/menu/:id` | Update menu item |
 | `DELETE` | `/admin/menu/:id` | Delete menu item |
-| `POST` | `/admin/upload` | Upload product photo |
-| `GET` | `/admin/analytics` | Sales/order analytics |
+| `POST` | `/admin/upload` | Upload product photo (5MB max, content-type validated) |
+| `GET` | `/admin/analytics` | Sales/order analytics (daily/weekly/monthly) |
 | `GET` | `/admin/users` | List admin users |
 | `POST` | `/admin/users` | Create admin user |
 | `DELETE` | `/admin/users/:id` | Delete admin user |
-| `GET` | `/admin/audit` | Audit log |
+| `GET` | `/admin/audit` | Audit log (who did what, when, from where) |
 | `GET` | `/admin/config` | Restaurant settings |
 | `PUT` | `/admin/config` | Update restaurant settings |
 | `GET` | `/admin/conversations` | WhatsApp chat list |
 | `GET` | `/admin/conversations/:phone/messages` | Chat messages |
 | `POST` | `/admin/conversations/:phone/send` | Send chat message |
 | `GET` | `/admin/customers` | List all customers |
-| `POST` | `/admin/broadcast/send` | Bulk send WhatsApp messages |
+| `POST` | `/admin/broadcast/send` | Bulk send WhatsApp messages (max 200 recipients) |
 | `GET` | `/admin/me` | Current admin user info |
 | `GET` | `/admin/site-settings` | All site settings |
 | `PUT` | `/admin/site-settings/:key` | Update a site setting |
@@ -422,8 +493,10 @@ The codebase has been audited and hardened for production use:
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/webhook/evolution` | Evolution GO event receiver (rate limited: 300/min) |
+| `POST` | `/webhook/evolution` | Evolution GO event receiver (HMAC-SHA256 verified, rate limited: 300/min) |
 | `POST` | `/webhook/button` | Evolution GO button click receiver |
+
+---
 
 ## Admin Dashboard
 
@@ -432,13 +505,13 @@ Access at `your-domain/admin` (or `localhost:5173/admin` in development).
 Login with your `BOT_ADMIN_KEY`. The key is stored in browser localStorage only.
 
 **Tabs:**
-- **Orders** — Live order queue with status controls and sound alerts
-- **Menu Studio** — Add/edit/delete menu items with image upload
-- **Live Chat** — WhatsApp conversation viewer
-- **Analytics** — Sales charts, daily/weekly/monthly breakdowns
+- **Orders** — Live order queue with status controls, sound alerts, filter by status (New, Confirmed, Cooking, Ready, En Route, Delivered, Completed, Cancelled)
+- **Menu Studio** — Add/edit/delete menu items with image upload, manage categories, configure crust variants with per-size pricing
+- **Live Chat** — WhatsApp conversation viewer, read incoming messages, send replies directly from admin
+- **Analytics** — Sales charts with daily/weekly/monthly breakdowns, order volume, revenue tracking
 - **Team** — Manage staff accounts with role-based access
 - **Settings** — Restaurant name, hours, delivery config + site customization links
-- **Audit Log** — Who did what, when
+- **Audit Log** — Who did what, when, from where (every admin action tracked)
 
 **Site Customization (under Settings):**
 - **Brand** — Logo, favicon, primary/secondary/accent colors, heading and body fonts with live preview
@@ -454,30 +527,107 @@ Login with your `BOT_ADMIN_KEY`. The key is stored in browser localStorage only.
 - `kitchen` — Can view/update order status only
 - `viewer` — Read-only access
 
-## Campaign Runner
+---
 
-A standalone WhatsApp marketing tool that connects to the Go bot.
+## Customer Site Pages
 
-```bash
-cd campaign-runner
-npm install
-npm run dev
-```
+| Route | Page | Features |
+|-------|------|----------|
+| `/` | Landing | Hero, menu preview, location pill, banner carousel, GSAP animations |
+| `/r` | Home | Food mood cards, category scroll, menu items, floating cart bar |
+| `/r/menu` | Menu | Filter chips, search autocomplete, category tabs, item grid |
+| `/r/menu/:slug` | Product | Image zoom, crust selection, size picker, add to cart with flying animation |
+| `/r/cart` | Cart | Item list, quantity adjust, subtotal, tax, proceed to checkout |
+| `/r/checkout` | Checkout | Address autocomplete (Nominatim), OTP flow, order summary, idempotency |
+| `/r/order/:token` | Order Tracking | Real-time status timeline (10s polling), order details, items |
+| `/r/login` | Login | WhatsApp OTP send/verify, phone input |
+| `/r/account` | Account | Profile, order history, logout |
+| `/r/offers` | Offers | Family packs, BOGO, cheese burst deals, menu links |
+| `/r/locations` | Locations | Outlet cards with address, hours, online ordering status |
+| `/r/about` | About | Restaurant story (API-driven) |
+| `/r/contact` | Contact | Contact form, map, restaurant info |
+| `/r/faq` | FAQ | Accordion FAQ (API-driven with static fallback) |
+| `/r/privacy` | Privacy | API-driven privacy policy content |
+| `/r/terms` | Terms | API-driven terms of service content |
+| `/r/reservations` | Reservations | Table booking form, time slots, guest count |
 
-Open `http://localhost:5173` — go to Settings → enter Bot API URL (`http://localhost:8090`) and your admin key.
+---
 
-**6 tabs:**
-- **Dashboard** — Stats cards, 7-day activity chart, recent campaigns, tag breakdown
-- **Customers** — Search, filter by tag, paginated table, CSV import/export, bulk operations
-- **Campaigns** — 3-step wizard (Compose → Recipients → Review), WhatsApp-style live preview, scheduling, live progress
-- **Templates** — Reusable messages with merge tags ({name}, {discount}, {brand_name}), 6 presets
-- **Media** — Upload images, grid gallery, copy URL
-- **Settings** — Brand name/logo/color, bot connection, delay config
+## Frontend Components
 
-**How it sends:**
-- Customers sync from the bot's PostgreSQL via `/admin/customers`
-- Messages send through the bot's `/admin/broadcast/send` endpoint
-- No direct Evolution GO access — all WhatsApp operations go through the bot
+### UI Components (`frontend/src/components/ui/`)
+
+| Component | What it does |
+|-----------|-------------|
+| `AddressAutocomplete` | Nominatim-powered address search with city/postal code extraction |
+| `Badge` | Status badges — success/warning/error/neutral/brand/veg/nonveg variants |
+| `BannerCarousel` | Auto-rotating banner slider from site settings |
+| `Button` | Primary/secondary/ghost/danger/outline variants with loading state |
+| `Card` | Reusable card container with hover and padding options |
+| `CategoryScroll` | Horizontal scrolling category navigation with arrow buttons |
+| `ConfirmDialog` | Modal confirmation dialog with danger mode (replaces browser `confirm()`) |
+| `FilterChips` | Horizontal scrollable filter pills for menu filtering |
+| `FloatingCartBar` | Mobile sticky cart bar showing item count and subtotal |
+| `FoodMoodCards` | Category grid ("What's on your mind?") with images |
+| `ImageZoom` | Fullscreen image viewer with zoom in/out and pan |
+| `Input` | Form input with label, error message, hint text, and icon support |
+| `LocationPill` | Current location/outlet display pill |
+| `Modal` | Overlay modal with sizes (sm/md/lg/full) and ESC key close |
+| `OffersStrip` | Horizontal scrollable offers cards from site settings |
+| `SearchAutocomplete` | Menu search with recent searches (localStorage), popular items, keyboard navigation |
+| `Skeleton` | Loading placeholders — text/circular/rectangular/card variants |
+| `StarRating` | Star rating display with half-star support |
+
+### Contexts (`frontend/src/context/`)
+
+| Context | What it provides |
+|---------|-----------------|
+| `AuthContext` | Customer authentication state, OTP flow, session management |
+| `CartContext` | Shopping cart state (localStorage), add/remove/clear/calculate, variant-aware |
+| `CrustContext` | Crust variant pricing and selection (fetched from API) |
+| `RestaurantContext` | Restaurant info, outlets, delivery hours, operating hours (fetched from API) |
+| `SiteSettingsContext` | Banners, offers, contacts, page content, CSS custom properties for brand colors |
+| `ToastContext` | Toast notifications (success/error/info/warning) |
+
+### Hooks (`frontend/src/hooks/`)
+
+| Hook | What it does |
+|------|-------------|
+| `useFlyingCart` | Animated flying cart effect when adding item to cart |
+| `useGeoLocation` | Browser geolocation with fallback to default location |
+| `useGsap` | GSAP scroll-triggered animations — `useGsapReveal`, `useGsapFadeIn`, `useGsapCountUp` |
+| `useMenu` | Menu data fetching with React Query (API first, static fallback) |
+| `usePushNotifications` | Push notification subscription, permission management |
+
+### Services (`frontend/src/services/`)
+
+| Service | What it does |
+|---------|-------------|
+| `api.ts` | Base HTTP client with auth headers, error handling |
+| `authService.ts` | OTP send/verify, session management |
+| `cartService.ts` | Cart persistence operations |
+| `menuService.ts` | Menu/category/crust data fetching |
+| `orderService.ts` | Order creation, tracking, history |
+
+---
+
+## WhatsApp Conversation Flow
+
+The bot handles a full stateful conversation over WhatsApp:
+
+1. **Greeting** — Customer sends any message, bot responds with welcome + menu
+2. **Category browsing** — Customer picks a category (Pizza, Sides, etc.)
+3. **Item selection** — Customer picks an item from the category
+4. **Size selection** — Regular / Medium / Large (configurable from admin)
+5. **Crust selection** — Tossed, Thin, Cheese Burst, etc. (per-item, with pricing)
+6. **Quantity** — Customer specifies how many
+7. **Cart management** — Add more items, view cart, remove items, clear cart
+8. **Checkout** — Confirm order, provide address, choose payment method
+9. **Order placed** — Confirmation sent to customer + notification to restaurant
+
+All message templates are stored in the database and editable from the admin Bot Messages panel with live WhatsApp preview.
+
+---
 
 ## WhatsApp Integration
 
@@ -505,6 +655,15 @@ go build -o evolution-go ./cmd/evolution-go
 docker compose -f docker/examples/docker-compose.yml up -d
 ```
 
+Evolution GO features:
+- High-performance WhatsApp API built in Go
+- QR code pairing for device linking
+- Real-time event delivery (WebSocket, Webhook, AMQP/RabbitMQ, NATS)
+- Text and media message sending (images, videos, audio, documents)
+- Instance management, user management, label/tag management
+- Group management, newsletter support, community management
+- Swagger API documentation included
+
 **Connecting to OCP:**
 1. Open the Evolution GO manager at `http://localhost:8081`
 2. Create an instance named `OCP`
@@ -512,6 +671,110 @@ docker compose -f docker/examples/docker-compose.yml up -d
 4. Set the webhook URL to `http://YOUR_SERVER:8090/webhook/evolution`
 5. Set `EVOLUTION_WEBHOOK_SECRET` in `bot/.env` to the same value
 6. Configure the instance token and API key in `bot/.env`
+
+---
+
+## Campaign Runner
+
+A standalone WhatsApp marketing tool that connects to the Go bot.
+
+```bash
+cd campaign-runner
+npm install
+npm run dev
+```
+
+Open `http://localhost:5173` — go to Settings → enter Bot API URL (`http://localhost:8090`) and your admin key.
+
+**6 tabs:**
+- **Dashboard** — Stats cards, 7-day activity chart, recent campaigns, tag breakdown
+- **Customers** — Search, filter by tag, paginated table, CSV import/export, bulk operations
+- **Campaigns** — 3-step wizard (Compose → Recipients → Review), WhatsApp-style live preview, scheduling, live progress with per-recipient status
+- **Templates** — Reusable messages with merge tags ({name}, {discount}, {brand_name}), 6 presets
+- **Media** — Upload images, grid gallery, copy URL
+- **Settings** — Brand name/logo/color, bot connection, delay config
+
+**How it sends:**
+- Customers sync from the bot's PostgreSQL via `/admin/customers`
+- Messages send through the bot's `/admin/broadcast/send` endpoint
+- No direct Evolution GO access — all WhatsApp operations go through the bot
+
+---
+
+## PWA Features
+
+- **Service Worker** — cache-first strategy for static assets, network fallback to offline page, skips API requests
+- **Web Manifest** — standalone display mode, portrait orientation, brand orange theme (#ea580c)
+- **Push Notifications** — browser push notification support with permission management
+- **Offline Support** — cached assets serve when network is unavailable
+- **Home Screen Install** — users can install the app to their home screen on mobile and desktop
+
+---
+
+## Static Fallback Data
+
+When the API is unavailable (offline, slow network), the frontend falls back to static data:
+
+| File | Items | What's in it |
+|------|-------|-------------|
+| `menu.ts` | ~100+ items | Full menu across all categories (Pizza, Burgers, Momos, Chicken, Pasta, Sides, etc.) |
+| `categories.ts` | 12 categories | With icons and display names |
+| `offers.ts` | 8 offers | BOGO, Family Packs (1-4), Cheese Burst, Fun Meal Box |
+| `blog.ts` | 3 posts | Mozzarella story, Desi Tadka, Korean Spicy launch |
+
+---
+
+## Animations & UX
+
+- **GSAP Scroll Animations** — elements reveal on scroll, fade in, count-up numbers
+- **Flying Cart Animation** — item visually flies to cart when added
+- **Mobile Floating Cart Bar** — sticky bottom bar showing item count and subtotal
+- **Image Zoom** — fullscreen viewer with pinch-to-zoom on product images
+- **Skeleton Loading** — shimmer placeholders while content loads
+- **Toast Notifications** — non-intrusive success/error/info messages
+- **Confirm Dialogs** — modal confirmations replacing browser `confirm()` calls
+- **Search Autocomplete** — recent searches, popular items, keyboard navigation
+
+---
+
+## Docker
+
+### Services
+
+| Service | Base Image | Build | Port |
+|---------|-----------|-------|------|
+| Bot | golang:1.21-alpine → alpine:3.19 | `CGO_ENABLED=0` static build | :8090 |
+| Frontend | node:20-alpine → nginx:alpine | `npm ci` + Vite build | :3000 |
+| Campaign Runner | node:20-alpine | `npm ci` + build | :3001 |
+| Evolution GO | golang:1.25.0-alpine → alpine:3.19.1 | `CGO_ENABLED=1` with image libs | :8080 |
+| PostgreSQL | postgres:14 | — | :5432 |
+
+### Docker Compose
+
+- Volume persistence for uploads and database
+- Network isolation between services
+- Health checks on PostgreSQL
+- Required environment variables (no insecure defaults)
+
+---
+
+## CI/CD
+
+### GitHub Actions (`ci.yml`)
+- Triggers on every push and pull request
+- Go build and `go vet`
+- Frontend build and TypeScript check
+
+### Release Pipeline (`release.yml`)
+- Triggers on version tags
+- Builds and publishes Docker images
+- Creates GitHub release with changelog
+
+---
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, code style, and PR guidelines.
 
 ## License
 
