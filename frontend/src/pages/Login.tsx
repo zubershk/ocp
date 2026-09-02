@@ -33,6 +33,7 @@ export default function Login() {
   const [verifying, setVerifying] = useState(false);
   const [error, setError] = useState('');
   const [cooldown, setCooldown] = useState(0);
+  const [success, setSuccess] = useState(false);
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   useEffect(() => { if (customer) nav(redirect, { replace: true }); }, [customer, nav, redirect]);
@@ -64,8 +65,9 @@ export default function Login() {
     try {
       const { token, customer: c } = await verifyOtp(normalizedPhone, code);
       setCustomer(c, token);
+      setSuccess(true);
       push({ type: 'success', title: `Welcome${c.name ? `, ${c.name}` : ''}!` });
-      nav(redirect, { replace: true });
+      setTimeout(() => nav(redirect, { replace: true }), 800);
     } catch (err) { setError(err instanceof Error ? err.message : 'Verification failed'); }
     finally { setVerifying(false); }
   };
@@ -86,31 +88,48 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-[70vh] flex items-center justify-center px-4 py-10">
-      <div className="w-full max-w-[420px]">
+    <div className="min-h-[70vh] flex items-center justify-center px-4 py-10 relative">
+      {/* Subtle background pattern */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-brand-100/30 rounded-full blur-3xl" />
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-amber-100/30 rounded-full blur-3xl" />
+      </div>
+
+      <div className="w-full max-w-[420px] relative">
         <Link to="/" className="inline-flex items-center gap-1.5 text-sm text-zinc-500 hover:text-zinc-900 mb-6 transition-colors">
           <ArrowLeft size={14} /> Back to home
         </Link>
 
         <div className="bg-white rounded-3xl border border-stone-100 shadow-elevated overflow-hidden">
-          {/* Header accent */}
           <div className="h-1 bg-brand-600" />
 
           <div className="p-7 sm:p-8">
-            {/* Logo */}
-            <div className="w-12 h-12 rounded-2xl bg-brand-600 flex items-center justify-center text-white mb-5">
-              <Shield size={20} />
-            </div>
+            {/* Logo / Success state */}
+            {success ? (
+              <div className="text-center py-4">
+                <div className="w-16 h-16 mx-auto rounded-2xl bg-emerald-100 flex items-center justify-center success-check">
+                  <svg className="w-8 h-8 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <h1 className="text-xl font-heading font-bold mt-4 text-emerald-700">Welcome!</h1>
+                <p className="text-sm text-zinc-500 mt-1.5">Redirecting you now…</p>
+              </div>
+            ) : (
+              <div>
+                <div className="w-12 h-12 rounded-2xl bg-brand-600 flex items-center justify-center text-white mb-5">
+                  <Shield size={20} />
+                </div>
 
-            <h1 className="text-xl sm:text-2xl font-heading font-bold tracking-tight">
-              {step === 'phone' ? 'Sign in' : 'Enter code'}
-            </h1>
-            <p className="text-sm text-zinc-500 mt-1.5 leading-relaxed">
-              {step === 'phone'
-                ? "We'll send a 6-digit code to your WhatsApp."
-                : <>Code sent to <span className="font-medium text-zinc-700">+91 {normalizedPhone}</span></>
-              }
-            </p>
+                <h1 className="text-xl sm:text-2xl font-heading font-bold tracking-tight">
+                  {step === 'phone' ? 'Sign in' : 'Enter code'}
+                </h1>
+                <p className="text-sm text-zinc-500 mt-1.5 leading-relaxed">
+                  {step === 'phone'
+                    ? "We'll send a 6-digit code to your WhatsApp."
+                    : <>Code sent to <span className="font-medium text-zinc-700">+91 {normalizedPhone}</span></>
+                  }
+                </p>
 
             {error && (
               <div role="alert" className="mt-4 px-4 py-3 rounded-xl bg-red-50 border border-red-200/60 text-sm text-red-700 flex items-start gap-2">
@@ -179,11 +198,12 @@ export default function Login() {
                         className={`
                           w-12 h-14 text-center text-xl font-bold rounded-xl border-2 transition-all duration-200
                           ${d
-                            ? 'border-brand-400 bg-brand-50/30 text-brand-700'
-                            : 'border-stone-200 bg-stone-50 focus:bg-white focus:border-brand-400'
+                            ? 'border-brand-400 bg-brand-50/30 text-brand-700 ring-2 ring-brand-200/40'
+                            : 'border-stone-200 bg-stone-50 focus:bg-white focus:border-brand-400 focus:ring-2 focus:ring-brand-200/40'
                           }
-                          focus:outline-none focus:ring-2 focus:ring-brand-500/20
+                          focus:outline-none
                         `}
+                        style={d ? { animationDelay: `${i * 30}ms` } : undefined}
                       />
                     ))}
                   </div>
@@ -211,6 +231,8 @@ export default function Login() {
                   </button>
                 </div>
               </form>
+            )}
+            </div>
             )}
           </div>
         </div>
