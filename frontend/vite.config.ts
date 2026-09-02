@@ -12,7 +12,13 @@ export default defineConfig({
     },
     proxy: {
       '/api': 'http://localhost:8090',
-      '/admin': 'http://localhost:8090',
+      '/admin': {
+        target: 'http://localhost:8090',
+        bypass(req) {
+          if (req.headers['x-admin-key']) return null;
+          return '/index.html';
+        },
+      },
       '/uploads': 'http://localhost:8090',
       '/health': 'http://localhost:8090',
     },
