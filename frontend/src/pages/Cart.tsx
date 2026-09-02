@@ -1,3 +1,4 @@
+import { useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { Minus, Plus, Trash2, ShoppingBag, Plus as PlusIcon, ArrowRight, ShieldCheck, Clock } from 'lucide-react';
 import { useCart } from '../context/CartContext';
@@ -10,8 +11,14 @@ export default function Cart() {
   const { items: menuItems } = useMenuItems();
   const { push } = useToast();
   const deliveryHours = useDeliveryHours();
+  const [removingIds, setRemovingIds] = useState<Set<string>>(new Set());
 
   const totalItems = items.reduce((a, b) => a + b.quantity, 0);
+
+  const handleRemove = useCallback((id: string) => {
+    setRemovingIds((prev) => new Set(prev).add(id));
+    setTimeout(() => { removeItem(id); setRemovingIds((prev) => { const next = new Set(prev); next.delete(id); return next; }); }, 250);
+  }, [removeItem]);
 
   const suggestions = menuItems
     .filter((m) => ['garlic-bread', 'desserts', 'french-fries', 'drinks', 'beverages'].includes(m.category))
@@ -19,7 +26,7 @@ export default function Cart() {
     .slice(0, 3);
 
   if (items.length === 0) return (
-    <div className="container-page py-20 text-center">
+    <div className="container-page py-20 text-center animate-fade-up">
       <div className="w-24 h-24 mx-auto rounded-3xl bg-stone-100 flex items-center justify-center mb-6">
         <ShoppingBag size={40} className="text-stone-300" />
       </div>
@@ -53,10 +60,14 @@ export default function Cart() {
           </div>
 
           <ul className="mt-6 space-y-3">
-            {items.map((it) => (
+            {items.map((it, i) => (
               <li
                 key={it.id}
-                className="bg-white rounded-2xl border border-stone-100 p-4 flex gap-4 shadow-sm hover:shadow-card transition-shadow duration-200"
+                className={`
+                  bg-white rounded-2xl border border-stone-100 p-4 flex gap-4 shadow-sm transition-all duration-300
+                  ${removingIds.has(it.id) ? 'cart-item-exit' : 'cart-item-enter hover:shadow-card'}
+                `}
+                style={{ animationDelay: `${i * 40}ms` }}
               >
                 <img
                   src={it.image}
@@ -89,7 +100,7 @@ export default function Cart() {
                       <Plus size={14} />
                     </button>
                     <button
-                      onClick={() => removeItem(it.id)}
+                      onClick={() => handleRemove(it.id)}
                       className="ml-auto text-xs text-red-500 hover:text-red-700 hover:underline cursor-pointer transition-colors"
                     >
                       Remove
