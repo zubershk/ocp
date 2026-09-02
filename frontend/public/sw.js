@@ -25,7 +25,7 @@ self.addEventListener('fetch', (event) => {
   const { request } = event;
 
   // Skip non-GET and API requests
-  if (request.method !== 'GET' || request.url.includes('/api/')) return;
+  if (request.method !== 'GET' || request.url.includes('/api/') || !request.url.startsWith('http')) return;
 
   event.respondWith(
     caches.match(request).then((cached) => {
