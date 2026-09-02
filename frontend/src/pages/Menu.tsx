@@ -1,6 +1,6 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Flame, Plus, Pizza, SlidersHorizontal, X, ChevronDown } from 'lucide-react';
+import { Flame, Plus, Pizza, SlidersHorizontal, X, ChevronDown, Search, ArrowRight } from 'lucide-react';
 import { useMenuItems } from '../hooks/useMenu';
 import { useCart } from '../context/CartContext';
 import { useToast } from '../context/ToastContext';
@@ -35,6 +35,19 @@ export default function Menu() {
   const { addItem } = useCart();
   const { push } = useToast();
   const deliveryHours = useDeliveryHours();
+  const categoryBarRef = useRef<HTMLDivElement>(null);
+  const [isCategoryBarSticky, setIsCategoryBarSticky] = useState(false);
+
+  useEffect(() => {
+    const bar = categoryBarRef.current;
+    if (!bar) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setIsCategoryBarSticky(!entry.isIntersecting),
+      { threshold: 0, rootMargin: '-1px 0px 0px 0px' }
+    );
+    observer.observe(bar);
+    return () => observer.disconnect();
+  }, []);
 
   const filtered = useMemo(() => {
     let list = menuItems.filter(categories.find((c) => c.id === cat)!.filter);
@@ -87,24 +100,33 @@ export default function Menu() {
       </div>
 
       {/* Category chips */}
-      <div className="mt-6 flex flex-wrap gap-2" role="tablist" aria-label="Menu categories">
-        {categories.map((c) => (
-          <button
-            key={c.id}
-            onClick={() => setCat(c.id)}
-            role="tab"
-            aria-selected={cat === c.id}
-            className={`
-              px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 cursor-pointer
-              ${cat === c.id
-                ? 'bg-brand-600 text-white shadow-sm shadow-brand-600/20'
-                : 'bg-white text-zinc-600 border border-stone-200 hover:border-brand-300 hover:text-brand-600 hover:bg-brand-50/30'
-              }
-            `}
-          >
-            {c.label}
-          </button>
-        ))}
+      <div ref={categoryBarRef} className="mt-6">
+        <div
+          className={`
+            flex flex-wrap gap-2 py-2 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 transition-all duration-300
+            ${isCategoryBarSticky ? 'sticky-category-bar' : ''}
+          `}
+          role="tablist"
+          aria-label="Menu categories"
+        >
+          {categories.map((c) => (
+            <button
+              key={c.id}
+              onClick={() => setCat(c.id)}
+              role="tab"
+              aria-selected={cat === c.id}
+              className={`
+                px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 cursor-pointer
+                ${cat === c.id
+                  ? 'bg-brand-600 text-white shadow-sm shadow-brand-600/20'
+                  : 'bg-white text-zinc-600 border border-stone-200 hover:border-brand-300 hover:text-brand-600 hover:bg-brand-50/30'
+                }
+              `}
+            >
+              {c.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Filters row */}
@@ -136,7 +158,7 @@ export default function Menu() {
       {loading ? (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 mt-6">
           {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
-            <div key={i} className="bg-white rounded-2xl border border-stone-100 overflow-hidden">
+            <div key={i} className="bg-white rounded-2xl border border-stone-100 overflow-hidden stagger-child" style={{ animationDelay: `${i * 50}ms` }}>
               <div className="h-44 skeleton" />
               <div className="p-4 space-y-3">
                 <div className="flex gap-2">
@@ -155,19 +177,38 @@ export default function Menu() {
           ))}
         </div>
       ) : filtered.length === 0 ? (
-        /* Empty state */
-        <div className="mt-12 text-center py-16 bg-white rounded-3xl border border-stone-100">
-          <div className="w-16 h-16 mx-auto rounded-2xl bg-stone-100 flex items-center justify-center">
-            <Pizza size={28} className="text-stone-300" />
+        <div className="mt-12 text-center py-16 bg-white rounded-3xl border border-stone-100 animate-fade-up">
+          <div className="w-20 h-20 mx-auto rounded-3xl bg-stone-100 flex items-center justify-center">
+            <Pizza size={32} className="text-stone-300" />
           </div>
-          <h3 className="font-heading font-bold text-lg mt-4">No items found</h3>
-          <p className="text-sm text-zinc-500 mt-1.5">Try a different search or category</p>
-          <button
-            onClick={() => { setQ(''); setCat('all'); setVegOnly(false); }}
-            className="mt-5 px-5 py-2.5 rounded-xl bg-brand-600 text-white text-sm font-semibold hover:bg-brand-700 transition-all cursor-pointer"
-          >
-            Clear filters
-          </button>
+          <h3 className="font-heading font-bold text-xl mt-5">
+            {q ? `No results for "${q}"` : cat !== 'all' ? `No ${categories.find(c => c.id === cat)?.label || ''} items` : 'No items found'}
+          </h3>
+          <p className="text-sm text-zinc-500 mt-2 max-w-sm mx-auto leading-relaxed">
+            {q
+              ? 'Try a different search term or browse our full menu'
+              : cat !== 'all'
+                ? 'Try a different category or view our full menu'
+                : 'We are updating our menu — check back soon'
+            }
+          </p>
+          <div className="mt-6 flex flex-wrap justify-center gap-2">
+            <button
+              onClick={() => { setQ(''); setCat('all'); setVegOnly(false); }}
+              className="px-5 py-2.5 rounded-xl bg-brand-600 text-white text-sm font-semibold hover:bg-brand-700 transition-all cursor-pointer"
+            >
+              Clear filters
+            </button>
+            {q && (
+              <Link
+                to="/r/menu"
+                onClick={() => { setQ(''); setCat('all'); }}
+                className="px-5 py-2.5 rounded-xl bg-white border border-stone-200 text-sm font-semibold hover:bg-stone-50 transition-all inline-flex items-center gap-1.5"
+              >
+                Browse menu <ArrowRight size={14} />
+              </Link>
+            )}
+          </div>
         </div>
       ) : (
         /* Menu grid */
