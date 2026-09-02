@@ -9,6 +9,8 @@ import {
 } from 'lucide-react';
 import { adminFetch, getAdminKey, setAdminKey } from '../services/api';
 import OnboardingWizard, { isOnboardingComplete } from '../components/OnboardingWizard';
+import { useCountUp } from '../hooks/useCountUp';
+import AdminSubNav from '../components/layout/AdminSubNav';
 
 // ── Lifecycle (mirrors services/order_status_service.go) ──
 const NEXT_STATUSES: Record<string, { to: string; label: string; primary?: boolean }[]> = {
@@ -178,6 +180,11 @@ export default function Admin() {
 
   const lastUpdated = ordersQuery.dataUpdatedAt ? new Date(ordersQuery.dataUpdatedAt).toLocaleTimeString() : '—';
 
+  const revenueCountUp = useCountUp(kpi.revenueToday);
+  const activeCountUp = useCountUp(kpi.active);
+  const urgentCountUp = useCountUp(kpi.urgent);
+  const throughputCountUp = useCountUp(orders.length);
+
   const logout = () => { try { localStorage.removeItem('ocp_admin_key'); } catch {} setAuthed(false); setKeyInput(''); };
 
   if (!authed) {
@@ -259,43 +266,35 @@ export default function Admin() {
 
       <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {/* Sub-nav */}
-        <div className="flex gap-1 p-1 bg-stone-100 rounded-2xl w-fit text-sm mb-6 flex-wrap">
-          <span className="px-3.5 py-1.5 rounded-xl bg-zinc-900 text-white font-semibold text-xs">Orders</span>
-          <Link to="/admin/catalog" className="px-3.5 py-1.5 rounded-xl hover:bg-white font-medium text-xs transition-colors">Menu</Link>
-          <Link to="/admin/chats" className="px-3.5 py-1.5 rounded-xl hover:bg-white font-medium text-xs transition-colors">Chats</Link>
-          <Link to="/admin/settings" className="px-3.5 py-1.5 rounded-xl hover:bg-white font-medium text-xs transition-colors">Settings</Link>
-          <Link to="/admin/analytics" className="px-3.5 py-1.5 rounded-xl hover:bg-white font-medium text-xs transition-colors">Analytics</Link>
-          <Link to="/admin/team" className="px-3.5 py-1.5 rounded-xl hover:bg-white font-medium text-xs transition-colors">Team</Link>
-          <Link to="/admin/logs" className="px-3.5 py-1.5 rounded-xl hover:bg-white font-medium text-xs transition-colors">Audit</Link>
-        </div>
+        <AdminSubNav activeOverride="/admin" />
 
         {/* KPI */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <div className="bg-white rounded-2xl border border-stone-100 p-4 shadow-sm">
+          <div className="bg-white rounded-2xl border border-stone-100 p-4 shadow-sm stagger-child" style={{ animationDelay: '0ms' }}>
             <div className="flex items-start justify-between">
               <div className="w-9 h-9 rounded-xl bg-zinc-900 text-white grid place-items-center shadow-sm"><Wallet size={16} /></div>
               <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200"><TrendingUp size={12} /> Today</span>
             </div>
             <div className="mt-3 text-[11px] font-semibold tracking-wide text-zinc-500">Revenue today</div>
-            <div className="text-[22px] font-bold tracking-tight leading-none mt-1 flex items-baseline gap-1"><IndianRupee size={16} className="text-zinc-400" />{kpi.revenueToday.toLocaleString('en-IN')}</div>
+            <div className="text-[22px] font-bold tracking-tight leading-none mt-1 flex items-baseline gap-1"><IndianRupee size={16} className="text-zinc-400" />{revenueCountUp.toLocaleString('en-IN')}</div>
             <div className="text-[11px] text-zinc-500 mt-1">{kpi.todayCount} orders • avg ₹{kpi.avg.toLocaleString('en-IN')}</div>
           </div>
-          <div className="bg-white rounded-2xl border border-stone-100 p-4 shadow-sm">
+          <div className="bg-white rounded-2xl border border-stone-100 p-4 shadow-sm stagger-child" style={{ animationDelay: '60ms' }}>
             <div className="w-9 h-9 rounded-xl bg-brand-50 border border-brand-200 text-brand-600 grid place-items-center"><Flame size={16} /></div>
             <div className="mt-3 text-[11px] font-semibold tracking-wide text-zinc-500">Active orders</div>
-            <div className="text-[22px] font-bold tracking-tight leading-none mt-1">{kpi.active}</div>
+            <div className="text-[22px] font-bold tracking-tight leading-none mt-1">{activeCountUp}</div>
             <div className="text-[11px] text-zinc-500 mt-1">{counts.placed ?? 0} new • {counts.preparing ?? 0} cooking • {counts.ready ?? 0} ready</div>
           </div>
-          <div className={`rounded-2xl border p-4 shadow-sm ${kpi.urgent ? 'bg-red-50 border-red-200' : 'bg-white border-stone-100'}`}>
+          <div className={`rounded-2xl border p-4 shadow-sm stagger-child ${kpi.urgent ? 'bg-red-50 border-red-200' : 'bg-white border-stone-100'}`} style={{ animationDelay: '120ms' }}>
             <div className={`w-9 h-9 rounded-xl grid place-items-center border ${kpi.urgent ? 'bg-red-600 text-white border-red-600' : 'bg-stone-50 border-stone-200 text-stone-400'}`}><AlertTriangle size={16} /></div>
             <div className="mt-3 text-[11px] font-semibold tracking-wide text-zinc-500">Needs attention</div>
-            <div className={`text-[22px] font-bold tracking-tight leading-none mt-1 ${kpi.urgent ? 'text-red-700' : ''}`}>{kpi.urgent}</div>
+            <div className={`text-[22px] font-bold tracking-tight leading-none mt-1 ${kpi.urgent ? 'text-red-700' : ''}`}>{urgentCountUp}</div>
             <div className="text-[11px] text-zinc-500 mt-1">{kpi.urgent ? 'Over SLA — act now' : 'All clear'}</div>
           </div>
-          <div className="bg-white rounded-2xl border border-stone-100 p-4 shadow-sm">
+          <div className="bg-white rounded-2xl border border-stone-100 p-4 shadow-sm stagger-child" style={{ animationDelay: '180ms' }}>
             <div className="w-9 h-9 rounded-xl bg-sky-50 border border-sky-200 text-sky-600 grid place-items-center"><Activity size={16} /></div>
             <div className="mt-3 text-[11px] font-semibold tracking-wide text-zinc-500">Throughput</div>
-            <div className="text-[22px] font-bold tracking-tight leading-none mt-1">{orders.length}<span className="text-sm font-medium text-zinc-400"> / 50</span></div>
+            <div className="text-[22px] font-bold tracking-tight leading-none mt-1">{throughputCountUp}<span className="text-sm font-medium text-zinc-400"> / 50</span></div>
             <div className="text-[11px] text-zinc-500 mt-1">Last 50 orders • {orders.filter((o) => o.source === 'whatsapp').length} WhatsApp</div>
           </div>
         </div>
@@ -426,11 +425,11 @@ export default function Admin() {
           </div>
         ) : (
           <div className="mt-6 grid md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {filtered.map((o) => {
+            {filtered.map((o, i) => {
               const meta = STATUS_META[o.status] ?? STATUS_META.placed;
               const urgent = isUrgent(o);
               return (
-                <div key={o.id} className={`group bg-white rounded-2xl border shadow-sm hover:shadow-md hover:-translate-y-[1px] transition-all flex flex-col overflow-hidden ${urgent ? 'border-red-200 ring-1 ring-red-100' : 'border-zinc-200'}`}>
+                <div key={o.id} className={`group bg-white rounded-2xl border shadow-sm hover:shadow-md hover:-translate-y-[1px] transition-all flex flex-col overflow-hidden stagger-child ${urgent ? 'border-red-200 ring-1 ring-red-100' : 'border-zinc-200'}`} style={{ animationDelay: `${i * 30}ms` }}>
                   {/* accent */}
                   <div className={`h-1 w-full ${urgent ? 'bg-red-500' : o.status === 'placed' ? 'bg-orange-500' : o.status === 'ready' ? 'bg-emerald-500' : 'bg-zinc-900'}`} />
                   <div className="p-5 flex flex-col flex-1">
