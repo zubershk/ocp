@@ -1,6 +1,6 @@
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { useState } from 'react';
-import { Minus, Plus, ArrowLeft, Flame, Clock, BadgeCheck, ChevronRight, ShoppingCart, Zap } from 'lucide-react';
+import { useState, useRef } from 'react';
+import { Minus, Plus, ArrowLeft, Flame, Clock, BadgeCheck, ChevronRight, ShoppingCart, Zap, Check } from 'lucide-react';
 import { useCrusts } from '../context/CrustContext';
 import { useMenuItems } from '../hooks/useMenu';
 import { useCart } from '../context/CartContext';
@@ -22,8 +22,30 @@ export default function Product() {
   const [size, setSize] = useState<'regular' | 'medium' | 'large'>('regular');
   const [crust, setCrust] = useState('tossed');
   const [qty, setQty] = useState(1);
+  const [justAdded, setJustAdded] = useState(false);
+  const [imgLoaded, setImgLoaded] = useState(false);
+  const addTimeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  if (loading && !item) return <div className="container-page py-12 text-center text-sm text-zinc-500">Loading…</div>;
+  if (loading && !item) return (
+    <div className="container-page py-12">
+      <div className="h-6 w-28 skeleton rounded-lg" />
+      <div className="grid lg:grid-cols-2 gap-8 lg:gap-12 mt-6">
+        <div className="h-[280px] lg:h-[420px] skeleton rounded-3xl" />
+        <div className="space-y-4">
+          <div className="h-4 w-20 skeleton rounded" />
+          <div className="h-8 w-48 skeleton rounded" />
+          <div className="h-4 w-32 skeleton rounded" />
+          <div className="h-16 w-full skeleton rounded-xl" />
+          <div className="grid grid-cols-3 gap-2.5 mt-8">
+            <div className="h-20 skeleton rounded-2xl" />
+            <div className="h-20 skeleton rounded-2xl" />
+            <div className="h-20 skeleton rounded-2xl" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
   if (!item) return (
     <div className="container-page py-16 text-center">
       <div className="w-16 h-16 mx-auto rounded-2xl bg-stone-100 flex items-center justify-center mb-4">
@@ -47,6 +69,9 @@ export default function Product() {
   const addNow = () => {
     addItem(item, size, crust, qty);
     push({ type: 'success', title: `Added ${qty} × ${item.name} to cart` });
+    setJustAdded(true);
+    if (addTimeoutRef.current) clearTimeout(addTimeoutRef.current);
+    addTimeoutRef.current = setTimeout(() => setJustAdded(false), 1800);
   };
 
   return (
@@ -57,12 +82,19 @@ export default function Product() {
 
       <div className="grid lg:grid-cols-2 gap-8 lg:gap-12 mt-6 pb-24 lg:pb-0">
         {/* Image */}
-        <div>
-          <div className="relative overflow-hidden rounded-3xl">
+        <div className="animate-fade-in">
+          <div className="relative overflow-hidden rounded-3xl bg-orange-50">
+            <img
+              src={item.image}
+              alt=""
+              className="absolute inset-0 w-full h-full object-cover"
+              onLoad={() => setImgLoaded(true)}
+            />
+            {!imgLoaded && <div className="absolute inset-0 skeleton rounded-none" />}
             <ImageZoom
               src={item.image}
               alt={item.name}
-              className="w-full h-[280px] lg:h-[420px] bg-orange-50"
+              className={`w-full h-[280px] lg:h-[420px] transition-opacity duration-300 ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
             />
             {/* Badges */}
             <div className="absolute top-4 left-4 flex flex-wrap gap-2">
@@ -218,9 +250,17 @@ export default function Product() {
           <div className="hidden lg:flex mt-8 gap-3">
             <button
               onClick={addNow}
-              className="flex-1 py-4 rounded-2xl bg-brand-600 text-white font-semibold hover:bg-brand-700 active:scale-[0.99] transition-all duration-200 shadow-sm hover:shadow-md cursor-pointer inline-flex items-center justify-center gap-2"
+              className={`flex-1 py-4 rounded-2xl font-semibold transition-all duration-300 shadow-sm cursor-pointer inline-flex items-center justify-center gap-2 ${
+                justAdded
+                  ? 'bg-emerald-600 text-white shadow-emerald-600/20 scale-[0.98]'
+                  : 'bg-brand-600 text-white hover:bg-brand-700 hover:shadow-md active:scale-[0.99]'
+              }`}
             >
-              <ShoppingCart size={18} /> Add to Cart · ₹{total}
+              {justAdded ? (
+                <><Check size={18} className="success-check" /> Added to Cart</>
+              ) : (
+                <><ShoppingCart size={18} /> Add to Cart · ₹{total}</>
+              )}
             </button>
             <button
               onClick={() => { addItem(item, size, crust, qty); nav('/r/checkout'); }}
@@ -242,7 +282,7 @@ export default function Product() {
           <h2 className="text-xl sm:text-2xl font-heading font-bold">Complete Your Meal</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-5">
             {sides.map((s: MenuItem) => (
-              <div key={s.id} className="bg-white rounded-2xl border border-stone-100 overflow-hidden group flex flex-col card-lift">
+              <div key={s.id} className="bg-white rounded-2xl border border-stone-100 overflow-hidden group flex flex-col card-lift stagger-child">
                 <Link to={`/menu/item/${s.id}`} aria-label={`View ${s.name}`} className="block">
                   <div className="overflow-hidden">
                     <img
@@ -284,9 +324,17 @@ export default function Product() {
         <div className="flex-1 flex gap-2 justify-end">
           <button
             onClick={addNow}
-            className="flex-1 max-w-[220px] inline-flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-brand-600 text-white font-semibold hover:bg-brand-700 active:scale-[0.99] transition-all duration-200 shadow-sm cursor-pointer"
+            className={`flex-1 max-w-[220px] inline-flex items-center justify-center gap-2 py-3.5 rounded-2xl font-semibold transition-all duration-300 shadow-sm cursor-pointer ${
+              justAdded
+                ? 'bg-emerald-600 text-white shadow-emerald-600/20'
+                : 'bg-brand-600 text-white hover:bg-brand-700 active:scale-[0.99]'
+            }`}
           >
-            Add to Cart <ChevronRight size={16} />
+            {justAdded ? (
+              <><Check size={16} className="success-check" /> Added</>
+            ) : (
+              <>Add to Cart <ChevronRight size={16} /></>
+            )}
           </button>
         </div>
       </div>
