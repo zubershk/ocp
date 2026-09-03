@@ -55,14 +55,14 @@ export function Modal({ open, onClose, title, children, size = 'md' }: ModalProp
     >
       <div ref={contentRef} className={`bg-white rounded-3xl shadow-2xl w-full ${sizeMap[size]} max-h-[85vh] flex flex-col animate-slide-in-up`} role="dialog" aria-modal="true" aria-label={title}>
         {title && (
-          <div className="flex items-center justify-between px-6 py-4 border-b border-stone-100">
+          <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-stone-100">
             <h2 className="font-heading font-bold text-lg">{title}</h2>
             <button onClick={onClose} className="p-2 rounded-xl hover:bg-stone-50 transition-colors" aria-label="Close">
               <X size={18} />
             </button>
           </div>
         )}
-        <div className="flex-1 overflow-y-auto px-6 py-4">{children}</div>
+        <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4">{children}</div>
       </div>
     </div>,
     document.body
