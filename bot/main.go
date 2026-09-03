@@ -159,6 +159,8 @@ func main() {
 		apiGroup.GET("/site-settings", siteHandler.GetSiteSettings)
 		apiGroup.GET("/site-pages/:slug", siteHandler.GetPage)
 		apiGroup.GET("/menu-categories", siteHandler.GetMenuCategories)
+		apiGroup.GET("/offers", siteHandler.GetOffersPublic)
+		apiGroup.GET("/banners", siteHandler.GetBannersPublic)
 		apiGroup.POST("/orders", handlers.RateLimit(20, time.Minute), apiHandler.CreateOrder)
 		apiGroup.GET("/orders/:id", apiHandler.GetOrder)
 		// Customer auth — phone synced to WhatsApp bot (customers.whatsapp_number)
