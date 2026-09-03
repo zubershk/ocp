@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
 import {
   Pizza, Clock, Phone, MapPin, RefreshCw, Search, Bell, BellOff, LogOut, MessageCircle,
   PhoneCall, AlertTriangle, ChefHat, CheckCircle2, XCircle, Timer,
@@ -8,11 +7,16 @@ import {
   Activity, IndianRupee,
 } from 'lucide-react';
 import { adminFetch, getAdminKey, setAdminKey } from '../services/api';
-import OnboardingWizard, { isOnboardingComplete } from '../components/OnboardingWizard';
 import { useCountUp } from '../hooks/useCountUp';
 import AdminSubNav from '../components/layout/AdminSubNav';
+import { Button } from '@/components/shadcn/button';
+import { Badge } from '@/components/shadcn/badge';
+import { Card, CardContent } from '@/components/shadcn/card';
+import { Input } from '@/components/shadcn/input';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/shadcn/dialog';
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/shadcn/table';
+import { Skeleton } from '@/components/shadcn/skeleton';
 
-// ── Lifecycle (mirrors services/order_status_service.go) ──
 const NEXT_STATUSES: Record<string, { to: string; label: string; primary?: boolean }[]> = {
   placed: [{ to: 'confirmed', label: 'Confirm', primary: true }, { to: 'cancelled', label: 'Cancel' }],
   confirmed: [{ to: 'preparing', label: 'Fire kitchen', primary: true }, { to: 'cancelled', label: 'Cancel' }],
@@ -85,7 +89,6 @@ export default function Admin() {
   const [soundOn, setSoundOn] = useState(() => { try { return localStorage.getItem('ocp_admin_sound') !== 'off'; } catch { return true; } });
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [confirmCancel, setConfirmCancel] = useState<AdminOrder | null>(null);
-  const [showOnboarding, setShowOnboarding] = useState(false);
   const queryClient = useQueryClient();
   const prevIdsRef = useRef<Set<number>>(new Set());
   const searchRef = useRef<HTMLInputElement>(null);
@@ -115,14 +118,6 @@ export default function Admin() {
     enabled: authed,
   });
 
-  useEffect(() => {
-    if (authed && configQuery.data && !isOnboardingComplete()) {
-      const phone = configQuery.data.phone || '';
-      if (!phone.trim()) setShowOnboarding(true);
-    }
-  }, [authed, configQuery.data]);
-
-  // new-order chime (Web Audio)
   useEffect(() => {
     const orders = ordersQuery.data; if (!orders || !soundOn) return;
     const cur = new Set(orders.map((o) => o.id)); const prev = prevIdsRef.current;
@@ -189,144 +184,155 @@ export default function Admin() {
 
   if (!authed) {
     return (
-      <div className="min-h-[70vh] grid place-items-center px-4 py-12 bg-stone-50">
+      <div className="min-h-[70vh] grid place-items-center px-4 py-12 bg-background">
         <div className="w-full max-w-[420px]">
-          <div className="bg-white rounded-3xl border border-stone-100 shadow-lg overflow-hidden">
-            <div className="h-1.5 w-full bg-zinc-900" />
-            <div className="p-8 text-center">
-              <div className="w-14 h-14 mx-auto rounded-2xl bg-zinc-900 flex items-center justify-center text-white"><Pizza size={22} /></div>
+          <Card className="overflow-hidden">
+            <div className="h-1.5 w-full bg-primary" />
+            <CardContent className="p-8 text-center">
+              <div className="w-14 h-14 mx-auto rounded-2xl bg-primary flex items-center justify-center text-primary-foreground"><Pizza size={22} /></div>
               <h1 className="text-xl font-heading font-bold mt-4 tracking-tight">Operations</h1>
-              <p className="text-[13px] text-zinc-500 mt-1">Sign in to manage live orders, kitchen queue and payouts.</p>
+              <p className="text-[13px] text-muted-foreground mt-1">Sign in to manage live orders, kitchen queue and payouts.</p>
               <form onSubmit={(e) => { e.preventDefault(); if (keyInput.trim()) { setAdminKey(keyInput.trim()); setAuthed(true); } }} className="mt-6 text-left space-y-3">
-                <label className="text-[11px] font-semibold tracking-wide text-zinc-600">Admin key</label>
+                <label className="text-[11px] font-semibold tracking-wide text-muted-foreground">Admin key</label>
                 <div className="relative">
-                  <input type="password" value={keyInput} onChange={(e) => setKeyInput(e.target.value)} placeholder="BOT_ADMIN_KEY" className="w-full px-4 py-3.5 rounded-2xl border border-stone-200 bg-stone-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-400 text-sm font-mono transition-all" autoFocus />
-                  <ShieldCheck size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+                  <Input type="password" value={keyInput} onChange={(e) => setKeyInput(e.target.value)} placeholder="BOT_ADMIN_KEY" className="font-mono pr-10" autoFocus />
+                  <ShieldCheck size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 </div>
-                <p className="text-[11px] leading-relaxed text-zinc-400">Stored only in this browser (<code className="px-1 py-0.5 bg-stone-100 rounded text-zinc-600 font-mono text-[10px]">localStorage</code>). Find it in <code className="px-1 py-0.5 bg-stone-100 rounded text-zinc-600 font-mono text-[10px]">bot/.env</code>.</p>
-                <button type="submit" className="w-full py-3.5 rounded-2xl bg-zinc-900 text-white text-sm font-semibold hover:bg-black transition flex items-center justify-center gap-2 shadow-sm">Open dashboard <ArrowUpRight size={16} /></button>
+                <p className="text-[11px] leading-relaxed text-muted-foreground">Stored only in this browser (<code className="px-1 py-0.5 bg-muted rounded text-foreground font-mono text-[10px]">localStorage</code>). Find it in <code className="px-1 py-0.5 bg-muted rounded text-foreground font-mono text-[10px]">bot/.env</code>.</p>
+                <Button type="submit" className="w-full" size="lg">Open dashboard <ArrowUpRight size={16} /></Button>
               </form>
-            </div>
-            <div className="px-8 py-3 bg-stone-50 border-t border-stone-100 flex items-center justify-between text-[11px] text-zinc-500">
+            </CardContent>
+            <div className="px-8 py-3 bg-muted border-t flex items-center justify-between text-[11px] text-muted-foreground">
               <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" /> System operational</span>
               <span className="font-mono">OCP • Mira Road</span>
             </div>
-          </div>
-          <p className="text-center text-[11px] text-zinc-400 mt-3">Need a key? Set <code className="font-mono">BOT_ADMIN_KEY</code> and restart the bot.</p>
+          </Card>
+          <p className="text-center text-[11px] text-muted-foreground mt-3">Need a key? Set <code className="font-mono">BOT_ADMIN_KEY</code> and restart the bot.</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-stone-50">
+    <div className="min-h-screen bg-background">
       {/* Top bar */}
-      <div className="sticky top-0 z-30 bg-white border-b border-stone-200/60">
+      <div className="sticky top-0 z-30 bg-card border-b">
         <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 h-[56px] flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-8 h-8 rounded-xl bg-zinc-900 text-white grid place-items-center"><Pizza size={16} /></div>
-            <div className="hidden sm:block h-6 w-px bg-stone-200" />
+            <div className="w-8 h-8 rounded-xl bg-primary text-primary-foreground grid place-items-center shadow-sm"><Pizza size={16} /></div>
+            <div className="hidden sm:block h-6 w-px bg-border" />
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <h1 className="text-[14px] font-bold tracking-tight leading-none">Operations</h1>
-                <span className="hidden sm:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-bold"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />Live</span>
-                <span className="hidden md:inline-flex items-center gap-1 text-[11px] text-zinc-400"><Activity size={12} />{lastUpdated}</span>
+                <Badge variant="secondary" className="hidden sm:inline-flex gap-1.5 bg-emerald-50 text-emerald-700 border-emerald-200"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />Live</Badge>
+                <span className="hidden md:inline-flex items-center gap-1 text-[11px] text-muted-foreground"><Activity size={12} />{lastUpdated}</span>
               </div>
-              <div className="hidden lg:flex items-center gap-1.5 text-[11px] text-zinc-500"><span className="w-1 h-1 rounded-full bg-zinc-300" /> Mira Road • Vasai • Bhayandar</div>
+              <div className="hidden lg:flex items-center gap-1.5 text-[11px] text-muted-foreground"><span className="w-1 h-1 rounded-full bg-muted-foreground/30" /> Mira Road • Vasai • Bhayandar</div>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-zinc-900 text-white text-[11px] font-bold">
-              <Flame size={12} className="text-orange-400" /> {kpi.active} active
-            </div>
+            <Badge variant="secondary" className="hidden md:inline-flex gap-1.5 bg-primary text-primary-foreground">
+              <Flame size={12} /> {kpi.active} active
+            </Badge>
             {kpi.urgent > 0 && (
-              <div className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-red-600 text-white text-[11px] font-bold shadow-sm">
+              <Badge variant="destructive" className="hidden sm:inline-flex gap-1.5">
                 <AlertTriangle size={12} /> {kpi.urgent} urgent
-              </div>
+              </Badge>
             )}
             <div className="hidden sm:flex items-center gap-1">
-              <button onClick={() => setSoundOn((v) => !v)} aria-label="Toggle sound" className={`w-10 h-10 grid place-items-center rounded-full border transition-all ${soundOn ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white border-stone-200 hover:bg-stone-50'}`}>
+              <Button variant={soundOn ? 'default' : 'outline'} size="icon" className="h-10 w-10 rounded-full" onClick={() => setSoundOn((v) => !v)}>
                 {soundOn ? <Bell size={14} /> : <BellOff size={14} />}
-              </button>
-              <button onClick={() => setAutoRefresh((v) => !v)} aria-label="Toggle auto refresh" className={`w-10 h-10 grid place-items-center rounded-full border transition-all ${autoRefresh ? 'bg-white border-stone-200 hover:bg-stone-50' : 'bg-amber-50 border-amber-200 text-amber-700'}`}>
+              </Button>
+              <Button variant={autoRefresh ? 'outline' : 'secondary'} size="icon" className="h-10 w-10 rounded-full" onClick={() => setAutoRefresh((v) => !v)}>
                 <Timer size={14} />
-              </button>
-              <button onClick={() => queryClient.invalidateQueries({ queryKey: ['admin-orders'] })} aria-label="Refresh" className="w-10 h-10 grid place-items-center rounded-full bg-white border border-stone-200 hover:bg-stone-50">
+              </Button>
+              <Button variant="outline" size="icon" className="h-10 w-10 rounded-full" onClick={() => queryClient.invalidateQueries({ queryKey: ['admin-orders'] })}>
                 <RefreshCw size={14} className={ordersQuery.isFetching ? 'animate-spin' : ''} />
-              </button>
+              </Button>
             </div>
-            <div className="h-6 w-px bg-stone-200 hidden sm:block" />
-            <button onClick={logout} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-stone-200 bg-white text-xs font-semibold hover:bg-stone-50 transition-colors">
+            <div className="h-6 w-px bg-border hidden sm:block" />
+            <Button variant="outline" size="sm" onClick={logout} className="gap-1.5">
               <LogOut size={14} /> <span className="hidden sm:inline">Sign out</span>
-            </button>
+            </Button>
           </div>
         </div>
       </div>
 
       <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Sub-nav */}
         <AdminSubNav activeOverride="/admin" />
 
-        {/* KPI */}
+        {/* KPI Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <div className="bg-white rounded-2xl border border-stone-100 p-4 shadow-sm stagger-child" style={{ animationDelay: '0ms' }}>
-            <div className="flex items-start justify-between">
-              <div className="w-9 h-9 rounded-xl bg-zinc-900 text-white grid place-items-center shadow-sm"><Wallet size={16} /></div>
-              <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200"><TrendingUp size={12} /> Today</span>
-            </div>
-            <div className="mt-3 text-[11px] font-semibold tracking-wide text-zinc-500">Revenue today</div>
-            <div className="text-[22px] font-bold tracking-tight leading-none mt-1 flex items-baseline gap-1"><IndianRupee size={16} className="text-zinc-400" />{revenueCountUp.toLocaleString('en-IN')}</div>
-            <div className="text-[11px] text-zinc-500 mt-1">{kpi.todayCount} orders • avg ₹{kpi.avg.toLocaleString('en-IN')}</div>
-          </div>
-          <div className="bg-white rounded-2xl border border-stone-100 p-4 shadow-sm stagger-child" style={{ animationDelay: '60ms' }}>
-            <div className="w-9 h-9 rounded-xl bg-brand-50 border border-brand-200 text-brand-600 grid place-items-center"><Flame size={16} /></div>
-            <div className="mt-3 text-[11px] font-semibold tracking-wide text-zinc-500">Active orders</div>
-            <div className="text-[22px] font-bold tracking-tight leading-none mt-1">{activeCountUp}</div>
-            <div className="text-[11px] text-zinc-500 mt-1">{counts.placed ?? 0} new • {counts.preparing ?? 0} cooking • {counts.ready ?? 0} ready</div>
-          </div>
-          <div className={`rounded-2xl border p-4 shadow-sm stagger-child ${kpi.urgent ? 'bg-red-50 border-red-200' : 'bg-white border-stone-100'}`} style={{ animationDelay: '120ms' }}>
-            <div className={`w-9 h-9 rounded-xl grid place-items-center border ${kpi.urgent ? 'bg-red-600 text-white border-red-600' : 'bg-stone-50 border-stone-200 text-stone-400'}`}><AlertTriangle size={16} /></div>
-            <div className="mt-3 text-[11px] font-semibold tracking-wide text-zinc-500">Needs attention</div>
-            <div className={`text-[22px] font-bold tracking-tight leading-none mt-1 ${kpi.urgent ? 'text-red-700' : ''}`}>{urgentCountUp}</div>
-            <div className="text-[11px] text-zinc-500 mt-1">{kpi.urgent ? 'Over SLA — act now' : 'All clear'}</div>
-          </div>
-          <div className="bg-white rounded-2xl border border-stone-100 p-4 shadow-sm stagger-child" style={{ animationDelay: '180ms' }}>
-            <div className="w-9 h-9 rounded-xl bg-sky-50 border border-sky-200 text-sky-600 grid place-items-center"><Activity size={16} /></div>
-            <div className="mt-3 text-[11px] font-semibold tracking-wide text-zinc-500">Throughput</div>
-            <div className="text-[22px] font-bold tracking-tight leading-none mt-1">{throughputCountUp}<span className="text-sm font-medium text-zinc-400"> / 50</span></div>
-            <div className="text-[11px] text-zinc-500 mt-1">Last 50 orders • {orders.filter((o) => o.source === 'whatsapp').length} WhatsApp</div>
-          </div>
+          <Card className="stagger-child" style={{ animationDelay: '0ms' }}>
+            <CardContent className="p-4">
+              <div className="flex items-start justify-between">
+                <div className="w-9 h-9 rounded-xl bg-primary text-primary-foreground grid place-items-center shadow-sm"><Wallet size={16} /></div>
+                <Badge variant="secondary" className="gap-1 bg-emerald-50 text-emerald-700 border border-emerald-200"><TrendingUp size={12} /> Today</Badge>
+              </div>
+              <div className="mt-3 text-[11px] font-semibold tracking-wide text-muted-foreground">Revenue today</div>
+              <div className="text-[22px] font-bold tracking-tight leading-none mt-1 flex items-baseline gap-1"><IndianRupee size={16} className="text-muted-foreground" />{revenueCountUp.toLocaleString('en-IN')}</div>
+              <div className="text-[11px] text-muted-foreground mt-1">{kpi.todayCount} orders • avg ₹{kpi.avg.toLocaleString('en-IN')}</div>
+            </CardContent>
+          </Card>
+          <Card className="stagger-child" style={{ animationDelay: '60ms' }}>
+            <CardContent className="p-4">
+              <div className="w-9 h-9 rounded-xl bg-brand-50 border border-brand-200 text-brand-600 grid place-items-center"><Flame size={16} /></div>
+              <div className="mt-3 text-[11px] font-semibold tracking-wide text-muted-foreground">Active orders</div>
+              <div className="text-[22px] font-bold tracking-tight leading-none mt-1">{activeCountUp}</div>
+              <div className="text-[11px] text-muted-foreground mt-1">{counts.placed ?? 0} new • {counts.preparing ?? 0} cooking • {counts.ready ?? 0} ready</div>
+            </CardContent>
+          </Card>
+          <Card className={`stagger-child ${kpi.urgent ? 'border-red-200 bg-red-50/40' : ''}`} style={{ animationDelay: '120ms' }}>
+            <CardContent className="p-4">
+              <div className={`w-9 h-9 rounded-xl grid place-items-center border ${kpi.urgent ? 'bg-destructive text-destructive-foreground border-destructive' : 'bg-muted border-border text-muted-foreground'}`}><AlertTriangle size={16} /></div>
+              <div className="mt-3 text-[11px] font-semibold tracking-wide text-muted-foreground">Needs attention</div>
+              <div className={`text-[22px] font-bold tracking-tight leading-none mt-1 ${kpi.urgent ? 'text-red-700' : ''}`}>{urgentCountUp}</div>
+              <div className="text-[11px] text-muted-foreground mt-1">{kpi.urgent ? 'Over SLA — act now' : 'All clear'}</div>
+            </CardContent>
+          </Card>
+          <Card className="stagger-child" style={{ animationDelay: '180ms' }}>
+            <CardContent className="p-4">
+              <div className="w-9 h-9 rounded-xl bg-sky-50 border border-sky-200 text-sky-600 grid place-items-center"><Activity size={16} /></div>
+              <div className="mt-3 text-[11px] font-semibold tracking-wide text-muted-foreground">Throughput</div>
+              <div className="text-[22px] font-bold tracking-tight leading-none mt-1">{throughputCountUp}<span className="text-sm font-medium text-muted-foreground"> / 50</span></div>
+              <div className="text-[11px] text-muted-foreground mt-1">Last 50 orders • {orders.filter((o) => o.source === 'whatsapp').length} WhatsApp</div>
+            </CardContent>
+          </Card>
         </div>
 
         {/* Toolbar */}
-        <div className="mt-6 bg-white rounded-2xl border border-stone-100 shadow-sm p-2 flex flex-col lg:flex-row gap-2 lg:items-center lg:justify-between">
-          <div className="flex flex-wrap gap-1 p-1 bg-stone-50 rounded-xl border border-stone-100 w-fit">
-            {STATUS_TABS.map((t) => {
-              const count = counts[t.id] ?? 0; const active = tab === t.id;
-              return (
-                <button key={t.id} onClick={() => setTab(t.id)} className={`px-3 py-1.5 rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 transition-all ${active ? 'bg-zinc-900 text-white shadow-sm' : 'text-zinc-600 hover:bg-white hover:text-zinc-900'}`}>
-                  {t.label} <span className={`px-1.5 py-0.5 rounded-lg text-[10px] font-bold tabular-nums ${active ? 'bg-white/15 text-white' : 'bg-white border border-stone-200 text-zinc-600'}`}>{count}</span>
-                </button>
-              );
-            })}
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="relative flex-1 lg:w-[320px]">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
-              <input ref={searchRef} value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search order, customer, phone…" className="w-full pl-9 pr-16 py-2.5 rounded-xl border border-stone-200 bg-stone-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-400 text-sm transition-all" />
-              <span className="hidden sm:inline-flex absolute right-1.5 top-1/2 -translate-y-1/2 items-center gap-1 px-1.5 py-1 rounded-lg bg-white border border-stone-200 text-[10px] font-bold tracking-wide text-zinc-500">⌘K</span>
-              {search && <button onClick={() => setSearch('')} className="absolute right-8 sm:right-[52px] top-1/2 -translate-y-1/2 w-7 h-7 grid place-items-center rounded-full hover:bg-stone-100 text-zinc-500 transition-colors"><XCircle size={14} /></button>}
+        <Card className="mt-6">
+          <CardContent className="p-2">
+            <div className="flex flex-col lg:flex-row gap-2 lg:items-center lg:justify-between">
+              <div className="flex flex-wrap gap-1 p-1 bg-muted rounded-xl border border-border w-fit">
+                {STATUS_TABS.map((t) => {
+                  const count = counts[t.id] ?? 0; const active = tab === t.id;
+                  return (
+                    <button key={t.id} onClick={() => setTab(t.id)} className={`px-3 py-1.5 rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 transition-all ${active ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-background hover:text-foreground'}`}>
+                      {t.label} <span className={`px-1.5 py-0.5 rounded-lg text-[10px] font-bold tabular-nums ${active ? 'bg-white/15 text-white' : 'bg-background border border-border text-muted-foreground'}`}>{count}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1 lg:w-[320px]">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <Input ref={searchRef} value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search order, customer, phone…" className="pl-9 pr-16" />
+                  <span className="hidden sm:inline-flex absolute right-1.5 top-1/2 -translate-y-1/2 items-center gap-1 px-1.5 py-1 rounded-lg bg-background border border-border text-[10px] font-bold tracking-wide text-muted-foreground">⌘K</span>
+                  {search && <Button variant="ghost" size="icon" className="absolute right-8 sm:right-[52px] top-1/2 -translate-y-1/2 h-7 w-7" onClick={() => setSearch('')}><XCircle size={14} /></Button>}
+                </div>
+                <div className="hidden sm:flex items-center rounded-lg border border-border overflow-hidden">
+                  <Button variant={view === 'board' ? 'default' : 'ghost'} size="sm" className="gap-1.5 rounded-r-none" onClick={() => setView('board')}><LayoutGrid size={14} />Board</Button>
+                  <Button variant={view === 'list' ? 'default' : 'ghost'} size="sm" className="gap-1.5 rounded-l-none border-l" onClick={() => setView('list')}><List size={14} />List</Button>
+                </div>
+              </div>
             </div>
-            <div className="hidden sm:flex items-center rounded-xl border border-stone-200 overflow-hidden">
-              <button onClick={() => setView('board')} className={`px-3 py-2.5 inline-flex items-center gap-1.5 text-xs font-semibold transition-all ${view === 'board' ? 'bg-zinc-900 text-white' : 'bg-white hover:bg-stone-50'}`}><LayoutGrid size={14} />Board</button>
-              <button onClick={() => setView('list')} className={`px-3 py-2.5 inline-flex items-center gap-1.5 text-xs font-semibold border-l border-stone-200 transition-all ${view === 'list' ? 'bg-zinc-900 text-white' : 'bg-white hover:bg-stone-50'}`}><List size={14} />List</button>
-            </div>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
 
         {ordersQuery.isError && (
-          <div className="mt-4 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700 flex items-center gap-2"><XCircle size={16} />{(ordersQuery.error as Error).message.includes('401') ? 'Unauthorized — sign out and re-enter the admin key.' : (ordersQuery.error as Error).message}</div>
+          <div className="mt-4 px-4 py-3 rounded-xl bg-destructive/10 border border-destructive/20 text-sm text-destructive flex items-center gap-2"><XCircle size={16} />{(ordersQuery.error as Error).message.includes('401') ? 'Unauthorized — sign out and re-enter the admin key.' : (ordersQuery.error as Error).message}</div>
         )}
 
         {/* Content */}
@@ -334,158 +340,159 @@ export default function Admin() {
           view === 'board' ? (
             <div className="mt-6 grid md:grid-cols-2 xl:grid-cols-3 gap-4">
               {[0, 1, 2, 3, 4, 5].map((i) => (
-                <div key={i} className="bg-white rounded-2xl border border-zinc-200 p-5 animate-pulse">
-                  <div className="h-4 w-32 bg-zinc-100 rounded" /><div className="h-3 w-44 bg-zinc-100 rounded mt-2" />
-                  <div className="h-20 bg-zinc-50 rounded-xl mt-4" /><div className="h-24 bg-zinc-50 rounded-xl mt-3" />
-                </div>
+                <Card key={i}>
+                  <CardContent className="p-5 space-y-3">
+                    <Skeleton className="h-4 w-32" /><Skeleton className="h-3 w-44" />
+                    <Skeleton className="h-20 w-full rounded-xl" /><Skeleton className="h-24 w-full rounded-xl" />
+                  </CardContent>
+                </Card>
               ))}
             </div>
           ) : (
-            <div className="mt-6 bg-white rounded-2xl border border-zinc-200 overflow-hidden">
-              <div className="h-10 bg-zinc-50 border-b" /><div className="p-4 space-y-3">{[0, 1, 2, 3].map((i) => <div key={i} className="h-12 bg-zinc-50 rounded-xl animate-pulse" />)}</div>
-            </div>
+            <Card className="mt-6">
+              <CardContent className="p-0">
+                <Skeleton className="h-10 w-full rounded-none" />
+                <div className="p-4 space-y-3">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-12 w-full rounded-xl" />)}</div>
+              </CardContent>
+            </Card>
           )
         ) : filtered.length === 0 ? (
-          <div className="mt-6 bg-white rounded-2xl border border-zinc-200 py-16 text-center px-6">
-            <div className="w-16 h-16 mx-auto rounded-2xl bg-zinc-50 border border-zinc-200 grid place-items-center text-zinc-400"><ChefHat size={22} /></div>
-            <h3 className="font-semibold mt-4">No {tab === 'active' ? 'active' : prettyStatus(tab).toLowerCase()} orders</h3>
-            <p className="text-sm text-zinc-500 mt-1.5 max-w-md mx-auto">{search ? `No match for “${search}”. Try a different order number, name or phone.` : tab === 'placed' ? 'New orders land here first. Confirm to fire the kitchen — the customer gets a WhatsApp update.' : 'Orders appear here as they move through the pipeline.'}</p>
-            <div className="mt-5 flex justify-center gap-2">
-              {search ? <button onClick={() => setSearch('')} className="px-4 py-2.5 rounded-xl bg-zinc-900 text-white text-sm font-semibold">Clear search</button> : <button onClick={() => queryClient.invalidateQueries({ queryKey: ['admin-orders'] })} className="px-4 py-2.5 rounded-xl bg-white border border-zinc-200 text-sm font-semibold hover:bg-zinc-50">Refresh</button>}
-            </div>
-          </div>
+          <Card className="mt-6">
+            <CardContent className="py-16 text-center px-6">
+              <div className="w-16 h-16 mx-auto rounded-2xl bg-muted border border-border grid place-items-center text-muted-foreground"><ChefHat size={22} /></div>
+              <h3 className="font-semibold mt-4">No {tab === 'active' ? 'active' : prettyStatus(tab).toLowerCase()} orders</h3>
+              <p className="text-sm text-muted-foreground mt-1.5 max-w-md mx-auto">{search ? `No match for "${search}". Try a different order number, name or phone.` : tab === 'placed' ? 'New orders land here first. Confirm to fire the kitchen — the customer gets a WhatsApp update.' : 'Orders appear here as they move through the pipeline.'}</p>
+              <div className="mt-5 flex justify-center gap-2">
+                {search ? <Button onClick={() => setSearch('')}>Clear search</Button> : <Button variant="outline" onClick={() => queryClient.invalidateQueries({ queryKey: ['admin-orders'] })}>Refresh</Button>}
+              </div>
+            </CardContent>
+          </Card>
         ) : view === 'list' ? (
-          <div className="mt-6 bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-zinc-50 border-b border-zinc-200 text-[11px] font-semibold tracking-wide text-zinc-500">
-                  <tr>
-                    <th className="text-left px-4 py-3 font-semibold">Order</th>
-                    <th className="text-left px-3 py-3 font-semibold">Customer</th>
-                    <th className="text-left px-3 py-3 font-semibold">Items</th>
-                    <th className="text-right px-3 py-3 font-semibold">Total</th>
-                    <th className="text-left px-3 py-3 font-semibold">Status</th>
-                    <th className="text-left px-3 py-3 font-semibold">Age</th>
-                    <th className="text-right px-4 py-3 font-semibold">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-100">
+          <Card className="mt-6">
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/50">
+                    <TableHead className="font-semibold">Order</TableHead>
+                    <TableHead className="font-semibold">Customer</TableHead>
+                    <TableHead className="font-semibold">Items</TableHead>
+                    <TableHead className="font-semibold text-right">Total</TableHead>
+                    <TableHead className="font-semibold">Status</TableHead>
+                    <TableHead className="font-semibold">Age</TableHead>
+                    <TableHead className="font-semibold text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {filtered.map((o) => {
                     const meta = STATUS_META[o.status] ?? STATUS_META.placed;
                     const urgent = isUrgent(o);
-  if (showOnboarding) {
-    return (
-      <OnboardingWizard
-        phone={configQuery.data?.phone || ''}
-        onComplete={() => { setShowOnboarding(false); configQuery.refetch(); }}
-      />
-    );
-  }
-
-  return (
-                      <tr key={o.id} className={`hover:bg-zinc-50/70 ${urgent ? 'bg-red-50/40' : ''}`}>
-                        <td className="px-4 py-3">
+                    return (
+                      <TableRow key={o.id} className={urgent ? 'bg-red-50/40' : ''}>
+                        <TableCell>
                           <div className="font-mono text-xs font-bold">{o.order_number}</div>
-                          <div className="text-[11px] text-zinc-500 inline-flex items-center gap-1"><span className={`w-1.5 h-1.5 rounded-full ${o.order_type === 'delivery' ? 'bg-sky-500' : 'bg-zinc-400'}`} />{o.order_type} • {o.payment_method}</div>
-                        </td>
-                        <td className="px-3 py-3">
+                          <div className="text-[11px] text-muted-foreground inline-flex items-center gap-1"><span className={`w-1.5 h-1.5 rounded-full ${o.order_type === 'delivery' ? 'bg-sky-500' : 'bg-muted-foreground'}`} />{o.order_type} • {o.payment_method}</div>
+                        </TableCell>
+                        <TableCell>
                           <div className="font-semibold text-[13px] leading-tight">{o.customer_name}</div>
-                          <div className="text-xs text-zinc-500 flex items-center gap-1"><Phone size={11} />{o.customer_phone}</div>
-                        </td>
-                        <td className="px-3 py-3 max-w-[320px]">
-                          <div className="text-xs text-zinc-700 line-clamp-2 leading-relaxed">{(o.items ?? []).map((it) => `${it.quantity}× ${it.name}`).join(' • ') || '—'}</div>
-                        </td>
-                        <td className="px-3 py-3 text-right font-semibold tabular-nums">₹{o.total.toLocaleString('en-IN')}</td>
-                        <td className="px-3 py-3">
-                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-bold ${meta.cls}`}>
+                          <div className="text-xs text-muted-foreground flex items-center gap-1"><Phone size={11} />{o.customer_phone}</div>
+                        </TableCell>
+                        <TableCell className="max-w-[320px]">
+                          <div className="text-xs text-foreground line-clamp-2 leading-relaxed">{(o.items ?? []).map((it) => `${it.quantity}× ${it.name}`).join(' • ') || '—'}</div>
+                        </TableCell>
+                        <TableCell className="text-right font-semibold tabular-nums">₹{o.total.toLocaleString('en-IN')}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className={`gap-1.5 ${meta.cls}`}>
                             <span className={`w-1.5 h-1.5 rounded-full ${meta.dot}`} />{prettyStatus(o.status)}
-                          </span>
-                        </td>
-                        <td className="px-3 py-3">
-                          <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full border ${urgent ? 'bg-red-50 border-red-200 text-red-700' : 'bg-zinc-50 border-zinc-200 text-zinc-600'}`}>
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className={`gap-1 ${urgent ? 'bg-red-50 border-red-200 text-red-700' : 'bg-muted border-border text-muted-foreground'}`}>
                             <Clock size={11} />{timeAgo(o.created_at)}{urgent ? ' • urgent' : ''}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
                           <div className="flex justify-end gap-1.5">
                             {(NEXT_STATUSES[o.status] ?? []).slice(0, 2).map((n) => (
-                              <button key={n.to} disabled={statusMutation.isPending} onClick={() => n.to === 'cancelled' ? setConfirmCancel(o) : statusMutation.mutate({ id: o.id, status: n.to })} className={`px-3 py-2 rounded-full text-xs font-semibold border ${n.primary ? 'bg-zinc-900 text-white border-zinc-900 hover:bg-black' : n.to === 'cancelled' ? 'bg-white border-red-200 text-red-700 hover:bg-red-50' : 'bg-white border-zinc-200 hover:bg-zinc-50'} disabled:opacity-50`}>
+                              <Button key={n.to} size="sm" disabled={statusMutation.isPending}
+                                variant={n.primary ? 'default' : n.to === 'cancelled' ? 'destructive' : 'outline'}
+                                onClick={() => n.to === 'cancelled' ? setConfirmCancel(o) : statusMutation.mutate({ id: o.id, status: n.to })}
+                                className="text-xs">
                                 {n.label}
-                              </button>
+                              </Button>
                             ))}
-                            <a href={`tel:${o.customer_phone}`} className="w-7 h-7 grid place-items-center rounded-full bg-white border border-zinc-200 hover:bg-zinc-50"><PhoneCall size={12} /></a>
+                            <a href={`tel:${o.customer_phone}`}><Button variant="outline" size="icon" className="h-7 w-7"><PhoneCall size={12} /></Button></a>
                           </div>
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     );
                   })}
-                </tbody>
-              </table>
-            </div>
-          </div>
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
         ) : (
           <div className="mt-6 grid md:grid-cols-2 xl:grid-cols-3 gap-4">
             {filtered.map((o, i) => {
               const meta = STATUS_META[o.status] ?? STATUS_META.placed;
               const urgent = isUrgent(o);
               return (
-                <div key={o.id} className={`group bg-white rounded-2xl border shadow-sm hover:shadow-md hover:-translate-y-[1px] transition-all flex flex-col overflow-hidden stagger-child ${urgent ? 'border-red-200 ring-1 ring-red-100' : 'border-zinc-200'}`} style={{ animationDelay: `${i * 30}ms` }}>
+                <Card key={o.id} className={`group stagger-child flex flex-col overflow-hidden transition-all hover:shadow-md hover:-translate-y-[1px] ${urgent ? 'border-red-200 ring-1 ring-red-100' : ''}`} style={{ animationDelay: `${i * 30}ms` }}>
                   {/* accent */}
-                  <div className={`h-1 w-full ${urgent ? 'bg-red-500' : o.status === 'placed' ? 'bg-orange-500' : o.status === 'ready' ? 'bg-emerald-500' : 'bg-zinc-900'}`} />
-                  <div className="p-5 flex flex-col flex-1">
+                  <div className={`h-1 w-full ${urgent ? 'bg-red-500' : o.status === 'placed' ? 'bg-orange-500' : o.status === 'ready' ? 'bg-emerald-500' : 'bg-primary'}`} />
+                  <CardContent className="p-5 flex flex-col flex-1">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="font-mono text-[13px] font-bold tracking-tight">{o.order_number}</span>
-                          {o.source === 'whatsapp' && <span className="px-1.5 py-0.5 rounded-full bg-green-50 border border-green-200 text-green-700 text-[10px] font-bold inline-flex items-center gap-1"><MessageCircle size={10} />WA</span>}
-                          {urgent && <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-600 text-white text-[10px] font-bold"><Flame size={10} />Urgent</span>}
+                          {o.source === 'whatsapp' && <Badge variant="secondary" className="gap-1 bg-green-50 text-green-700 border border-green-200"><MessageCircle size={10} />WA</Badge>}
+                          {urgent && <Badge variant="destructive" className="gap-1"><Flame size={10} />Urgent</Badge>}
                         </div>
                         <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-bold ${meta.cls}`}><span className={`w-1.5 h-1.5 rounded-full ${meta.dot}`} />{prettyStatus(o.status)}</span>
-                          <span className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-full bg-zinc-50 border border-zinc-200 text-zinc-600 font-medium"><Clock size={11} />{timeAgo(o.created_at)}</span>
+                          <Badge variant="outline" className={`gap-1.5 ${meta.cls}`}><span className={`w-1.5 h-1.5 rounded-full ${meta.dot}`} />{prettyStatus(o.status)}</Badge>
+                          <Badge variant="outline" className="gap-1 bg-muted border-border text-muted-foreground"><Clock size={11} />{timeAgo(o.created_at)}</Badge>
                         </div>
                       </div>
                       <div className="flex flex-col items-end gap-1">
-                        <span className={`px-2 py-1 rounded-full text-[10px] font-bold border ${o.order_type === 'delivery' ? 'bg-sky-50 border-sky-200 text-sky-700' : 'bg-zinc-50 border-zinc-200 text-zinc-600'}`}>{o.order_type}</span>
-                        <span className="text-[10px] font-mono text-zinc-400">{new Date(o.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                        <Badge variant="outline" className={`text-[10px] ${o.order_type === 'delivery' ? 'bg-sky-50 border-sky-200 text-sky-700' : 'bg-muted border-border text-muted-foreground'}`}>{o.order_type}</Badge>
+                        <span className="text-[10px] font-mono text-muted-foreground">{new Date(o.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                       </div>
                     </div>
 
-                    <div className="mt-4 rounded-xl bg-zinc-50 border border-zinc-100 p-3">
+                    <div className="mt-4 rounded-xl bg-muted border border-border p-3">
                       <div className="flex items-center justify-between gap-2">
                         <div className="font-semibold text-sm truncate" title={o.customer_name}>{o.customer_name}</div>
-                        <span className="text-[10px] font-bold tracking-wide px-2 py-1 rounded-full bg-white border border-zinc-200 text-zinc-600">{o.payment_method}</span>
+                        <Badge variant="outline" className="text-[10px] bg-background border-border">{o.payment_method}</Badge>
                       </div>
                       <div className="mt-2 flex flex-wrap gap-1.5">
-                        <a href={`tel:${o.customer_phone}`} className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-full bg-white border border-zinc-200 hover:bg-zinc-50 font-medium shadow-sm">
-                          <Phone size={12} className="text-zinc-500" />{o.customer_phone}
+                        <a href={`tel:${o.customer_phone}`} className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-full bg-background border border-border hover:bg-muted font-medium shadow-sm">
+                          <Phone size={12} className="text-muted-foreground" />{o.customer_phone}
                         </a>
                         <a href={`https://wa.me/91${o.customer_phone.replace(/\D/g, '').slice(-10)}?text=Hi%20${encodeURIComponent(o.customer_name.split(' ')[0])},%20about%20your%20order%20${o.order_number}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-emerald-600 text-white hover:bg-emerald-700 font-semibold shadow-sm">
                           <MessageCircle size={12} />WhatsApp
                         </a>
                       </div>
                       {o.address ? (
-                        <div className="mt-2.5 text-xs text-zinc-600 flex gap-1.5 leading-relaxed"><MapPin size={12} className="shrink-0 mt-0.5 text-zinc-400" /><span className="line-clamp-2">{o.address}{o.landmark ? ` • ${o.landmark}` : ''}</span></div>
+                        <div className="mt-2.5 text-xs text-muted-foreground flex gap-1.5 leading-relaxed"><MapPin size={12} className="shrink-0 mt-0.5 text-muted-foreground" /><span className="line-clamp-2">{o.address}{o.landmark ? ` • ${o.landmark}` : ''}</span></div>
                       ) : o.order_type === 'delivery' ? (
-                        <div className="mt-2 text-xs text-red-600 inline-flex items-center gap-1 font-medium"><MapPin size={11} />Missing address</div>
+                        <div className="mt-2 text-xs text-destructive inline-flex items-center gap-1 font-medium"><MapPin size={11} />Missing address</div>
                       ) : null}
                     </div>
 
                     <div className="mt-4 space-y-1.5">
                       {(o.items ?? []).slice(0, 4).map((it, i) => (
                         <div key={i} className="flex justify-between gap-3 text-[13px] leading-tight">
-                          <span className="text-zinc-700 truncate"><span className="font-semibold tabular-nums">{it.quantity}×</span> {it.name}{it.size ? ` · ${it.size}` : ''}{it.crust ? ` · ${it.crust}` : ''}</span>
+                          <span className="text-foreground truncate"><span className="font-semibold tabular-nums">{it.quantity}×</span> {it.name}{it.size ? ` · ${it.size}` : ''}{it.crust ? ` · ${it.crust}` : ''}</span>
                           <span className="font-semibold tabular-nums shrink-0">₹{Number(it.line_total).toLocaleString('en-IN')}</span>
                         </div>
                       ))}
-                      {(o.items?.length ?? 0) > 4 && <div className="text-xs text-zinc-500">+{o.items!.length - 4} more items</div>}
+                      {(o.items?.length ?? 0) > 4 && <div className="text-xs text-muted-foreground">+{o.items!.length - 4} more items</div>}
                     </div>
 
-                    <div className="mt-4 pt-3 border-t border-zinc-100 flex items-center justify-between">
-                      <div className="text-[11px] font-semibold tracking-wide text-zinc-500">Total</div>
+                    <div className="mt-4 pt-3 border-t border-border flex items-center justify-between">
+                      <div className="text-[11px] font-semibold tracking-wide text-muted-foreground">Total</div>
                       <div className="text-[18px] font-bold tracking-tight tabular-nums">₹{o.total.toLocaleString('en-IN')}</div>
                     </div>
-                    <div className="text-[11px] text-zinc-500 flex items-center justify-between">
+                    <div className="text-[11px] text-muted-foreground flex items-center justify-between">
                       <span>Sub ₹{o.subtotal.toLocaleString('en-IN')}{o.delivery_fee ? ` + ₹${o.delivery_fee}` : ' • free delivery'}</span>
                       <span className="inline-flex items-center gap-1"><ShieldCheck size={11} className="text-emerald-600" /> incl. tax</span>
                     </div>
@@ -493,42 +500,45 @@ export default function Admin() {
                     {NEXT_STATUSES[o.status] ? (
                       <div className="mt-4 flex gap-2">
                         {NEXT_STATUSES[o.status].map((n) => (
-                          <button
+                          <Button
                             key={n.to}
                             disabled={statusMutation.isPending}
+                            variant={n.primary ? 'default' : n.to === 'cancelled' ? 'destructive' : 'outline'}
+                            className="flex-1 gap-1.5"
                             onClick={() => (n.to === 'cancelled' ? setConfirmCancel(o) : statusMutation.mutate({ id: o.id, status: n.to }))}
-                            className={`flex-1 py-3 rounded-xl text-xs font-bold transition disabled:opacity-50 inline-flex items-center justify-center gap-1.5 ${n.primary ? 'bg-zinc-900 text-white hover:bg-black shadow-sm' : n.to === 'cancelled' ? 'bg-white border border-red-200 text-red-700 hover:bg-red-50' : 'bg-white border border-zinc-200 hover:bg-zinc-50'}`}
                           >
                             {n.primary ? <CheckCircle2 size={14} /> : n.to === 'cancelled' ? <XCircle size={14} /> : <MoreHorizontal size={14} />} {n.label}
-                          </button>
+                          </Button>
                         ))}
                       </div>
                     ) : (
-                      <div className="mt-4 text-[11px] text-zinc-400 inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-zinc-50 border border-zinc-100 w-full justify-center"><CheckCircle2 size={12} /> Completed — no further actions</div>
+                      <div className="mt-4 text-[11px] text-muted-foreground inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-muted border border-border w-full justify-center"><CheckCircle2 size={12} /> Completed — no further actions</div>
                     )}
-                  </div>
-                </div>
+                  </CardContent>
+                </Card>
               );
             })}
           </div>
         )}
 
-        {/* Cancel confirm — SaaS modal */}
-        {confirmCancel && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-900/40 backdrop-blur-[2px]" onClick={() => setConfirmCancel(null)}>
-            <div className="bg-white rounded-[16px] p-6 max-w-[420px] w-full shadow-2xl border border-zinc-200" onClick={(e) => e.stopPropagation()}>
-              <div className="w-10 h-10 rounded-xl bg-red-50 border border-red-200 text-red-600 grid place-items-center"><XCircle size={18} /></div>
-              <h3 className="font-bold text-[16px] mt-3">Cancel {confirmCancel.order_number}?</h3>
-              <p className="text-sm leading-relaxed text-zinc-600 mt-1.5">This will notify <span className="font-semibold text-zinc-900">{confirmCancel.customer_name}</span> on WhatsApp and move the order to <span className="font-mono text-xs px-1 py-0.5 bg-red-50 border border-red-200 rounded">cancelled</span>. This cannot be undone.</p>
-              <div className="mt-6 flex gap-2">
-                <button onClick={() => setConfirmCancel(null)} className="flex-1 py-3 rounded-xl border border-zinc-200 bg-white font-semibold text-sm hover:bg-zinc-50">Keep order</button>
-                <button disabled={statusMutation.isPending} onClick={() => { statusMutation.mutate({ id: confirmCancel.id, status: 'cancelled' }); setConfirmCancel(null); }} className="flex-1 py-3 rounded-xl bg-red-600 text-white font-semibold text-sm hover:bg-red-700 disabled:opacity-50">Yes, cancel</button>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Cancel confirm dialog */}
+        <Dialog open={!!confirmCancel} onOpenChange={(open) => { if (!open) setConfirmCancel(null); }}>
+          <DialogContent className="sm:max-w-[420px]">
+            <DialogHeader>
+              <div className="w-10 h-10 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive grid place-items-center"><XCircle size={18} /></div>
+              <DialogTitle>Cancel {confirmCancel?.order_number}?</DialogTitle>
+              <DialogDescription>
+                This will notify <span className="font-semibold text-foreground">{confirmCancel?.customer_name}</span> on WhatsApp and move the order to <span className="font-mono text-xs px-1 py-0.5 bg-destructive/10 border border-destructive/20 rounded">cancelled</span>. This cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setConfirmCancel(null)}>Keep order</Button>
+              <Button variant="destructive" disabled={statusMutation.isPending} onClick={() => { statusMutation.mutate({ id: confirmCancel!.id, status: 'cancelled' }); setConfirmCancel(null); }}>Yes, cancel</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
-        <div className="mt-8 flex items-center justify-center gap-2 text-[11px] text-zinc-400">
+        <div className="mt-8 flex items-center justify-center gap-2 text-[11px] text-muted-foreground">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live sync every 8s · Status changes notify customers on WhatsApp
         </div>
       </div>
