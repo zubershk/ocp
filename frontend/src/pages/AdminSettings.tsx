@@ -5,6 +5,13 @@ import { Save, Plus, Pencil, Trash2, MapPin, Phone, Clock, Store, AlertTriangle,
 import { adminFetch, getAdminKey } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
+import AdminSubNav from '../components/layout/AdminSubNav';
+import { Card, CardContent } from '@/components/shadcn/card';
+import { Button } from '@/components/shadcn/button';
+import { Input } from '@/components/shadcn/input';
+import { Badge } from '@/components/shadcn/badge';
+import { Skeleton } from '@/components/shadcn/skeleton';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/shadcn/dialog';
 
 interface Outlet {
   id: number;
@@ -50,8 +57,6 @@ export default function AdminSettings() {
   });
 
   const [cfgForm, setCfgForm] = useState<Partial<Config>>({});
-  // sync config to form when loaded
-  // useEffect not needed — initialize on first load via placeholder
 
   const updateConfigMut = useMutation({
     mutationFn: (body: Record<string, unknown>) => adminFetch('/admin/config', { method: 'PUT', body: JSON.stringify(body) }),
@@ -74,11 +79,11 @@ export default function AdminSettings() {
   if (!authed) {
     return (
       <div className="max-w-md mx-auto px-4 py-16 text-center">
-        <div className="bg-white rounded-2xl border p-8">
+        <Card className="p-8">
           <Store size={24} className="mx-auto text-zinc-400" />
           <h1 className="font-bold mt-3">Settings</h1>
           <p className="text-sm text-zinc-500 mt-1">Sign in via <Link to="/admin" className="text-orange-600 underline">Orders</Link> first.</p>
-        </div>
+        </Card>
       </div>
     );
   }
@@ -123,8 +128,6 @@ export default function AdminSettings() {
 
   const handleConfigSave = () => {
     const body: Record<string, unknown> = {};
-    const form = cfgForm;
-    // only send changed fields — if empty, read from inputs via DOM? Simpler: collect from form elements by id
     const getVal = (id: string) => (document.getElementById(id) as HTMLInputElement | HTMLTextAreaElement)?.value?.trim() ?? '';
     const name = getVal('cfg-name');
     const phone = getVal('cfg-phone');
@@ -136,7 +139,6 @@ export default function AdminSettings() {
     if (address) body.address = address;
     if (mapUrl) body.map_url = mapUrl;
     if (support) body.support_phone = support;
-    // opening_hours as JSON string
     const hours = getVal('cfg-hours');
     if (hours) body.opening_hours = JSON.stringify({ hours });
     if (Object.keys(body).length === 0) { toast.push({ type: 'warning', title: 'No changes' }); return; }
@@ -146,36 +148,28 @@ export default function AdminSettings() {
 
   return (
     <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
-      <div className="flex gap-1 p-1 bg-zinc-100 rounded-xl w-fit text-sm mb-4 flex-wrap">
-        <Link to="/admin" className="px-3 py-1.5 rounded-full hover:bg-white">Orders</Link>
-        <Link to="/admin/catalog" className="px-3 py-1.5 rounded-full hover:bg-white">Menu</Link>
-        <Link to="/admin/chats" className="px-3 py-1.5 rounded-full hover:bg-white">Chats</Link>
-        <span className="px-3 py-1.5 rounded-full bg-zinc-900 text-white font-semibold">Settings</span>
-        <Link to="/admin/analytics" className="px-3 py-1.5 rounded-full hover:bg-white">Analytics</Link>
-        <Link to="/admin/team" className="px-3 py-1.5 rounded-full hover:bg-white">Team</Link>
-        <Link to="/admin/logs" className="px-3 py-1.5 rounded-full hover:bg-white">Audit</Link>
-      </div>
+      <AdminSubNav activeOverride="/admin/settings" />
 
       <div className="flex items-center gap-2">
         <h1 className="text-2xl font-bold tracking-tight">Restaurant Settings</h1>
-        <span className="text-xs px-2 py-1 rounded-full bg-zinc-900 text-white">SaaS</span>
+        <Badge>SaaS</Badge>
       </div>
       <p className="text-sm text-zinc-500 mt-1">Update once — live on site, WhatsApp bot and receipts. No deploy needed.</p>
 
       {/* General */}
-      <div className="mt-6 bg-white rounded-2xl border p-6">
+      <Card className="mt-6 p-6">
         <h2 className="font-semibold flex items-center gap-2"><Store size={16} /> General</h2>
         {configQuery.isLoading ? (
-          <div className="mt-3 h-24 bg-zinc-50 rounded-xl animate-pulse" />
+          <Skeleton className="mt-3 h-24 rounded-xl" />
         ) : (
           <div className="mt-4 grid sm:grid-cols-2 gap-4">
             <div>
               <label className="text-xs font-semibold">Restaurant name</label>
-              <input id="cfg-name" defaultValue={config?.name ?? ''} placeholder="Orange Cheese Pizza" className="mt-1 w-full px-3 py-2.5 rounded-xl border" />
+              <Input id="cfg-name" defaultValue={config?.name ?? ''} placeholder="Orange Cheese Pizza" className="mt-1" />
             </div>
             <div>
               <label className="text-xs font-semibold">Primary phone</label>
-              <input id="cfg-phone" defaultValue={config?.phone ?? ''} placeholder="8369293998" className="mt-1 w-full px-3 py-2.5 rounded-xl border" />
+              <Input id="cfg-phone" defaultValue={config?.phone ?? ''} placeholder="8369293998" className="mt-1" />
             </div>
             <div className="sm:col-span-2">
               <label className="text-xs font-semibold">Address (full)</label>
@@ -183,42 +177,44 @@ export default function AdminSettings() {
             </div>
             <div>
               <label className="text-xs font-semibold">Map URL</label>
-              <input id="cfg-map" defaultValue={config?.map_url ?? ''} placeholder="https://maps.google.com/..." className="mt-1 w-full px-3 py-2.5 rounded-xl border text-sm" />
+              <Input id="cfg-map" defaultValue={config?.map_url ?? ''} placeholder="https://maps.google.com/..." className="mt-1 text-sm" />
             </div>
             <div>
               <label className="text-xs font-semibold">Support phone (WA help)</label>
-              <input id="cfg-support" defaultValue={config?.support_phone ?? ''} placeholder="8369293998" className="mt-1 w-full px-3 py-2.5 rounded-xl border" />
+              <Input id="cfg-support" defaultValue={config?.support_phone ?? ''} placeholder="8369293998" className="mt-1" />
             </div>
             <div className="sm:col-span-2">
               <label className="text-xs font-semibold">Opening hours (e.g. 11:00 AM to 04:00 AM)</label>
-              <input id="cfg-hours" defaultValue={(() => { try { const j = JSON.parse(config?.opening_hours ?? '{}'); return j.hours ?? '11:00 AM to 04:00 AM'; } catch { return '11:00 AM to 04:00 AM'; } })()} placeholder="11:00 AM to 04:00 AM" className="mt-1 w-full px-3 py-2.5 rounded-xl border" />
+              <Input id="cfg-hours" defaultValue={(() => { try { const j = JSON.parse(config?.opening_hours ?? '{}'); return j.hours ?? '11:00 AM to 04:00 AM'; } catch { return '11:00 AM to 04:00 AM'; } })()} placeholder="11:00 AM to 04:00 AM" className="mt-1" />
             </div>
           </div>
         )}
         <div className="mt-4 flex gap-2">
-          <button onClick={handleConfigSave} disabled={updateConfigMut.isPending} className="px-4 py-2.5 rounded-xl bg-zinc-900 text-white text-sm font-semibold hover:bg-black disabled:opacity-50 inline-flex items-center gap-1.5"><Save size={14} /> {updateConfigMut.isPending ? 'Saving…' : 'Save general'}</button>
+          <Button onClick={handleConfigSave} disabled={updateConfigMut.isPending} className="inline-flex items-center gap-1.5">
+            <Save size={14} /> {updateConfigMut.isPending ? 'Saving…' : 'Save general'}
+          </Button>
           {updateConfigMut.isSuccess && <span className="text-xs text-emerald-600 flex items-center gap-1"><CheckIcon /> Saved</span>}
           {updateConfigMut.isError && <span className="text-xs text-red-600 flex items-center gap-1"><AlertTriangle size={12} /> {(updateConfigMut.error as Error).message}</span>}
         </div>
-      </div>
+      </Card>
 
       {/* Outlets */}
-      <div className="mt-6 bg-white rounded-2xl border p-6">
+      <Card className="mt-6 p-6">
         <div className="flex items-center justify-between">
-          <h2 className="font-semibold flex items-center gap-2"><MapPin size={16} /> Outlets <span className="text-xs font-mono bg-zinc-900 text-white px-2 py-1 rounded-full">{outlets.length}</span></h2>
-          <button onClick={openCreate} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-zinc-900 text-white text-sm font-semibold hover:bg-black"><Plus size={14} /> Add outlet</button>
+          <h2 className="font-semibold flex items-center gap-2"><MapPin size={16} /> Outlets <Badge className="ml-1">{outlets.length}</Badge></h2>
+          <Button onClick={openCreate} className="inline-flex items-center gap-1.5"><Plus size={14} /> Add outlet</Button>
         </div>
         {outletsQuery.isLoading ? (
-          <div className="mt-4 grid sm:grid-cols-2 lg:grid-cols-3 gap-3">{[0, 1, 2].map((i) => <div key={i} className="h-36 bg-zinc-50 rounded-xl animate-pulse border" />)}</div>
+          <div className="mt-4 grid sm:grid-cols-2 lg:grid-cols-3 gap-3">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-36 rounded-xl" />)}</div>
         ) : outlets.length === 0 ? (
           <div className="mt-4 py-8 text-center text-sm text-zinc-500">No outlets.</div>
         ) : (
           <div className="mt-4 grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {outlets.map((o) => (
-              <div key={o.id} className="border rounded-2xl p-4 flex flex-col">
+              <Card key={o.id} className="p-4 flex flex-col">
                 <div className="flex items-start justify-between gap-2">
                   <h3 className="font-bold leading-tight">{o.name}</h3>
-                  <span className={`text-[10px] px-2 py-1 rounded-full font-bold border ${o.online_ordering ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-zinc-100 border-zinc-200 text-zinc-600'}`}>{o.online_ordering ? 'Online' : 'Offline'}</span>
+                  <Badge variant={o.online_ordering ? 'default' : 'secondary'}>{o.online_ordering ? 'Online' : 'Offline'}</Badge>
                 </div>
                 <div className="text-xs text-zinc-600 mt-2 space-y-0.5">
                   {o.address_lines.map((l, i) => <div key={i}>{l}</div>)}
@@ -227,44 +223,43 @@ export default function AdminSettings() {
                 <div className="text-xs text-zinc-500 flex items-center gap-1"><Clock size={11} />{o.delivery_hours}</div>
                 <div className="text-[11px] font-mono text-zinc-400 mt-1">/{o.slug} • sort {o.sort_order}</div>
                 <div className="mt-3 flex gap-2">
-                  <button onClick={() => openEdit(o)} className="flex-1 py-2 rounded-xl border hover:bg-zinc-50 text-xs font-semibold flex items-center justify-center gap-1"><Pencil size={12} /> Edit</button>
-                  <button onClick={() => setConfirmDelete({ id: o.id, name: o.name })} className="px-3 py-2 rounded-xl border hover:bg-red-50 text-red-600"><Trash2 size={14} /></button>
+                  <Button variant="outline" size="sm" onClick={() => openEdit(o)} className="flex-1 inline-flex items-center justify-center gap-1"><Pencil size={12} /> Edit</Button>
+                  <Button variant="destructive" size="icon" onClick={() => setConfirmDelete({ id: o.id, name: o.name })}><Trash2 size={14} /></Button>
                 </div>
-              </div>
+              </Card>
             ))}
           </div>
         )}
-      </div>
+      </Card>
 
       {/* Outlet modal */}
-      {showOutletModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" onClick={() => setShowOutletModal(false)}>
-          <form onSubmit={handleOutletSubmit} onClick={(e) => e.stopPropagation()} className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-auto">
-            <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
-              <h2 className="font-bold">{editingOutlet ? `Edit ${editingOutlet.name}` : 'New outlet'}</h2>
-              <button type="button" onClick={() => setShowOutletModal(false)} className="w-8 h-8 rounded-full hover:bg-zinc-100 grid place-items-center">✕</button>
-            </div>
-            <div className="p-6 space-y-3">
-              <div><label className="text-xs font-semibold">Slug *</label><input value={outletForm.slug} onChange={(e) => setOutletForm({ ...outletForm, slug: e.target.value })} placeholder="mira-road" className="mt-1 w-full px-3 py-2.5 rounded-xl border font-mono text-sm" required /></div>
-              <div><label className="text-xs font-semibold">Name *</label><input value={outletForm.name} onChange={(e) => setOutletForm({ ...outletForm, name: e.target.value })} placeholder="Mira Road East" className="mt-1 w-full px-3 py-2.5 rounded-xl border" required /></div>
+      <Dialog open={showOutletModal} onOpenChange={setShowOutletModal}>
+        <DialogContent className="sm:max-w-lg" onClick={(e) => e.stopPropagation()}>
+          <form onSubmit={handleOutletSubmit}>
+            <DialogHeader>
+              <DialogTitle>{editingOutlet ? `Edit ${editingOutlet.name}` : 'New outlet'}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3 py-4">
+              <div><label className="text-xs font-semibold">Slug *</label><Input value={outletForm.slug} onChange={(e) => setOutletForm({ ...outletForm, slug: e.target.value })} placeholder="mira-road" className="mt-1 font-mono text-sm" required /></div>
+              <div><label className="text-xs font-semibold">Name *</label><Input value={outletForm.name} onChange={(e) => setOutletForm({ ...outletForm, name: e.target.value })} placeholder="Mira Road East" className="mt-1" required /></div>
               <div><label className="text-xs font-semibold">Address (one per line)</label><textarea value={outletForm.address} onChange={(e) => setOutletForm({ ...outletForm, address: e.target.value })} rows={4} placeholder={`Shop 21, Winstone PNK\nBeverly Park, Mira Road East`} className="mt-1 w-full px-3 py-2.5 rounded-xl border text-sm" /></div>
-              <div><label className="text-xs font-semibold">Phones (comma separated)</label><input value={outletForm.phones} onChange={(e) => setOutletForm({ ...outletForm, phones: e.target.value })} placeholder="8369293998, 8591683998" className="mt-1 w-full px-3 py-2.5 rounded-xl border" /></div>
-              <div><label className="text-xs font-semibold">Delivery hours</label><input value={outletForm.delivery_hours} onChange={(e) => setOutletForm({ ...outletForm, delivery_hours: e.target.value })} className="mt-1 w-full px-3 py-2.5 rounded-xl border" /></div>
+              <div><label className="text-xs font-semibold">Phones (comma separated)</label><Input value={outletForm.phones} onChange={(e) => setOutletForm({ ...outletForm, phones: e.target.value })} placeholder="8369293998, 8591683998" className="mt-1" /></div>
+              <div><label className="text-xs font-semibold">Delivery hours</label><Input value={outletForm.delivery_hours} onChange={(e) => setOutletForm({ ...outletForm, delivery_hours: e.target.value })} className="mt-1" /></div>
               <div className="flex gap-4">
                 <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={outletForm.online_ordering} onChange={(e) => setOutletForm({ ...outletForm, online_ordering: e.target.checked })} /> Online ordering</label>
-                <div className="flex items-center gap-2"><label className="text-xs font-semibold">Sort</label><input type="number" value={outletForm.sort_order} onChange={(e) => setOutletForm({ ...outletForm, sort_order: e.target.value })} className="w-20 px-2 py-1.5 rounded-xl border" /></div>
+                <div className="flex items-center gap-2"><label className="text-xs font-semibold">Sort</label><Input type="number" value={outletForm.sort_order} onChange={(e) => setOutletForm({ ...outletForm, sort_order: e.target.value })} className="w-20 px-2 py-1.5" /></div>
               </div>
             </div>
-            <div className="sticky bottom-0 bg-white border-t px-6 py-4 flex justify-end gap-2">
-              <button type="button" onClick={() => setShowOutletModal(false)} className="px-4 py-2.5 rounded-xl border hover:bg-zinc-50">Cancel</button>
-              <button type="submit" disabled={createOutletMut.isPending || updateOutletMut.isPending} className="px-5 py-2.5 rounded-xl bg-zinc-900 text-white font-semibold hover:bg-black disabled:opacity-50">{editingOutlet ? 'Save' : 'Create'}</button>
-            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setShowOutletModal(false)}>Cancel</Button>
+              <Button type="submit" disabled={createOutletMut.isPending || updateOutletMut.isPending}>{editingOutlet ? 'Save' : 'Create'}</Button>
+            </DialogFooter>
           </form>
-        </div>
-      )}
+        </DialogContent>
+      </Dialog>
 
       {/* Site Customization */}
-      <div className="mt-6 bg-white rounded-2xl border p-6">
+      <Card className="mt-6 p-6">
         <h2 className="font-semibold flex items-center gap-2"><Palette size={16} /> Site Customization</h2>
         <p className="text-xs text-zinc-500 mt-1">Customize your brand, content pages, offers, and banners.</p>
         <div className="mt-4 grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -293,7 +288,7 @@ export default function AdminSettings() {
             <div><div className="text-sm font-semibold">Bot Messages</div><div className="text-xs text-zinc-500">WhatsApp bot responses</div></div>
           </Link>
         </div>
-      </div>
+      </Card>
 
       <p className="text-center text-[11px] text-zinc-400 mt-6">Edits are live — no restart. Bot and site read same tables.</p>
       {confirmDelete && (
