@@ -178,7 +178,7 @@ export default function AdminBusinessConfig() {
 
   if (isLoading) {
     return (
-      <div className="p-6 max-w-5xl mx-auto space-y-6">
+      <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         <Skeleton className="h-8 w-64" />
         <Skeleton className="h-4 w-96" />
         <div className="space-y-4">
@@ -189,16 +189,23 @@ export default function AdminBusinessConfig() {
       </div>
     );
   }
-  if (!cfg) return <div className="p-6 text-center text-muted-foreground">Failed to load configuration</div>;
+  if (!cfg) return <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-6 text-center text-muted-foreground">Failed to load configuration</div>;
 
   const hasChanges = localConfig !== null;
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-6">
+    <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <AdminSubNav activeOverride="/admin/business-config" />
+
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground">Business Configuration</h1>
-          <p className="text-sm text-muted-foreground mt-1">Configure sizes, payments, icons, delivery, and more for your business type. <RouterLink to="/admin/catalog" className="text-primary hover:underline">Manage menu items & crusts →</RouterLink></p>
+          <h1 className="text-2xl font-bold tracking-tight">Business Configuration</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Configure sizes, payments, icons, delivery, and more for your business type.{' '}
+            <RouterLink to="/admin/catalog" className="text-primary hover:underline">
+              Manage menu items & crusts →
+            </RouterLink>
+          </p>
         </div>
         <div className="flex gap-2">
           <Button
@@ -222,8 +229,6 @@ export default function AdminBusinessConfig() {
           )}
         </div>
       </div>
-
-      <AdminSubNav activeOverride="/admin/business-config" />
 
       {/* General Settings */}
       <Section title="General Settings" icon={<Settings size={18} />} expanded={expandedSections.general} onToggle={() => toggle('general')}>
