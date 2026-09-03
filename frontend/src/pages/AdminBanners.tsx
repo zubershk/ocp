@@ -120,13 +120,15 @@ export default function AdminBanners() {
   };
 
   const handleUpload = async (f: File) => {
+    if (!f.type.startsWith('image/')) { toast.push({ type: 'warning', title: 'Please choose an image file' }); return; }
+    if (f.size > 10 << 20) { toast.push({ type: 'warning', title: 'Image too large — max 10MB' }); return; }
     try {
       setUploading(true);
       const fd = new FormData();
       fd.append('image', f);
       const res = await fetch('/admin/upload', {
         method: 'POST',
-        headers: { 'X-Admin-Key': localStorage.getItem('ocp_admin_key') || '' },
+        headers: { 'X-Admin-Key': getAdminKey() },
         body: fd,
       });
       const data = await res.json();
@@ -252,7 +254,7 @@ export default function AdminBanners() {
                         className="mt-1"
                       />
                     </div>
-                    <input type="file" ref={fileRef} accept="image/jpeg,image/png,image/webp,image/gif" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(f); }} />
+                    <input type="file" ref={fileRef} accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(f); }} />
                     <Button type="button" disabled={uploading} onClick={() => fileRef.current?.click()} className="h-[38px]">
                       <Upload size={14} />{uploading ? '…' : 'Upload'}
                     </Button>
