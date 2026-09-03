@@ -1,12 +1,19 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, Save, RotateCcw, MessageSquare, ChevronDown, ChevronRight,
   Eye, HelpCircle, Smartphone, Search, Info, X, CheckCircle, AlertTriangle,
 } from 'lucide-react';
 import { adminFetch, getAdminKey } from '../services/api';
 import { useToast } from '../context/ToastContext';
+import AdminSubNav from '../components/layout/AdminSubNav';
+import { Button } from '@/components/shadcn/button';
+import { Card, CardContent } from '@/components/shadcn/card';
+import { Input } from '@/components/shadcn/input';
+import { Badge } from '@/components/shadcn/badge';
+import { Skeleton } from '@/components/shadcn/skeleton';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/shadcn/dialog';
 
 // ------------------------------------------------------------------
 // Types
@@ -256,87 +263,99 @@ export default function AdminBotWorkflows() {
   if (!authed) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <p className="text-zinc-500">Enter your admin key at /admin first.</p>
+        <p className="text-muted-foreground">Enter your admin key at /admin first.</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#fefcf8]">
+    <div className="min-h-screen bg-background">
       {/* ---- Header ---- */}
-      <div className="bg-white border-b sticky top-0 z-20">
+      <div className="bg-card border-b sticky top-0 z-20">
         <div className="max-w-5xl mx-auto px-4 py-3 flex items-center gap-3">
-          <Link to="/admin/settings" className="p-2 rounded-xl hover:bg-zinc-100">
+          <Link to="/admin/settings" className="inline-flex items-center justify-center size-8 rounded-lg hover:bg-muted transition-colors">
             <ArrowLeft size={18} />
           </Link>
           <div className="flex-1 min-w-0">
             <h1 className="font-bold text-lg flex items-center gap-2">
               <MessageSquare size={20} /> Bot Messages
             </h1>
-            <p className="text-xs text-zinc-500 truncate">
+            <p className="text-xs text-muted-foreground truncate">
               Customize every WhatsApp bot response — no coding needed.
             </p>
           </div>
-          <button
+          <Button
+            variant={showHelp ? 'default' : 'outline'}
+            size="sm"
             onClick={() => setShowHelp(!showHelp)}
-            className={`p-2 rounded-xl border text-xs flex items-center gap-1.5 ${showHelp ? 'bg-brand-50 border-brand-300 text-brand-700' : 'hover:bg-zinc-50'}`}
+            className="gap-1.5"
           >
             <HelpCircle size={14} /> How it works
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => setConfirmResetAll(true)}
-            className="px-3 py-1.5 rounded-xl border text-xs font-medium hover:bg-zinc-50 flex items-center gap-1.5"
+            className="gap-1.5"
           >
             <RotateCcw size={14} /> Reset All
-          </button>
+          </Button>
         </div>
       </div>
 
       <div className="max-w-5xl mx-auto px-4 py-6">
+        <AdminSubNav activeOverride="/admin/bot-workflows" />
+
         {/* ---- Getting Started Guide ---- */}
         {showHelp && (
-          <div className="mb-6 bg-blue-50 border border-blue-200 rounded-2xl p-5">
-            <div className="flex items-start gap-3">
-              <Info size={20} className="text-blue-600 mt-0.5 shrink-0" />
-              <div className="text-sm space-y-3">
-                <h3 className="font-semibold text-blue-900">How Bot Messages Work</h3>
-                <div className="space-y-2 text-blue-800">
-                  <p><strong>1. Every message your bot sends is stored here.</strong> Edit any message to change what the bot says.</p>
-                  <p><strong>2. Use {'{{.Variable}}'} for dynamic content.</strong> For example, {'{{.Name}}'} becomes the customer's name, {'{{.OrderNumber}}'} becomes their order ID.</p>
-                  <p><strong>3. Changes are instant.</strong> Save a message and the bot uses it immediately — no restart needed.</p>
-                  <p><strong>4. You can always reset.</strong> Each message has a "Reset" button to restore the original text.</p>
-                </div>
-                <div className="bg-white rounded-xl p-3 border border-blue-100">
-                  <p className="text-xs font-medium text-blue-900 mb-1">Example template:</p>
-                  <code className="text-xs text-blue-700 break-all">
-                    {'Thank you, {{.Name}}! Your order {{.OrderNumber}} is {{.Status}}.'}
-                  </code>
-                  <p className="text-xs text-blue-600 mt-1">
-                    Renders as: "Thank you, John! Your order OCP-20260901-0001 is Confirmed."
-                  </p>
+          <Card className="mb-6 border-blue-200 bg-blue-50">
+            <CardContent className="p-5">
+              <div className="flex items-start gap-3">
+                <Info size={20} className="text-blue-600 mt-0.5 shrink-0" />
+                <div className="text-sm space-y-3">
+                  <h3 className="font-semibold text-blue-900">How Bot Messages Work</h3>
+                  <div className="space-y-2 text-blue-800">
+                    <p><strong>1. Every message your bot sends is stored here.</strong> Edit any message to change what the bot says.</p>
+                    <p><strong>2. Use {'{{.Variable}}'} for dynamic content.</strong> For example, {'{{.Name}}'} becomes the customer's name, {'{{.OrderNumber}}'} becomes their order ID.</p>
+                    <p><strong>3. Changes are instant.</strong> Save a message and the bot uses it immediately — no restart needed.</p>
+                    <p><strong>4. You can always reset.</strong> Each message has a "Reset" button to restore the original text.</p>
+                  </div>
+                  <div className="bg-card rounded-xl p-3 border border-blue-100">
+                    <p className="text-xs font-medium text-blue-900 mb-1">Example template:</p>
+                    <code className="text-xs text-blue-700 break-all">
+                      {'Thank you, {{.Name}}! Your order {{.OrderNumber}} is {{.Status}}.'}
+                    </code>
+                    <p className="text-xs text-blue-600 mt-1">
+                      Renders as: "Thank you, John! Your order OCP-20260901-0001 is Confirmed."
+                    </p>
+                  </div>
                 </div>
               </div>
-            </div>
-          </div>
+            </CardContent>
+          </Card>
         )}
 
         {/* ---- Search ---- */}
         <div className="mb-4 relative">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
-          <input
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input
             type="text"
             placeholder="Search messages..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-4 py-2.5 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+            className="pl-9"
           />
         </div>
 
         {/* ---- Categories ---- */}
         {messagesQuery.isLoading ? (
-          <div className="text-center py-12 text-zinc-400">Loading messages...</div>
+          <div className="space-y-3">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-14 w-full rounded-xl" />
+            ))}
+          </div>
         ) : Object.keys(filteredGrouped).length === 0 ? (
-          <div className="text-center py-12 text-zinc-400">
+          <div className="text-center py-12 text-muted-foreground">
             {searchQuery ? 'No messages match your search.' : 'No messages found.'}
           </div>
         ) : (
@@ -345,26 +364,27 @@ export default function AdminBotWorkflows() {
             const isExpanded = expandedCat === cat;
             return (
               <div key={cat} className="mb-3">
-                <button
+                <Button
+                  variant="outline"
+                  className="w-full justify-start gap-3 h-auto py-3"
                   onClick={() => setExpandedCat(isExpanded ? null : cat)}
-                  className={`w-full flex items-center gap-3 p-3 rounded-xl border bg-white hover:bg-zinc-50 transition-colors`}
                 >
-                  {isExpanded ? <ChevronDown size={16} className="text-zinc-400" /> : <ChevronRight size={16} className="text-zinc-400" />}
+                  {isExpanded ? <ChevronDown size={16} className="text-muted-foreground" /> : <ChevronRight size={16} className="text-muted-foreground" />}
                   <span className="text-lg">{meta.icon}</span>
                   <div className="flex-1 text-left">
                     <div className="font-semibold text-sm">{meta.label}</div>
-                    <div className="text-xs text-zinc-500">{meta.description}</div>
+                    <div className="text-xs text-muted-foreground">{meta.description}</div>
                   </div>
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${meta.color}`}>
+                  <Badge variant="outline" className={meta.color}>
                     {items.length} messages
-                  </span>
-                </button>
+                  </Badge>
+                </Button>
 
                 {isExpanded && (
                   <div className="mt-2 ml-6 space-y-2">
                     {/* When-sent hint */}
                     {meta.whenSent && (
-                      <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-zinc-50 text-xs text-zinc-500">
+                      <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-muted text-xs text-muted-foreground">
                         <Info size={14} className="shrink-0 mt-0.5" />
                         <span>{meta.whenSent}</span>
                       </div>
@@ -395,112 +415,114 @@ export default function AdminBotWorkflows() {
 
         {/* ---- Variable Reference ---- */}
         {!searchQuery && expandedCat && CATEGORIES[expandedCat] && VARIABLE_REF[expandedCat] && (
-          <div className="mt-6 bg-white rounded-2xl border p-5">
-            <h3 className="font-semibold text-sm flex items-center gap-2 mb-3">
-              <span className="text-lg">{CATEGORIES[expandedCat].icon}</span>
-              Available Variables for {CATEGORIES[expandedCat].label}
-            </h3>
-            <p className="text-xs text-zinc-500 mb-3">
-              Use these placeholders in your message. They are replaced with real values when the bot sends the message.
-            </p>
-            <div className="grid sm:grid-cols-2 gap-2">
-              {VARIABLE_REF[expandedCat].map((v, i) => (
-                <div key={i} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-zinc-50">
-                  <code className="text-xs bg-white border px-1.5 py-0.5 rounded font-mono text-brand-700 shrink-0">
-                    {'{{.'}{v.description.split(' ').slice(0, 2).map(w => w[0].toUpperCase() + w.slice(1)).join('')}{'}'}
-                  </code>
-                  <span className="text-xs text-zinc-500 truncate">{v.description} — e.g. "{v.example}"</span>
-                </div>
-              ))}
-            </div>
-          </div>
+          <Card className="mt-6">
+            <CardContent className="p-5">
+              <h3 className="font-semibold text-sm flex items-center gap-2 mb-3">
+                <span className="text-lg">{CATEGORIES[expandedCat].icon}</span>
+                Available Variables for {CATEGORIES[expandedCat].label}
+              </h3>
+              <p className="text-xs text-muted-foreground mb-3">
+                Use these placeholders in your message. They are replaced with real values when the bot sends the message.
+              </p>
+              <div className="grid sm:grid-cols-2 gap-2">
+                {VARIABLE_REF[expandedCat].map((v, i) => (
+                  <div key={i} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted">
+                    <code className="text-xs bg-card border px-1.5 py-0.5 rounded font-mono text-primary shrink-0">
+                      {'{{.'}{v.description.split(' ').slice(0, 2).map(w => w[0].toUpperCase() + w.slice(1)).join('')}{'}'}
+                    </code>
+                    <span className="text-xs text-muted-foreground truncate">{v.description} — e.g. "{v.example}"</span>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
         )}
       </div>
 
       {/* ---- WhatsApp Preview Modal ---- */}
-      {previewKey && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setPreviewKey(null)}>
-          <div className="bg-white rounded-2xl max-w-sm w-full shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
-            {/* Phone frame */}
-            <div className="bg-zinc-800 px-4 py-2 flex items-center justify-between">
-              <span className="text-white text-xs font-medium">WhatsApp Preview</span>
-              <button onClick={() => setPreviewKey(null)} className="text-zinc-400 hover:text-white"><X size={16} /></button>
-            </div>
-            {/* Chat header */}
-            <div className="bg-[#075e54] px-4 py-2.5 flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-green-600 grid place-items-center text-white text-xs font-bold">R</div>
-              <div>
-                <div className="text-white text-sm font-medium">Restaurant</div>
-                <div className="text-green-200 text-[10px]">online</div>
-              </div>
-            </div>
-            {/* Message bubble */}
-            <div className="bg-[#ece5dd] p-4 min-h-[120px] flex items-end">
-              <div className="bg-[#dcf8c6] rounded-xl rounded-tl-none p-3 max-w-[85%] shadow-sm">
-                <p className="text-sm text-zinc-800 whitespace-pre-wrap break-words leading-relaxed">
-                  {previewMutation.isPending ? 'Loading...' : (previewText || 'Click preview on a message to see it here.')}
-                </p>
-                <div className="text-[10px] text-zinc-500 text-right mt-1">12:00 PM ✓✓</div>
-              </div>
-            </div>
-            {/* Message key */}
-            <div className="px-4 py-2 bg-zinc-50 border-t text-center">
-              <code className="text-xs text-zinc-500 font-mono">{previewKey}</code>
+      <Dialog open={!!previewKey} onOpenChange={(open) => { if (!open) { setPreviewKey(null); setPreviewText(''); } }}>
+        <DialogContent className="p-0 overflow-hidden max-w-sm" showCloseButton={false}>
+          {/* Phone frame */}
+          <div className="bg-zinc-800 px-4 py-2 flex items-center justify-between">
+            <span className="text-white text-xs font-medium">WhatsApp Preview</span>
+            <Button variant="ghost" size="icon" className="size-7 text-zinc-400 hover:text-white" onClick={() => { setPreviewKey(null); setPreviewText(''); }}>
+              <X size={16} />
+            </Button>
+          </div>
+          {/* Chat header */}
+          <div className="bg-[#075e54] px-4 py-2.5 flex items-center gap-2">
+            <div className="w-8 h-8 rounded-full bg-green-600 grid place-items-center text-white text-xs font-bold">R</div>
+            <div>
+              <div className="text-white text-sm font-medium">Restaurant</div>
+              <div className="text-green-200 text-[10px]">online</div>
             </div>
           </div>
-        </div>
-      )}
+          {/* Message bubble */}
+          <div className="bg-[#ece5dd] p-4 min-h-[120px] flex items-end">
+            <div className="bg-[#dcf8c6] rounded-xl rounded-tl-none p-3 max-w-[85%] shadow-sm">
+              <p className="text-sm text-zinc-800 whitespace-pre-wrap break-words leading-relaxed">
+                {previewMutation.isPending ? 'Loading...' : (previewText || 'Click preview on a message to see it here.')}
+              </p>
+              <div className="text-[10px] text-zinc-500 text-right mt-1">12:00 PM ✓✓</div>
+            </div>
+          </div>
+          {/* Message key */}
+          <div className="px-4 py-2 bg-muted border-t text-center">
+            <code className="text-xs text-muted-foreground font-mono">{previewKey}</code>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* ---- Reset Single Confirm ---- */}
-      {confirmResetKey && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setConfirmResetKey(null)}>
-          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center gap-3 mb-3">
+      <Dialog open={!!confirmResetKey} onOpenChange={(open) => { if (!open) setConfirmResetKey(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-orange-100 grid place-items-center"><AlertTriangle size={18} className="text-orange-600" /></div>
               <div>
-                <h3 className="font-semibold">Reset this message?</h3>
-                <p className="text-xs text-zinc-500">This will restore the original default text.</p>
+                <DialogTitle>Reset this message?</DialogTitle>
+                <DialogDescription>This will restore the original default text.</DialogDescription>
               </div>
             </div>
-            <code className="block text-xs bg-zinc-50 rounded-lg p-2 mb-4 font-mono text-zinc-600">{confirmResetKey}</code>
-            <div className="flex gap-2 justify-end">
-              <button onClick={() => setConfirmResetKey(null)} className="px-4 py-2 rounded-xl border text-sm font-medium hover:bg-zinc-50">Cancel</button>
-              <button
-                onClick={() => resetMutation.mutate(confirmResetKey)}
-                disabled={resetMutation.isPending}
-                className="px-4 py-2 rounded-xl bg-orange-600 text-white text-sm font-medium hover:bg-orange-700 disabled:opacity-50"
-              >
-                {resetMutation.isPending ? 'Resetting...' : 'Reset'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          </DialogHeader>
+          <code className="block text-xs bg-muted rounded-lg p-2 font-mono text-muted-foreground">{confirmResetKey}</code>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmResetKey(null)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              onClick={() => resetMutation.mutate(confirmResetKey!)}
+              disabled={resetMutation.isPending}
+            >
+              {resetMutation.isPending ? 'Resetting...' : 'Reset'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ---- Reset All Confirm ---- */}
-      {confirmResetAll && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setConfirmResetAll(false)}>
-          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center gap-3 mb-3">
+      <Dialog open={confirmResetAll} onOpenChange={(open) => { if (!open) setConfirmResetAll(false); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-red-100 grid place-items-center"><AlertTriangle size={18} className="text-red-600" /></div>
               <div>
-                <h3 className="font-semibold">Reset all messages?</h3>
-                <p className="text-xs text-zinc-500">Every bot message will be restored to its original default. Your edits will be lost.</p>
+                <DialogTitle>Reset all messages?</DialogTitle>
+                <DialogDescription>Every bot message will be restored to its original default. Your edits will be lost.</DialogDescription>
               </div>
             </div>
-            <div className="flex gap-2 justify-end mt-4">
-              <button onClick={() => setConfirmResetAll(false)} className="px-4 py-2 rounded-xl border text-sm font-medium hover:bg-zinc-50">Cancel</button>
-              <button
-                onClick={() => resetAllMutation.mutate()}
-                disabled={resetAllMutation.isPending}
-                className="px-4 py-2 rounded-xl bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50"
-              >
-                {resetAllMutation.isPending ? 'Resetting...' : 'Reset All'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmResetAll(false)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              onClick={() => resetAllMutation.mutate()}
+              disabled={resetAllMutation.isPending}
+            >
+              {resetAllMutation.isPending ? 'Resetting...' : 'Reset All'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -525,68 +547,71 @@ function MessageCard({
   isPending: boolean;
 }) {
   return (
-    <div className="bg-white rounded-xl border p-4 hover:shadow-sm transition-shadow">
-      <div className="flex items-start gap-3">
-        <div className="flex-1 min-w-0">
-          {/* Key + description */}
-          <div className="flex items-center gap-2 mb-1 flex-wrap">
-            <code className="text-xs bg-zinc-100 px-1.5 py-0.5 rounded font-mono">{msg.message_key}</code>
-            {msg.description && <span className="text-xs text-zinc-500">{msg.description}</span>}
+    <Card className="hover:shadow-sm transition-shadow">
+      <CardContent className="p-4">
+        <div className="flex items-start gap-3">
+          <div className="flex-1 min-w-0">
+            {/* Key + description */}
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
+              <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">{msg.message_key}</code>
+              {msg.description && <span className="text-xs text-muted-foreground">{msg.description}</span>}
+            </div>
+
+            {/* Variables hint */}
+            {msg.variables && (
+              <div className="flex items-center gap-1 mb-2 flex-wrap">
+                <span className="text-[10px] text-muted-foreground">Variables:</span>
+                {msg.variables.split(',').map((v) => (
+                  <code key={v} className="text-[10px] bg-primary/10 text-primary px-1 py-0.5 rounded font-mono">{`{{.${v.trim()}}}`}</code>
+                ))}
+              </div>
+            )}
+
+            {/* Message content */}
+            {isEditing ? (
+              <div className="space-y-2">
+                <textarea
+                  value={editText}
+                  onChange={(e) => onEditTextChange(e.target.value)}
+                  rows={5}
+                  className="w-full px-3 py-2 rounded-lg border border-input bg-transparent text-sm font-mono focus:outline-none focus:ring-1 focus:ring-ring resize-y"
+                  autoFocus
+                />
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    onClick={onSave}
+                    disabled={isPending}
+                    className="gap-1"
+                  >
+                    <Save size={12} /> {isPending ? 'Saving...' : 'Save'}
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={onCancel}>Cancel</Button>
+                </div>
+              </div>
+            ) : (
+              <pre className="text-xs text-muted-foreground bg-muted rounded-lg p-3 whitespace-pre-wrap font-mono max-h-24 overflow-y-auto border border-border">
+                {msg.message_text}
+              </pre>
+            )}
           </div>
 
-          {/* Variables hint */}
-          {msg.variables && (
-            <div className="flex items-center gap-1 mb-2 flex-wrap">
-              <span className="text-[10px] text-zinc-400">Variables:</span>
-              {msg.variables.split(',').map((v) => (
-                <code key={v} className="text-[10px] bg-brand-50 text-brand-700 px-1 py-0.5 rounded font-mono">{`{{.${v.trim()}}}`}</code>
-              ))}
+          {/* Action buttons */}
+          {!isEditing && (
+            <div className="flex flex-col gap-1 shrink-0">
+              <Button variant="ghost" size="icon" className="size-7" onClick={onEdit} title="Edit message">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              </Button>
+              <Button variant="ghost" size="icon" className="size-7 text-blue-600 hover:text-blue-700 hover:bg-blue-50" onClick={onPreview} title="Preview in WhatsApp">
+                <Smartphone size={14} />
+              </Button>
+              <Button variant="ghost" size="icon" className="size-7 text-orange-600 hover:text-orange-700 hover:bg-orange-50" onClick={onReset} title="Reset to default">
+                <RotateCcw size={14} />
+              </Button>
             </div>
-          )}
-
-          {/* Message content */}
-          {isEditing ? (
-            <div className="space-y-2">
-              <textarea
-                value={editText}
-                onChange={(e) => onEditTextChange(e.target.value)}
-                rows={5}
-                className="w-full px-3 py-2 rounded-lg border text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-400 resize-y"
-                autoFocus
-              />
-              <div className="flex gap-2">
-                <button
-                  onClick={onSave}
-                  disabled={isPending}
-                  className="px-3 py-1.5 rounded-lg bg-zinc-900 text-white text-xs font-medium hover:bg-black disabled:opacity-50 flex items-center gap-1"
-                >
-                  <Save size={12} /> {isPending ? 'Saving...' : 'Save'}
-                </button>
-                <button onClick={onCancel} className="px-3 py-1.5 rounded-lg border text-xs font-medium hover:bg-zinc-50">Cancel</button>
-              </div>
-            </div>
-          ) : (
-            <pre className="text-xs text-zinc-700 bg-zinc-50 rounded-lg p-3 whitespace-pre-wrap font-mono max-h-24 overflow-y-auto border border-zinc-100">
-              {msg.message_text}
-            </pre>
           )}
         </div>
-
-        {/* Action buttons */}
-        {!isEditing && (
-          <div className="flex flex-col gap-1 shrink-0">
-            <button onClick={onEdit} className="p-1.5 rounded-lg hover:bg-zinc-100 text-zinc-600" title="Edit message">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-            </button>
-            <button onClick={onPreview} className="p-1.5 rounded-lg hover:bg-blue-50 text-blue-600" title="Preview in WhatsApp">
-              <Smartphone size={14} />
-            </button>
-            <button onClick={onReset} className="p-1.5 rounded-lg hover:bg-orange-50 text-orange-600" title="Reset to default">
-              <RotateCcw size={14} />
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }
