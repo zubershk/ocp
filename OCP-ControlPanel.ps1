@@ -409,20 +409,6 @@ $btnRestart.Add_Click({
     $restartTimer.Start()
 })
 
-$btnWebsite.Add_Click({
-    [System.Diagnostics.Process]::Start('http://localhost:5173')
-})
-
-$btnAdmin.Add_Click({
-    [System.Diagnostics.Process]::Start('http://localhost:5173/admin')
-})
-
-$btnCampaign.Add_Click({
-    $Sync.Command = 'start_frontend'
-    $Sync.CommandReady = $true
-    $lblFooter.Text = 'Starting frontend...'
-})
-
 # ---- website shortcuts ----
 $btnWebsite = New-Object System.Windows.Forms.Button
 $btnWebsite.Text = 'Open Website'
@@ -435,6 +421,9 @@ $btnWebsite.Cursor = 'Hand'
 $btnWebsite.Location = New-Object System.Drawing.Point(20, 225)
 $btnWebsite.Size = New-Object System.Drawing.Size(120, 32)
 $form.Controls.Add($btnWebsite)
+$btnWebsite.Add_Click({
+    [System.Diagnostics.Process]::Start('http://localhost:5173')
+})
 
 $btnAdmin = New-Object System.Windows.Forms.Button
 $btnAdmin.Text = [char]0x2699 + '  Admin Board'
@@ -447,6 +436,9 @@ $btnAdmin.Cursor = 'Hand'
 $btnAdmin.Location = New-Object System.Drawing.Point(150, 225)
 $btnAdmin.Size = New-Object System.Drawing.Size(120, 32)
 $form.Controls.Add($btnAdmin)
+$btnAdmin.Add_Click({
+    [System.Diagnostics.Process]::Start('http://localhost:5173/admin')
+})
 
 # ---- log section ----
 $logHeader = New-Object System.Windows.Forms.Label
