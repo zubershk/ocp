@@ -1,9 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Link, useNavigate } from 'react-router-dom';
 import { Save, ArrowLeft, Palette, Type, Image, Upload } from 'lucide-react';
 import { adminFetch, getAdminKey } from '../services/api';
 import { useToast } from '../context/ToastContext';
+import AdminSubNav from '../components/layout/AdminSubNav';
+import { Card, CardContent } from '@/components/shadcn/card';
+import { Button } from '@/components/shadcn/button';
+import { Input } from '@/components/shadcn/input';
+import { Skeleton } from '@/components/shadcn/skeleton';
 
 interface BrandSettings {
   logo_url: string;
@@ -29,7 +33,6 @@ const FONT_HEADING_OPTIONS = ['Outfit', 'Inter', 'Poppins', 'Roboto', 'Montserra
 const FONT_BODY_OPTIONS = ['Inter', 'Outfit', 'Poppins', 'Roboto', 'Lato'];
 
 export default function AdminBrand() {
-  const navigate = useNavigate();
   const [authed] = useState(() => getAdminKey().length > 0);
   const qc = useQueryClient();
   const toast = useToast();
@@ -61,11 +64,13 @@ export default function AdminBrand() {
   if (!authed) {
     return (
       <div className="max-w-md mx-auto px-4 py-16 text-center">
-        <div className="bg-white rounded-2xl border p-8">
-          <Palette size={24} className="mx-auto text-zinc-400" />
-          <h1 className="font-bold mt-3">Brand Settings</h1>
-          <p className="text-sm text-zinc-500 mt-1">Sign in via <Link to="/admin" className="text-orange-600 underline">Orders</Link> first.</p>
-        </div>
+        <Card className="p-8">
+          <CardContent>
+            <Palette size={24} className="mx-auto text-muted-foreground" />
+            <h1 className="font-bold mt-3">Brand Settings</h1>
+            <p className="text-sm text-muted-foreground mt-1">Sign in via <a href="/admin" className="text-orange-600 underline">Orders</a> first.</p>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -93,73 +98,63 @@ export default function AdminBrand() {
 
   return (
     <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
-      <div className="flex gap-1 p-1 bg-zinc-100 rounded-xl w-fit text-sm mb-4 flex-wrap">
-        <Link to="/admin" className="px-3 py-1.5 rounded-full hover:bg-white">Orders</Link>
-        <Link to="/admin/catalog" className="px-3 py-1.5 rounded-full hover:bg-white">Menu</Link>
-        <Link to="/admin/chats" className="px-3 py-1.5 rounded-full hover:bg-white">Chats</Link>
-        <Link to="/admin/settings" className="px-3 py-1.5 rounded-full hover:bg-white">Settings</Link>
-        <Link to="/admin/analytics" className="px-3 py-1.5 rounded-full hover:bg-white">Analytics</Link>
-        <Link to="/admin/team" className="px-3 py-1.5 rounded-full hover:bg-white">Team</Link>
-        <Link to="/admin/logs" className="px-3 py-1.5 rounded-full hover:bg-white">Audit</Link>
-      </div>
+      <AdminSubNav />
 
-      <div className="flex items-center gap-3">
-        <button onClick={() => navigate('/admin/settings')} className="w-9 h-9 rounded-xl border flex items-center justify-center hover:bg-zinc-50">
-          <ArrowLeft size={16} />
-        </button>
+      <div className="flex items-center gap-3 mt-4">
+        <Button variant="outline" size="icon" onClick={() => window.history.back()} className="w-9 h-9"><ArrowLeft size={16} /></Button>
         <h1 className="text-2xl font-bold tracking-tight">Brand Settings</h1>
       </div>
-      <p className="text-sm text-zinc-500 mt-1 ml-12">Customize colors, logo, and typography for your storefront.</p>
+      <p className="text-sm text-muted-foreground mt-1 ml-12">Customize colors, logo, and typography for your storefront.</p>
 
       <div className="mt-6 grid lg:grid-cols-3 gap-6">
         {/* Form */}
         <div className="lg:col-span-2 space-y-6">
           {/* Logo & Favicon */}
-          <div className="bg-white rounded-2xl border p-6">
+          <Card className="p-6">
             <h2 className="font-semibold flex items-center gap-2"><Image size={16} /> Assets</h2>
             {settingsQuery.isLoading ? (
-              <div className="mt-3 h-24 bg-zinc-50 rounded-xl animate-pulse" />
+              <Skeleton className="mt-3 h-24" />
             ) : (
               <div className="mt-4 grid sm:grid-cols-2 gap-4">
                 <div>
                   <label className="text-xs font-semibold">Logo URL</label>
                   <div className="flex gap-2 items-end">
                     <div className="flex-1">
-                      <input
+                      <Input
                         value={form.logo_url}
                         onChange={(e) => update('logo_url', e.target.value)}
                         placeholder="/uploads/..."
-                        className="mt-1 w-full px-3 py-2.5 rounded-xl border text-sm"
+                        className="mt-1"
                       />
                     </div>
                     <input type="file" ref={logoFileRef} accept="image/jpeg,image/png,image/webp,image/gif" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(f, 'logo_url'); }} />
-                    <button type="button" disabled={uploading} onClick={() => logoFileRef.current?.click()} className="px-4 py-2.5 rounded-xl bg-zinc-900 text-white text-sm font-semibold hover:bg-black disabled:opacity-50 inline-flex items-center gap-2 h-[42px]"><Upload size={14} />{uploading ? '…' : 'Upload'}</button>
+                    <Button type="button" disabled={uploading} onClick={() => logoFileRef.current?.click()} className="h-[42px]"><Upload size={14} />{uploading ? '…' : 'Upload'}</Button>
                   </div>
                 </div>
                 <div>
                   <label className="text-xs font-semibold">Favicon URL</label>
                   <div className="flex gap-2 items-end">
                     <div className="flex-1">
-                      <input
+                      <Input
                         value={form.favicon_url}
                         onChange={(e) => update('favicon_url', e.target.value)}
                         placeholder="/uploads/..."
-                        className="mt-1 w-full px-3 py-2.5 rounded-xl border text-sm"
+                        className="mt-1"
                       />
                     </div>
                     <input type="file" ref={faviconFileRef} accept="image/jpeg,image/png,image/webp,image/gif" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(f, 'favicon_url'); }} />
-                    <button type="button" disabled={uploading} onClick={() => faviconFileRef.current?.click()} className="px-4 py-2.5 rounded-xl bg-zinc-900 text-white text-sm font-semibold hover:bg-black disabled:opacity-50 inline-flex items-center gap-2 h-[42px]"><Upload size={14} />{uploading ? '…' : 'Upload'}</button>
+                    <Button type="button" disabled={uploading} onClick={() => faviconFileRef.current?.click()} className="h-[42px]"><Upload size={14} />{uploading ? '…' : 'Upload'}</Button>
                   </div>
                 </div>
               </div>
             )}
-          </div>
+          </Card>
 
           {/* Colors */}
-          <div className="bg-white rounded-2xl border p-6">
+          <Card className="p-6">
             <h2 className="font-semibold flex items-center gap-2"><Palette size={16} /> Colors</h2>
             {settingsQuery.isLoading ? (
-              <div className="mt-3 h-24 bg-zinc-50 rounded-xl animate-pulse" />
+              <Skeleton className="mt-3 h-24" />
             ) : (
               <div className="mt-4 grid sm:grid-cols-3 gap-4">
                 {([['primary_color', 'Primary'], ['secondary_color', 'Secondary'], ['accent_color', 'Accent']] as const).map(([key, label]) => (
@@ -170,25 +165,25 @@ export default function AdminBrand() {
                         type="color"
                         value={form[key]}
                         onChange={(e) => update(key, e.target.value)}
-                        className="w-10 h-10 rounded-lg border cursor-pointer"
+                        className="w-10 h-10 rounded-lg border border-border cursor-pointer"
                       />
-                      <input
+                      <Input
                         value={form[key]}
                         onChange={(e) => update(key, e.target.value)}
-                        className="flex-1 px-3 py-2.5 rounded-xl border text-sm font-mono"
+                        className="flex-1 font-mono"
                       />
                     </div>
                   </div>
                 ))}
               </div>
             )}
-          </div>
+          </Card>
 
           {/* Fonts */}
-          <div className="bg-white rounded-2xl border p-6">
+          <Card className="p-6">
             <h2 className="font-semibold flex items-center gap-2"><Type size={16} /> Typography</h2>
             {settingsQuery.isLoading ? (
-              <div className="mt-3 h-24 bg-zinc-50 rounded-xl animate-pulse" />
+              <Skeleton className="mt-3 h-24" />
             ) : (
               <div className="mt-4 grid sm:grid-cols-2 gap-4">
                 <div>
@@ -196,7 +191,7 @@ export default function AdminBrand() {
                   <select
                     value={form.font_heading}
                     onChange={(e) => update('font_heading', e.target.value)}
-                    className="mt-1 w-full px-3 py-2.5 rounded-xl border text-sm"
+                    className="mt-1 w-full px-3 py-2 rounded-lg border border-border bg-card text-sm"
                   >
                     {FONT_HEADING_OPTIONS.map((f) => <option key={f} value={f}>{f}</option>)}
                   </select>
@@ -206,19 +201,17 @@ export default function AdminBrand() {
                   <select
                     value={form.font_body}
                     onChange={(e) => update('font_body', e.target.value)}
-                    className="mt-1 w-full px-3 py-2.5 rounded-xl border text-sm"
+                    className="mt-1 w-full px-3 py-2 rounded-lg border border-border bg-card text-sm"
                   >
                     {FONT_BODY_OPTIONS.map((f) => <option key={f} value={f}>{f}</option>)}
                   </select>
                 </div>
               </div>
             )}
-          </div>
+          </Card>
 
           <div className="flex gap-2">
-            <button onClick={handleSave} disabled={saveMut.isPending} className="px-5 py-2.5 rounded-xl bg-zinc-900 text-white text-sm font-semibold hover:bg-black disabled:opacity-50 inline-flex items-center gap-1.5">
-              <Save size={14} /> {saveMut.isPending ? 'Saving…' : 'Save brand'}
-            </button>
+            <Button onClick={handleSave} disabled={saveMut.isPending}><Save size={14} /> {saveMut.isPending ? 'Saving…' : 'Save brand'}</Button>
             {saveMut.isSuccess && <span className="text-xs text-emerald-600 flex items-center gap-1">Saved</span>}
             {saveMut.isError && <span className="text-xs text-red-600">{(saveMut.error as Error).message}</span>}
           </div>
@@ -226,10 +219,10 @@ export default function AdminBrand() {
 
         {/* Live Preview */}
         <div className="space-y-6">
-          <div className="bg-white rounded-2xl border p-6">
+          <Card className="p-6">
             <h2 className="font-semibold mb-4">Live Preview</h2>
             <div
-              className="rounded-xl border overflow-hidden"
+              className="rounded-xl border border-border overflow-hidden"
               style={{
                 fontFamily: `'${form.font_body}', sans-serif`,
                 color: form.secondary_color,
@@ -264,23 +257,23 @@ export default function AdminBrand() {
                 </button>
               </div>
             </div>
-          </div>
+          </Card>
 
           {/* Color swatches */}
-          <div className="bg-white rounded-2xl border p-6">
+          <Card className="p-6">
             <h2 className="font-semibold mb-4">Color Palette</h2>
             <div className="space-y-3">
               {([['primary_color', 'Primary'], ['secondary_color', 'Secondary'], ['accent_color', 'Accent']] as const).map(([key, label]) => (
                 <div key={key} className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg border" style={{ backgroundColor: form[key] }} />
+                  <div className="w-8 h-8 rounded-lg border border-border" style={{ backgroundColor: form[key] }} />
                   <div>
                     <div className="text-xs font-semibold">{label}</div>
-                    <div className="text-[11px] font-mono text-zinc-500">{form[key]}</div>
+                    <div className="text-[11px] font-mono text-muted-foreground">{form[key]}</div>
                   </div>
                 </div>
               ))}
             </div>
-          </div>
+          </Card>
         </div>
       </div>
     </div>
