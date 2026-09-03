@@ -154,7 +154,7 @@ export default function Login() {
                       inputMode="numeric"
                       placeholder="98765 43210"
                       autoComplete="tel"
-                      className="flex-1 px-4 py-3 rounded-r-xl border border-stone-200 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-400 text-base transition-all"
+                      className="flex-1 px-4 py-3 rounded-r-xl border border-stone-200 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-400 text-base transition-all min-h-[44px]"
                       autoFocus
                     />
                   </div>
@@ -185,7 +185,7 @@ export default function Login() {
                       Change number
                     </button>
                   </div>
-                  <div className="flex gap-2.5 justify-center" onPaste={handlePaste}>
+                  <div className="flex gap-2 sm:gap-2.5 justify-center" onPaste={handlePaste}>
                     {otp.map((d, i) => (
                       <input
                         key={i}
@@ -196,7 +196,7 @@ export default function Login() {
                         inputMode="numeric"
                         maxLength={1}
                         className={`
-                          w-12 h-14 text-center text-xl font-bold rounded-xl border-2 transition-all duration-200
+                          w-10 sm:w-12 h-12 sm:h-14 text-center text-lg sm:text-xl font-bold rounded-xl border-2 transition-all duration-200
                           ${d
                             ? 'border-brand-400 bg-brand-50/30 text-brand-700 ring-2 ring-brand-200/40'
                             : 'border-stone-200 bg-stone-50 focus:bg-white focus:border-brand-400 focus:ring-2 focus:ring-brand-200/40'
