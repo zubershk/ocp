@@ -159,7 +159,7 @@ export default function Navbar() {
               {/* Mobile menu toggle */}
               <button
                 onClick={() => setOpen(!open)}
-                className="lg:hidden p-2 rounded-xl hover:bg-stone-50 transition-colors"
+                className="lg:hidden p-2.5 rounded-xl hover:bg-stone-50 transition-colors touch-target"
                 aria-label="Toggle menu"
               >
                 {open ? <X size={20} /> : <Menu size={20} />}
@@ -242,11 +242,11 @@ export default function Navbar() {
               </nav>
 
               {/* CTA at bottom */}
-              <div className="p-4 border-t border-stone-100">
+              <div className="p-4 border-t border-stone-100 safe-bottom">
                 <Link
                   to="/r/menu"
                   onClick={() => setOpen(false)}
-                  className="flex items-center justify-center gap-2 w-full py-3 rounded-xl text-white font-semibold hover:opacity-90 transition-all duration-200 shadow-sm"
+                  className="flex items-center justify-center gap-2 w-full py-3.5 rounded-xl text-white font-semibold hover:opacity-90 transition-all duration-200 shadow-sm touch-target"
                   style={{ backgroundColor: brand.primaryColor }}
                 >
                   Order Now
