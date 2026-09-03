@@ -228,7 +228,7 @@ export default function Home() {
                   </span>
                   <button
                     onClick={() => quickAdd(item, addItem, push)}
-                    className="flex items-center gap-1 text-xs bg-brand-600 text-white px-3.5 py-1.5 rounded-lg font-semibold hover:bg-brand-700 active:scale-95 transition-all duration-150 cursor-pointer"
+                    className="flex items-center gap-1 text-xs bg-brand-600 text-white px-3.5 py-2 rounded-lg font-semibold hover:bg-brand-700 active:scale-95 transition-all duration-150 cursor-pointer touch-target"
                   >
                     <Plus size={12} /> ADD
                   </button>
