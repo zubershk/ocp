@@ -57,7 +57,7 @@ export default function AdminBrand() {
 
   const saveMut = useMutation({
     mutationFn: (body: BrandSettings) =>
-      adminFetch('/admin/site-settings/brand', { method: 'PUT', body: JSON.stringify(body) }),
+      adminFetch('/admin/site-settings/brand', { method: 'PUT', body: JSON.stringify({ value: body }) }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-brand'] }); toast.push({ type: 'success', title: 'Brand settings saved' }); },
   });
 
@@ -76,13 +76,15 @@ export default function AdminBrand() {
   }
 
   const handleUpload = async (f: File, field: 'logo_url' | 'favicon_url') => {
+    if (!f.type.startsWith('image/')) { toast.push({ type: 'warning', title: 'Please choose an image file' }); return; }
+    if (f.size > 10 << 20) { toast.push({ type: 'warning', title: 'Image too large — max 10MB' }); return; }
     try {
       setUploading(true);
       const fd = new FormData();
       fd.append('image', f);
       const res = await fetch('/admin/upload', {
         method: 'POST',
-        headers: { 'X-Admin-Key': localStorage.getItem('ocp_admin_key') || '' },
+        headers: { 'X-Admin-Key': getAdminKey() },
         body: fd,
       });
       const data = await res.json();
@@ -127,7 +129,7 @@ export default function AdminBrand() {
                         className="mt-1"
                       />
                     </div>
-                    <input type="file" ref={logoFileRef} accept="image/jpeg,image/png,image/webp,image/gif" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(f, 'logo_url'); }} />
+                    <input type="file" ref={logoFileRef} accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(f, 'logo_url'); }} />
                     <Button type="button" disabled={uploading} onClick={() => logoFileRef.current?.click()} className="h-[42px]"><Upload size={14} />{uploading ? '…' : 'Upload'}</Button>
                   </div>
                 </div>
@@ -142,7 +144,7 @@ export default function AdminBrand() {
                         className="mt-1"
                       />
                     </div>
-                    <input type="file" ref={faviconFileRef} accept="image/jpeg,image/png,image/webp,image/gif" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(f, 'favicon_url'); }} />
+                    <input type="file" ref={faviconFileRef} accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(f, 'favicon_url'); }} />
                     <Button type="button" disabled={uploading} onClick={() => faviconFileRef.current?.click()} className="h-[42px]"><Upload size={14} />{uploading ? '…' : 'Upload'}</Button>
                   </div>
                 </div>
