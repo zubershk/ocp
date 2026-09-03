@@ -52,6 +52,7 @@ export default function Footer() {
                 { label: 'Offers', to: '/r/offers' },
                 { label: 'Locations', to: '/r/locations' },
                 { label: 'About', to: '/r/about' },
+                { label: 'Reviews', to: '/r/reviews' },
                 { label: 'FAQ', to: '/r/faq' },
                 { label: 'Contact', to: '/r/contact' },
               ].map((link) => (

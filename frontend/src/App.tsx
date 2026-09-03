@@ -14,6 +14,7 @@ import About from './pages/About';
 import Offers from './pages/Offers';
 import Locations from './pages/Locations';
 import FAQ from './pages/FAQ';
+import Reviews from './pages/Reviews';
 import Contact from './pages/Contact';
 import Privacy from './pages/Privacy';
 import Terms from './pages/Terms';
@@ -106,6 +107,7 @@ function AppRoutes() {
       <Route path="/r/locations" element={<PageShell><Layout><Locations /></Layout></PageShell>} />
       <Route path="/r/about" element={<PageShell><Layout><About /></Layout></PageShell>} />
       <Route path="/r/faq" element={<PageShell><Layout><FAQ /></Layout></PageShell>} />
+      <Route path="/r/reviews" element={<PageShell><Layout><Reviews /></Layout></PageShell>} />
       <Route path="/r/contact" element={<PageShell><Layout><Contact /></Layout></PageShell>} />
       <Route path="/r/privacy" element={<PageShell><Layout><Privacy /></Layout></PageShell>} />
       <Route path="/r/terms" element={<PageShell><Layout><Terms /></Layout></PageShell>} />
