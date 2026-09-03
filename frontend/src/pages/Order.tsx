@@ -1,6 +1,6 @@
 import { useParams, Link } from 'react-router-dom';
 import { useEffect, useState, useRef } from 'react';
-import { PartyPopper, RefreshCw } from 'lucide-react';
+import { PartyPopper, RefreshCw, Star, Send, CheckCircle } from 'lucide-react';
 import { orderService, type OrderView } from '../services/orderService';
 import { useRestaurantPhone, useDeliveryHours } from '../context/RestaurantContext';
 import { useGsapFadeIn } from '../hooks/useGsap';
@@ -59,6 +59,43 @@ export default function Order() {
   const waNumber = restaurantPhone;
   const isLive = !['delivered', 'cancelled'].includes(order.status);
 
+  const stepTime: Record<string, string> = {};
+  for (const e of order.events ?? []) {
+    if (orderSteps.includes(e.eventType) && !stepTime[e.eventType]) {
+      stepTime[e.eventType] = e.createdAt;
+    }
+  }
+  const fmtTime = (iso?: string) =>
+    iso ? new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : undefined;
+
+  const [rating, setRating] = useState(0);
+  const [hoverRating, setHoverRating] = useState(0);
+  const [reviewTitle, setReviewTitle] = useState('');
+  const [reviewBody, setReviewBody] = useState('');
+  const [itemRatings, setItemRatings] = useState<Record<string, number>>({});
+  const [reviewState, setReviewState] = useState<'idle' | 'sending' | 'done' | 'error'>('idle');
+  const [reviewError, setReviewError] = useState('');
+
+  const submitReview = async () => {
+    if (rating < 1) { setReviewError('Please tap a star rating first.'); return; }
+    setReviewState('sending');
+    setReviewError('');
+    try {
+      await orderService.submitReview(id!, order.id, {
+        rating,
+        title: reviewTitle.trim(),
+        body: reviewBody.trim(),
+        item_ratings: Object.entries(itemRatings)
+          .filter(([, r]) => r >= 1)
+          .map(([item_slug, r]) => ({ item_slug, rating: r })),
+      });
+      setReviewState('done');
+    } catch (e) {
+      setReviewState('error');
+      setReviewError(e instanceof Error ? e.message : 'Could not submit review.');
+    }
+  };
+
   return (
     <div className="container-page py-8">
       <div ref={titleRef} className="max-w-3xl mx-auto">
@@ -103,7 +140,7 @@ export default function Order() {
                     </div>
                     <div className={active ? 'text-zinc-900' : 'text-zinc-400'}>
                       <div className={`text-sm font-semibold ${isCurrent ? 'text-brand-600' : ''}`}>{labels[s]}</div>
-                      <div className="text-xs">{stepHints[i]}</div>
+                      <div className="text-xs">{stepHints[i]}{fmtTime(stepTime[s]) ? ` · ${fmtTime(stepTime[s])}` : ''}</div>
                     </div>
                     {isCurrent && <span className="ml-auto text-xs px-2 py-1 rounded-full bg-zinc-900 text-white h-fit">now</span>}
                   </div>
@@ -149,6 +186,86 @@ export default function Order() {
               <div className="flex justify-between font-bold text-base"><span>Total (incl. tax)</span><span>₹{order.total}</span></div>
             </div>
           </div>
+
+          {order.status === 'delivered' && (
+            <div className="mt-6 border-t border-stone-100 pt-6">
+              <h3 className="font-heading font-semibold">Rate your order</h3>
+              {reviewState === 'done' ? (
+                <p className="mt-3 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 flex items-center gap-2">
+                  <CheckCircle size={16} /> Thanks! Your review is awaiting moderation.
+                </p>
+              ) : (
+                <div className="mt-3">
+                  <div className="flex items-center gap-1" role="radiogroup" aria-label="Overall rating">
+                    {[1, 2, 3, 4, 5].map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => setRating(s)}
+                        onMouseEnter={() => setHoverRating(s)}
+                        onMouseLeave={() => setHoverRating(0)}
+                        className="p-1 cursor-pointer"
+                        aria-label={`${s} star${s > 1 ? 's' : ''}`}
+                      >
+                        <Star
+                          size={26}
+                          className={(hoverRating || rating) >= s ? 'fill-amber-400 text-amber-400' : 'text-stone-300'}
+                        />
+                      </button>
+                    ))}
+                  </div>
+                  {order.items.filter((it) => it.slug).length > 0 && (
+                    <div className="mt-3 space-y-2">
+                      {order.items.filter((it) => it.slug).map((it, idx) => (
+                        <div key={`${it.slug}-${idx}`} className="flex items-center justify-between gap-3 text-sm">
+                          <span className="text-zinc-600 truncate">{it.name}</span>
+                          <span className="flex items-center gap-0.5 shrink-0">
+                            {[1, 2, 3, 4, 5].map((s) => (
+                              <button
+                                key={s}
+                                type="button"
+                                onClick={() => setItemRatings((m) => ({ ...m, [it.slug!]: s }))}
+                                className="p-0.5 cursor-pointer"
+                                aria-label={`Rate ${it.name} ${s} stars`}
+                              >
+                                <Star
+                                  size={16}
+                                  className={(itemRatings[it.slug!] ?? 0) >= s ? 'fill-amber-400 text-amber-400' : 'text-stone-300'}
+                                />
+                              </button>
+                            ))}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <input
+                    value={reviewTitle}
+                    onChange={(e) => setReviewTitle(e.target.value)}
+                    placeholder="Headline (optional)"
+                    maxLength={120}
+                    className="mt-3 w-full px-3 py-2 rounded-xl border border-stone-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  />
+                  <textarea
+                    value={reviewBody}
+                    onChange={(e) => setReviewBody(e.target.value)}
+                    placeholder="How was the food? (optional)"
+                    rows={3}
+                    maxLength={2000}
+                    className="mt-2 w-full px-3 py-2 rounded-xl border border-stone-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  />
+                  {reviewError && <p className="mt-2 text-xs text-red-600">{reviewError}</p>}
+                  <button
+                    onClick={submitReview}
+                    disabled={reviewState === 'sending'}
+                    className="mt-3 inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-brand-600 text-white text-sm font-semibold hover:bg-brand-700 disabled:opacity-50 transition cursor-pointer"
+                  >
+                    <Send size={14} /> {reviewState === 'sending' ? 'Sending…' : 'Submit review'}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="mt-6 flex gap-2">
             <Link to="/r/menu" className="flex-1 py-3 rounded-xl bg-zinc-900 text-white text-center font-semibold hover:bg-zinc-800 transition-colors">Order Again</Link>
