@@ -22,7 +22,7 @@ export default function Footer() {
   return (
     <footer className="bg-zinc-950 text-zinc-400">
       <div className="container-page py-12 sm:py-16">
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-10 lg:gap-8">
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8 lg:gap-10">
           {/* Brand */}
           <div className="lg:col-span-1">
             <div className="flex items-center gap-2.5 text-white mb-4">
