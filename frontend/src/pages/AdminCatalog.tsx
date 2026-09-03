@@ -6,6 +6,13 @@ import { adminFetch, getAdminKey } from '../services/api';
 import { apiGet } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
+import AdminSubNav from '../components/layout/AdminSubNav';
+import { Card, CardContent } from '@/components/shadcn/card';
+import { Button } from '@/components/shadcn/button';
+import { Input } from '@/components/shadcn/input';
+import { Badge } from '@/components/shadcn/badge';
+import { Skeleton } from '@/components/shadcn/skeleton';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/shadcn/dialog';
 
 // Types mirroring backend
 interface Category { id: number; name: string; slug: string; sort_order: number; active: boolean; }
@@ -191,11 +198,11 @@ export default function AdminCatalog() {
   if (!authed) {
     return (
       <div className="max-w-md mx-auto px-4 py-16 text-center">
-        <div className="bg-white rounded-2xl border p-8">
+        <Card className="p-8">
           <Pizza size={24} className="mx-auto text-orange-600" />
           <h1 className="font-bold mt-3">Menu Studio</h1>
           <p className="text-sm text-zinc-500 mt-1">Sign in via <Link to="/admin" className="text-orange-600 underline">Order Board</Link> with admin key first.</p>
-        </div>
+        </Card>
       </div>
     );
   }
@@ -205,29 +212,21 @@ export default function AdminCatalog() {
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2"><Pizza size={20} className="text-orange-600" /> Menu Studio <span className="text-xs px-2 py-1 rounded-full bg-zinc-900 text-white">Bot + Site sync</span></h1>
+          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2"><Pizza size={20} className="text-orange-600" /> Menu Studio <Badge>Bot + Site sync</Badge></h1>
           <p className="text-sm text-zinc-500 mt-1">Edit once — live on website and WhatsApp instantly. Images via <code className="px-1 py-0.5 bg-zinc-100 rounded text-xs">/uploads</code>.</p>
         </div>
-        <button onClick={openCreate} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-900 text-white text-sm font-semibold hover:bg-black"><Plus size={16} /> New item</button>
+        <Button onClick={openCreate} className="inline-flex items-center gap-2"><Plus size={16} /> New item</Button>
       </div>
 
       {/* Sub-nav */}
-      <div className="flex gap-1 p-1 bg-zinc-100 rounded-xl w-fit text-sm flex-wrap">
-        <Link to="/admin" className="px-3 py-1.5 rounded-full hover:bg-white">Orders</Link>
-        <span className="px-3 py-1.5 rounded-full bg-zinc-900 text-white font-semibold">Menu</span>
-        <Link to="/admin/chats" className="px-3 py-1.5 rounded-full hover:bg-white">Chats</Link>
-        <Link to="/admin/settings" className="px-3 py-1.5 rounded-full hover:bg-white">Settings</Link>
-        <Link to="/admin/analytics" className="px-3 py-1.5 rounded-full hover:bg-white">Analytics</Link>
-        <Link to="/admin/team" className="px-3 py-1.5 rounded-full hover:bg-white">Team</Link>
-        <Link to="/admin/logs" className="px-3 py-1.5 rounded-full hover:bg-white">Audit</Link>
-      </div>
+      <AdminSubNav activeOverride="/admin/catalog" />
 
       {/* Stats */}
       <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="bg-white border rounded-2xl p-4"><div className="text-[11px] tracking-wide font-semibold text-zinc-500">Items</div><div className="text-2xl font-bold">{items.length}</div></div>
-        <div className="bg-white border rounded-2xl p-4"><div className="text-[11px] tracking-wide font-semibold text-zinc-500">Categories</div><div className="text-2xl font-bold">{categories.length}</div></div>
-        <div className="bg-white border rounded-2xl p-4"><div className="text-[11px] tracking-wide font-semibold text-zinc-500">Available</div><div className="text-2xl font-bold">{items.filter((i) => i.available).length}</div></div>
-        <div className="bg-white border rounded-2xl p-4 flex flex-col justify-center"><div className="text-xs text-zinc-500 inline-flex items-center gap-1"><Sparkles size={12} /> Live preview at <Link to="/r/menu" className="text-orange-600 underline">/r/menu</Link></div></div>
+        <Card className="p-4"><div className="text-[11px] tracking-wide font-semibold text-zinc-500">Items</div><div className="text-2xl font-bold">{items.length}</div></Card>
+        <Card className="p-4"><div className="text-[11px] tracking-wide font-semibold text-zinc-500">Categories</div><div className="text-2xl font-bold">{categories.length}</div></Card>
+        <Card className="p-4"><div className="text-[11px] tracking-wide font-semibold text-zinc-500">Available</div><div className="text-2xl font-bold">{items.filter((i) => i.available).length}</div></Card>
+        <Card className="p-4 flex flex-col justify-center"><div className="text-xs text-zinc-500 inline-flex items-center gap-1"><Sparkles size={12} /> Live preview at <Link to="/r/menu" className="text-orange-600 underline">/r/menu</Link></div></Card>
       </div>
 
       {/* Filters */}
@@ -241,7 +240,7 @@ export default function AdminCatalog() {
         <div className="flex items-center gap-2">
           <div className="relative">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name or slug…" className="pl-9 pr-3 py-2.5 rounded-xl border bg-zinc-50 focus:bg-white text-sm w-56" />
+            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name or slug…" className="pl-9 pr-3 py-2.5 bg-zinc-50 focus:bg-white text-sm w-56" />
           </div>
           <select value={dietFilter} onChange={(e) => setDietFilter(e.target.value)} className="px-3 py-2.5 rounded-xl border bg-white text-sm">
             <option value="all">All diets</option>
@@ -255,73 +254,72 @@ export default function AdminCatalog() {
 
       {/* Grid */}
       {menuQuery.isLoading ? (
-        <div className="mt-6 grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">{[0, 1, 2, 3, 4, 5, 6, 7].map((i) => <div key={i} className="h-64 bg-white border rounded-2xl animate-pulse" />)}</div>
+        <div className="mt-6 grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">{[0, 1, 2, 3, 4, 5, 6, 7].map((i) => <Skeleton key={i} className="h-64 rounded-2xl" />)}</div>
       ) : filtered.length === 0 ? (
-        <div className="mt-6 bg-white border rounded-2xl py-12 text-center px-4">
+        <Card className="mt-6 py-12 text-center px-4">
           <ImageIcon size={24} className="mx-auto text-zinc-300" />
           <p className="font-semibold mt-2">No items</p><p className="text-sm text-zinc-500">Try different filters or create a new pizza.</p>
-        </div>
+        </Card>
       ) : (
         <div className="mt-6 grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {filtered.map((it) => (
-            <div key={it.id} className="bg-white border rounded-2xl overflow-hidden flex flex-col group">
+            <Card key={it.id} className="overflow-hidden flex flex-col group">
               <div className="aspect-[4/3] bg-zinc-50 relative overflow-hidden">
                 {it.image_url ? <img src={it.image_url} alt={it.name} className="w-full h-full object-cover group-hover:scale-[1.02] transition" loading="lazy" /> : <div className="w-full h-full grid place-items-center text-zinc-300"><ImageIcon size={28} /></div>}
                 <div className="absolute top-2 left-2 flex gap-1">
-                  <span className={`text-[10px] px-2 py-1 rounded-full font-bold border ${it.available ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-red-50 border-red-200 text-red-700'}`}>{it.available ? 'Available' : 'Hidden'}</span>
-                  {it.is_new && <span className="text-[10px] px-2 py-1 rounded-full bg-orange-600 text-white font-bold">New</span>}
+                  <Badge variant={it.available ? 'default' : 'destructive'}>{it.available ? 'Available' : 'Hidden'}</Badge>
+                  {it.is_new && <Badge className="bg-orange-600 text-white">New</Badge>}
                 </div>
                 <div className="absolute top-2 right-2 flex gap-1">
-                  <button onClick={() => openEdit(it)} className="w-8 h-8 rounded-full bg-white/90 backdrop-blur border grid place-items-center hover:bg-white"><Pencil size={14} /></button>
-                  <button onClick={() => setConfirmDelete({ id: it.id, name: it.name })} className="w-8 h-8 rounded-full bg-white/90 backdrop-blur border grid place-items-center hover:bg-red-50 text-red-600"><Trash2 size={14} /></button>
+                  <Button variant="ghost" size="icon" onClick={() => openEdit(it)} className="w-8 h-8 rounded-full bg-white/90 backdrop-blur border grid place-items-center hover:bg-white"><Pencil size={14} /></Button>
+                  <Button variant="ghost" size="icon" onClick={() => setConfirmDelete({ id: it.id, name: it.name })} className="w-8 h-8 rounded-full bg-white/90 backdrop-blur border grid place-items-center hover:bg-red-50 text-red-600"><Trash2 size={14} /></Button>
                 </div>
               </div>
-              <div className="p-4 flex-1 flex flex-col">
+              <CardContent className="p-4 flex-1 flex flex-col">
                 <div className="flex items-start justify-between gap-2">
                   <h3 className="font-semibold leading-tight line-clamp-1">{it.name}</h3>
                   <span className="text-xs font-mono text-zinc-500">#{it.id}</span>
                 </div>
                 <p className="text-xs text-zinc-500 line-clamp-2 mt-1 min-h-[32px]">{it.description || '—'}</p>
                 <div className="flex flex-wrap gap-1 mt-2">
-                  <span className="text-[10px] px-2 py-1 rounded-full bg-zinc-100 border font-semibold">{it.dietary || 'veg'}</span>
-                  {it.is_spicy && <span className="text-[10px] px-2 py-1 rounded-full bg-red-50 border border-red-200 text-red-700 font-bold">Spicy</span>}
-                  {it.is_jain && <span className="text-[10px] px-2 py-1 rounded-full bg-green-50 border text-green-700">Jain</span>}
-                  <span className="text-[10px] px-2 py-1 rounded-full bg-white border">{it.pizza_subcategory || 'classic'}</span>
+                  <Badge variant="secondary">{it.dietary || 'veg'}</Badge>
+                  {it.is_spicy && <Badge className="bg-red-50 border border-red-200 text-red-700">Spicy</Badge>}
+                  {it.is_jain && <Badge className="bg-green-50 border text-green-700">Jain</Badge>}
+                  <Badge variant="outline">{it.pizza_subcategory || 'classic'}</Badge>
                 </div>
                 <div className="mt-3">
                   <div className="text-sm font-bold">₹{it.price} {it.price_by_size && <span className="text-xs font-normal text-zinc-500">· {Object.entries(it.price_by_size).map(([k, v]) => `${k[0].toUpperCase()}:₹${v}`).join(' ')}</span>}</div>
                   <div className="text-[11px] text-zinc-400 font-mono truncate">{it.slug}</div>
                 </div>
                 <div className="mt-3 flex gap-2">
-                  <button onClick={() => openEdit(it)} className="flex-1 py-2 rounded-xl bg-zinc-900 text-white text-xs font-semibold hover:bg-black inline-flex items-center justify-center gap-1"><Pencil size={12} /> Edit</button>
-                  <button onClick={async () => {
+                  <Button onClick={() => openEdit(it)} className="flex-1 inline-flex items-center justify-center gap-1"><Pencil size={12} /> Edit</Button>
+                  <Button variant={it.available ? 'outline' : 'default'} onClick={async () => {
                     const next = !it.available;
                     try { await adminFetch(`/admin/menu/${it.id}`, { method: 'PUT', body: JSON.stringify({ available: next }) }); qc.invalidateQueries({ queryKey: ['catalog-menu'] }); } catch {}
-                  }} className={`px-3 py-2 rounded-xl border text-xs font-semibold ${it.available ? 'bg-white hover:bg-zinc-50' : 'bg-emerald-600 text-white border-emerald-600'}`}>{it.available ? <><EyeOff size={12} /> Hide</> : <><Eye size={12} /> Show</>}</button>
+                  }} className={it.available ? '' : 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700'}>{it.available ? <><EyeOff size={12} /> Hide</> : <><Eye size={12} /> Show</>}</Button>
                 </div>
-              </div>
-            </div>
+              </CardContent>
+            </Card>
           ))}
         </div>
       )}
 
       {/* Modal */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" onClick={() => setShowModal(false)}>
-          <form onSubmit={onSubmit} onClick={(e) => e.stopPropagation()} className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-auto">
-            <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
-              <h2 className="font-bold">{editing ? `Edit #${editing.id}` : 'New item'}</h2>
-              <button type="button" onClick={() => setShowModal(false)} className="w-8 h-8 rounded-full hover:bg-zinc-100 grid place-items-center"><X size={16} /></button>
-            </div>
-            <div className="p-6 space-y-4">
+      <Dialog open={showModal} onOpenChange={setShowModal}>
+        <DialogContent className="sm:max-w-2xl" onClick={(e) => e.stopPropagation()}>
+          <form onSubmit={onSubmit}>
+            <DialogHeader>
+              <DialogTitle>{editing ? `Edit #${editing.id}` : 'New item'}</DialogTitle>
+            </DialogHeader>
+            <div className="py-4 space-y-4">
               <div className="grid sm:grid-cols-2 gap-4">
                 <div className="sm:col-span-2">
                   <label className="text-xs font-semibold">Name *</label>
-                  <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value, slug: form.slug || slugify(e.target.value) })} className="mt-1 w-full px-3 py-2.5 rounded-xl border" placeholder="Cheese & Tomato" required />
+                  <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value, slug: form.slug || slugify(e.target.value) })} placeholder="Cheese & Tomato" className="mt-1" required />
                 </div>
                 <div>
                   <label className="text-xs font-semibold">Slug</label>
-                  <input value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value })} className="mt-1 w-full px-3 py-2.5 rounded-xl border font-mono text-sm" placeholder="cheese-tomato" />
+                  <Input value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value })} className="mt-1 font-mono text-sm" placeholder="cheese-tomato" />
                 </div>
                 <div>
                   <label className="text-xs font-semibold">Category *</label>
@@ -336,15 +334,15 @@ export default function AdminCatalog() {
                 </div>
                 <div>
                   <label className="text-xs font-semibold">Price (base) *</label>
-                  <input type="number" step="0.01" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} className="mt-1 w-full px-3 py-2.5 rounded-xl border" placeholder="205" required />
+                  <Input type="number" step="0.01" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} className="mt-1" placeholder="205" required />
                 </div>
                 <div>
                   <label className="text-xs font-semibold">Sort order</label>
-                  <input type="number" value={form.sort_order} onChange={(e) => setForm({ ...form, sort_order: e.target.value })} className="mt-1 w-full px-3 py-2.5 rounded-xl border" />
+                  <Input type="number" value={form.sort_order} onChange={(e) => setForm({ ...form, sort_order: e.target.value })} className="mt-1" />
                 </div>
-                <div><label className="text-xs font-semibold">Regular price</label><input type="number" step="0.01" value={form.price_regular} onChange={(e) => setForm({ ...form, price_regular: e.target.value })} className="mt-1 w-full px-3 py-2.5 rounded-xl border" placeholder="205" /></div>
-                <div><label className="text-xs font-semibold">Medium price</label><input type="number" step="0.01" value={form.price_medium} onChange={(e) => setForm({ ...form, price_medium: e.target.value })} className="mt-1 w-full px-3 py-2.5 rounded-xl border" placeholder="385" /></div>
-                <div><label className="text-xs font-semibold">Large price</label><input type="number" step="0.01" value={form.price_large} onChange={(e) => setForm({ ...form, price_large: e.target.value })} className="mt-1 w-full px-3 py-2.5 rounded-xl border" placeholder="615" /></div>
+                <div><label className="text-xs font-semibold">Regular price</label><Input type="number" step="0.01" value={form.price_regular} onChange={(e) => setForm({ ...form, price_regular: e.target.value })} className="mt-1" placeholder="205" /></div>
+                <div><label className="text-xs font-semibold">Medium price</label><Input type="number" step="0.01" value={form.price_medium} onChange={(e) => setForm({ ...form, price_medium: e.target.value })} className="mt-1" placeholder="385" /></div>
+                <div><label className="text-xs font-semibold">Large price</label><Input type="number" step="0.01" value={form.price_large} onChange={(e) => setForm({ ...form, price_large: e.target.value })} className="mt-1" placeholder="615" /></div>
                 <div>
                   <label className="text-xs font-semibold">Dietary</label>
                   <select value={form.dietary} onChange={(e) => setForm({ ...form, dietary: e.target.value })} className="mt-1 w-full px-3 py-2.5 rounded-xl border bg-white"><option value="veg">veg</option><option value="nonveg">nonveg</option><option value="egg">egg</option></select>
@@ -352,16 +350,16 @@ export default function AdminCatalog() {
                 <div className="sm:col-span-2">
                   <label className="text-xs font-semibold">Image</label>
                   <div className="mt-1 flex gap-2">
-                    <input value={form.image_url} onChange={(e) => setForm({ ...form, image_url: e.target.value })} placeholder="https://… or /uploads/xxx.jpg" className="flex-1 px-3 py-2.5 rounded-xl border text-sm" />
+                    <Input value={form.image_url} onChange={(e) => setForm({ ...form, image_url: e.target.value })} placeholder="https://… or /uploads/xxx.jpg" className="flex-1 text-sm" />
                     <input type="file" ref={fileRef} accept="image/jpeg,image/png,image/webp,image/gif" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(f); }} />
-                    <button type="button" disabled={uploading} onClick={() => fileRef.current?.click()} className="px-4 py-2.5 rounded-xl bg-zinc-900 text-white text-sm font-semibold hover:bg-black disabled:opacity-50 inline-flex items-center gap-2"><Upload size={14} />{uploading ? '…' : 'Upload'}</button>
+                    <Button type="button" disabled={uploading} onClick={() => fileRef.current?.click()} className="inline-flex items-center gap-2"><Upload size={14} />{uploading ? '…' : 'Upload'}</Button>
                   </div>
                   {form.image_url && <img src={form.image_url} alt="preview" className="mt-2 w-full h-40 object-cover rounded-xl border bg-zinc-50" />}
                   <p className="text-[11px] text-zinc-400 mt-1">JPG/PNG/WEBP ≤5MB. Uploaded to <code className="px-1 bg-zinc-100 rounded">/uploads</code> — served to site + bot.</p>
                 </div>
                 <div>
                   <label className="text-xs font-semibold">Subcategory</label>
-                  <input value={form.pizza_subcategory} onChange={(e) => setForm({ ...form, pizza_subcategory: e.target.value })} className="mt-1 w-full px-3 py-2.5 rounded-xl border" placeholder="classic / premium" />
+                  <Input value={form.pizza_subcategory} onChange={(e) => setForm({ ...form, pizza_subcategory: e.target.value })} className="mt-1" placeholder="classic / premium" />
                 </div>
                 <div className="flex flex-col gap-2 pt-6">
                   <label className="inline-flex items-center gap-2 text-sm"><input type="checkbox" checked={form.is_spicy} onChange={(e) => setForm({ ...form, is_spicy: e.target.checked })} /> Spicy</label>
@@ -372,13 +370,13 @@ export default function AdminCatalog() {
               </div>
               {(createMut.isError || updateMut.isError) && <div className="px-3 py-2 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700 flex gap-2"><AlertTriangle size={14} />{(createMut.error as Error)?.message ?? (updateMut.error as Error)?.message}</div>}
             </div>
-            <div className="sticky bottom-0 bg-white border-t px-6 py-4 flex gap-2 justify-end">
-              <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2.5 rounded-xl border hover:bg-zinc-50">Cancel</button>
-              <button type="submit" disabled={createMut.isPending || updateMut.isPending} className="px-5 py-2.5 rounded-xl bg-orange-600 text-white font-semibold hover:bg-orange-700 disabled:opacity-50 inline-flex items-center gap-2"><Check size={16} />{editing ? 'Save' : 'Create'}</button>
-            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setShowModal(false)}>Cancel</Button>
+              <Button type="submit" disabled={createMut.isPending || updateMut.isPending} className="bg-orange-600 text-white hover:bg-orange-700 inline-flex items-center gap-2"><Check size={16} />{editing ? 'Save' : 'Create'}</Button>
+            </DialogFooter>
           </form>
-        </div>
-      )}
+        </DialogContent>
+      </Dialog>
       {confirmDelete && (
         <ConfirmDialog
           open
