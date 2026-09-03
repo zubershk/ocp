@@ -121,7 +121,7 @@ export default function Checkout() {
 
   return (
     <div className="container-page py-8">
-      <div className="grid lg:grid-cols-3 gap-8">
+      <div className="grid lg:grid-cols-3 gap-6 lg:gap-8">
         <form onSubmit={onSubmit} noValidate className="lg:col-span-2 space-y-6">
           {/* Step indicator */}
           <nav className="flex items-center gap-1 sm:gap-2 text-sm overflow-x-auto" aria-label="Checkout progress">
