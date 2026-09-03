@@ -316,6 +316,7 @@ func (h *AdminHandler) CreateMenuItem(c *gin.Context) {
 		IsSpicy          *bool    `json:"is_spicy"`
 		IsJain           *bool    `json:"is_jain"`
 		IsNew            *bool    `json:"is_new"`
+		NoCrust          *bool    `json:"no_crust"`
 		Available        *bool    `json:"available"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -357,6 +358,10 @@ func (h *AdminHandler) CreateMenuItem(c *gin.Context) {
 	if req.IsNew != nil {
 		isNew = *req.IsNew
 	}
+	noCrust := false
+	if req.NoCrust != nil {
+		noCrust = *req.NoCrust
+	}
 	available := true
 	if req.Available != nil {
 		available = *req.Available
@@ -364,13 +369,13 @@ func (h *AdminHandler) CreateMenuItem(c *gin.Context) {
 	err := database.DB.QueryRow(`
 		INSERT INTO menu_items
 		(category_id, name, slug, description, price, price_regular, price_medium, price_large,
-		 image_url, available, sort_order, active, dietary, pizza_subcategory, pizza_type, is_spicy, is_jain, is_new)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,true,$12,$13,$14,$15,$16,$17)
+		 image_url, available, sort_order, active, dietary, pizza_subcategory, pizza_type, is_spicy, is_jain, is_new, no_crust)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,true,$12,$13,$14,$15,$16,$17,$18)
 		RETURNING id
 	`, req.CategoryID, req.Name, slug, req.Description, req.Price,
 		req.PriceRegular, req.PriceMedium, req.PriceLarge,
 		req.ImageURL, available, req.SortOrder,
-		dietary, req.PizzaSubcategory, req.PizzaType, isSpicy, isJain, isNew).Scan(&id)
+		dietary, req.PizzaSubcategory, req.PizzaType, isSpicy, isJain, isNew, noCrust).Scan(&id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
@@ -429,6 +434,7 @@ func (h *AdminHandler) UpdateMenuItem(c *gin.Context) {
 		IsSpicy          *bool    `json:"is_spicy"`
 		IsJain           *bool    `json:"is_jain"`
 		IsNew            *bool    `json:"is_new"`
+		NoCrust          *bool    `json:"no_crust"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
@@ -508,6 +514,10 @@ func (h *AdminHandler) UpdateMenuItem(c *gin.Context) {
 	if req.IsNew != nil {
 		isNew = *req.IsNew
 	}
+	noCrust := existing.NoCrust
+	if req.NoCrust != nil {
+		noCrust = *req.NoCrust
+	}
 	// price variants — keep existing if not provided; BuildPriceBySize will handle nil vs 0
 	var pr, pm, pl *float64
 	if req.PriceRegular != nil {
@@ -530,10 +540,10 @@ func (h *AdminHandler) UpdateMenuItem(c *gin.Context) {
 		category_id=$2, name=$3, slug=$4, description=$5, price=$6,
 		price_regular=$7, price_medium=$8, price_large=$9,
 		image_url=$10, available=$11, sort_order=$12, dietary=$13,
-		pizza_subcategory=$14, pizza_type=$15, is_spicy=$16, is_jain=$17, is_new=$18,
+		pizza_subcategory=$14, pizza_type=$15, is_spicy=$16, is_jain=$17, is_new=$18, no_crust=$19,
 		updated_at=CURRENT_TIMESTAMP
 		WHERE id=$1
-	`, id, catID, name, slug, desc, price, pr, pm, pl, img, available, sortOrder, dietary, subcat, ptype, isSpicy, isJain, isNew)
+	`, id, catID, name, slug, desc, price, pr, pm, pl, img, available, sortOrder, dietary, subcat, ptype, isSpicy, isJain, isNew, noCrust)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
@@ -595,8 +605,8 @@ func (h *AdminHandler) UploadImage(c *gin.Context) {
 		return
 	}
 	defer file.Close()
-	if header.Size > 5<<20 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "image too large — max 5MB"})
+	if header.Size > 10<<20 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "image too large — max 10MB"})
 		return
 	}
 	// sniff type
@@ -607,11 +617,26 @@ func (h *AdminHandler) UploadImage(c *gin.Context) {
 		return
 	}
 	ct := http.DetectContentType(buf[:n])
-	allowed := map[string]string{"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp", "image/gif": ".gif"}
+	allowed := map[string]string{
+		"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp",
+		"image/gif": ".gif", "image/bmp": ".bmp", "image/svg+xml": ".svg",
+		"image/x-icon": ".ico", "image/vnd.microsoft.icon": ".ico",
+		"image/avif": ".avif", "image/heic": ".heic", "image/heif": ".heif",
+		"image/tiff": ".tiff",
+	}
 	ext, ok := allowed[ct]
 	if !ok {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "unsupported image type — use jpg, png, webp or gif"})
-		return
+		// fall back to the client-provided extension for any other image/* type
+		if len(ct) > 6 && ct[:6] == "image/" {
+			feo := filepath.Ext(header.Filename)
+			if feo == "" {
+				feo = ".jpg"
+			}
+			ext = feo
+		} else {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "file is not an image"})
+			return
+		}
 	}
 	// ensure dir
 	dir := "./uploads"

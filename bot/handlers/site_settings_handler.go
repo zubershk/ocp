@@ -136,16 +136,16 @@ func (h *SiteSettingsHandler) UpdateSiteSetting(c *gin.Context) {
 		return
 	}
 	var req struct {
-		Value interface{} `json:"value" binding:"required"`
+		Value *json.RawMessage `json:"value"`
 	}
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil || req.Value == nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
 	_, err := database.DB.Exec(
 		`INSERT INTO site_settings (key, value) VALUES ($1, $2::jsonb)
 		 ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=NOW()`,
-		key, req.Value,
+		key, []byte(*req.Value),
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update setting"})
@@ -434,16 +434,17 @@ func (h *SiteSettingsHandler) GetOffers(c *gin.Context) {
 
 func (h *SiteSettingsHandler) UpdateOffers(c *gin.Context) {
 	var req struct {
-		Offers interface{} `json:"offers" binding:"required"`
+		Offers *json.RawMessage `json:"offers"`
 	}
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil || req.Offers == nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
+	raw := []byte(*req.Offers)
 	_, err := database.DB.Exec(
 		`INSERT INTO site_settings (key, value) VALUES ('offers', $1::jsonb)
 		 ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=NOW()`,
-		req.Offers,
+		raw,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update offers"})
@@ -468,16 +469,17 @@ func (h *SiteSettingsHandler) GetBanners(c *gin.Context) {
 
 func (h *SiteSettingsHandler) UpdateBanners(c *gin.Context) {
 	var req struct {
-		Banners interface{} `json:"banners" binding:"required"`
+		Banners *json.RawMessage `json:"banners"`
 	}
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil || req.Banners == nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
+	raw := []byte(*req.Banners)
 	_, err := database.DB.Exec(
 		`INSERT INTO site_settings (key, value) VALUES ('banners', $1::jsonb)
 		 ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=NOW()`,
-		req.Banners,
+		raw,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update banners"})
@@ -528,4 +530,82 @@ func (h *SiteSettingsHandler) GetBannersPublic(c *gin.Context) {
 		}
 	}
 	c.JSON(http.StatusOK, gin.H{"banners": active})
+}
+
+// --- Family packs page config (BOGO card + pack list) ---
+
+func (h *SiteSettingsHandler) GetFamilyPacks(c *gin.Context) {
+	var value []byte
+	err := database.DB.QueryRow(`SELECT value FROM site_settings WHERE key='family_packs'`).Scan(&value)
+	if err == sql.ErrNoRows {
+		c.JSON(http.StatusOK, gin.H{"family_packs": defaultFamilyPacks()})
+		return
+	}
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"family_packs": defaultFamilyPacks()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"family_packs": json.RawMessage(value)})
+}
+
+func (h *SiteSettingsHandler) UpdateFamilyPacks(c *gin.Context) {
+	var req struct {
+		FamilyPacks *json.RawMessage `json:"family_packs"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || req.FamilyPacks == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+	raw := []byte(*req.FamilyPacks)
+	_, err := database.DB.Exec(
+		`INSERT INTO site_settings (key, value) VALUES ('family_packs', $1::jsonb)
+		 ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=NOW()`,
+		raw,
+	)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update family packs"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"updated": true})
+}
+
+func (h *SiteSettingsHandler) GetFamilyPacksPublic(c *gin.Context) {
+	var value []byte
+	err := database.DB.QueryRow(`SELECT value FROM site_settings WHERE key='family_packs'`).Scan(&value)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"family_packs": defaultFamilyPacks()})
+		return
+	}
+	var cfg map[string]interface{}
+	if err := json.Unmarshal(value, &cfg); err != nil {
+		c.JSON(http.StatusOK, gin.H{"family_packs": defaultFamilyPacks()})
+		return
+	}
+	if packs, ok := cfg["packs"].([]interface{}); ok {
+		var active []interface{}
+		for _, p := range packs {
+			if m, ok := p.(map[string]interface{}); ok {
+				if v, ok := m["active"].(bool); ok && v {
+					active = append(active, m)
+				}
+			}
+		}
+		cfg["packs"] = active
+	}
+	c.JSON(http.StatusOK, gin.H{"family_packs": cfg})
+}
+
+// Empty shape — every business configures its own content via admin.
+// No business-specific content belongs in code fallbacks.
+func defaultFamilyPacks() map[string]interface{} {
+	return map[string]interface{}{
+		"bogo": map[string]interface{}{
+			"title":       "",
+			"subtitle":    "",
+			"description": "",
+			"pricing":     "",
+			"active":      false,
+		},
+		"packs": []interface{}{},
+	}
 }

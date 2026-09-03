@@ -101,6 +101,7 @@ func main() {
 
 	// Site settings handler
 	siteHandler := handlers.NewSiteSettingsHandler()
+	reviewHandler := handlers.NewReviewHandler()
 
 	// Setup Gin router
 	gin.SetMode(gin.ReleaseMode)
@@ -161,6 +162,10 @@ func main() {
 		apiGroup.GET("/menu-categories", siteHandler.GetMenuCategories)
 		apiGroup.GET("/offers", siteHandler.GetOffersPublic)
 		apiGroup.GET("/banners", siteHandler.GetBannersPublic)
+		apiGroup.GET("/family-packs", siteHandler.GetFamilyPacksPublic)
+		apiGroup.GET("/reviews", reviewHandler.ListReviews)
+		apiGroup.GET("/reviews/summary", reviewHandler.ReviewSummary)
+		apiGroup.POST("/reviews", reviewHandler.CreateReview)
 		apiGroup.POST("/orders", handlers.RateLimit(20, time.Minute), apiHandler.CreateOrder)
 		apiGroup.GET("/orders/:id", apiHandler.GetOrder)
 		// Customer auth — phone synced to WhatsApp bot (customers.whatsapp_number)
@@ -223,6 +228,10 @@ func main() {
 		adminGroup.PUT("/offers", siteHandler.UpdateOffers)
 		adminGroup.GET("/banners", siteHandler.GetBanners)
 		adminGroup.PUT("/banners", siteHandler.UpdateBanners)
+		adminGroup.GET("/family-packs", siteHandler.GetFamilyPacks)
+		adminGroup.PUT("/family-packs", siteHandler.UpdateFamilyPacks)
+		adminGroup.GET("/reviews", reviewHandler.ListReviewsAdmin)
+		adminGroup.PATCH("/reviews/:id", adminHandler.RequireRole("owner", "manager"), reviewHandler.ModerateReview)
 		// Bot message templates
 		adminGroup.GET("/bot-messages", adminHandler.ListBotMessages)
 		adminGroup.GET("/bot-messages/:key", adminHandler.GetBotMessage)

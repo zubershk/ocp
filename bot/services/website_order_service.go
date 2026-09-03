@@ -13,6 +13,7 @@ import (
 
 	"orangecheesepizza/bot/config"
 	"orangecheesepizza/bot/database"
+	"orangecheesepizza/bot/models"
 )
 
 // ------------------------------------------------------------------
@@ -78,6 +79,7 @@ type WebsiteOrderResult struct {
 	Landmark      string             `json:"landmark,omitempty"`
 	PaymentMethod string             `json:"payment_method"`
 	Items         []WebsiteOrderLine `json:"items"`
+	Events        []models.OrderEvent `json:"events,omitempty"`
 	Subtotal      float64            `json:"subtotal"`
 	DeliveryFee   float64            `json:"delivery_fee"`
 	Discount      float64            `json:"discount"`
@@ -482,7 +484,26 @@ func (s *WebsiteOrderService) getByID(orderID int) (*WebsiteOrderResult, error) 
 		line.LineTotal = lineTotal
 		o.Items = append(o.Items, line)
 	}
-	return &o, itemRows.Err()
+	if err := itemRows.Err(); err != nil {
+		return nil, err
+	}
+	evRows, err := database.DB.Query(`
+		SELECT id, order_id, event_type, COALESCE(description,''), created_at
+		FROM order_events WHERE order_id = $1 ORDER BY created_at, id
+	`, orderID)
+	if err != nil {
+		return nil, err
+	}
+	defer evRows.Close()
+	o.Events = []models.OrderEvent{}
+	for evRows.Next() {
+		var ev models.OrderEvent
+		if err := evRows.Scan(&ev.ID, &ev.OrderID, &ev.EventType, &ev.Description, &ev.CreatedAt); err != nil {
+			return nil, err
+		}
+		o.Events = append(o.Events, ev)
+	}
+	return &o, evRows.Err()
 }
 
 func (s *WebsiteOrderService) getByIdepotencyKey(key string) (*WebsiteOrderResult, error) {

@@ -36,6 +36,7 @@ type MenuItem struct {
 	IsSpicy          bool               `json:"is_spicy,omitempty"`
 	IsJain           bool               `json:"is_jain,omitempty"`
 	IsNew            bool               `json:"is_new,omitempty"`
+	NoCrust          bool               `json:"no_crust,omitempty"`
 	PriceRegular     *float64           `json:"-"`
 	PriceMedium      *float64           `json:"-"`
 	PriceLarge       *float64           `json:"-"`
@@ -134,6 +135,19 @@ type OrderEvent struct {
 	EventType   string    `json:"event_type"`
 	Description string    `json:"description"`
 	CreatedAt   time.Time `json:"created_at"`
+}
+
+type Review struct {
+	ID            int       `json:"id"`
+	OrderID       int       `json:"order_id"`
+	ItemSlug      string    `json:"item_slug"`
+	CustomerName  string    `json:"customer_name"`
+	CustomerPhone string    `json:"customer_phone,omitempty"`
+	Rating        int       `json:"rating"`
+	Title         string    `json:"title"`
+	Body          string    `json:"body"`
+	Approved      bool      `json:"approved"`
+	CreatedAt     time.Time `json:"created_at"`
 }
 
 type CustomerState struct {
