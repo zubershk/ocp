@@ -1,8 +1,7 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  ArrowLeft, Save, RotateCcw, MessageSquare, ChevronDown, ChevronRight,
+  Save, RotateCcw, MessageSquare, ChevronDown, ChevronRight,
   Eye, HelpCircle, Smartphone, Search, Info, X, CheckCircle, AlertTriangle,
 } from 'lucide-react';
 import { adminFetch, getAdminKey } from '../services/api';
@@ -269,21 +268,19 @@ export default function AdminBotWorkflows() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* ---- Header ---- */}
-      <div className="bg-card border-b sticky top-0 z-20">
-        <div className="max-w-5xl mx-auto px-4 py-3 flex items-center gap-3">
-          <Link to="/admin/settings" className="inline-flex items-center justify-center size-8 rounded-lg hover:bg-muted transition-colors">
-            <ArrowLeft size={18} />
-          </Link>
-          <div className="flex-1 min-w-0">
-            <h1 className="font-bold text-lg flex items-center gap-2">
-              <MessageSquare size={20} /> Bot Messages
-            </h1>
-            <p className="text-xs text-muted-foreground truncate">
-              Customize every WhatsApp bot response — no coding needed.
-            </p>
-          </div>
+    <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <AdminSubNav activeOverride="/admin/bot-workflows" />
+
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+            <MessageSquare size={20} /> Bot Messages
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Customize every WhatsApp bot response — no coding needed.
+          </p>
+        </div>
+        <div className="flex gap-2">
           <Button
             variant={showHelp ? 'default' : 'outline'}
             size="sm"
@@ -293,7 +290,7 @@ export default function AdminBotWorkflows() {
             <HelpCircle size={14} /> How it works
           </Button>
           <Button
-            variant="outline"
+            variant="destructive"
             size="sm"
             onClick={() => setConfirmResetAll(true)}
             className="gap-1.5"
@@ -302,9 +299,6 @@ export default function AdminBotWorkflows() {
           </Button>
         </div>
       </div>
-
-      <div className="max-w-5xl mx-auto px-4 py-6">
-        <AdminSubNav activeOverride="/admin/bot-workflows" />
 
         {/* ---- Getting Started Guide ---- */}
         {showHelp && (
@@ -437,7 +431,6 @@ export default function AdminBotWorkflows() {
             </CardContent>
           </Card>
         )}
-      </div>
 
       {/* ---- WhatsApp Preview Modal ---- */}
       <Dialog open={!!previewKey} onOpenChange={(open) => { if (!open) { setPreviewKey(null); setPreviewText(''); } }}>
