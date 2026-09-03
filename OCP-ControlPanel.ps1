@@ -57,7 +57,7 @@ $psCmd.AddScript({
         } else {
             $feDir = Join-Path $PSScriptRoot 'frontend'
             if (Test-Path $feDir) {
-                Start-Process -FilePath 'cmd.exe' -ArgumentList "/c title OCP Frontend && cd /d `"$feDir`" && wsl -d Ubuntu -u pizza -e bash -c `"cd /mnt/c/Users/Pizza/Downloads/Tech-OCP/frontend && npx vite --host`"" -WindowStyle Minimized
+                Start-Process -FilePath 'cmd.exe' -ArgumentList "/c title OCP Frontend && cd /d `"$feDir`" && netsh interface portproxy delete v4tov4 listenport=5173 listenaddress=127.0.0.1 >nul 2>&1 & call npm run dev -- --host 0.0.0.0 --port 5173 || call npm run dev -- --host 0.0.0.0 --port 5174" -WindowStyle Minimized
             }
         }
     }
