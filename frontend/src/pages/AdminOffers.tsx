@@ -147,7 +147,7 @@ export default function AdminOffers() {
 
   return (
     <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
-      <AdminSubNav activeOverride="/admin/settings" />
+      <AdminSubNav activeOverride="/admin/offers" />
 
       <div className="flex items-center gap-3">
         <Link to="/admin/settings" className="p-2 rounded-xl hover:bg-muted"><ArrowLeft size={18} /></Link>

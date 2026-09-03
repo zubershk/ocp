@@ -98,7 +98,7 @@ export default function AdminBrand() {
 
   return (
     <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
-      <AdminSubNav />
+      <AdminSubNav activeOverride="/admin/brand" />
 
       <div className="flex items-center gap-3 mt-4">
         <Button variant="outline" size="icon" onClick={() => window.history.back()} className="w-9 h-9"><ArrowLeft size={16} /></Button>

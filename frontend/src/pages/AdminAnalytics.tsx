@@ -44,7 +44,7 @@ export default function AdminAnalytics() {
 
   return (
     <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
-      <AdminSubNav />
+      <AdminSubNav activeOverride="/admin/analytics" />
 
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2"><BarChart3 size={20} className="text-violet-600" /> Analytics <Badge>Live</Badge></h1>

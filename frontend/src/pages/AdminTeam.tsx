@@ -73,7 +73,7 @@ export default function AdminTeam() {
 
   return (
     <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
-      <AdminSubNav />
+      <AdminSubNav activeOverride="/admin/team" />
 
       <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2"><Users size={20} className="text-violet-600" /> Team & Roles</h1>
       <p className="text-sm text-muted-foreground mt-1">Owner → Manager → Kitchen → Viewer. Keys are hashed at rest — copy once.</p>
