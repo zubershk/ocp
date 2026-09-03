@@ -246,13 +246,13 @@ export default function Admin() {
               </div>
             )}
             <div className="hidden sm:flex items-center gap-1">
-              <button onClick={() => setSoundOn((v) => !v)} aria-label="Toggle sound" className={`w-8 h-8 grid place-items-center rounded-full border transition-all ${soundOn ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white border-stone-200 hover:bg-stone-50'}`}>
+              <button onClick={() => setSoundOn((v) => !v)} aria-label="Toggle sound" className={`w-10 h-10 grid place-items-center rounded-full border transition-all ${soundOn ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white border-stone-200 hover:bg-stone-50'}`}>
                 {soundOn ? <Bell size={14} /> : <BellOff size={14} />}
               </button>
-              <button onClick={() => setAutoRefresh((v) => !v)} aria-label="Toggle auto refresh" className={`w-8 h-8 grid place-items-center rounded-full border transition-all ${autoRefresh ? 'bg-white border-stone-200 hover:bg-stone-50' : 'bg-amber-50 border-amber-200 text-amber-700'}`}>
+              <button onClick={() => setAutoRefresh((v) => !v)} aria-label="Toggle auto refresh" className={`w-10 h-10 grid place-items-center rounded-full border transition-all ${autoRefresh ? 'bg-white border-stone-200 hover:bg-stone-50' : 'bg-amber-50 border-amber-200 text-amber-700'}`}>
                 <Timer size={14} />
               </button>
-              <button onClick={() => queryClient.invalidateQueries({ queryKey: ['admin-orders'] })} aria-label="Refresh" className="w-8 h-8 grid place-items-center rounded-full bg-white border border-stone-200 hover:bg-stone-50">
+              <button onClick={() => queryClient.invalidateQueries({ queryKey: ['admin-orders'] })} aria-label="Refresh" className="w-10 h-10 grid place-items-center rounded-full bg-white border border-stone-200 hover:bg-stone-50">
                 <RefreshCw size={14} className={ordersQuery.isFetching ? 'animate-spin' : ''} />
               </button>
             </div>
@@ -409,7 +409,7 @@ export default function Admin() {
                         <td className="px-4 py-3">
                           <div className="flex justify-end gap-1.5">
                             {(NEXT_STATUSES[o.status] ?? []).slice(0, 2).map((n) => (
-                              <button key={n.to} disabled={statusMutation.isPending} onClick={() => n.to === 'cancelled' ? setConfirmCancel(o) : statusMutation.mutate({ id: o.id, status: n.to })} className={`px-3 py-1.5 rounded-full text-xs font-semibold border ${n.primary ? 'bg-zinc-900 text-white border-zinc-900 hover:bg-black' : n.to === 'cancelled' ? 'bg-white border-red-200 text-red-700 hover:bg-red-50' : 'bg-white border-zinc-200 hover:bg-zinc-50'} disabled:opacity-50`}>
+                              <button key={n.to} disabled={statusMutation.isPending} onClick={() => n.to === 'cancelled' ? setConfirmCancel(o) : statusMutation.mutate({ id: o.id, status: n.to })} className={`px-3 py-2 rounded-full text-xs font-semibold border ${n.primary ? 'bg-zinc-900 text-white border-zinc-900 hover:bg-black' : n.to === 'cancelled' ? 'bg-white border-red-200 text-red-700 hover:bg-red-50' : 'bg-white border-zinc-200 hover:bg-zinc-50'} disabled:opacity-50`}>
                                 {n.label}
                               </button>
                             ))}
@@ -497,7 +497,7 @@ export default function Admin() {
                             key={n.to}
                             disabled={statusMutation.isPending}
                             onClick={() => (n.to === 'cancelled' ? setConfirmCancel(o) : statusMutation.mutate({ id: o.id, status: n.to }))}
-                            className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition disabled:opacity-50 inline-flex items-center justify-center gap-1.5 ${n.primary ? 'bg-zinc-900 text-white hover:bg-black shadow-sm' : n.to === 'cancelled' ? 'bg-white border border-red-200 text-red-700 hover:bg-red-50' : 'bg-white border border-zinc-200 hover:bg-zinc-50'}`}
+                            className={`flex-1 py-3 rounded-xl text-xs font-bold transition disabled:opacity-50 inline-flex items-center justify-center gap-1.5 ${n.primary ? 'bg-zinc-900 text-white hover:bg-black shadow-sm' : n.to === 'cancelled' ? 'bg-white border border-red-200 text-red-700 hover:bg-red-50' : 'bg-white border border-zinc-200 hover:bg-zinc-50'}`}
                           >
                             {n.primary ? <CheckCircle2 size={14} /> : n.to === 'cancelled' ? <XCircle size={14} /> : <MoreHorizontal size={14} />} {n.label}
                           </button>
