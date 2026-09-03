@@ -422,19 +422,19 @@ func (h *SiteSettingsHandler) GetOffers(c *gin.Context) {
 	var value []byte
 	err := database.DB.QueryRow(`SELECT value FROM site_settings WHERE key='offers'`).Scan(&value)
 	if err == sql.ErrNoRows {
-		c.JSON(http.StatusOK, gin.H{"value": []interface{}{}})
+		c.JSON(http.StatusOK, gin.H{"offers": []interface{}{}})
 		return
 	}
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"value": []interface{}{}})
+		c.JSON(http.StatusOK, gin.H{"offers": []interface{}{}})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"value": json.RawMessage(value)})
+	c.JSON(http.StatusOK, gin.H{"offers": json.RawMessage(value)})
 }
 
 func (h *SiteSettingsHandler) UpdateOffers(c *gin.Context) {
 	var req struct {
-		Value interface{} `json:"value" binding:"required"`
+		Offers interface{} `json:"offers" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
@@ -443,7 +443,7 @@ func (h *SiteSettingsHandler) UpdateOffers(c *gin.Context) {
 	_, err := database.DB.Exec(
 		`INSERT INTO site_settings (key, value) VALUES ('offers', $1::jsonb)
 		 ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=NOW()`,
-		req.Value,
+		req.Offers,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update offers"})
@@ -456,19 +456,19 @@ func (h *SiteSettingsHandler) GetBanners(c *gin.Context) {
 	var value []byte
 	err := database.DB.QueryRow(`SELECT value FROM site_settings WHERE key='banners'`).Scan(&value)
 	if err == sql.ErrNoRows {
-		c.JSON(http.StatusOK, gin.H{"value": []interface{}{}})
+		c.JSON(http.StatusOK, gin.H{"banners": []interface{}{}})
 		return
 	}
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"value": []interface{}{}})
+		c.JSON(http.StatusOK, gin.H{"banners": []interface{}{}})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"value": json.RawMessage(value)})
+	c.JSON(http.StatusOK, gin.H{"banners": json.RawMessage(value)})
 }
 
 func (h *SiteSettingsHandler) UpdateBanners(c *gin.Context) {
 	var req struct {
-		Value interface{} `json:"value" binding:"required"`
+		Banners interface{} `json:"banners" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
@@ -477,11 +477,55 @@ func (h *SiteSettingsHandler) UpdateBanners(c *gin.Context) {
 	_, err := database.DB.Exec(
 		`INSERT INTO site_settings (key, value) VALUES ('banners', $1::jsonb)
 		 ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=NOW()`,
-		req.Value,
+		req.Banners,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update banners"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"updated": true})
+}
+
+// --- Public endpoints for customer-facing pages ---
+
+func (h *SiteSettingsHandler) GetOffersPublic(c *gin.Context) {
+	var value []byte
+	err := database.DB.QueryRow(`SELECT value FROM site_settings WHERE key='offers'`).Scan(&value)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"offers": []interface{}{}})
+		return
+	}
+	var offers []map[string]interface{}
+	if err := json.Unmarshal(value, &offers); err != nil {
+		c.JSON(http.StatusOK, gin.H{"offers": []interface{}{}})
+		return
+	}
+	var active []map[string]interface{}
+	for _, o := range offers {
+		if v, ok := o["active"].(bool); ok && v {
+			active = append(active, o)
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{"offers": active})
+}
+
+func (h *SiteSettingsHandler) GetBannersPublic(c *gin.Context) {
+	var value []byte
+	err := database.DB.QueryRow(`SELECT value FROM site_settings WHERE key='banners'`).Scan(&value)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"banners": []interface{}{}})
+		return
+	}
+	var banners []map[string]interface{}
+	if err := json.Unmarshal(value, &banners); err != nil {
+		c.JSON(http.StatusOK, gin.H{"banners": []interface{}{}})
+		return
+	}
+	var active []map[string]interface{}
+	for _, b := range banners {
+		if v, ok := b["active"].(bool); ok && v {
+			active = append(active, b)
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{"banners": active})
 }
