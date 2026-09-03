@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Pizza, MessageCircle, Settings, BarChart3, Users, ScrollText, LayoutGrid, Megaphone, Image, Tag, Bot, Store } from 'lucide-react';
+import { Pizza, MessageCircle, Settings, BarChart3, Users, ScrollText, LayoutGrid, Megaphone, Image, Tag, Bot, Store, Package, Star } from 'lucide-react';
 
 const items = [
   { to: '/admin', label: 'Orders', icon: Pizza, exact: true },
@@ -11,6 +11,8 @@ const items = [
   { to: '/admin/logs', label: 'Audit', icon: ScrollText },
   { to: '/admin/brand', label: 'Brand', icon: Megaphone },
   { to: '/admin/offers', label: 'Offers', icon: Tag },
+  { to: '/admin/family-packs', label: 'Packs', icon: Package },
+  { to: '/admin/reviews', label: 'Reviews', icon: Star },
   { to: '/admin/banners', label: 'Banners', icon: Image },
   { to: '/admin/bot-workflows', label: 'Bot', icon: Bot },
   { to: '/admin/business-config', label: 'Config', icon: Store },

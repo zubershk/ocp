@@ -38,6 +38,8 @@ const AdminBrand = lazy(() => import('./pages/AdminBrand'));
 const AdminPages = lazy(() => import('./pages/AdminPages'));
 const AdminOffers = lazy(() => import('./pages/AdminOffers'));
 const AdminBanners = lazy(() => import('./pages/AdminBanners'));
+const AdminFamilyPacks = lazy(() => import('./pages/AdminFamilyPacks'));
+const AdminReviews = lazy(() => import('./pages/AdminReviews'));
 const AdminBotWorkflows = lazy(() => import('./pages/AdminBotWorkflows'));
 const AdminBusinessConfig = lazy(() => import('./pages/AdminBusinessConfig'));
 
@@ -120,6 +122,8 @@ function AppRoutes() {
       <Route path="/admin/pages" element={<AdminSuspense><AdminPageShell><AdminPages /></AdminPageShell></AdminSuspense>} />
       <Route path="/admin/offers" element={<AdminSuspense><AdminPageShell><AdminOffers /></AdminPageShell></AdminSuspense>} />
       <Route path="/admin/banners" element={<AdminSuspense><AdminPageShell><AdminBanners /></AdminPageShell></AdminSuspense>} />
+      <Route path="/admin/family-packs" element={<AdminSuspense><AdminPageShell><AdminFamilyPacks /></AdminPageShell></AdminSuspense>} />
+      <Route path="/admin/reviews" element={<AdminSuspense><AdminPageShell><AdminReviews /></AdminPageShell></AdminSuspense>} />
       <Route path="/admin/bot-workflows" element={<AdminSuspense><AdminPageShell><AdminBotWorkflows /></AdminPageShell></AdminSuspense>} />
       <Route path="/admin/business-config" element={<AdminSuspense><AdminPageShell><AdminBusinessConfig /></AdminPageShell></AdminSuspense>} />
       <Route path="*" element={<Navigate to="/" replace />} />
