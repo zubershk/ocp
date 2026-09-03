@@ -12,6 +12,7 @@ import { Button } from '@/components/shadcn/button';
 import { Input } from '@/components/shadcn/input';
 import { Badge } from '@/components/shadcn/badge';
 import { Skeleton } from '@/components/shadcn/skeleton';
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/shadcn/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/shadcn/dialog';
 
 // Types mirroring backend
@@ -20,12 +21,30 @@ interface MenuItem {
   id: number; category_id: number; name: string; slug: string; description: string;
   price: number; image_url: string; available: boolean; sort_order: number; active: boolean;
   dietary?: string; pizza_subcategory?: string; pizza_type?: string;
-  is_spicy?: boolean; is_jain?: boolean; is_new?: boolean;
+  is_spicy?: boolean; is_jain?: boolean; is_new?: boolean; no_crust?: boolean;
   price_by_size?: Record<string, number>;
   price_regular?: number; price_medium?: number; price_large?: number;
 }
 
 interface MenuResponse { categories: Category[]; items: MenuItem[]; }
+
+interface Crust {
+  id: number; slug: string; name: string; description: string;
+  price_regular: number; price_medium: number; price_large: number;
+  active: boolean; sort_order: number;
+}
+
+type CrustForm = {
+  slug: string; name: string; description: string;
+  price_regular: string; price_medium: string; price_large: string;
+  active: boolean; sort_order: string;
+};
+
+const emptyCrustForm: CrustForm = {
+  slug: '', name: '', description: '',
+  price_regular: '', price_medium: '', price_large: '',
+  active: true, sort_order: '0',
+};
 
 type FormState = {
   category_id: number;
@@ -42,6 +61,7 @@ type FormState = {
   is_spicy: boolean;
   is_jain: boolean;
   is_new: boolean;
+  no_crust: boolean;
   available: boolean;
   sort_order: string;
 };
@@ -61,6 +81,7 @@ const emptyForm: FormState = {
   is_spicy: false,
   is_jain: false,
   is_new: false,
+  no_crust: false,
   available: true,
   sort_order: '0',
 };
@@ -109,6 +130,81 @@ export default function AdminCatalog() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['catalog-menu'] }),
   });
 
+  // ---- Crusts ----
+  const [tab, setTab] = useState<'items' | 'crusts'>('items');
+  const [editingCrust, setEditingCrust] = useState<Crust | null>(null);
+  const [showCrustModal, setShowCrustModal] = useState(false);
+  const [crustForm, setCrustForm] = useState<CrustForm>(emptyCrustForm);
+  const [confirmCrustDelete, setConfirmCrustDelete] = useState<{ id: number; name: string } | null>(null);
+
+  const crustQuery = useQuery({
+    queryKey: ['admin-crusts'],
+    queryFn: async () => {
+      const d = await adminFetch<Crust[] | { crusts: Crust[] }>('/admin/crusts');
+      return Array.isArray(d) ? d : (d.crusts ?? []);
+    },
+    enabled: authed,
+  });
+
+  const refreshCrusts = () => {
+    qc.invalidateQueries({ queryKey: ['admin-crusts'] });
+    qc.invalidateQueries({ queryKey: ['crusts'] });
+  };
+
+  const crustCreateMut = useMutation({
+    mutationFn: (body: Record<string, unknown>) => adminFetch('/admin/crusts', { method: 'POST', body: JSON.stringify(body) }),
+    onSuccess: () => { refreshCrusts(); setShowCrustModal(false); setEditingCrust(null); toast.push({ type: 'success', title: 'Crust created' }); },
+    onError: (e: Error) => toast.push({ type: 'error', title: e.message }),
+  });
+  const crustUpdateMut = useMutation({
+    mutationFn: ({ id, body }: { id: number; body: Record<string, unknown> }) => adminFetch(`/admin/crusts/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+    onSuccess: () => { refreshCrusts(); setShowCrustModal(false); setEditingCrust(null); toast.push({ type: 'success', title: 'Crust updated' }); },
+    onError: (e: Error) => toast.push({ type: 'error', title: e.message }),
+  });
+  const crustDeleteMut = useMutation({
+    mutationFn: (id: number) => adminFetch(`/admin/crusts/${id}`, { method: 'DELETE' }),
+    onSuccess: () => { refreshCrusts(); toast.push({ type: 'success', title: 'Crust deleted' }); },
+    onError: (e: Error) => toast.push({ type: 'error', title: e.message }),
+  });
+
+  const crusts: Crust[] = crustQuery.data ?? [];
+
+  const openCrustCreate = () => {
+    setEditingCrust(null);
+    setCrustForm({ ...emptyCrustForm, sort_order: String(crusts.length) });
+    setShowCrustModal(true);
+  };
+  const openCrustEdit = (c: Crust) => {
+    setEditingCrust(c);
+    setCrustForm({
+      slug: c.slug,
+      name: c.name,
+      description: c.description ?? '',
+      price_regular: String(c.price_regular ?? ''),
+      price_medium: String(c.price_medium ?? ''),
+      price_large: String(c.price_large ?? ''),
+      active: !!c.active,
+      sort_order: String(c.sort_order ?? 0),
+    });
+    setShowCrustModal(true);
+  };
+  const submitCrust = (e: React.FormEvent) => {
+    e.preventDefault();
+    const body: Record<string, unknown> = {
+      slug: crustForm.slug.trim() || slugify(crustForm.name),
+      name: crustForm.name.trim(),
+      description: crustForm.description.trim(),
+      price_regular: Number(crustForm.price_regular) || 0,
+      price_medium: Number(crustForm.price_medium) || 0,
+      price_large: Number(crustForm.price_large) || 0,
+      active: crustForm.active,
+      sort_order: Number(crustForm.sort_order) || 0,
+    };
+    if (!body.name) { toast.push({ type: 'warning', title: 'Name is required' }); return; }
+    if (editingCrust) crustUpdateMut.mutate({ id: editingCrust.id, body });
+    else crustCreateMut.mutate(body);
+  };
+
   const categories: Category[] = menuQuery.data?.categories ?? catQuery.data ?? [];
   const items: MenuItem[] = menuQuery.data?.items ?? [];
 
@@ -144,6 +240,7 @@ export default function AdminCatalog() {
       is_spicy: !!it.is_spicy,
       is_jain: !!it.is_jain,
       is_new: !!it.is_new,
+      no_crust: !!it.no_crust,
       available: !!it.available,
       sort_order: String(it.sort_order ?? 0),
     });
@@ -151,9 +248,8 @@ export default function AdminCatalog() {
   };
 
   const handleUpload = async (f: File) => {
-    if (f.size > 5 * 1024 * 1024) { toast.push({ type: 'warning', title: 'Max 5MB' }); return; }
-    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-    if (!allowed.includes(f.type)) { toast.push({ type: 'warning', title: 'Use jpg, png, webp or gif' }); return; }
+    if (!f.type.startsWith('image/')) { toast.push({ type: 'warning', title: 'Please choose an image file' }); return; }
+    if (f.size > 10 << 20) { toast.push({ type: 'warning', title: 'Image too large — max 10MB' }); return; }
     setUploading(true);
     try {
       const fd = new FormData();
@@ -187,6 +283,7 @@ export default function AdminCatalog() {
       is_spicy: form.is_spicy,
       is_jain: form.is_jain,
       is_new: form.is_new,
+      no_crust: form.no_crust,
       available: form.available,
       sort_order: Number(form.sort_order) || 0,
     };
@@ -215,12 +312,27 @@ export default function AdminCatalog() {
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2"><Pizza size={20} className="text-orange-600" /> Menu Studio <Badge>Bot + Site sync</Badge></h1>
           <p className="text-sm text-zinc-500 mt-1">Edit once — live on website and WhatsApp instantly. Images via <code className="px-1 py-0.5 bg-zinc-100 rounded text-xs">/uploads</code>.</p>
         </div>
-        <Button onClick={openCreate} className="inline-flex items-center gap-2"><Plus size={16} /> New item</Button>
+        <Button onClick={tab === 'items' ? openCreate : openCrustCreate} className="inline-flex items-center gap-2"><Plus size={16} /> {tab === 'items' ? 'New item' : 'New crust'}</Button>
       </div>
 
       {/* Sub-nav */}
       <AdminSubNav activeOverride="/admin/catalog" />
 
+      {/* Items / Crusts tabs */}
+      <div className="mt-4 flex gap-1 p-1 bg-stone-100 rounded-2xl w-fit text-sm">
+        {(['items', 'crusts'] as const).map((t) => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={`px-4 py-1.5 rounded-xl text-xs font-semibold capitalize transition-colors ${tab === t ? 'bg-zinc-900 text-white' : 'text-zinc-600 hover:bg-white'}`}
+          >
+            {t} {t === 'crusts' && crusts.length > 0 && `(${crusts.length})`}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'items' && (
+      <>
       {/* Stats */}
       <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Card className="p-4"><div className="text-[11px] tracking-wide font-semibold text-zinc-500">Items</div><div className="text-2xl font-bold">{items.length}</div></Card>
@@ -303,10 +415,122 @@ export default function AdminCatalog() {
           ))}
         </div>
       )}
+      </>
+      )}
+
+      {tab === 'crusts' && (
+      <div className="mt-4">
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-zinc-500">Crust options shown on product pages, with per-size extra charges.</p>
+          <Button onClick={openCrustCreate} className="inline-flex items-center gap-2"><Plus size={14} /> New crust</Button>
+        </div>
+        {crustQuery.isLoading ? (
+          <div className="mt-4 space-y-2">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-14 rounded-xl" />)}</div>
+        ) : crusts.length === 0 ? (
+          <Card className="mt-4 py-12 text-center px-4">
+            <Pizza size={24} className="mx-auto text-zinc-300" />
+            <p className="font-semibold mt-2">No crusts</p><p className="text-sm text-zinc-500">Add your first crust option.</p>
+          </Card>
+        ) : (
+          <Card className="mt-4">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/50">
+                  <TableHead className="px-4 py-3">Name</TableHead>
+                  <TableHead className="px-4 py-3 hidden sm:table-cell">Extras (R/M/L)</TableHead>
+                  <TableHead className="px-4 py-3">Status</TableHead>
+                  <TableHead className="px-4 py-3 text-right w-32"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {crusts.map((c) => (
+                  <TableRow key={c.id}>
+                    <TableCell className="px-4 py-3">
+                      <div className="font-medium">{c.name}</div>
+                      <div className="text-xs text-muted-foreground mt-0.5 font-mono">{c.slug}{c.description ? ` · ${c.description}` : ''}</div>
+                    </TableCell>
+                    <TableCell className="px-4 py-3 hidden sm:table-cell text-sm text-muted-foreground">
+                      ₹{c.price_regular ?? 0} / ₹{c.price_medium ?? 0} / ₹{c.price_large ?? 0}
+                    </TableCell>
+                    <TableCell className="px-4 py-3">
+                      <Badge variant={c.active ? 'default' : 'secondary'} className={c.active ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : ''}>
+                        {c.active ? 'Active' : 'Inactive'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="px-4 py-3 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <Button variant="outline" size="sm" onClick={() => openCrustEdit(c)}>
+                          <Pencil size={12} /> Edit
+                        </Button>
+                        <Button variant="destructive" size="icon" onClick={() => setConfirmCrustDelete({ id: c.id, name: c.name })}>
+                          <Trash2 size={13} />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Card>
+        )}
+      </div>
+      )}
+
+      {/* Crust modal */}
+      <Dialog open={showCrustModal} onOpenChange={setShowCrustModal}>
+        <DialogContent className="sm:max-w-lg max-h-[90dvh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+          <form onSubmit={submitCrust}>
+            <DialogHeader>
+              <DialogTitle>{editingCrust ? `Edit crust #${editingCrust.id}` : 'New crust'}</DialogTitle>
+            </DialogHeader>
+            <div className="py-4 space-y-4">
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div className="sm:col-span-2">
+                  <label className="text-xs font-semibold">Name *</label>
+                  <Input value={crustForm.name} onChange={(e) => setCrustForm({ ...crustForm, name: e.target.value, slug: crustForm.slug || slugify(e.target.value) })} placeholder="Cheese Burst" className="mt-1" required />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold">Slug</label>
+                  <Input value={crustForm.slug} onChange={(e) => setCrustForm({ ...crustForm, slug: e.target.value })} className="mt-1 font-mono text-sm" placeholder="cheese-burst" />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold">Sort order</label>
+                  <Input type="number" value={crustForm.sort_order} onChange={(e) => setCrustForm({ ...crustForm, sort_order: e.target.value })} className="mt-1" />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="text-xs font-semibold">Description</label>
+                  <Input value={crustForm.description} onChange={(e) => setCrustForm({ ...crustForm, description: e.target.value })} className="mt-1" placeholder="Loaded with extra cheese" />
+                </div>
+                <div><label className="text-xs font-semibold">Extra ₹ (Regular)</label><Input type="number" step="0.01" value={crustForm.price_regular} onChange={(e) => setCrustForm({ ...crustForm, price_regular: e.target.value })} className="mt-1" placeholder="0" /></div>
+                <div><label className="text-xs font-semibold">Extra ₹ (Medium)</label><Input type="number" step="0.01" value={crustForm.price_medium} onChange={(e) => setCrustForm({ ...crustForm, price_medium: e.target.value })} className="mt-1" placeholder="0" /></div>
+                <div><label className="text-xs font-semibold">Extra ₹ (Large)</label><Input type="number" step="0.01" value={crustForm.price_large} onChange={(e) => setCrustForm({ ...crustForm, price_large: e.target.value })} className="mt-1" placeholder="0" /></div>
+                <div className="flex items-end pb-1">
+                  <label className="inline-flex items-center gap-2 text-sm"><input type="checkbox" checked={crustForm.active} onChange={(e) => setCrustForm({ ...crustForm, active: e.target.checked })} /> Active</label>
+                </div>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setShowCrustModal(false)}>Cancel</Button>
+              <Button type="submit" disabled={crustCreateMut.isPending || crustUpdateMut.isPending} className="bg-orange-600 text-white hover:bg-orange-700 inline-flex items-center gap-2"><Check size={16} />{editingCrust ? 'Save' : 'Create'}</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+      {confirmCrustDelete && (
+        <ConfirmDialog
+          open
+          title={`Delete ${confirmCrustDelete.name}?`}
+          message="Items using this crust fall back to no extra charge."
+          danger
+          confirmLabel="Delete"
+          onConfirm={() => { crustDeleteMut.mutate(confirmCrustDelete.id); setConfirmCrustDelete(null); }}
+          onCancel={() => setConfirmCrustDelete(null)}
+        />
+      )}
 
       {/* Modal */}
       <Dialog open={showModal} onOpenChange={setShowModal}>
-        <DialogContent className="sm:max-w-2xl" onClick={(e) => e.stopPropagation()}>
+        <DialogContent className="sm:max-w-2xl max-h-[90dvh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
           <form onSubmit={onSubmit}>
             <DialogHeader>
               <DialogTitle>{editing ? `Edit #${editing.id}` : 'New item'}</DialogTitle>
@@ -351,11 +575,11 @@ export default function AdminCatalog() {
                   <label className="text-xs font-semibold">Image</label>
                   <div className="mt-1 flex gap-2">
                     <Input value={form.image_url} onChange={(e) => setForm({ ...form, image_url: e.target.value })} placeholder="https://… or /uploads/xxx.jpg" className="flex-1 text-sm" />
-                    <input type="file" ref={fileRef} accept="image/jpeg,image/png,image/webp,image/gif" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(f); }} />
+                    <input type="file" ref={fileRef} accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(f); }} />
                     <Button type="button" disabled={uploading} onClick={() => fileRef.current?.click()} className="inline-flex items-center gap-2"><Upload size={14} />{uploading ? '…' : 'Upload'}</Button>
                   </div>
                   {form.image_url && <img src={form.image_url} alt="preview" className="mt-2 w-full h-40 object-cover rounded-xl border bg-zinc-50" />}
-                  <p className="text-[11px] text-zinc-400 mt-1">JPG/PNG/WEBP ≤5MB. Uploaded to <code className="px-1 bg-zinc-100 rounded">/uploads</code> — served to site + bot.</p>
+                  <p className="text-[11px] text-zinc-400 mt-1">Any image ≤10MB. Uploaded to <code className="px-1 bg-zinc-100 rounded">/uploads</code> — served to site + bot.</p>
                 </div>
                 <div>
                   <label className="text-xs font-semibold">Subcategory</label>
@@ -365,6 +589,7 @@ export default function AdminCatalog() {
                   <label className="inline-flex items-center gap-2 text-sm"><input type="checkbox" checked={form.is_spicy} onChange={(e) => setForm({ ...form, is_spicy: e.target.checked })} /> Spicy</label>
                   <label className="inline-flex items-center gap-2 text-sm"><input type="checkbox" checked={form.is_jain} onChange={(e) => setForm({ ...form, is_jain: e.target.checked })} /> Jain</label>
                   <label className="inline-flex items-center gap-2 text-sm"><input type="checkbox" checked={form.is_new} onChange={(e) => setForm({ ...form, is_new: e.target.checked })} /> New badge</label>
+                  <label className="inline-flex items-center gap-2 text-sm"><input type="checkbox" checked={form.no_crust} onChange={(e) => setForm({ ...form, no_crust: e.target.checked })} /> Hide crust selector</label>
                   <label className="inline-flex items-center gap-2 text-sm"><input type="checkbox" checked={form.available} onChange={(e) => setForm({ ...form, available: e.target.checked })} /> Available</label>
                 </div>
               </div>
