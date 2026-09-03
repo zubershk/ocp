@@ -5,6 +5,13 @@ import { ArrowLeft, Plus, Pencil, Trash2, Save, Image, AlertTriangle, Upload } f
 import { adminFetch, getAdminKey } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
+import AdminSubNav from '../components/layout/AdminSubNav';
+import { Card, CardContent } from '@/components/shadcn/card';
+import { Button } from '@/components/shadcn/button';
+import { Input } from '@/components/shadcn/input';
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/shadcn/table';
+import { Badge } from '@/components/shadcn/badge';
+import { Skeleton } from '@/components/shadcn/skeleton';
 
 interface Banner {
   id: string;
@@ -78,11 +85,13 @@ export default function AdminBanners() {
   if (!authed) {
     return (
       <div className="max-w-md mx-auto px-4 py-16 text-center">
-        <div className="bg-white rounded-2xl border p-8">
-          <Image size={24} className="mx-auto text-zinc-400" />
-          <h1 className="font-bold mt-3">Banner Carousel</h1>
-          <p className="text-sm text-zinc-500 mt-1">Sign in via <Link to="/admin" className="text-orange-600 underline">Orders</Link> first.</p>
-        </div>
+        <Card>
+          <CardContent className="py-8">
+            <Image size={24} className="mx-auto text-muted-foreground" />
+            <h1 className="font-bold mt-3">Banner Carousel</h1>
+            <p className="text-sm text-muted-foreground mt-1">Sign in via <Link to="/admin" className="text-orange-600 underline">Orders</Link> first.</p>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -153,208 +162,208 @@ export default function AdminBanners() {
 
   return (
     <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
-      <div className="flex gap-1 p-1 bg-zinc-100 rounded-xl w-fit text-sm mb-4 flex-wrap">
-        <Link to="/admin" className="px-3 py-1.5 rounded-full hover:bg-white">Orders</Link>
-        <Link to="/admin/catalog" className="px-3 py-1.5 rounded-full hover:bg-white">Menu</Link>
-        <Link to="/admin/chats" className="px-3 py-1.5 rounded-full hover:bg-white">Chats</Link>
-        <span className="px-3 py-1.5 rounded-full bg-zinc-900 text-white font-semibold">Settings</span>
-        <Link to="/admin/analytics" className="px-3 py-1.5 rounded-full hover:bg-white">Analytics</Link>
-        <Link to="/admin/team" className="px-3 py-1.5 rounded-full hover:bg-white">Team</Link>
-        <Link to="/admin/logs" className="px-3 py-1.5 rounded-full hover:bg-white">Audit</Link>
-      </div>
+      <AdminSubNav activeOverride="/admin/settings" />
 
       <div className="flex items-center gap-3">
-        <Link to="/admin/settings" className="p-2 rounded-xl hover:bg-zinc-100"><ArrowLeft size={18} /></Link>
+        <Link to="/admin/settings" className="p-2 rounded-xl hover:bg-muted"><ArrowLeft size={18} /></Link>
         <h1 className="text-2xl font-bold tracking-tight">Banner Carousel</h1>
       </div>
-      <p className="text-sm text-zinc-500 mt-1 ml-11">Manage the hero banners shown on the Home page.</p>
+      <p className="text-sm text-muted-foreground mt-1 ml-11">Manage the hero banners shown on the Home page.</p>
 
       {showForm ? (
         <div className="mt-6 grid lg:grid-cols-2 gap-6">
-          <div className="bg-white rounded-2xl border p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-semibold">{editingId ? 'Edit Banner' : 'New Banner'}</h2>
-              <button onClick={() => { setShowForm(false); setEditingId(null); }} className="w-8 h-8 rounded-full hover:bg-zinc-100 grid place-items-center text-sm">✕</button>
-            </div>
+          <Card>
+            <CardContent className="py-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="font-semibold">{editingId ? 'Edit Banner' : 'New Banner'}</h2>
+                <Button variant="ghost" size="icon" onClick={() => { setShowForm(false); setEditingId(null); }}>✕</Button>
+              </div>
 
-            <div className="space-y-4">
-              <div>
-                <label className="text-xs font-semibold">Title *</label>
-                <input
-                  value={form.title}
-                  onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-                  placeholder="e.g. Fresh Baked Pizzas"
-                  className="mt-1 w-full px-3 py-2.5 rounded-xl border text-sm"
-                  required
-                />
-              </div>
-              <div>
-                <label className="text-xs font-semibold">Subtitle</label>
-                <input
-                  value={form.subtitle}
-                  onChange={(e) => setForm((f) => ({ ...f, subtitle: e.target.value }))}
-                  placeholder="e.g. Hot & cheesy, delivered to your door"
-                  className="mt-1 w-full px-3 py-2.5 rounded-xl border text-sm"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-4">
                 <div>
-                  <label className="text-xs font-semibold">Background</label>
-                  <select
-                    value={form.background}
-                    onChange={(e) => setForm((f) => ({ ...f, background: e.target.value }))}
-                    className="mt-1 w-full px-3 py-2.5 rounded-xl border text-sm"
-                  >
-                    {BG_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs font-semibold">Accent Text Color</label>
-                  <select
-                    value={form.accent}
-                    onChange={(e) => setForm((f) => ({ ...f, accent: e.target.value }))}
-                    className="mt-1 w-full px-3 py-2.5 rounded-xl border text-sm"
-                  >
-                    {ACCENT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs font-semibold">Button Text</label>
-                  <input
-                    value={form.buttonText}
-                    onChange={(e) => setForm((f) => ({ ...f, buttonText: e.target.value }))}
-                    placeholder="e.g. Order Now"
-                    className="mt-1 w-full px-3 py-2.5 rounded-xl border text-sm"
+                  <label className="text-xs font-semibold">Title *</label>
+                  <Input
+                    value={form.title}
+                    onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+                    placeholder="e.g. Fresh Baked Pizzas"
+                    className="mt-1"
+                    required
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold">Button Link</label>
-                  <input
-                    value={form.buttonLink}
-                    onChange={(e) => setForm((f) => ({ ...f, buttonLink: e.target.value }))}
-                    placeholder="e.g. /r/menu"
-                    className="mt-1 w-full px-3 py-2.5 rounded-xl border text-sm font-mono"
+                  <label className="text-xs font-semibold">Subtitle</label>
+                  <Input
+                    value={form.subtitle}
+                    onChange={(e) => setForm((f) => ({ ...f, subtitle: e.target.value }))}
+                    placeholder="e.g. Hot & cheesy, delivered to your door"
+                    className="mt-1"
                   />
                 </div>
-              </div>
-              <div>
-                <label className="text-xs font-semibold">Image URL</label>
-                <div className="flex gap-2 items-end">
-                  <div className="flex-1">
-                    <input
-                      value={form.image_url}
-                      onChange={(e) => setForm((f) => ({ ...f, image_url: e.target.value }))}
-                      placeholder="/uploads/..."
-                      className="mt-1 w-full px-3 py-2.5 rounded-xl border text-sm"
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-semibold">Background</label>
+                    <select
+                      value={form.background}
+                      onChange={(e) => setForm((f) => ({ ...f, background: e.target.value }))}
+                      className="mt-1 w-full px-3 py-2.5 rounded-lg border border-input bg-transparent text-sm"
+                    >
+                      {BG_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold">Accent Text Color</label>
+                    <select
+                      value={form.accent}
+                      onChange={(e) => setForm((f) => ({ ...f, accent: e.target.value }))}
+                      className="mt-1 w-full px-3 py-2.5 rounded-lg border border-input bg-transparent text-sm"
+                    >
+                      {ACCENT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-semibold">Button Text</label>
+                    <Input
+                      value={form.buttonText}
+                      onChange={(e) => setForm((f) => ({ ...f, buttonText: e.target.value }))}
+                      placeholder="e.g. Order Now"
+                      className="mt-1"
                     />
                   </div>
-                  <input type="file" ref={fileRef} accept="image/jpeg,image/png,image/webp,image/gif" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(f); }} />
-                  <button type="button" disabled={uploading} onClick={() => fileRef.current?.click()} className="px-4 py-2.5 rounded-xl bg-zinc-900 text-white text-sm font-semibold hover:bg-black disabled:opacity-50 inline-flex items-center gap-2 h-[42px]"><Upload size={14} />{uploading ? '…' : 'Upload'}</button>
+                  <div>
+                    <label className="text-xs font-semibold">Button Link</label>
+                    <Input
+                      value={form.buttonLink}
+                      onChange={(e) => setForm((f) => ({ ...f, buttonLink: e.target.value }))}
+                      placeholder="e.g. /r/menu"
+                      className="mt-1 font-mono text-sm"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold">Image URL</label>
+                  <div className="flex gap-2 items-end">
+                    <div className="flex-1">
+                      <Input
+                        value={form.image_url}
+                        onChange={(e) => setForm((f) => ({ ...f, image_url: e.target.value }))}
+                        placeholder="/uploads/..."
+                        className="mt-1"
+                      />
+                    </div>
+                    <input type="file" ref={fileRef} accept="image/jpeg,image/png,image/webp,image/gif" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(f); }} />
+                    <Button type="button" disabled={uploading} onClick={() => fileRef.current?.click()} className="h-[38px]">
+                      <Upload size={14} />{uploading ? '…' : 'Upload'}
+                    </Button>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setForm((f) => ({ ...f, active: !f.active }))}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${form.active ? 'bg-emerald-500' : 'bg-muted'}`}
+                  >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${form.active ? 'translate-x-6' : 'translate-x-1'}`} />
+                  </button>
+                  <span className="text-sm font-medium">{form.active ? 'Active' : 'Inactive'}</span>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setForm((f) => ({ ...f, active: !f.active }))}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${form.active ? 'bg-emerald-500' : 'bg-zinc-300'}`}
-                >
-                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${form.active ? 'translate-x-6' : 'translate-x-1'}`} />
-                </button>
-                <span className="text-sm font-medium">{form.active ? 'Active' : 'Inactive'}</span>
-              </div>
-            </div>
 
-            <div className="flex items-center gap-2 mt-6">
-              <button onClick={handleSave} disabled={saveMut.isPending} className="px-5 py-2.5 rounded-xl bg-zinc-900 text-white text-sm font-semibold hover:bg-black disabled:opacity-50 inline-flex items-center gap-1.5">
-                <Save size={14} /> {saveMut.isPending ? 'Saving…' : 'Save'}
-              </button>
-              {saveMut.isSuccess && <span className="text-xs text-emerald-600">Saved</span>}
-              {saveMut.isError && <span className="text-xs text-red-600 flex items-center gap-1"><AlertTriangle size={12} /> {(saveMut.error as Error).message}</span>}
-            </div>
-          </div>
+              <div className="flex items-center gap-2 mt-6">
+                <Button onClick={handleSave} disabled={saveMut.isPending}>
+                  <Save size={14} /> {saveMut.isPending ? 'Saving…' : 'Save'}
+                </Button>
+                {saveMut.isSuccess && <span className="text-xs text-emerald-600">Saved</span>}
+                {saveMut.isError && <span className="text-xs text-destructive flex items-center gap-1"><AlertTriangle size={12} /> {(saveMut.error as Error).message}</span>}
+              </div>
+            </CardContent>
+          </Card>
 
           {/* Preview */}
-          <div className="bg-white rounded-2xl border p-6">
-            <h2 className="font-semibold mb-4">Preview</h2>
-            <div className={`rounded-xl overflow-hidden ${form.background} p-6 min-h-[200px] flex flex-col justify-end`}>
-              <h3 className={`text-2xl font-bold text-white`}>{form.title || 'Banner Title'}</h3>
-              {form.subtitle && <p className={`text-sm ${form.accent} mt-1`}>{form.subtitle}</p>}
-              {form.buttonText && (
-                <button className="mt-4 px-5 py-2.5 bg-white text-zinc-900 text-sm font-semibold rounded-xl w-fit hover:bg-zinc-100 transition-colors">
-                  {form.buttonText}
-                </button>
-              )}
-            </div>
-          </div>
+          <Card>
+            <CardContent className="py-6">
+              <h2 className="font-semibold mb-4">Preview</h2>
+              <div className={`rounded-xl overflow-hidden ${form.background} p-6 min-h-[200px] flex flex-col justify-end`}>
+                <h3 className="text-2xl font-bold text-white">{form.title || 'Banner Title'}</h3>
+                {form.subtitle && <p className={`text-sm ${form.accent} mt-1`}>{form.subtitle}</p>}
+                {form.buttonText && (
+                  <button className="mt-4 px-5 py-2.5 bg-white text-zinc-900 text-sm font-semibold rounded-xl w-fit hover:bg-zinc-100 transition-colors">
+                    {form.buttonText}
+                  </button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
         </div>
       ) : (
         <>
           <div className="flex items-center justify-between mt-6">
             <div />
-            <button onClick={openNew} className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-zinc-900 text-white text-sm font-semibold hover:bg-black">
+            <Button onClick={openNew}>
               <Plus size={14} /> Add Banner
-            </button>
+            </Button>
           </div>
 
           {bannersQuery.isLoading ? (
-            <div className="mt-4 space-y-2">{[0, 1, 2].map((i) => <div key={i} className="h-14 bg-zinc-50 rounded-xl animate-pulse border" />)}</div>
+            <div className="mt-4 space-y-2">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-14 rounded-xl" />)}</div>
           ) : banners.length === 0 ? (
-            <div className="mt-8 bg-white rounded-2xl border p-8 text-center">
-              <Image size={24} className="mx-auto text-zinc-400" />
-              <p className="text-sm text-zinc-500 mt-2">No banners yet. Create one to get started.</p>
-              <button onClick={openNew} className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-zinc-900 text-white text-sm font-semibold hover:bg-black">
-                <Plus size={14} /> Create first banner
-              </button>
-            </div>
+            <Card className="mt-8">
+              <CardContent className="py-8 text-center">
+                <Image size={24} className="mx-auto text-muted-foreground" />
+                <p className="text-sm text-muted-foreground mt-2">No banners yet. Create one to get started.</p>
+                <Button onClick={openNew} className="mt-3">
+                  <Plus size={14} /> Create first banner
+                </Button>
+              </CardContent>
+            </Card>
           ) : (
-            <div className="mt-2 bg-white rounded-2xl border overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b bg-zinc-50">
-                    <th className="text-left px-4 py-3 font-semibold text-zinc-600">Title</th>
-                    <th className="text-left px-4 py-3 font-semibold text-zinc-600 hidden sm:table-cell">Subtitle</th>
-                    <th className="text-left px-4 py-3 font-semibold text-zinc-600 hidden md:table-cell">Background</th>
-                    <th className="text-left px-4 py-3 font-semibold text-zinc-600">Status</th>
-                    <th className="text-right px-4 py-3 font-semibold text-zinc-600 w-32"></th>
-                  </tr>
-                </thead>
-                <tbody>
+            <Card className="mt-2">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/50">
+                    <TableHead className="px-4 py-3">Title</TableHead>
+                    <TableHead className="px-4 py-3 hidden sm:table-cell">Subtitle</TableHead>
+                    <TableHead className="px-4 py-3 hidden md:table-cell">Background</TableHead>
+                    <TableHead className="px-4 py-3">Status</TableHead>
+                    <TableHead className="px-4 py-3 text-right w-32"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {banners.map((b) => (
-                    <tr key={b.id} className="border-b last:border-b-0 hover:bg-zinc-50 transition-colors">
-                      <td className="px-4 py-3">
+                    <TableRow key={b.id}>
+                      <TableCell className="px-4 py-3">
                         <div className="flex items-center gap-3">
                           <div className={`w-10 h-10 rounded-lg ${b.background} flex-shrink-0`} />
                           <div className="font-medium">{b.title}</div>
                         </div>
-                      </td>
-                      <td className="px-4 py-3 text-zinc-500 hidden sm:table-cell">{b.subtitle || '—'}</td>
-                      <td className="px-4 py-3 hidden md:table-cell">
-                        <span className={`text-[11px] px-2 py-1 rounded-full font-bold border ${b.background} text-white border-transparent`}>
+                      </TableCell>
+                      <TableCell className="px-4 py-3 text-muted-foreground hidden sm:table-cell">{b.subtitle || '—'}</TableCell>
+                      <TableCell className="px-4 py-3 hidden md:table-cell">
+                        <Badge variant="outline" className={`${b.background} text-white border-transparent`}>
                           {b.background.replace('bg-', '')}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`text-[11px] px-2 py-1 rounded-full font-bold border ${b.active ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-zinc-100 border-zinc-200 text-zinc-600'}`}>
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="px-4 py-3">
+                        <Badge variant={b.active ? 'default' : 'secondary'} className={b.active ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : ''}>
                           {b.active ? 'Active' : 'Inactive'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-right">
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-2">
-                          <button onClick={() => openEdit(b)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border hover:bg-zinc-100 text-xs font-semibold">
+                          <Button variant="outline" size="sm" onClick={() => openEdit(b)}>
                             <Pencil size={12} /> Edit
-                          </button>
-                          <button onClick={() => handleDelete(b.id)} className="px-2.5 py-1.5 rounded-xl border hover:bg-red-50 text-red-600">
+                          </Button>
+                          <Button variant="destructive" size="icon" onClick={() => handleDelete(b.id)}>
                             <Trash2 size={13} />
-                          </button>
+                          </Button>
                         </div>
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
-            </div>
+                </TableBody>
+              </Table>
+            </Card>
           )}
         </>
       )}
