@@ -96,6 +96,7 @@ export interface MenuItem {
   isNew: boolean;
   isSpicy?: boolean;
   isJain?: boolean;
+  noCrust?: boolean;
   preparationTime: number;
   calories?: number;
 }

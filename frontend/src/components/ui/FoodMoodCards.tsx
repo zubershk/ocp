@@ -29,7 +29,7 @@ export default function FoodMoodCards({ items }: FoodMoodCardsProps) {
         {representativeImages.map((mood) => (
           <Link
             key={mood.id}
-            to={`/menu?${mood.query}`}
+            to={`/r/menu?${mood.query}`}
             className="flex flex-col items-center gap-2.5 group"
           >
             <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full overflow-hidden border-2 border-stone-100 group-hover:border-brand-300 group-hover:shadow-md transition-all duration-200">

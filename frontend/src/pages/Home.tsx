@@ -182,7 +182,7 @@ export default function Home() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-5">
           {filteredPopular.map((item, i) => (
             <div key={item.id} className="reveal-item group bg-white rounded-2xl border border-stone-100 overflow-hidden card-lift" style={{ animationDelay: `${i * 50}ms` }}>
-              <Link to={`/menu/item/${item.id}`} className="block relative">
+              <Link to={`/r/menu/item/${item.id}`} className="block relative">
                 <div className="overflow-hidden">
                   <img
                     src={item.image}

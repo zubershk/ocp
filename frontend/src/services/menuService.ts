@@ -35,6 +35,7 @@ interface ApiMenuItem {
   is_spicy?: boolean;
   is_jain?: boolean;
   is_new?: boolean;
+  no_crust?: boolean;
   price_by_size?: Record<string, number>;
 }
 
@@ -114,6 +115,7 @@ function mapItem(raw: ApiMenuItem, categorySlug: string): MenuItem {
     isPopular:
       subcategory === 'signature' || subcategory === 'supreme' || subcategory === 'desi-tadka',
     isNew: raw.is_new === true,
+    noCrust: raw.no_crust === true,
     isSpicy: raw.is_spicy === true,
     isJain: raw.is_jain === true,
     preparationTime: DEFAULT_PREP_MINUTES,
@@ -132,6 +134,25 @@ async function fetchFromApi(): Promise<MenuSnapshot> {
   );
 
   const items = data.items.map((raw) => mapItem(raw, slugById.get(raw.category_id) ?? ''));
+
+  // Merge live review aggregates (best-effort, never blocks the menu).
+  try {
+    const summary = await apiGet<{ summary: { per_item: Record<string, { average: number; count: number }> } }>(
+      '/api/reviews/summary',
+    ).catch(() => null);
+    const perItem = summary?.summary?.per_item;
+    if (perItem) {
+      for (const item of items) {
+        const agg = perItem[item.id];
+        if (agg && agg.count > 0) {
+          item.rating = Math.round(agg.average * 10) / 10;
+          item.reviewCount = agg.count;
+        }
+      }
+    }
+  } catch {
+    /* keep default ratings */
+  }
 
   const counts = new Map<MenuCategory, number>();
   for (const item of items) {

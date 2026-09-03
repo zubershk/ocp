@@ -7,6 +7,19 @@ export default function CategoryScroll() {
   const { categories } = useMenuItems();
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  // Multiple DB categories can normalize to the same display id
+  // (via mapMenuCategory) — merge them so React keys stay unique.
+  const merged = categories.reduce<typeof categories>((acc, cat) => {
+    const existing = acc.find((c) => c.id === cat.id);
+    if (existing) {
+      existing.itemCount += cat.itemCount;
+      if (!existing.image && cat.image) existing.image = cat.image;
+    } else {
+      acc.push({ ...cat });
+    }
+    return acc;
+  }, []);
+
   const scroll = (dir: 'left' | 'right') => {
     if (!scrollRef.current) return;
     scrollRef.current.scrollBy({ left: dir === 'left' ? -200 : 200, behavior: 'smooth' });
@@ -34,10 +47,10 @@ export default function CategoryScroll() {
         className="flex gap-5 overflow-x-auto scrollbar-none pb-2 -mx-4 px-4 snap-x snap-mandatory"
         style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
       >
-        {categories.map((cat) => (
+        {merged.map((cat) => (
           <Link
             key={cat.id}
-            to={`/menu?cat=${cat.id}`}
+            to={`/r/menu?cat=${cat.id}`}
             className="shrink-0 snap-start flex flex-col items-center gap-2 group/cat"
           >
             <div className="w-[72px] h-[72px] rounded-full overflow-hidden border-2 border-stone-100 group-hover/cat:border-brand-300 group-hover/cat:shadow-md transition-all duration-200">

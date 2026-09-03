@@ -218,7 +218,7 @@ export default function Menu() {
               key={item.id}
               className="menu-card group bg-white rounded-2xl border border-stone-100 overflow-hidden card-lift flex flex-col"
             >
-              <Link to={`/menu/item/${item.id}`} className="relative block" aria-label={`View details for ${item.name}`}>
+                <Link to={`/r/menu/item/${item.id}`} className="relative block" aria-label={`View details for ${item.name}`}>
                 <div className="overflow-hidden">
                   <img
                     src={item.image}
@@ -284,7 +284,7 @@ export default function Menu() {
                   </span>
                   {item.priceBySize ? (
                     <Link
-                      to={`/menu/item/${item.id}`}
+                      to={`/r/menu/item/${item.id}`}
                       className="px-3.5 py-2 rounded-xl text-xs font-semibold transition-all duration-200 bg-zinc-900 text-white group-hover:bg-brand-600 touch-target"
                     >
                       Choose size
