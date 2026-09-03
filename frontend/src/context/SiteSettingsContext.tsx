@@ -55,9 +55,66 @@ interface MenuCategory {
   active?: boolean;
 }
 
+export interface PublicOffer {
+  id: string;
+  title: string;
+  subtitle: string;
+  badge: string;
+  code: string;
+  discount: string;
+  image_url: string;
+  minOrder: number;
+  maxDiscount: number;
+  active: boolean;
+}
+
+export interface PublicBanner {
+  id: string;
+  title: string;
+  subtitle: string;
+  background: string;
+  accent: string;
+  buttonText: string;
+  buttonLink: string;
+  image_url: string;
+  active: boolean;
+}
+
+export interface FamilyPackConfig {
+  id: string;
+  title: string;
+  subtitle: string;
+  vegSlug: string;
+  nonvegSlug: string;
+  active: boolean;
+}
+
+export interface BogoConfig {
+  title: string;
+  subtitle: string;
+  description: string;
+  pricing: string;
+  active: boolean;
+}
+
+export interface FamilyPacksConfig {
+  bogo: BogoConfig;
+  packs: FamilyPackConfig[];
+}
+
+// Empty shape — every business configures its own content via admin.
+// No business-specific content belongs in code fallbacks.
+const FAMILY_PACKS_DEFAULTS: FamilyPacksConfig = {
+  bogo: { title: '', subtitle: '', description: '', pricing: '', active: false },
+  packs: [],
+};
+
 interface SiteSettingsData {
   settings: SiteSettingsResponse;
   categories: MenuCategory[];
+  offers: PublicOffer[];
+  banners: PublicBanner[];
+  familyPacks: FamilyPacksConfig;
   loading: boolean;
 }
 
@@ -83,6 +140,9 @@ const SETTINGS_DEFAULTS: SiteSettingsResponse = {
 const SiteSettingsContext = createContext<SiteSettingsData>({
   settings: SETTINGS_DEFAULTS,
   categories: [],
+  offers: [],
+  banners: [],
+  familyPacks: FAMILY_PACKS_DEFAULTS,
   loading: true,
 });
 
@@ -118,23 +178,34 @@ function applySEO(seo: SEOSettings) {
 export function SiteSettingsProvider({ children }: { children: React.ReactNode }) {
   const [settings, setSettings] = useState<SiteSettingsResponse>(SETTINGS_DEFAULTS);
   const [categories, setCategories] = useState<MenuCategory[]>([]);
+  const [offers, setOffers] = useState<PublicOffer[]>([]);
+  const [banners, setBanners] = useState<PublicBanner[]>([]);
+  const [familyPacks, setFamilyPacks] = useState<FamilyPacksConfig>(FAMILY_PACKS_DEFAULTS);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     async function load() {
       try {
-        const [settingsRes, categoriesRes] = await Promise.all([
-          apiGet<SiteSettingsResponse>('/api/site-settings').catch(() => null),
+        const [settingsRes, categoriesRes, offersRes, bannersRes, packsRes] = await Promise.all([
+          apiGet<{ settings: SiteSettingsResponse }>('/api/site-settings').catch(() => null),
           apiGet<{ categories: MenuCategory[] }>('/api/menu-categories').catch(() => ({ categories: [] })),
+          apiGet<{ offers: PublicOffer[] }>('/api/offers').catch(() => ({ offers: [] })),
+          apiGet<{ banners: PublicBanner[] }>('/api/banners').catch(() => ({ banners: [] })),
+          apiGet<{ family_packs: FamilyPacksConfig }>('/api/family-packs').catch(() => null),
         ]);
         if (!cancelled) {
-          if (settingsRes) {
-            setSettings(settingsRes);
-            applyCSSVars(settingsRes.brand ?? {});
-            applySEO(settingsRes.seo ?? {});
+          const unwrapped = settingsRes?.settings ?? settingsRes;
+          if (unwrapped && typeof unwrapped === 'object' && 'brand' in (unwrapped as object)) {
+            const s = unwrapped as SiteSettingsResponse;
+            setSettings(s);
+            applyCSSVars(s.brand ?? {});
+            applySEO(s.seo ?? {});
           }
           setCategories(categoriesRes.categories ?? []);
+          setOffers(offersRes.offers ?? []);
+          setBanners(bannersRes.banners ?? []);
+          if (packsRes?.family_packs) setFamilyPacks(packsRes.family_packs);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -147,8 +218,11 @@ export function SiteSettingsProvider({ children }: { children: React.ReactNode }
   const value = useMemo(() => ({
     settings,
     categories,
+    offers,
+    banners,
+    familyPacks,
     loading,
-  }), [settings, categories, loading]);
+  }), [settings, categories, offers, banners, familyPacks, loading]);
 
   return (
     <SiteSettingsContext.Provider value={value}>
