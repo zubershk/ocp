@@ -79,11 +79,11 @@ func (s *MenuService) GetItemByID(id int) (*models.MenuItem, error) {
 	var item models.MenuItem
 	err := database.DB.QueryRow(`
 		SELECT id, category_id, name, slug, description, price, image_url, available, sort_order, active, created_at, updated_at,
-		price_regular, price_medium, price_large, COALESCE(dietary,'veg'), COALESCE(pizza_subcategory,''), COALESCE(pizza_type,''), is_spicy, is_jain, is_new
+		price_regular, price_medium, price_large, COALESCE(dietary,'veg'), COALESCE(pizza_subcategory,''), COALESCE(pizza_type,''), is_spicy, is_jain, is_new, COALESCE(no_crust,false)
 		FROM menu_items
 		WHERE id = $1 AND active = true
 	`, id).Scan(&item.ID, &item.CategoryID, &item.Name, &item.Slug, &item.Description, &item.Price, &item.ImageURL, &item.Available, &item.SortOrder, &item.Active, &item.CreatedAt, &item.UpdatedAt,
-		&item.PriceRegular, &item.PriceMedium, &item.PriceLarge, &item.Dietary, &item.PizzaSubcategory, &item.PizzaType, &item.IsSpicy, &item.IsJain, &item.IsNew)
+		&item.PriceRegular, &item.PriceMedium, &item.PriceLarge, &item.Dietary, &item.PizzaSubcategory, &item.PizzaType, &item.IsSpicy, &item.IsJain, &item.IsNew, &item.NoCrust)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -466,6 +466,7 @@ const websiteItemColumns = `
 	COALESCE(image_url, ''), available, sort_order, active, created_at, updated_at,
 	COALESCE(dietary, ''), COALESCE(pizza_subcategory, ''), COALESCE(pizza_type, ''),
 	COALESCE(is_spicy, false), COALESCE(is_jain, false), COALESCE(is_new, false),
+	COALESCE(no_crust, false),
 	price_regular, price_medium, price_large
 `
 
@@ -477,7 +478,7 @@ func scanWebsiteItem(scanner interface {
 		&item.ID, &item.CategoryID, &item.Name, &item.Slug, &item.Description, &item.Price,
 		&item.ImageURL, &item.Available, &item.SortOrder, &item.Active, &item.CreatedAt, &item.UpdatedAt,
 		&item.Dietary, &item.PizzaSubcategory, &item.PizzaType,
-		&item.IsSpicy, &item.IsJain, &item.IsNew,
+		&item.IsSpicy, &item.IsJain, &item.IsNew, &item.NoCrust,
 		&item.PriceRegular, &item.PriceMedium, &item.PriceLarge,
 	)
 	if err != nil {
@@ -572,12 +573,12 @@ func isNumericID(s string) bool {
 
 // CrustInfo is the website/WhatsApp-facing crust catalog row.
 type CrustInfo struct {
-	Slug        string
-	Name        string
-	Description string
-	Regular     float64
-	Medium      float64
-	Large       float64
+	Slug        string  `json:"slug"`
+	Name        string  `json:"name"`
+	Description string  `json:"description"`
+	Regular     float64 `json:"regular"`
+	Medium      float64 `json:"medium"`
+	Large       float64 `json:"large"`
 }
 
 // GetActiveCrusts returns the backend-owned crust catalog (Phase 3).
