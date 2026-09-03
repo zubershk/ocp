@@ -1,4 +1,4 @@
-import { apiGet, apiPost } from './api';
+import { apiGet, apiPost, apiBaseUrl } from './api';
 
 // ------------------------------------------------------------------
 // Website order API (Phase 2.2 + security fix)
@@ -59,11 +59,17 @@ interface ApiOrderResponse {
     payment_method: string;
     items: {
       name: string;
+      slug?: string;
       size?: string;
       crust?: string;
       quantity: number;
       unit_price: number;
       line_total: number;
+    }[];
+    events?: {
+      event_type: string;
+      description: string;
+      created_at: string;
     }[];
     subtotal: number;
     delivery_fee: number;
@@ -88,11 +94,17 @@ export type OrderView = {
   paymentMethod: string;
   items: {
     name: string;
+    slug?: string;
     size?: string;
     crust?: string;
     quantity: number;
     unitPrice: number;
     lineTotal: number;
+  }[];
+  events?: {
+    eventType: string;
+    description: string;
+    createdAt: string;
   }[];
   subtotal: number;
   deliveryFee: number;
@@ -116,11 +128,17 @@ function toView(raw: ApiOrderResponse['order'], notification?: ApiOrderResponse[
     paymentMethod: raw.payment_method,
     items: raw.items.map((it) => ({
       name: it.name,
+      slug: it.slug || undefined,
       size: it.size,
       crust: it.crust,
       quantity: it.quantity,
       unitPrice: it.unit_price,
       lineTotal: it.line_total,
+    })),
+    events: raw.events?.map((e) => ({
+      eventType: e.event_type,
+      description: e.description,
+      createdAt: e.created_at,
     })),
     subtotal: raw.subtotal,
     deliveryFee: raw.delivery_fee,
@@ -139,6 +157,28 @@ export const orderService = {
     // Persist the per-order access token so THIS device can track later.
     saveOrderToken(view.orderNumber, view.id, response.order.access_token ?? '');
     return view;
+  },
+
+  /** Submits a verified-purchase review for a delivered order. */
+  async submitReview(
+    idOrNumber: string,
+    orderId: number,
+    payload: { rating: number; title: string; body: string; item_ratings: { item_slug: string; rating: number }[] },
+  ): Promise<void> {
+    const token = tokenFor(idOrNumber);
+    const response = await fetch(`${apiBaseUrl}/api/reviews`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        ...(token ? { 'X-Order-Token': token } : {}),
+      },
+      body: JSON.stringify({ order_id: orderId, ...payload }),
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => null) as { error?: string } | null;
+      throw new Error(data?.error ?? `Review failed (${response.status})`);
+    }
   },
 
   /** Loads an order by numeric ID or order number. Returns null on 404. */
