@@ -13,6 +13,28 @@
     --brand-accent: #f59e0b;
     --brand-accent-light: #fbbf24;
 
+    /* shadcn/ui tokens (HSL space-separated) */
+    --radius: 0.75rem;
+    --background: 37 60% 98%;
+    --foreground: 24 8% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 24 8% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 24 8% 11%;
+    --primary: 24 95% 53%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 60 6% 96%;
+    --secondary-foreground: 24 8% 11%;
+    --muted: 60 6% 96%;
+    --muted-foreground: 25 7% 46%;
+    --accent: 33 80% 97%;
+    --accent-foreground: 24 8% 11%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 33 17% 88%;
+    --input: 33 17% 88%;
+    --ring: 24 95% 53%;
+
     /* Semantic colors */
     --color-bg: #fefcf8;
     --color-bg-subtle: #fef7ed;
