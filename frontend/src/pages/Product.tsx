@@ -80,7 +80,7 @@ export default function Product() {
         <ArrowLeft size={16} /> Back to menu
       </Link>
 
-      <div className="grid lg:grid-cols-2 gap-8 lg:gap-12 mt-6 pb-24 lg:pb-0">
+      <div className="grid lg:grid-cols-2 gap-6 lg:gap-12 mt-6 pb-24 lg:pb-0">
         {/* Image */}
         <div className="animate-fade-in">
           <div className="relative overflow-hidden rounded-3xl bg-orange-50">
@@ -213,7 +213,7 @@ export default function Product() {
           </fieldset>
 
           {/* Quantity + Price */}
-          <div className="mt-8 flex flex-wrap items-end gap-x-8 gap-y-4">
+          <div className="mt-8 flex flex-wrap items-end gap-x-4 sm:gap-x-8 gap-y-4">
             <div>
               <h3 className="text-sm font-semibold text-zinc-700 mb-2">Quantity</h3>
               <div className="flex items-center gap-3">
@@ -303,7 +303,7 @@ export default function Product() {
                     <button
                       onClick={() => { addItem(s, 'regular', 'tossed', 1); push({ type: 'success', title: `Added ${s.name} to cart` }); }}
                       aria-label={`Add ${s.name} to cart`}
-                      className="inline-flex items-center gap-1 text-xs bg-brand-600 text-white px-3 py-1.5 rounded-lg font-semibold hover:bg-brand-700 active:scale-95 transition-all duration-150 cursor-pointer"
+                      className="inline-flex items-center gap-1 text-xs bg-brand-600 text-white px-3 py-2 rounded-lg font-semibold hover:bg-brand-700 active:scale-95 transition-all duration-150 cursor-pointer touch-target"
                     >
                       <Plus size={12} /> Add
                     </button>
