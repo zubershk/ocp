@@ -43,7 +43,7 @@ export default function AdminAudit() {
 
   return (
     <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
-      <AdminSubNav />
+      <AdminSubNav activeOverride="/admin/logs" />
 
       <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2"><ScrollText size={20} className="text-zinc-700" /> Audit Log</h1>
       <p className="text-sm text-muted-foreground mt-1">Every menu, order, outlet and chat action — who, what, when, IP.</p>
