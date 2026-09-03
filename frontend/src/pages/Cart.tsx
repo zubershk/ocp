@@ -125,7 +125,7 @@ export default function Cart() {
                     key={s.id}
                     className="bg-white rounded-2xl border border-stone-100 overflow-hidden flex items-center gap-3 pr-3 card-lift"
                   >
-                    <Link to={`/menu/item/${s.id}`} aria-label={`View ${s.name}`}>
+                    <Link to={`/r/menu/item/${s.id}`} aria-label={`View ${s.name}`}>
                       <div className="overflow-hidden shrink-0">
                         <img
                           src={s.image}

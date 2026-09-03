@@ -142,8 +142,8 @@ export default function Product() {
 
           <h1 className="text-3xl sm:text-4xl font-heading font-bold leading-tight mt-2">{item.name}</h1>
           
-          {/* Rating */}
-          {item.rating > 0 && (
+          {/* Rating — only when real reviews exist */}
+          {item.reviewCount > 0 && (
             <div className="mt-2">
               <StarRating rating={item.rating} count={item.reviewCount} size={16} />
             </div>
@@ -182,7 +182,8 @@ export default function Product() {
             </fieldset>
           )}
 
-          {/* Crust selector */}
+          {/* Crust selector — hidden for fixed bundles (no_crust flag) */}
+          {!item.noCrust && (
           <fieldset className="mt-6">
             <legend className="text-sm font-semibold text-zinc-700 mb-3">Choose Crust</legend>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -192,7 +193,7 @@ export default function Product() {
                   <button
                     key={c.slug}
                     type="button"
-                    onClick={() => setCrust(c.slug)}
+                    onClick={() => setCrust(crust === c.slug ? 'tossed' : c.slug)}
                     aria-pressed={crust === c.slug}
                     className={`
                       text-left p-3.5 rounded-2xl border-2 transition-all duration-200 cursor-pointer
@@ -211,6 +212,7 @@ export default function Product() {
               })}
             </div>
           </fieldset>
+          )}
 
           {/* Quantity + Price */}
           <div className="mt-8 flex flex-wrap items-end gap-x-4 sm:gap-x-8 gap-y-4">
@@ -283,7 +285,7 @@ export default function Product() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-5">
             {sides.map((s: MenuItem) => (
               <div key={s.id} className="bg-white rounded-2xl border border-stone-100 overflow-hidden group flex flex-col card-lift stagger-child">
-                <Link to={`/menu/item/${s.id}`} aria-label={`View ${s.name}`} className="block">
+                <Link to={`/r/menu/item/${s.id}`} aria-label={`View ${s.name}`} className="block">
                   <div className="overflow-hidden">
                     <img
                       src={s.image}
