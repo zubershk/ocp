@@ -212,7 +212,7 @@ export default function Menu() {
         </div>
       ) : (
         /* Menu grid */
-        <div ref={menuGridRef} className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 mt-6">
+        <div ref={menuGridRef} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-5 mt-6">
           {filtered.map((item) => (
             <div
               key={item.id}
@@ -285,14 +285,14 @@ export default function Menu() {
                   {item.priceBySize ? (
                     <Link
                       to={`/menu/item/${item.id}`}
-                      className="px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all duration-200 bg-zinc-900 text-white group-hover:bg-brand-600"
+                      className="px-3.5 py-2 rounded-xl text-xs font-semibold transition-all duration-200 bg-zinc-900 text-white group-hover:bg-brand-600 touch-target"
                     >
                       Choose size
                     </Link>
                   ) : (
                     <button
                       onClick={() => quickAdd(item)}
-                      className="inline-flex items-center gap-1 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all duration-200 bg-brand-600 text-white hover:bg-brand-700 active:scale-95 cursor-pointer"
+                      className="inline-flex items-center gap-1 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all duration-200 bg-brand-600 text-white hover:bg-brand-700 active:scale-95 cursor-pointer touch-target"
                     >
                       <Plus size={12} /> Add
                     </button>
