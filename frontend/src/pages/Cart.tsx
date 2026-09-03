@@ -43,7 +43,7 @@ export default function Cart() {
 
   return (
     <div className="container-page py-8">
-      <div className="grid lg:grid-cols-3 gap-8">
+      <div className="grid lg:grid-cols-3 gap-6 lg:gap-8">
         {/* Cart items */}
         <div className="lg:col-span-2">
           <div className="flex items-center justify-between">
@@ -87,7 +87,7 @@ export default function Cart() {
                     <button
                       onClick={() => updateQty(it.id, it.quantity - 1)}
                       aria-label={`Decrease ${it.name}`}
-                      className="w-9 h-9 rounded-xl border border-stone-200 flex items-center justify-center hover:bg-stone-50 transition-colors cursor-pointer"
+                      className="w-11 h-11 rounded-xl border border-stone-200 flex items-center justify-center hover:bg-stone-50 transition-colors cursor-pointer"
                     >
                       <Minus size={14} />
                     </button>
@@ -95,7 +95,7 @@ export default function Cart() {
                     <button
                       onClick={() => updateQty(it.id, it.quantity + 1)}
                       aria-label={`Increase ${it.name}`}
-                      className="w-9 h-9 rounded-xl border border-stone-200 flex items-center justify-center hover:bg-stone-50 transition-colors cursor-pointer"
+                      className="w-11 h-11 rounded-xl border border-stone-200 flex items-center justify-center hover:bg-stone-50 transition-colors cursor-pointer"
                     >
                       <Plus size={14} />
                     </button>
@@ -145,7 +145,7 @@ export default function Cart() {
                     <button
                       onClick={() => { addItem(s, 'regular', 'tossed', 1); push({ type: 'success', title: `Added ${s.name} to cart` }); }}
                       aria-label={`Add ${s.name} to cart`}
-                      className="shrink-0 w-9 h-9 rounded-xl bg-brand-600 text-white flex items-center justify-center hover:bg-brand-700 active:scale-95 transition-all duration-150 cursor-pointer"
+                      className="shrink-0 w-10 h-10 rounded-xl bg-brand-600 text-white flex items-center justify-center hover:bg-brand-700 active:scale-95 transition-all duration-150 cursor-pointer"
                     >
                       <PlusIcon size={15} />
                     </button>
