@@ -2,12 +2,14 @@ import { useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { Minus, Plus, Trash2, ShoppingBag, Plus as PlusIcon, ArrowRight, ShieldCheck, Clock } from 'lucide-react';
 import { useCart } from '../context/CartContext';
+import { useCrusts } from '../context/CrustContext';
 import { useMenuItems } from '../hooks/useMenu';
 import { useToast } from '../context/ToastContext';
 import { useDeliveryHours } from '../context/RestaurantContext';
 
 export default function Cart() {
   const { items, updateQty, removeItem, clear, subtotal, addItem } = useCart();
+  const { defaultCrust } = useCrusts();
   const { items: menuItems } = useMenuItems();
   const { push } = useToast();
   const deliveryHours = useDeliveryHours();
@@ -143,7 +145,7 @@ export default function Cart() {
                       <div className="text-xs text-zinc-400 mt-0.5">₹{s.price}</div>
                     </div>
                     <button
-                      onClick={() => { addItem(s, 'regular', 'tossed', 1); push({ type: 'success', title: `Added ${s.name} to cart` }); }}
+                      onClick={() => { addItem(s, 'regular', defaultCrust, 1); push({ type: 'success', title: `Added ${s.name} to cart` }); }}
                       aria-label={`Add ${s.name} to cart`}
                       className="shrink-0 w-10 h-10 rounded-xl bg-brand-600 text-white flex items-center justify-center hover:bg-brand-700 active:scale-95 transition-all duration-150 cursor-pointer"
                     >

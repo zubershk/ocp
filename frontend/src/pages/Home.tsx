@@ -5,9 +5,11 @@ import { useMenuItems } from '../hooks/useMenu';
 import { pickPopular } from '../services/menuService';
 import { useRestaurantName, useDeliveryHours, useOutletsList, useRestaurantPhone } from '../context/RestaurantContext';
 import { useCart } from '../context/CartContext';
+import { useCrusts } from '../context/CrustContext';
 import { useToast } from '../context/ToastContext';
 import { useMenuCategories } from '../context/SiteSettingsContext';
 import LocationPill from '../components/ui/LocationPill';
+import SearchAutocomplete from '../components/ui/SearchAutocomplete';
 import OffersStrip from '../components/ui/OffersStrip';
 import CategoryScroll from '../components/ui/CategoryScroll';
 import FoodMoodCards from '../components/ui/FoodMoodCards';
@@ -17,8 +19,8 @@ import BannerCarousel from '../components/ui/BannerCarousel';
 import { useGsapReveal } from '../hooks/useGsap';
 import type { MenuItem } from '../types';
 
-function quickAdd(item: MenuItem, addItem: ReturnType<typeof useCart>['addItem'], push: ReturnType<typeof useToast>['push']) {
-  addItem(item, 'regular', 'tossed', 1);
+function quickAdd(item: MenuItem, addItem: ReturnType<typeof useCart>['addItem'], push: ReturnType<typeof useToast>['push'], crust: string) {
+  addItem(item, 'regular', crust, 1);
   push({ type: 'success', title: `Added ${item.name} to cart` });
 }
 
@@ -96,6 +98,7 @@ export default function Home() {
   const popular = pickPopular(items);
   const { addItem } = useCart();
   const { push } = useToast();
+  const { defaultCrust } = useCrusts();
   const [activeFilter, setActiveFilter] = useState('all');
   const [showBackToTop, setShowBackToTop] = useState(false);
   const restaurantName = useRestaurantName();
@@ -134,13 +137,9 @@ export default function Home() {
       <div className="sticky top-0 z-40 bg-white border-b border-stone-200">
         <div className="container-page py-3 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
           <LocationPill />
-          <Link
-            to="/r/menu"
-            className="flex-1 flex items-center gap-3 px-4 py-2.5 rounded-xl bg-stone-50 border border-stone-200 text-sm text-zinc-400 hover:border-stone-300 transition-all"
-          >
-            <Search size={16} className="text-zinc-400 shrink-0" />
-            <span className="truncate">Search for pizza, burgers, pasta...</span>
-          </Link>
+          <div className="flex-1">
+            <SearchAutocomplete items={items} />
+          </div>
         </div>
       </div>
 
@@ -227,7 +226,7 @@ export default function Home() {
                     {item.priceBySize && <span className="text-xs text-zinc-400 font-medium">+</span>}
                   </span>
                   <button
-                    onClick={() => quickAdd(item, addItem, push)}
+                    onClick={() => quickAdd(item, addItem, push, defaultCrust)}
                     className="flex items-center gap-1 text-xs bg-brand-600 text-white px-3.5 py-2 rounded-lg font-semibold hover:bg-brand-700 active:scale-95 transition-all duration-150 cursor-pointer touch-target"
                   >
                     <Plus size={12} /> ADD

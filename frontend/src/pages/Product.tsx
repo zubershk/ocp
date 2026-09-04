@@ -13,7 +13,7 @@ import type { MenuItem } from '../types';
 export default function Product() {
   const { id } = useParams();
   const { items, loading } = useMenuItems();
-  const { crusts, getCrustExtra } = useCrusts();
+  const { crusts, getCrustExtra, defaultCrust } = useCrusts();
   const item = items.find((i) => i.id === id);
   const nav = useNavigate();
   const { addItem } = useCart();
@@ -21,6 +21,9 @@ export default function Product() {
   const deliveryHours = useDeliveryHours();
   const [size, setSize] = useState<'regular' | 'medium' | 'large'>('regular');
   const [crust, setCrust] = useState('tossed');
+  // If the selected crust was deactivated in admin, fall back to the
+  // first active option so checkout validation never fails.
+  const activeCrust = crusts.some((c) => c.slug === crust) ? crust : defaultCrust;
   const [qty, setQty] = useState(1);
   const [justAdded, setJustAdded] = useState(false);
   const [imgLoaded, setImgLoaded] = useState(false);
@@ -57,8 +60,8 @@ export default function Product() {
   );
 
   const base = item.priceBySize ? (item.priceBySize[size] ?? item.price) : item.price;
-  const crustObj = crusts.find((c) => c.slug === crust);
-  const crustExtra = getCrustExtra(crust, size);
+  const crustObj = crusts.find((c) => c.slug === activeCrust);
+  const crustExtra = getCrustExtra(activeCrust, size);
   const unit = base + crustExtra;
   const total = unit * qty;
 
@@ -67,7 +70,7 @@ export default function Product() {
   ).slice(0, 4);
 
   const addNow = () => {
-    addItem(item, size, crust, qty);
+    addItem(item, size, activeCrust, qty);
     push({ type: 'success', title: `Added ${qty} × ${item.name} to cart` });
     setJustAdded(true);
     if (addTimeoutRef.current) clearTimeout(addTimeoutRef.current);
@@ -193,18 +196,18 @@ export default function Product() {
                   <button
                     key={c.slug}
                     type="button"
-                    onClick={() => setCrust(crust === c.slug ? 'tossed' : c.slug)}
-                    aria-pressed={crust === c.slug}
+                    onClick={() => setCrust(activeCrust === c.slug ? defaultCrust : c.slug)}
+                    aria-pressed={activeCrust === c.slug}
                     className={`
                       text-left p-3.5 rounded-2xl border-2 transition-all duration-200 cursor-pointer
-                      ${crust === c.slug
+                      ${activeCrust === c.slug
                         ? 'bg-zinc-900 text-white border-zinc-900 shadow-sm'
                         : 'bg-white border-stone-200 hover:border-brand-300 hover:bg-brand-50/30'
                       }
                     `}
                   >
                     <div className="text-sm font-medium">{c.name}</div>
-                    <div className={`text-xs mt-0.5 ${crust === c.slug ? 'text-white/70' : 'text-zinc-400'}`}>
+                    <div className={`text-xs mt-0.5 ${activeCrust === c.slug ? 'text-white/70' : 'text-zinc-400'}`}>
                       {c.description} {extra > 0 ? `(+₹${extra})` : '(no extra)'}
                     </div>
                   </button>
@@ -265,7 +268,7 @@ export default function Product() {
               )}
             </button>
             <button
-              onClick={() => { addItem(item, size, crust, qty); nav('/r/checkout'); }}
+              onClick={() => { addItem(item, size, activeCrust, qty); nav('/r/checkout'); }}
               className="px-8 py-4 rounded-2xl bg-zinc-900 text-white font-semibold hover:bg-zinc-800 transition-all duration-200 cursor-pointer inline-flex items-center gap-2"
             >
               <Zap size={16} /> Buy Now
@@ -303,7 +306,7 @@ export default function Product() {
                   <div className="flex items-center justify-between mt-2">
                     <span className="font-bold text-sm text-zinc-900">₹{s.price}</span>
                     <button
-                      onClick={() => { addItem(s, 'regular', 'tossed', 1); push({ type: 'success', title: `Added ${s.name} to cart` }); }}
+                      onClick={() => { addItem(s, 'regular', defaultCrust, 1); push({ type: 'success', title: `Added ${s.name} to cart` }); }}
                       aria-label={`Add ${s.name} to cart`}
                       className="inline-flex items-center gap-1 text-xs bg-brand-600 text-white px-3 py-2 rounded-lg font-semibold hover:bg-brand-700 active:scale-95 transition-all duration-150 cursor-pointer touch-target"
                     >
