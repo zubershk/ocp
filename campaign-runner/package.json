@@ -12,7 +12,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "express": "^4.21.0",
+    "express": "^5.2.1",
     "multer": "^2.2.0",
     "cors": "^2.8.5"
   },
