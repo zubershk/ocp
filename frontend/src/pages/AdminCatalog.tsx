@@ -249,7 +249,7 @@ export default function AdminCatalog() {
 
   const handleUpload = async (f: File) => {
     if (!f.type.startsWith('image/')) { toast.push({ type: 'warning', title: 'Please choose an image file' }); return; }
-    if (f.size > 10 << 20) { toast.push({ type: 'warning', title: 'Image too large — max 10MB' }); return; }
+    if (f.size > 5 << 20) { toast.push({ type: 'warning', title: 'Image too large — max 5MB' }); return; }
     setUploading(true);
     try {
       const fd = new FormData();
@@ -579,7 +579,7 @@ export default function AdminCatalog() {
                     <Button type="button" disabled={uploading} onClick={() => fileRef.current?.click()} className="inline-flex items-center gap-2"><Upload size={14} />{uploading ? '…' : 'Upload'}</Button>
                   </div>
                   {form.image_url && <img src={form.image_url} alt="preview" className="mt-2 w-full h-40 object-cover rounded-xl border bg-zinc-50" />}
-                  <p className="text-[11px] text-zinc-400 mt-1">Any image ≤10MB. Uploaded to <code className="px-1 bg-zinc-100 rounded">/uploads</code> — served to site + bot.</p>
+                  <p className="text-[11px] text-zinc-400 mt-1">Any image ≤5MB. Uploaded to <code className="px-1 bg-zinc-100 rounded">/uploads</code> — served to site + bot.</p>
                 </div>
                 <div>
                   <label className="text-xs font-semibold">Subcategory</label>
