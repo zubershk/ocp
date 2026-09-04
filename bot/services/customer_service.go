@@ -120,7 +120,8 @@ func RecordCustomerOrder(phone string, total float64) error {
 	return err
 }
 
-// CustomerOrders returns recent orders belonging strictly to this number.
+// CustomerOrders returns recent orders belonging strictly to this number,
+// each with its line items for status views and history.
 func CustomerOrders(phone string, limit int) ([]models.Order, error) {
 	phone = canonicalForStorage(phone)
 	rows, err := database.DB.Query(`
@@ -144,9 +145,32 @@ func CustomerOrders(phone string, limit int) ([]models.Order, error) {
 			&o.Total, &o.Status, &o.CreatedAt, &o.UpdatedAt); err != nil {
 			return nil, err
 		}
+		o.Items = loadOrderLines(o.ID)
 		orders = append(orders, o)
 	}
 	return orders, rows.Err()
+}
+
+// loadOrderLines fetches display lines for one order. Never fails the caller.
+func loadOrderLines(orderID int) []models.OrderItem {
+	itemRows, err := database.DB.Query(`
+		SELECT menu_item_id, name, quantity, unit_price, subtotal
+		FROM order_items WHERE order_id = $1 ORDER BY id
+	`, orderID)
+	if err != nil {
+		return nil
+	}
+	defer itemRows.Close()
+	var out []models.OrderItem
+	for itemRows.Next() {
+		var it models.OrderItem
+		if err := itemRows.Scan(&it.MenuItemID, &it.Name, &it.Quantity, &it.UnitPrice, &it.Subtotal); err != nil {
+			continue
+		}
+		it.LineTotal = it.Subtotal
+		out = append(out, it)
+	}
+	return out
 }
 
 // LatestActiveOrder returns the most recent non-terminal order.

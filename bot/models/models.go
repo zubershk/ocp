@@ -127,6 +127,10 @@ type OrderItem struct {
 	Options    string    `json:"options"` // JSON string
 	Subtotal   float64   `json:"subtotal"`
 	CreatedAt  time.Time `json:"created_at"`
+	// Display conveniences (populated by GetOrderByID / loadOrderLines).
+	Size      string  `json:"size,omitempty"`
+	Crust     string  `json:"crust,omitempty"`
+	LineTotal float64 `json:"line_total"`
 }
 
 type OrderEvent struct {

@@ -290,7 +290,13 @@ func (s *OrderService) CreateOrder(order *models.Order) error {
 		return err
 	}
 
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	BroadcastRealtime("order.created", map[string]interface{}{
+		"order_id": order.ID, "order_number": order.OrderNumber, "total": order.Total,
+	})
+	return nil
 }
 
 func (s *OrderService) GetOrderByID(id int) (*models.Order, error) {
@@ -323,6 +329,12 @@ func (s *OrderService) GetOrderByID(id int) (*models.Order, error) {
 			return nil, err
 		}
 		json.Unmarshal(optionsJSON, &item.Options)
+		var opts map[string]string
+		if json.Unmarshal(optionsJSON, &opts) == nil {
+			item.Size = opts["size"]
+			item.Crust = opts["crust"]
+		}
+		item.LineTotal = item.Subtotal
 		order.Items = append(order.Items, item)
 	}
 
