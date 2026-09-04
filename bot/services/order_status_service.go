@@ -158,7 +158,13 @@ func notifyCustomerStatus(orderNumber, phone, status string, evolution *Evolutio
 		return WhatsAppOutcome{Skipped: true, Reason: "customer phone missing"}
 	}
 	msg := StatusUpdateText(status, orderNumber)
-	if err := evolution.SendText(dest, msg); err != nil {
+	var err error
+	if img := resolvePublicImage(MsgImage("status_update"), cfg.PublicBaseURL); img != "" {
+		err = evolution.SendMedia(dest, img, "image", msg)
+	} else {
+		err = evolution.SendText(dest, msg)
+	}
+	if err != nil {
 		log.Printf("WhatsApp status notification failed for order %s: %v", orderNumber, err)
 		return WhatsAppOutcome{Reason: err.Error()}
 	}

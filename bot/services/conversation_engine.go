@@ -668,6 +668,20 @@ func (e *ConversationEngine) replayListPage(conv *conversation, phone, pageKey s
 
 func (e *ConversationEngine) stateOptions(conv *conversation) string {
 	switch conv.State {
+	case "CATEGORY":
+		return e.msgBrand("state_category")
+	case "ITEM":
+		return e.msgBrand("state_item")
+	case "SIZE":
+		return e.msgBrand("state_size")
+	case "CRUST":
+		return e.msgBrand("state_crust")
+	case "QUANTITY", "QUANTITY_MORE":
+		return e.msgBrand("state_quantity")
+	case "CART_MENU", "CART_EDIT", "CART_EDIT_QTY":
+		return e.msgBrand("state_cart")
+	case "FULFILLMENT", "ADDRESS_CONFIRM":
+		return e.msgBrand("state_fulfillment")
 	case "NAME":
 		return e.msgBrand("state_name")
 	case "ADDRESS":

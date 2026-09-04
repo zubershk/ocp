@@ -2,6 +2,7 @@ package services
 
 import (
 	"bytes"
+	"database/sql"
 	"fmt"
 	"log"
 	"strings"
@@ -25,6 +26,7 @@ type BotMessage struct {
 	Description string `json:"description"`
 	MessageText string `json:"message_text"`
 	Variables   string `json:"variables"`
+	ImageURL    string `json:"image_url"`
 	Active      bool   `json:"active"`
 }
 
@@ -42,8 +44,31 @@ func NewBotMessageService() *BotMessageService {
 		messages: make(map[string]*BotMessage),
 	}
 	globalMsgSvc = svc
+	svc.syncDefaults()
 	svc.loadAll()
 	return svc
+}
+
+// syncDefaults inserts any compiled-in keys missing from the DB so new
+// messages appear in the admin dashboard with zero migrations.
+// Existing rows are never touched (admin edits are sacred).
+func (s *BotMessageService) syncDefaults() {
+	defs := defaultMessages()
+	meta := defaultMessageMeta()
+	synced := 0
+	for key, text := range defs {
+		m, _ := meta[key]
+		if _, err := database.DB.Exec(`
+			INSERT INTO bot_messages (message_key, category, description, message_text, variables)
+			VALUES ($1, $2, $3, $4, $5)
+			ON CONFLICT (message_key) DO NOTHING
+		`, key, m.Category, m.Description, text, m.Variables); err == nil {
+			synced++
+		} else {
+			log.Printf("[BotMessages] sync failed for %q: %v", key, err)
+		}
+	}
+	_ = synced
 }
 
 // loadAll loads all bot_messages from the database into memory.
@@ -52,7 +77,7 @@ func (s *BotMessageService) loadAll() {
 	defer s.mu.Unlock()
 
 	rows, err := database.DB.Query(
-		`SELECT id, message_key, category, COALESCE(description,''), message_text, COALESCE(variables,''), active
+		`SELECT id, message_key, category, COALESCE(description,''), message_text, COALESCE(variables,''), COALESCE(image_url,''), active
 		 FROM bot_messages ORDER BY id`)
 	if err != nil {
 		log.Printf("[BotMessages] failed to load from DB: %v (using defaults)", err)
@@ -64,7 +89,7 @@ func (s *BotMessageService) loadAll() {
 	count := 0
 	for rows.Next() {
 		var m BotMessage
-		if err := rows.Scan(&m.ID, &m.Key, &m.Category, &m.Description, &m.MessageText, &m.Variables, &m.Active); err != nil {
+		if err := rows.Scan(&m.ID, &m.Key, &m.Category, &m.Description, &m.MessageText, &m.Variables, &m.ImageURL, &m.Active); err != nil {
 			log.Printf("[BotMessages] scan error: %v", err)
 			continue
 		}
@@ -152,10 +177,19 @@ func (s *BotMessageService) GetAllMessages() []BotMessage {
 }
 
 // UpdateMessage updates a single message template in DB and cache.
-func (s *BotMessageService) UpdateMessage(key, text string) error {
-	res, err := database.DB.Exec(
-		`UPDATE bot_messages SET message_text = $1, updated_at = CURRENT_TIMESTAMP WHERE message_key = $2`,
-		text, key)
+// Image is preserved by ResetMessage and updated when provided (nil = keep).
+func (s *BotMessageService) UpdateMessage(key, text string, imageURL *string) error {
+	var res sql.Result
+	var err error
+	if imageURL != nil {
+		res, err = database.DB.Exec(
+			`UPDATE bot_messages SET message_text = $1, image_url = $2, updated_at = CURRENT_TIMESTAMP WHERE message_key = $3`,
+			text, *imageURL, key)
+	} else {
+		res, err = database.DB.Exec(
+			`UPDATE bot_messages SET message_text = $1, updated_at = CURRENT_TIMESTAMP WHERE message_key = $2`,
+			text, key)
+	}
 	if err != nil {
 		return err
 	}
@@ -166,15 +200,29 @@ func (s *BotMessageService) UpdateMessage(key, text string) error {
 	s.mu.Lock()
 	if m, ok := s.messages[key]; ok {
 		m.MessageText = text
+		if imageURL != nil {
+			m.ImageURL = *imageURL
+		}
 	}
 	s.mu.Unlock()
 	return nil
 }
 
-// ResetMessage resets a message to its compiled-in default.
+// MessageImage returns the configured image URL for a key, or "".
+// Only active rows contribute images.
+func (s *BotMessageService) MessageImage(key string) string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if m, ok := s.messages[key]; ok && m.Active {
+		return strings.TrimSpace(m.ImageURL)
+	}
+	return ""
+}
+
+// ResetMessage resets a message to its compiled-in default (image kept).
 func (s *BotMessageService) ResetMessage(key string) error {
 	def := defaultMessage(key)
-	return s.UpdateMessage(key, def)
+	return s.UpdateMessage(key, def, nil)
 }
 
 // ResetAllMessages resets all messages to compiled-in defaults.
@@ -224,6 +272,14 @@ func Msg(key string, data map[string]interface{}) string {
 
 func MsgBrand(key string) string {
 	return Msg(key, nil)
+}
+
+// MsgImage returns the configured image URL for a key, or "".
+func MsgImage(key string) string {
+	if globalMsgSvc != nil {
+		return globalMsgSvc.MessageImage(key)
+	}
+	return ""
 }
 
 // FormatItems builds a line-item string from cart/order items for templates.

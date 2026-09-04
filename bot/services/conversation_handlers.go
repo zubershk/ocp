@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"os"
 	"strings"
 
 	"orangecheesepizza/bot/models"
@@ -90,13 +89,54 @@ func sizeOrRegular(s string) string {
 // ---------- send helpers ----------
 
 func (e *ConversationEngine) sendButtons(phone, title, body string, buttons []Button) {
+	e.sendButtonsWithImage(phone, title, body, "", buttons)
+}
+
+func (e *ConversationEngine) sendButtonsWithImage(phone, title, body, imageURL string, buttons []Button) {
 	footer := e.messages.GetBrandName()
 	if footer == "" {
 		footer = "Restaurant"
 	}
-	if err := e.evolution.SendButton(phone, title, body, footer, buttons); err != nil {
+	if err := e.evolution.SendButtonWithImage(phone, title, body, footer, imageURL, buttons); err != nil {
 		log.Printf("WA button send failed to %s: %v", phone, err)
 	}
+}
+
+// resolvePublicImage turns a stored image path into a WhatsApp-fetchable
+// URL: absolute URLs pass through; relative paths need a base URL.
+func resolvePublicImage(raw, base string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	if strings.HasPrefix(raw, "http://") || strings.HasPrefix(raw, "https://") {
+		return raw
+	}
+	if base == "" {
+		return ""
+	}
+	if !strings.HasPrefix(raw, "/") {
+		raw = "/" + raw
+	}
+	return base + raw
+}
+
+// publicImageURL resolves a menu image for WhatsApp fetching,
+// honoring the admin photos toggle.
+func (e *ConversationEngine) publicImageURL(raw string) string {
+	if !e.biz.UseWhatsAppPhotos() {
+		return ""
+	}
+	return resolvePublicImage(raw, e.biz.GetPublicBaseURL())
+}
+
+// msgImage returns the WhatsApp-ready image for a message template key.
+// Message images are explicit admin opt-in, so no toggle applies.
+func (e *ConversationEngine) msgImage(key string) string {
+	if e.messages == nil {
+		return ""
+	}
+	return resolvePublicImage(e.messages.MessageImage(key), e.biz.GetPublicBaseURL())
 }
 
 func (e *ConversationEngine) evolutionSendList(conv *conversation, phone, title string, rows []Row) {
@@ -132,7 +172,7 @@ func rowsToPager(rows []Row) []pagerItem {
 const waPagerSize = 3
 
 func (e *ConversationEngine) sendListPage(conv *conversation, phone, pageKey, title string, rows []Row) {
-	if os.Getenv("WA_LISTS") == "1" {
+	if e.biz.UseWhatsAppLists() {
 		e.evolutionSendList(conv, phone, title, rows)
 		return
 	}
@@ -176,16 +216,18 @@ func (e *ConversationEngine) renderPagerPage(conv *conversation, phone, key stri
 	}
 
 	buttons := make([]Button, 0, waPagerSize)
-	for _, it := range items[start:end] {
+	var listing strings.Builder
+	for i, it := range items[start:end] {
 		buttons = append(buttons, Button{Type: "reply", ID: it.ID, DisplayText: it.Label})
+		fmt.Fprintf(&listing, "%d. %s\n", start+i+1, it.Label)
 	}
 	if hasNext {
 		buttons = append(buttons, Button{
 			Type: "reply", ID: "__pgnext__" + key,
-			DisplayText: "More " + emArrowR + fmt.Sprintf(" (%d)", len(items)-end),
+			DisplayText: e.msg("pager_more", map[string]interface{}{"Remaining": len(items) - end}),
 		})
 	} else if len(items) > waPagerSize && start > 0 {
-		buttons = append(buttons, Button{Type: "reply", ID: "__pgfirst__" + key, DisplayText: emArrowL + " Start"})
+		buttons = append(buttons, Button{Type: "reply", ID: "__pgfirst__" + key, DisplayText: e.msgBrand("pager_back")})
 	}
 	if len(buttons) == 0 {
 		e.evolution.SendText(phone, e.msgBrand("nothing_to_show"))
@@ -193,9 +235,11 @@ func (e *ConversationEngine) renderPagerPage(conv *conversation, phone, key stri
 	}
 	pageInfo := ""
 	if len(items) > waPagerSize {
-		pageInfo = fmt.Sprintf(" (page %d)", pos+1)
+		totalPages := (len(items) + waPagerSize - 1) / waPagerSize
+		pageInfo = e.msg("pager_page", map[string]interface{}{"Page": pos + 1, "Pages": totalPages})
 	}
-	e.sendButtons(phone, title+pageInfo, "Tap an option:", buttons)
+	body := listing.String() + "\n" + e.msgBrand("pager_tap")
+	e.sendButtons(phone, title+pageInfo, body, buttons)
 }
 
 func min(a, b int) int {
@@ -230,12 +274,14 @@ func (e *ConversationEngine) pagerNav(conv *conversation, phone, input string) b
 // ---------- MAIN MENU ----------
 
 func (e *ConversationEngine) mainMenuText(cust *Customer, conv *conversation) {
-	greeting := e.msgBrand("welcome")
+	key := "welcome"
+	greeting := e.msgBrand(key)
 	if cust.FirstName != "" {
-		greeting = e.msg("welcome_back", map[string]interface{}{"Name": cust.FirstName})
+		key = "welcome_back"
+		greeting = e.msg(key, map[string]interface{}{"Name": cust.FirstName})
 	}
-	e.sendButtons(cust.WhatsAppNumber, greeting,
-		e.msgBrand("welcome_footer"),
+	e.sendButtonsWithImage(cust.WhatsAppNumber, greeting,
+		e.msgBrand("welcome_footer"), e.msgImage(key),
 		[]Button{
 			{Type: "reply", ID: "main_order", DisplayText: emPizza + " Order Now"},
 			{Type: "reply", ID: "main_browse", DisplayText: emPizza + " Browse Menu"},
@@ -274,12 +320,22 @@ func (e *ConversationEngine) showCategories(conv *conversation, phone string) {
 		e.evolution.SendText(phone, e.msgBrand("category_empty"))
 		return
 	}
+	counts := map[int]int{}
+	if allItems, err := e.menu.GetAllActiveItems(); err == nil {
+		for i := range allItems {
+			counts[allItems[i].CategoryID]++
+		}
+	}
 	rows := make([]Row, 0, len(cats))
 	for _, c := range cats {
 		icon := e.biz.GetCategoryIcon(c.Slug)
+		title := icon + " " + c.Name
+		if n := counts[c.ID]; n > 0 {
+			title += fmt.Sprintf(" (%d)", n)
+		}
 		rows = append(rows, Row{
 			RowID:       "category_" + c.Slug,
-			Title:       icon + " " + c.Name,
+			Title:       title,
 			Description: truncate(c.Description, 55),
 		})
 	}
@@ -407,7 +463,7 @@ func (e *ConversationEngine) startItemFlow(conv *conversation, phone, ref string
 	}
 	conv.State = "SIZE"
 	_ = conv.save()
-	e.sendButtons(phone, e.msgBrand("size_title"), detail+"\n\n"+sizes.String(), buttons)
+	e.sendButtonsWithImage(phone, e.msgBrand("size_title"), detail+"\n\n"+sizes.String(), e.publicImageURL(item.ImageURL), buttons)
 }
 
 func (e *ConversationEngine) sendCrustList(conv *conversation, phone, size string) {
@@ -457,20 +513,13 @@ func (e *ConversationEngine) confirmSelection(conv *conversation, phone string) 
 	}
 	conv.Context["unit_price"] = itoa(int(unit))
 
-	var b strings.Builder
-	b.WriteString("*Your selection:*\n\n")
-	fmt.Fprintf(&b, "%s %s\n", emPizza, item.Name)
-	if size != "" {
-		fmt.Fprintf(&b, "%s\n", strings.Title(size))
-	}
-	if crustName != "" {
-		fmt.Fprintf(&b, "%s\n", crustName)
-	}
-	fmt.Fprintf(&b, "Rs.%d", int(unit))
+	summary := e.msg("selection_summary", map[string]interface{}{
+		"ItemName": item.Name, "Size": strings.Title(size), "CrustName": crustName, "Price": int(unit),
+	})
 
 	conv.State = "QUANTITY"
 	_ = conv.save()
-	e.sendButtons(phone, b.String(), e.msgBrand("quantity_title"),
+	e.sendButtons(phone, summary, e.msgBrand("quantity_title"),
 		[]Button{
 			{Type: "reply", ID: "qty_1", DisplayText: "1"},
 			{Type: "reply", ID: "qty_2", DisplayText: "2"},
@@ -517,16 +566,17 @@ func (e *ConversationEngine) addToCart(conv *conversation, phone string, qty int
 		return
 	}
 
-	sizeLine := ""
-	if size != "" {
-		sizeLine = "\n" + strings.Title(size)
+	sizeLine := strings.Title(size)
+	if sizeLine == "" {
+		sizeLine = "-"
 	}
-	crustLine := ""
-	if crustName != "" {
-		crustLine = " - " + crustName
+	if crustName == "" {
+		crustName = "-"
 	}
-	summary := fmt.Sprintf("%s %s%s%s\nQty: %d\nRs.%d",
-		emPizza, item.Name, sizeLine, crustLine, qty, int(unit*float64(qty)))
+	summary := e.msg("cart_item_added", map[string]interface{}{
+		"ItemName": item.Name, "Size": sizeLine, "CrustName": crustName,
+		"Quantity": qty, "Total": int(unit * float64(qty)),
+	})
 
 	conv.State = "CART_MENU"
 	_ = conv.save()
@@ -596,7 +646,7 @@ func (e *ConversationEngine) sendCartLinePicker(conv *conversation, phone string
 	}
 	conv.State = "CART_EDIT"
 	_ = conv.save()
-	e.sendListPage(conv, phone, "cline_page", "Which item?", rows)
+	e.sendListPage(conv, phone, "cline_page", e.msgBrand("cart_which_item"), rows)
 }
 
 func (e *ConversationEngine) sendLineEditButtons(conv *conversation, phone string, line WACartLine) {
@@ -604,7 +654,7 @@ func (e *ConversationEngine) sendLineEditButtons(conv *conversation, phone strin
 	conv.State = "CART_EDIT_QTY"
 	_ = conv.save()
 	e.sendButtons(phone, line.ItemName,
-		fmt.Sprintf("Current quantity: %d\nSet new quantity:", line.Quantity),
+		e.msg("cart_set_qty", map[string]interface{}{"Quantity": line.Quantity}),
 		[]Button{
 			{Type: "reply", ID: "qset_1", DisplayText: emMinus + " 1"},
 			{Type: "reply", ID: "qset_2", DisplayText: "2"},
@@ -814,13 +864,8 @@ func (e *ConversationEngine) paymentChosen(conv *conversation, phone, method str
 	}
 	payLabel := e.biz.GetPaymentLabel(method)
 
-	var b strings.Builder
-	b.WriteString(emPizza + " ORDER SUMMARY\n\n")
 	name := orDash(conv.Context["name"])
 	dt := strings.Title(conv.Context["delivery_type"])
-
-	fmt.Fprintf(&b, "Customer: %s\n", name)
-	fmt.Fprintf(&b, "Order type: %s\n", dt)
 
 	itemsBlock := ""
 	for _, l := range lines {
@@ -841,22 +886,28 @@ func (e *ConversationEngine) paymentChosen(conv *conversation, phone, method str
 	}
 
 	sub := subtotalOf(lines)
-	fmt.Fprintf(&b, "\nItems:\n%s", itemsBlock)
-	fmt.Fprintf(&b, "\nSubtotal: Rs.%d\nDelivery: Rs.0\nTotal: Rs.%d\n", int(sub), int(sub))
-	fmt.Fprintf(&b, "\nPayment: %s\n", payLabel)
-
+	fee := 0.0
+	if conv.Context["delivery_type"] == "delivery" {
+		fee = e.biz.DeliveryFee
+	}
+	addressBlock := ""
 	if dt == "Delivery" {
-		fmt.Fprintf(&b, "\nAddress:\n%s", conv.Context["address"])
+		addressBlock = conv.Context["address"]
 		if lm := conv.Context["landmark"]; lm != "" {
-			fmt.Fprintf(&b, "\nLandmark: %s", lm)
+			addressBlock += "\nLandmark: " + lm
 		}
 	} else {
-		fmt.Fprintf(&b, "\n\nPickup at the store")
+		addressBlock = "Pickup at the store"
 	}
+	body := e.msg("order_summary_body", map[string]interface{}{
+		"Name": name, "DeliveryType": dt, "Items": itemsBlock,
+		"Subtotal": int(sub), "Delivery": int(fee), "Total": int(sub + fee),
+		"Payment": payLabel, "AddressBlock": addressBlock,
+	})
 
 	conv.State = "CONFIRMATION"
 	_ = conv.save()
-	e.sendButtons(phone, e.msgBrand("order_summary_title"), b.String(),
+	e.sendButtons(phone, e.msgBrand("order_summary_title"), body,
 		[]Button{
 			{Type: "reply", ID: "confirm_order", DisplayText: emCheck + " Place Order"},
 			{Type: "reply", ID: "confirm_change", DisplayText: emPencil + " Change"},
@@ -889,7 +940,7 @@ func (e *ConversationEngine) placeOrder(conv *conversation, phone string) {
 	result, err := e.orders.Create(req, "")
 	if err != nil {
 		log.Printf("WA order create failed for %s: %v", phone, err)
-		e.evolution.SendText(phone, e.msg("order_failed", map[string]interface{}{"Error": err.Error()}))
+		e.evolution.SendText(phone, e.msg("order_failed", map[string]interface{}{"Error": "please try again in a moment"}))
 		return
 	}
 
@@ -902,7 +953,7 @@ func (e *ConversationEngine) placeOrder(conv *conversation, phone string) {
 		"OrderNumber": result.OrderNumber,
 		"Total":       int(result.Total),
 	})
-	e.sendButtons(phone, e.msgBrand("order_placed_title"), confirmation,
+	e.sendButtonsWithImage(phone, e.msgBrand("order_placed_title"), confirmation, e.msgImage("order_placed"),
 		[]Button{
 			{Type: "reply", ID: "track_order", DisplayText: emPackage + " Track Order"},
 			{Type: "reply", ID: "order_again", DisplayText: emPizza + " Order Again"},
@@ -946,9 +997,12 @@ func (e *ConversationEngine) sendStatusViewFor(phone string, o *models.Order) {
 	for _, it := range o.Items {
 		fmt.Fprintf(&items, "%d x %s\n", it.Quantity, it.Name)
 	}
-	e.sendButtons(phone, emPackage+" "+o.OrderNumber,
-		fmt.Sprintf("Status: %s %s\n\n%s\nTotal: Rs.%d",
-			statusEmoji[o.Status], pretty(o.Status), items.String(), int(o.Total)),
+	e.sendButtons(phone,
+		e.msg("status_view_title", map[string]interface{}{"OrderNumber": o.OrderNumber}),
+		e.msg("status_view_body", map[string]interface{}{
+			"Emoji": statusEmoji[o.Status], "Status": pretty(o.Status),
+			"Items": items.String(), "Total": int(o.Total),
+		}),
 		[]Button{
 			{Type: "reply", ID: "track_refresh_" + o.OrderNumber, DisplayText: "Refresh"},
 			{Type: "reply", ID: "back_main", DisplayText: "Main Menu"},
@@ -980,7 +1034,7 @@ func (e *ConversationEngine) sendOrderHistoryList(conv *conversation, phone stri
 			Description: fmt.Sprintf("Rs.%d - %s", int(o.Total), pretty(o.Status)),
 		})
 	}
-	e.sendButtonPages(conv, phone, "hist_page", emPackage+" Your recent orders", rowsToPager(rows))
+	e.sendButtonPages(conv, phone, "hist_page", e.msgBrand("history_title"), rowsToPager(rows))
 }
 
 func (e *ConversationEngine) orderDetailByName(conv *conversation, phone, number string) {
@@ -994,10 +1048,13 @@ func (e *ConversationEngine) orderDetailByName(conv *conversation, phone, number
 		for _, it := range o.Items {
 			fmt.Fprintf(&items, "%d x %s : Rs.%d\n", it.Quantity, it.Name, int(it.Subtotal))
 		}
-		e.sendButtons(phone, emPackage+" "+number,
-			fmt.Sprintf("Status: %s %s\nPlaced: %s\n\n%sTotal: Rs.%d",
-				statusEmoji[o.Status], pretty(o.Status),
-				o.CreatedAt.Format("02 Jan, 3:04 PM"), items.String(), int(o.Total)),
+		e.sendButtons(phone,
+			e.msg("status_view_title", map[string]interface{}{"OrderNumber": number}),
+			e.msg("status_order_detail", map[string]interface{}{
+				"Emoji": statusEmoji[o.Status], "Status": pretty(o.Status),
+				"Date": o.CreatedAt.Format("02 Jan, 3:04 PM"),
+				"Items": items.String(), "Total": int(o.Total),
+			}),
 			[]Button{
 				{Type: "reply", ID: "reorder_" + number, DisplayText: emPizza + " Order Again"},
 				{Type: "reply", ID: "back_main", DisplayText: "Main Menu"},
@@ -1040,10 +1097,10 @@ func (e *ConversationEngine) reorderAll(conv *conversation, phone, number string
 	}
 	conv.State = "CART_MENU"
 	_ = conv.save()
+	log.Printf("reorder %s: added=%d skipped=%v", number, added, skipped)
+	e.evolution.SendText(phone, msg)
 	lines, _ := GetWACart(phone)
 	e.cartView(phone, lines)
-	log.Printf("reorder %s: added=%d skipped=%v", number, added, skipped)
-	_ = msg
 }
 
 func (e *ConversationEngine) profileText(cust *Customer, conv *conversation, phone string) {
@@ -1076,8 +1133,8 @@ func (e *ConversationEngine) locationView(cust *Customer, conv *conversation, ph
 	body := e.msg("location_body", map[string]interface{}{
 		"Address":       addr,
 		"Phone":         phoneOut,
-		"KitchenHours":  "11 AM - 11 PM",
-		"DeliveryHours": "11 AM - 4 AM",
+		"KitchenHours":  e.biz.KitchenHours,
+		"DeliveryHours": e.biz.DeliveryHours,
 	})
 	e.sendButtons(phone,
 		e.msgBrand("location_title"),

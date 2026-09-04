@@ -106,9 +106,14 @@ func main() {
 	// Setup Gin router
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.Default()
-	// Enforce max request body size to prevent OOM via large payloads
+	// Enforce max request body size to prevent OOM via large payloads.
+	// Image uploads get a higher cap; UploadImage enforces 5MB itself.
 	router.Use(func(c *gin.Context) {
-		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxRequestBodySize)
+		limit := int64(maxRequestBodySize)
+		if c.FullPath() == "/admin/upload" || c.Request.URL.Path == "/admin/upload" {
+			limit = 6 << 20 // 5MB image + multipart overhead
+		}
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, limit)
 		c.Next()
 	})
 	router.Use(handlers.SecurityHeaders())

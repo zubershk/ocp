@@ -605,8 +605,8 @@ func (h *AdminHandler) UploadImage(c *gin.Context) {
 		return
 	}
 	defer file.Close()
-	if header.Size > 10<<20 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "image too large — max 10MB"})
+	if header.Size > 5<<20 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "image too large — max 5MB"})
 		return
 	}
 	// sniff type
@@ -1522,7 +1522,8 @@ func (h *AdminHandler) UpdateBotMessage(c *gin.Context) {
 	}
 	key := c.Param("key")
 	var req struct {
-		MessageText string `json:"message_text"`
+		MessageText string  `json:"message_text"`
+		ImageURL    *string `json:"image_url"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(400, gin.H{"error": "invalid request"})
@@ -1532,7 +1533,7 @@ func (h *AdminHandler) UpdateBotMessage(c *gin.Context) {
 		c.JSON(400, gin.H{"error": "message_text is required"})
 		return
 	}
-	if err := botMsgSvc.UpdateMessage(key, req.MessageText); err != nil {
+	if err := botMsgSvc.UpdateMessage(key, req.MessageText, req.ImageURL); err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
@@ -1584,7 +1585,11 @@ func (h *AdminHandler) RenderBotMessagePreview(c *gin.Context) {
 		req.Data = sampleData(key)
 	}
 	rendered := botMsgSvc.Render(key, req.Data)
-	c.JSON(200, gin.H{"rendered": rendered})
+	resp := gin.H{"rendered": rendered}
+	if msg, found := botMsgSvc.GetMessage(key); found && strings.TrimSpace(msg.ImageURL) != "" {
+		resp["image_url"] = msg.ImageURL
+	}
+	c.JSON(200, resp)
 }
 
 func sampleData(key string) map[string]interface{} {

@@ -123,12 +123,17 @@ type Button struct {
 }
 
 func (c *EvolutionClient) SendButton(number, title, description, footer string, buttons []Button) error {
+	return c.SendButtonWithImage(number, title, description, footer, "", buttons)
+}
+
+func (c *EvolutionClient) SendButtonWithImage(number, title, description, footer, imageURL string, buttons []Button) error {
 	payload := ButtonMessagePayload{
 		Number:      number,
 		Title:       title,
 		Description: description,
 		Footer:      footer,
 		Buttons:     buttons,
+		ImageUrl:    imageURL,
 	}
 	_, err := c.sendRequest("POST", "/send/button", payload, true)
 	return err
