@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"strconv"
+	"strings"
 )
 
 type Config struct {
@@ -23,6 +24,7 @@ type Config struct {
 	LogLevel                 string
 	CORSAllowedOrigins       string
 	WebhookSecret            string
+	PublicBaseURL            string
 }
 
 func Load() *Config {
@@ -47,6 +49,7 @@ func Load() *Config {
 		LogLevel:                 getEnv("LOG_LEVEL", "info"),
 		CORSAllowedOrigins:       getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173"),
 		WebhookSecret:            getEnv("EVOLUTION_WEBHOOK_SECRET", ""),
+		PublicBaseURL:            strings.TrimRight(getEnv("PUBLIC_BASE_URL", ""), "/"),
 	}
 }
 

@@ -65,7 +65,7 @@ func defaultMessages() map[string]string {
 
 		// ORDER CONFIRMATION
 		"order_summary_title": "Ready to place your order?",
-		"order_summary_body":  emPizza + " ORDER SUMMARY\n\nCustomer: {{.Name}}\nOrder type: {{.DeliveryType}}\n\nItems:\n{{.Items}}\nSubtotal: Rs.{{.Subtotal}}\nDelivery: Rs.0\nTotal: Rs.{{.Total}}\n\nPayment: {{.Payment}}\n\n{{.AddressBlock}}",
+		"order_summary_body":  emPizza + " ORDER SUMMARY\n\nCustomer: {{.Name}}\nOrder type: {{.DeliveryType}}\n\nItems:\n{{.Items}}\nSubtotal: Rs.{{.Subtotal}}\nDelivery: Rs.{{.Delivery}}\nTotal: Rs.{{.Total}}\n\nPayment: {{.Payment}}\n\n{{.AddressBlock}}",
 		"order_placed":        emCheck + " *ORDER PLACED!*\n\nThank you{{.ThankSuffix}}! " + emPizza + "\n\nOrder:\n*{{.OrderNumber}}*\n\nTotal:\nRs.{{.Total}}\n\nWe'll keep you updated here.",
 		"order_placed_title":  emTada + " Thank you!",
 		"order_failed":        "Couldn't place your order: {{.Error}}\n\nType 'cart' to review and retry.",
@@ -135,6 +135,25 @@ func defaultMessages() map[string]string {
 		"status_view_title":    emPackage + " {{.OrderNumber}}",
 		"status_view_body":     "Status: {{.Emoji}} {{.Status}}\n\n{{.Items}}\nTotal: Rs.{{.Total}}",
 		"status_order_detail":  "Status: {{.Emoji}} {{.Status}}\nPlaced: {{.Date}}\n\n{{.Items}}Total: Rs.{{.Total}}",
+
+		// PAGER (buttonPages chrome)
+		"pager_tap":  "Tap a button below:",
+		"pager_more": "More " + emArrowR + " ({{.Remaining}})",
+		"pager_back": emArrowL + " Start",
+		"pager_page": " (page {{.Page}} of {{.Pages}})",
+
+		// CART EDITING
+		"cart_which_item": "Which item?",
+		"cart_set_qty":    "Current quantity: {{.Quantity}}\nSet new quantity:",
+
+		// MID-FLOW HINTS (wrong input while browsing)
+		"state_category":    "Tap a category button above, or type 'menu'.",
+		"state_item":        "Tap an item, use More to see others, or type 'menu'.",
+		"state_size":        "Choose a size above, or type 'cancel'.",
+		"state_crust":       "Choose a crust above, or type 'cancel'.",
+		"state_quantity":    "Send a number 1-20, or type 'cancel'.",
+		"state_cart":        "Tap Checkout, Change Qty or Clear Cart — or type 'menu'.",
+		"state_fulfillment": "Choose Delivery or Pickup above.",
 	}
 }
 
@@ -143,4 +162,31 @@ func defaultMessage(key string) string {
 		return msg
 	}
 	return key // return the key itself as last resort
+}
+
+// defaultMessageMeta carries the admin-UI metadata (category,
+// description, variable list) for every compiled-in key. Used by
+// SyncDefaults so new keys appear in the dashboard with zero migrations.
+type messageMeta struct {
+	Category    string
+	Description string
+	Variables   string
+}
+
+func defaultMessageMeta() map[string]messageMeta {
+	return map[string]messageMeta{
+		"pager_tap":         {"ordering", "Pager body prompt", ""},
+		"pager_more":        {"ordering", "Pager More button", "Remaining"},
+		"pager_back":        {"ordering", "Pager back-to-start button", ""},
+		"pager_page":        {"ordering", "Pager page indicator suffix", "Page,Pages"},
+		"cart_which_item":   {"cart", "Cart line picker title", ""},
+		"cart_set_qty":      {"cart", "Edit-line quantity prompt", "Quantity"},
+		"state_category":    {"commands", "Hint when input arrives mid-category-browse", ""},
+		"state_item":        {"commands", "Hint when input arrives mid-item-browse", ""},
+		"state_size":        {"commands", "Hint when input arrives at size step", ""},
+		"state_crust":       {"commands", "Hint when input arrives at crust step", ""},
+		"state_quantity":    {"commands", "Hint when input arrives at quantity step", ""},
+		"state_cart":        {"commands", "Hint when input arrives at cart step", ""},
+		"state_fulfillment": {"commands", "Hint when input arrives at fulfillment step", ""},
+	}
 }

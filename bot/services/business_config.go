@@ -3,6 +3,8 @@ package services
 import (
 	"encoding/json"
 	"log"
+	"os"
+	"strings"
 	"sync"
 
 	"orangecheesepizza/bot/database"
@@ -40,6 +42,35 @@ type BusinessConfig struct {
 	BusinessType    string            `json:"business_type"`
 	CurrencySymbol  string            `json:"currency_symbol"`
 	TaxLabel        string            `json:"tax_label"`
+	// WhatsApp browsing experience ( pointers: nil = default ).
+	WhatsappLists  *bool  `json:"whatsapp_lists,omitempty"`
+	WhatsappPhotos *bool  `json:"whatsapp_photos,omitempty"`
+	PublicBaseURL  string `json:"public_base_url"`
+}
+
+// UseWhatsAppLists reports whether browse lists render as native
+// WhatsApp list messages instead of paginated reply buttons.
+func (c *BusinessConfig) UseWhatsAppLists() bool {
+	if os.Getenv("WA_LISTS") == "1" {
+		return true
+	}
+	return c != nil && c.WhatsappLists != nil && *c.WhatsappLists
+}
+
+// UseWhatsAppPhotos reports whether item photos are attached to
+// WhatsApp messages. Defaults to true.
+func (c *BusinessConfig) UseWhatsAppPhotos() bool {
+	return c == nil || c.WhatsappPhotos == nil || *c.WhatsappPhotos
+}
+
+// GetPublicBaseURL returns the admin-configured base URL for turning
+// relative /uploads paths into absolute WhatsApp-fetchable URLs,
+// falling back to the PUBLIC_BASE_URL environment variable.
+func (c *BusinessConfig) GetPublicBaseURL() string {
+	if c != nil && strings.TrimSpace(c.PublicBaseURL) != "" {
+		return strings.TrimRight(strings.TrimSpace(c.PublicBaseURL), "/")
+	}
+	return strings.TrimRight(os.Getenv("PUBLIC_BASE_URL"), "/")
 }
 
 var globalBizCfg *BusinessConfig
