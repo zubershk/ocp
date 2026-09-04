@@ -77,7 +77,7 @@ export default function AdminBrand() {
 
   const handleUpload = async (f: File, field: 'logo_url' | 'favicon_url') => {
     if (!f.type.startsWith('image/')) { toast.push({ type: 'warning', title: 'Please choose an image file' }); return; }
-    if (f.size > 10 << 20) { toast.push({ type: 'warning', title: 'Image too large — max 10MB' }); return; }
+    if (f.size > 5 << 20) { toast.push({ type: 'warning', title: 'Image too large — max 5MB' }); return; }
     try {
       setUploading(true);
       const fd = new FormData();
