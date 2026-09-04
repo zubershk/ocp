@@ -502,6 +502,11 @@ func (e *ConversationEngine) handleSelection(cust *Customer, conv *conversation,
 		e.sendCrustList(conv, phone, size)
 		return true
 
+	case input == "crust_skip":
+		conv.Context["crust"] = ""
+		e.confirmSelection(conv, phone) // summary first, then quantity buttons
+		return true
+
 	case strings.HasPrefix(input, "crust_"), strings.HasPrefix(input, "cr_"): // cr_ = legacy
 		crust := strings.TrimPrefix(input, "crust_")
 		crust = strings.TrimPrefix(crust, "cr_")

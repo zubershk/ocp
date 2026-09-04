@@ -24,16 +24,17 @@ func defaultMessages() map[string]string {
 		"item_became_unavailable": "That item became unavailable. Type 'menu' to pick another.",
 		"size_title":              "Choose your size",
 		"crust_title":             emBread + " Choose your crust",
+		"crust_skip":              "Skip crust",
 		"quantity_title":          "How many would you like?",
 		"quantity_invalid":        "Please send a number between 1 and 20, or type 'cancel'.",
 		"quantity_more_prompt":    "How many would you like? Send a number (1-20).",
 		"item_added":              emCheck + " Added to your cart!",
-		"selection_summary":       "*Your selection:*\n\n" + emPizza + " {{.ItemName}}\n{{.Size}}\n{{.CrustName}}\nRs.{{.Price}}",
+		"selection_summary":       "*Your selection:*\n\n" + emPizza + " {{.ItemName}}{{if .Size}}\n{{.Size}}{{end}}{{if .CrustName}}\n{{.CrustName}}{{end}}\nRs.{{.Price}}",
 
 		// CART
 		"cart_empty":          "Your cart is empty. " + emCart + "\nType 'menu' to start an order!",
 		"cart_title":          emCart + " Your Cart",
-		"cart_item_added":     "{{.ItemName}}\n{{.Size}}\n{{.CrustName}}\nQty: {{.Quantity}}\nRs.{{.Total}}",
+		"cart_item_added":     "{{.ItemName}}{{if .Size}}\n{{.Size}}{{end}}{{if .CrustName}}\n{{.CrustName}}{{end}}\nQty: {{.Quantity}}\nRs.{{.Total}}",
 		"cart_clear_confirm":  emTrash + " Clear your cart?",
 		"cart_clear_body":     "This removes all items.",
 		"cart_cleared":        emBroom + " Cart cleared.\nType 'menu' to start fresh!",
@@ -176,6 +177,7 @@ type messageMeta struct {
 func defaultMessageMeta() map[string]messageMeta {
 	return map[string]messageMeta{
 		"pager_tap":         {"ordering", "Pager body prompt", ""},
+		"crust_skip":        {"ordering", "Crust opt-out button", ""},
 		"pager_more":        {"ordering", "Pager More button", "Remaining"},
 		"pager_back":        {"ordering", "Pager back-to-start button", ""},
 		"pager_page":        {"ordering", "Pager page indicator suffix", "Page,Pages"},

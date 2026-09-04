@@ -467,6 +467,14 @@ func (e *ConversationEngine) startItemFlow(conv *conversation, phone, ref string
 }
 
 func (e *ConversationEngine) sendCrustList(conv *conversation, phone, size string) {
+	// Fixed bundles skip crust selection entirely (admin no_crust flag).
+	if slug := conv.Context["item_slug"]; slug != "" {
+		if item, _ := e.menu.GetItemByIdentifier(slug); item != nil && item.NoCrust {
+			conv.Context["crust"] = ""
+			e.confirmSelection(conv, phone)
+			return
+		}
+	}
 	cr, err := e.menu.GetActiveCrusts()
 	sz := sizeOrRegular(size)
 	if err != nil || len(cr) == 0 {
@@ -474,7 +482,7 @@ func (e *ConversationEngine) sendCrustList(conv *conversation, phone, size strin
 		e.confirmSelection(conv, phone)
 		return
 	}
-	rows := make([]Row, 0, len(cr))
+	rows := make([]Row, 0, len(cr)+1)
 	for _, c := range cr {
 		label := c.Name
 		if extra := crustChargePlain(c.Regular, c.Medium, c.Large, sz); extra > 0 {
@@ -482,6 +490,7 @@ func (e *ConversationEngine) sendCrustList(conv *conversation, phone, size strin
 		}
 		rows = append(rows, Row{RowID: "crust_" + c.Slug, Title: label, Description: c.Description})
 	}
+	rows = append(rows, Row{RowID: "crust_skip", Title: e.msgBrand("crust_skip"), Description: ""})
 	conv.State = "CRUST"
 	_ = conv.save()
 	e.sendListPage(conv, phone, "crust_page_"+sz, e.msgBrand("crust_title"), rows)
@@ -566,15 +575,8 @@ func (e *ConversationEngine) addToCart(conv *conversation, phone string, qty int
 		return
 	}
 
-	sizeLine := strings.Title(size)
-	if sizeLine == "" {
-		sizeLine = "-"
-	}
-	if crustName == "" {
-		crustName = "-"
-	}
 	summary := e.msg("cart_item_added", map[string]interface{}{
-		"ItemName": item.Name, "Size": sizeLine, "CrustName": crustName,
+		"ItemName": item.Name, "Size": strings.Title(size), "CrustName": crustName,
 		"Quantity": qty, "Total": int(unit * float64(qty)),
 	})
 
