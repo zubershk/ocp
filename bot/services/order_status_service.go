@@ -16,21 +16,22 @@ var defaultOrderService = NewOrderService()
 
 // ------------------------------------------------------------------
 // Explicit order lifecycle shared by the website tracker, the admin
-// board, and WhatsApp notifications.
+// board, and WhatsApp notifications. Kept short on purpose: new
+// orders auto-confirm at creation, staff only move them forward.
 //
-//	placed -> confirmed | cancelled
-//	confirmed -> preparing | cancelled
-//	preparing -> ready
-//	ready -> out_for_delivery | completed   (delivery vs pickup)
+//	placed -> confirmed | cancelled             (auto-confirm)
+//	confirmed -> out_for_delivery | completed | cancelled
 //	out_for_delivery -> delivered
 //	delivered/completed/cancelled are terminal
+//
+// preparing/ready exits exist only to close pre-simplify rows.
 // ------------------------------------------------------------------
 
 var AllowedTransitions = map[string][]string{
 	"placed":           {"confirmed", "cancelled"},
-	"confirmed":        {"preparing", "cancelled"},
-	"preparing":        {"ready"},
-	"ready":            {"out_for_delivery", "completed"},
+	"confirmed":        {"out_for_delivery", "completed", "cancelled"},
+	"preparing":        {"out_for_delivery", "completed", "cancelled"},
+	"ready":            {"out_for_delivery", "completed", "cancelled"},
 	"out_for_delivery": {"delivered"},
 	"delivered":        {},
 	"completed":        {},
@@ -148,6 +149,9 @@ func ApplyStatusChange(orderID int, newStatus string, evolution *EvolutionClient
 	order.Status = newStatus
 
 	outcome := notifyCustomerStatus(order.OrderNumber, order.CustomerPhone, newStatus, evolution, cfg)
+	BroadcastRealtime("order.status", map[string]interface{}{
+		"order_id": order.ID, "order_number": order.OrderNumber, "status": newStatus,
+	})
 	return order, outcome, nil
 }
 

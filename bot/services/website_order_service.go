@@ -327,7 +327,7 @@ func (s *WebsiteOrderService) Create(req *WebsiteOrderRequest, idempotencyKey st
 			(order_number, customer_name, customer_phone, email, order_type,
 			 address, landmark, payment_method, subtotal, delivery_fee, discount,
 			 total, status, idempotency_key, source, access_token)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'placed',$13,$14,$15)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'confirmed',$13,$14,$15)
 		RETURNING id, created_at, access_token
 	`, orderNumber, name, phone, strings.TrimSpace(req.Customer.Email), req.DeliveryType,
 		address, strings.TrimSpace(req.Landmark), req.PaymentMethod,
@@ -361,7 +361,7 @@ func (s *WebsiteOrderService) Create(req *WebsiteOrderRequest, idempotencyKey st
 
 	if _, err := tx.Exec(`
 		INSERT INTO order_events (order_id, event_type, description)
-		VALUES ($1, 'placed', 'Website order created')
+		VALUES ($1, 'confirmed', 'Order auto-confirmed on creation')
 	`, orderID); err != nil {
 		return nil, fmt.Errorf("order event insert failed: %w", err)
 	}
@@ -371,7 +371,7 @@ func (s *WebsiteOrderService) Create(req *WebsiteOrderRequest, idempotencyKey st
 	}
 
 	result := &WebsiteOrderResult{
-		ID: orderID, OrderNumber: orderNumber, Status: "placed",
+		ID: orderID, OrderNumber: orderNumber, Status: "confirmed",
 		CustomerName: name, CustomerPhone: phone,
 		Email:        strings.TrimSpace(req.Customer.Email),
 		DeliveryType: req.DeliveryType, Address: address,
@@ -381,6 +381,15 @@ func (s *WebsiteOrderService) Create(req *WebsiteOrderRequest, idempotencyKey st
 		DeliveryFee: deliveryFee, Discount: discount, Total: total,
 		CreatedAt: createdAt, Source: source,
 	}
+
+	// ---- lifetime stats (post-commit, best effort) ----
+	// Keeps customers.total_orders/total_spent (profile + account) in sync
+	// for website orders, mirroring the WhatsApp path.
+	_ = RecordCustomerOrder(phone, total)
+
+	BroadcastRealtime("order.created", map[string]interface{}{
+		"order_id": orderID, "order_number": orderNumber, "total": total,
+	})
 
 	// ---- notification (post-commit, best effort) ----
 	result.AccessToken = accessToken
