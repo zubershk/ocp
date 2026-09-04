@@ -57,7 +57,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                   </Link>
                 ) : (
                   <button
-                    onClick={() => { ('onClick' in t.action! && t.action.onClick)?.(); dismiss(t.id); }}
+                    onClick={() => {
+                      const a = t.action;
+                      if (a && 'onClick' in a && typeof a.onClick === 'function') a.onClick();
+                      dismiss(t.id);
+                    }}
                     className="ml-1 underline underline-offset-2 font-bold hover:text-white/80 transition-colors whitespace-nowrap cursor-pointer"
                   >
                     {t.action.label}
