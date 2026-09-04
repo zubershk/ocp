@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Save, RotateCcw, MessageSquare, ChevronDown, ChevronRight,
-  Eye, HelpCircle, Smartphone, Search, Info, X, CheckCircle, AlertTriangle,
+  Eye, HelpCircle, Smartphone, Search, Info, X, CheckCircle, AlertTriangle, ImagePlus, Loader2,
 } from 'lucide-react';
 import { adminFetch, getAdminKey } from '../services/api';
 import { useToast } from '../context/ToastContext';
@@ -25,6 +25,7 @@ interface BotMessage {
   description: string;
   message_text: string;
   variables: string;
+  image_url?: string;
   active: boolean;
 }
 
@@ -196,8 +197,10 @@ export default function AdminBotWorkflows() {
   const [expandedCat, setExpandedCat] = useState<string | null>(null);
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
+  const [editImage, setEditImage] = useState('');
   const [previewKey, setPreviewKey] = useState<string | null>(null);
   const [previewText, setPreviewText] = useState('');
+  const [previewImage, setPreviewImage] = useState('');
   const [confirmResetAll, setConfirmResetAll] = useState(false);
   const [confirmResetKey, setConfirmResetKey] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -212,8 +215,8 @@ export default function AdminBotWorkflows() {
 
   // Mutations
   const updateMutation = useMutation({
-    mutationFn: ({ key, text }: { key: string; text: string }) =>
-      adminFetch(`/admin/bot-messages/${key}`, { method: 'PUT', body: JSON.stringify({ message_text: text }) }),
+    mutationFn: ({ key, text, image_url }: { key: string; text: string; image_url?: string }) =>
+      adminFetch(`/admin/bot-messages/${key}`, { method: 'PUT', body: JSON.stringify({ message_text: text, image_url }) }),
     onSuccess: () => { toast.push({ type: 'success', title: 'Message saved' }); qc.invalidateQueries({ queryKey: ['admin-bot-messages'] }); setEditingKey(null); },
     onError: (e: Error) => toast.push({ type: 'error', title: e.message }),
   });
@@ -231,8 +234,8 @@ export default function AdminBotWorkflows() {
   });
 
   const previewMutation = useMutation({
-    mutationFn: (key: string) => adminFetch<{ rendered: string }>(`/admin/bot-messages/preview/${key}`, { method: 'POST', body: JSON.stringify({}) }),
-    onSuccess: (data) => { setPreviewText(data.rendered); },
+    mutationFn: (key: string) => adminFetch<{ rendered: string; image_url?: string }>(`/admin/bot-messages/preview/${key}`, { method: 'POST', body: JSON.stringify({}) }),
+    onSuccess: (data) => { setPreviewText(data.rendered); setPreviewImage(data.image_url ?? ''); },
     onError: (e: Error) => toast.push({ type: 'error', title: e.message }),
   });
 
@@ -391,9 +394,11 @@ export default function AdminBotWorkflows() {
                         cat={cat}
                         isEditing={editingKey === msg.message_key}
                         editText={editText}
-                        onEdit={() => { setEditingKey(msg.message_key); setEditText(msg.message_text); }}
+                        editImage={editImage}
+                        onEdit={() => { setEditingKey(msg.message_key); setEditText(msg.message_text); setEditImage(msg.image_url ?? ''); }}
                         onEditTextChange={setEditText}
-                        onSave={() => updateMutation.mutate({ key: msg.message_key, text: editText })}
+                        onEditImageChange={setEditImage}
+                        onSave={() => updateMutation.mutate({ key: msg.message_key, text: editText, image_url: editImage.trim() })}
                         onCancel={() => setEditingKey(null)}
                         onPreview={() => { setPreviewKey(msg.message_key); previewMutation.mutate(msg.message_key); }}
                         onReset={() => setConfirmResetKey(msg.message_key)}
@@ -433,12 +438,12 @@ export default function AdminBotWorkflows() {
         )}
 
       {/* ---- WhatsApp Preview Modal ---- */}
-      <Dialog open={!!previewKey} onOpenChange={(open) => { if (!open) { setPreviewKey(null); setPreviewText(''); } }}>
+      <Dialog open={!!previewKey} onOpenChange={(open) => { if (!open) { setPreviewKey(null); setPreviewText(''); setPreviewImage(''); } }}>
         <DialogContent className="p-0 overflow-hidden max-w-sm" showCloseButton={false}>
           {/* Phone frame */}
           <div className="bg-zinc-800 px-4 py-2 flex items-center justify-between">
             <span className="text-white text-xs font-medium">WhatsApp Preview</span>
-            <Button variant="ghost" size="icon" className="size-7 text-zinc-400 hover:text-white" onClick={() => { setPreviewKey(null); setPreviewText(''); }}>
+            <Button variant="ghost" size="icon" className="size-7 text-zinc-400 hover:text-white" onClick={() => { setPreviewKey(null); setPreviewText(''); setPreviewImage(''); }}>
               <X size={16} />
             </Button>
           </div>
@@ -453,6 +458,9 @@ export default function AdminBotWorkflows() {
           {/* Message bubble */}
           <div className="bg-[#ece5dd] p-4 min-h-[120px] flex items-end">
             <div className="bg-[#dcf8c6] rounded-xl rounded-tl-none p-3 max-w-[85%] shadow-sm">
+              {previewImage && (
+                <img src={previewImage} alt="" className="rounded-lg mb-2 max-h-48 w-full object-cover" />
+              )}
               <p className="text-sm text-zinc-800 whitespace-pre-wrap break-words leading-relaxed">
                 {previewMutation.isPending ? 'Loading...' : (previewText || 'Click preview on a message to see it here.')}
               </p>
@@ -525,20 +533,45 @@ export default function AdminBotWorkflows() {
 // ------------------------------------------------------------------
 
 function MessageCard({
-  msg, cat, isEditing, editText, onEdit, onEditTextChange, onSave, onCancel, onPreview, onReset, isPending,
+  msg, cat, isEditing, editText, editImage, onEdit, onEditTextChange, onEditImageChange, onSave, onCancel, onPreview, onReset, isPending,
 }: {
   msg: BotMessage;
   cat: string;
   isEditing: boolean;
   editText: string;
+  editImage: string;
   onEdit: () => void;
   onEditTextChange: (t: string) => void;
+  onEditImageChange: (t: string) => void;
   onSave: () => void;
   onCancel: () => void;
   onPreview: () => void;
   onReset: () => void;
   isPending: boolean;
 }) {
+  const toast = useToast();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const handleUpload = async (f: File) => {
+    if (!f.type.startsWith('image/')) { toast.push({ type: 'warning', title: 'Please choose an image file' }); return; }
+    if (f.size > 5 << 20) { toast.push({ type: 'warning', title: 'Image too large — max 5MB' }); return; }
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append('image', f);
+      const res = await fetch('/admin/upload', {
+        method: 'POST',
+        headers: { 'X-Admin-Key': getAdminKey() },
+        body: fd,
+      });
+      const data = await res.json().catch(() => null) as { url?: string; error?: string } | null;
+      if (!res.ok) throw new Error(data?.error ?? `Upload failed ${res.status}`);
+      if (data?.url) onEditImageChange(data.url);
+    } catch (e) { toast.push({ type: 'error', title: e instanceof Error ? e.message : 'Upload failed' }); }
+    finally { setUploading(false); }
+  };
+
   return (
     <Card className="hover:shadow-sm transition-shadow">
       <CardContent className="p-4">
@@ -560,6 +593,11 @@ function MessageCard({
               </div>
             )}
 
+            {/* Saved image thumbnail */}
+            {!isEditing && msg.image_url && (
+              <img src={msg.image_url} alt="" className="mb-2 h-16 w-24 object-cover rounded-lg border border-border" />
+            )}
+
             {/* Message content */}
             {isEditing ? (
               <div className="space-y-2">
@@ -570,6 +608,25 @@ function MessageCard({
                   className="w-full px-3 py-2 rounded-lg border border-input bg-transparent text-sm font-mono focus:outline-none focus:ring-1 focus:ring-ring resize-y"
                   autoFocus
                 />
+                <div>
+                  <label className="text-xs font-semibold">Photo (optional) — sent as image header on WhatsApp</label>
+                  <div className="mt-1 flex gap-2">
+                    <Input
+                      value={editImage}
+                      onChange={(e) => onEditImageChange(e.target.value)}
+                      placeholder="https://… or /uploads/xxx.jpg"
+                      className="flex-1 text-xs font-mono"
+                    />
+                    <input type="file" ref={fileRef} accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(f); if (fileRef.current) fileRef.current.value = ''; }} />
+                    <Button type="button" variant="outline" size="sm" disabled={uploading} onClick={() => fileRef.current?.click()} className="gap-1 shrink-0">
+                      {uploading ? <Loader2 size={12} className="animate-spin" /> : <ImagePlus size={12} />} Upload
+                    </Button>
+                    {editImage && (
+                      <Button type="button" variant="ghost" size="sm" onClick={() => onEditImageChange('')}>Remove</Button>
+                    )}
+                  </div>
+                  {editImage && <img src={editImage} alt="" className="mt-2 h-20 w-32 object-cover rounded-lg border border-border" />}
+                </div>
                 <div className="flex gap-2">
                   <Button
                     size="sm"
