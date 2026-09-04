@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -15,6 +16,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"orangecheesepizza/bot/config"
@@ -549,7 +551,27 @@ func (h *AdminHandler) UpdateMenuItem(c *gin.Context) {
 		return
 	}
 	updated, _ := h.menuService.GetItemByID(id)
-	auditLog(c, "update_menu_item", strconv.Itoa(id), map[string]interface{}{"name": name})
+	// Field-level diff so the audit log shows what actually changed.
+	diff := map[string]map[string]interface{}{}
+	diffField := func(field string, from, to interface{}) {
+		if fmt.Sprintf("%v", from) != fmt.Sprintf("%v", to) {
+			diff[field] = map[string]interface{}{"from": from, "to": to}
+		}
+	}
+	if existing != nil {
+		diffField("name", existing.Name, name)
+		diffField("slug", existing.Slug, slug)
+		diffField("description", existing.Description, desc)
+		diffField("price", existing.Price, price)
+		diffField("category_id", existing.CategoryID, catID)
+		diffField("available", existing.Available, available)
+		diffField("image_url", existing.ImageURL, img)
+		diffField("is_spicy", existing.IsSpicy, isSpicy)
+		diffField("is_jain", existing.IsJain, isJain)
+		diffField("is_new", existing.IsNew, isNew)
+		diffField("no_crust", existing.NoCrust, noCrust)
+	}
+	auditLog(c, "update_menu_item", strconv.Itoa(id), map[string]interface{}{"name": name, "changes": diff})
 	c.JSON(http.StatusOK, updated)
 }
 
@@ -665,6 +687,65 @@ func (h *AdminHandler) UploadImage(c *gin.Context) {
 	// return path usable via GET /uploads/<name> (proxied + static)
 	auditLog(c, "upload_image", name, map[string]interface{}{"url": "/uploads/" + name})
 	c.JSON(http.StatusOK, gin.H{"url": "/uploads/" + name, "filename": name})
+}
+
+// ListUploads returns the media library (files in ./uploads).
+func (h *AdminHandler) ListUploads(c *gin.Context) {
+	entries, err := os.ReadDir("./uploads")
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"files": []interface{}{}})
+		return
+	}
+	out := []map[string]interface{}{}
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		out = append(out, map[string]interface{}{
+			"name": e.Name(), "size": info.Size(),
+			"modified":    info.ModTime().UTC().Format(time.RFC3339),
+			"url":         "/uploads/" + e.Name(),
+			"referenced":  h.uploadReferenced(e.Name()),
+		})
+	}
+	c.JSON(http.StatusOK, gin.H{"files": out})
+}
+
+// uploadReferenced reports whether a file is still pointed at by any
+// menu item, offer, banner, page, or brand setting (best effort).
+func (h *AdminHandler) uploadReferenced(name string) bool {
+	url := "/uploads/" + name
+	var n int
+	_ = database.DB.QueryRow(`
+		SELECT (
+			(SELECT COUNT(*) FROM menu_items WHERE image_url LIKE '%' || $1 || '%') +
+			(SELECT COUNT(*) FROM site_settings WHERE value::text LIKE '%' || $1 || '%')
+		)`, url).Scan(&n)
+	return n > 0
+}
+
+// DeleteUpload removes an uploaded file (DB references left for admin to fix).
+func (h *AdminHandler) DeleteUpload(c *gin.Context) {
+	name := c.Param("name")
+	if name == "" || name != filepath.Base(name) || strings.Contains(name, "..") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid filename"})
+		return
+	}
+	p := filepath.Join("./uploads", name)
+	if _, err := os.Stat(p); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
+		return
+	}
+	if err := os.Remove(p); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete file"})
+		return
+	}
+	auditLog(c, "delete_upload", name, nil)
+	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
 // GetCategoriesAdmin returns website categories with slug for the dashboard.
@@ -888,6 +969,7 @@ func (h *AdminHandler) SendChatMessage(c *gin.Context) {
 		return
 	}
 	_ = services.SaveWhatsAppMessage(phone, "out", body, "")
+	services.BroadcastRealtime("chat.message", map[string]interface{}{"phone": phone, "dir": "out"})
 	// Mark takeover so bot pauses
 	if cust != nil {
 		_ = services.SetConversationState(phone, "HUMAN_SUPPORT")
@@ -1097,12 +1179,36 @@ func (h *AdminHandler) GetAnalytics(c *gin.Context) {
 	if byDay == nil {
 		byDay = []DayRev{}
 	}
+	// Orders by hour-of-day, last 7 days (peak-hour heatmap).
+	type HourStat struct {
+		Hour   int `json:"hour"`
+		Orders int `json:"orders"`
+	}
+	byHour := make([]HourStat, 24)
+	for h := 0; h < 24; h++ {
+		byHour[h].Hour = h
+	}
+	hourRows, err := database.DB.Query(`
+		SELECT EXTRACT(HOUR FROM created_at)::int AS h, COUNT(*)
+		FROM orders WHERE created_at >= CURRENT_DATE - INTERVAL '6 days'
+		GROUP BY h
+	`)
+	if err == nil && hourRows != nil {
+		defer hourRows.Close()
+		for hourRows.Next() {
+			var h, n int
+			if err := hourRows.Scan(&h, &n); err == nil && h >= 0 && h < 24 {
+				byHour[h].Orders = n
+			}
+		}
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"today": gin.H{"revenue": todayRevenue, "orders": todayCount},
 		"week":  gin.H{"revenue": weekRevenue, "orders": weekCount},
 		"by_status": statusMap,
 		"top_items": top,
 		"by_day": byDay,
+		"by_hour": byHour,
 	})
 }
 
