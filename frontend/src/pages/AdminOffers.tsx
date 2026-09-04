@@ -5,7 +5,6 @@ import { ArrowLeft, Plus, Pencil, Trash2, Save, Tag, AlertTriangle, Upload } fro
 import { adminFetch, getAdminKey } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
-import AdminSubNav from '../components/layout/AdminSubNav';
 import { Card, CardContent } from '@/components/shadcn/card';
 import { Button } from '@/components/shadcn/button';
 import { Input } from '@/components/shadcn/input';
@@ -149,7 +148,6 @@ export default function AdminOffers() {
 
   return (
     <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
-      <AdminSubNav activeOverride="/admin/offers" />
 
       <div className="flex items-center gap-3">
         <Link to="/admin/settings" className="p-2 rounded-xl hover:bg-muted"><ArrowLeft size={18} /></Link>
@@ -162,7 +160,7 @@ export default function AdminOffers() {
           <CardContent className="py-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-semibold">{editingId ? 'Edit Offer' : 'New Offer'}</h2>
-              <Button variant="ghost" size="icon" onClick={() => { setShowForm(false); setEditingId(null); }}>✕</Button>
+                <Button variant="ghost" size="icon" aria-label="Close form" onClick={() => { setShowForm(false); setEditingId(null); }}>✕</Button>
             </div>
 
             <div className="space-y-4 max-w-2xl">
@@ -290,9 +288,21 @@ export default function AdminOffers() {
               <CardContent className="py-8 text-center">
                 <Tag size={24} className="mx-auto text-muted-foreground" />
                 <p className="text-sm text-muted-foreground mt-2">No offers yet. Create one to get started.</p>
-                <Button onClick={openNew} className="mt-3">
-                  <Plus size={14} /> Create first offer
-                </Button>
+                <div className="mt-3 flex items-center justify-center gap-2">
+                  <Button onClick={openNew}>
+                    <Plus size={14} /> Create first offer
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setEditingId(null);
+                      setForm({ ...EMPTY_FORM, title: 'Weekend Family Feast', subtitle: '20% off above ₹799', badge: 'HOT', code: 'FEAST20', discount: '20% OFF', minOrder: 799, maxDiscount: 200 });
+                      setShowForm(true);
+                    }}
+                  >
+                    Try a sample
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           ) : (
@@ -332,7 +342,7 @@ export default function AdminOffers() {
                           <Button variant="outline" size="sm" onClick={() => openEdit(o)}>
                             <Pencil size={12} /> Edit
                           </Button>
-                          <Button variant="destructive" size="icon" onClick={() => handleDelete(o.id)}>
+                          <Button variant="destructive" size="icon" aria-label={`Delete offer ${o.title}`} onClick={() => handleDelete(o.id)}>
                             <Trash2 size={13} />
                           </Button>
                         </div>

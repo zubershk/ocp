@@ -160,18 +160,23 @@ function applyCSSVars(brand: BrandSettings) {
   setCSSVar('--font-body', brand.font_body);
 }
 
-function applySEO(seo: SEOSettings) {
+function applySEO(seo: SEOSettings, brand?: BrandSettings) {
   if (seo.meta_title) {
     document.title = seo.meta_title;
   }
-  if (seo.favicon_url) {
+  // Brand page saves the favicon under brand.favicon_url; SEO settings
+  // can override it via seo.favicon_url.
+  const favicon = seo.favicon_url || brand?.favicon_url;
+  if (favicon) {
     let link = document.querySelector("link[rel~='icon']") as HTMLLinkElement | null;
     if (!link) {
       link = document.createElement('link');
       link.rel = 'icon';
       document.head.appendChild(link);
     }
-    link.href = seo.favicon_url;
+    if (link.getAttribute('href') !== favicon) {
+      link.href = favicon;
+    }
   }
 }
 
@@ -200,7 +205,7 @@ export function SiteSettingsProvider({ children }: { children: React.ReactNode }
             const s = unwrapped as SiteSettingsResponse;
             setSettings(s);
             applyCSSVars(s.brand ?? {});
-            applySEO(s.seo ?? {});
+            applySEO(s.seo ?? {}, s.brand ?? {});
           }
           setCategories(categoriesRes.categories ?? []);
           setOffers(offersRes.offers ?? []);

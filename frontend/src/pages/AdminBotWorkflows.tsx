@@ -6,7 +6,6 @@ import {
 } from 'lucide-react';
 import { adminFetch, getAdminKey } from '../services/api';
 import { useToast } from '../context/ToastContext';
-import AdminSubNav from '../components/layout/AdminSubNav';
 import { Button } from '@/components/shadcn/button';
 import { Card, CardContent } from '@/components/shadcn/card';
 import { Input } from '@/components/shadcn/input';
@@ -185,6 +184,47 @@ const VARIABLE_REF: Record<string, { description: string; example: string }[]> =
 };
 
 // ------------------------------------------------------------------
+// Setup essentials — the dozen messages worth reviewing first.
+// ------------------------------------------------------------------
+
+const ESSENTIAL_KEYS = [
+  'welcome',
+  'help',
+  'unknown_input',
+  'item_added',
+  'order_placed',
+  'order_failed',
+  'status_confirmed',
+  'status_out_for_delivery',
+  'status_delivered',
+  'payment_how',
+  'cart_title',
+  'location_body',
+];
+
+const REVIEWED_KEY = 'ocp_bot_reviewed';
+
+function loadReviewed(): Set<string> {
+  try {
+    const raw = JSON.parse(localStorage.getItem(REVIEWED_KEY) ?? '[]') as string[];
+    return new Set(raw);
+  } catch {
+    return new Set();
+  }
+}
+
+function validateTemplate(text: string, knownVars: string[]): string | null {
+  const opens = (text.match(/{{/g) ?? []).length;
+  const closes = (text.match(/}}/g) ?? []).length;
+  if (opens !== closes) return 'Unbalanced {{ }} — the bot will show raw text until fixed.';
+  const used = [...text.matchAll(/{{\.([A-Za-z0-9_]+)}}/g)].map((m) => m[1]);
+  const known = new Set([...knownVars.map((v) => v.trim()), 'RestaurantName']);
+  const unknown = [...new Set(used.filter((v) => !known.has(v)))];
+  if (unknown.length > 0) return `Unknown variable${unknown.length === 1 ? '' : 's'}: ${unknown.map((v) => `{{.${v}}}`).join(', ')} — will render blank.`;
+  return null;
+}
+
+// ------------------------------------------------------------------
 // Component
 // ------------------------------------------------------------------
 
@@ -205,6 +245,19 @@ export default function AdminBotWorkflows() {
   const [confirmResetKey, setConfirmResetKey] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [showHelp, setShowHelp] = useState(false);
+  const [essentialsOnly, setEssentialsOnly] = useState(false);
+  const [reviewed, setReviewed] = useState<Set<string>>(loadReviewed);
+
+  const markReviewed = (key: string) => {
+    setReviewed((prev) => {
+      if (prev.has(key)) return prev;
+      const next = new Set(prev).add(key);
+      try {
+        localStorage.setItem(REVIEWED_KEY, JSON.stringify([...next]));
+      } catch {}
+      return next;
+    });
+  };
 
   // Data
   const messagesQuery = useQuery({
@@ -217,7 +270,7 @@ export default function AdminBotWorkflows() {
   const updateMutation = useMutation({
     mutationFn: ({ key, text, image_url }: { key: string; text: string; image_url?: string }) =>
       adminFetch(`/admin/bot-messages/${key}`, { method: 'PUT', body: JSON.stringify({ message_text: text, image_url }) }),
-    onSuccess: () => { toast.push({ type: 'success', title: 'Message saved' }); qc.invalidateQueries({ queryKey: ['admin-bot-messages'] }); setEditingKey(null); },
+    onSuccess: (_d, v) => { toast.push({ type: 'success', title: 'Message saved' }); markReviewed(v.key); qc.invalidateQueries({ queryKey: ['admin-bot-messages'] }); setEditingKey(null); },
     onError: (e: Error) => toast.push({ type: 'error', title: e.message }),
   });
 
@@ -248,19 +301,24 @@ export default function AdminBotWorkflows() {
     return acc;
   }, {});
 
-  const filteredGrouped = searchQuery.trim()
-    ? categories.reduce<Record<string, BotMessage[]>>((acc, cat) => {
-        const q = searchQuery.toLowerCase();
-        const filtered = grouped[cat]?.filter(
-          (m) =>
-            m.message_key.toLowerCase().includes(q) ||
-            m.description.toLowerCase().includes(q) ||
-            m.message_text.toLowerCase().includes(q)
-        );
-        if (filtered?.length) acc[cat] = filtered;
-        return acc;
-      }, {})
-    : grouped;
+  const essentialSet = new Set(ESSENTIAL_KEYS);
+  const filteredGrouped = categories.reduce<Record<string, BotMessage[]>>((acc, cat) => {
+    let list = grouped[cat] ?? [];
+    if (essentialsOnly) list = list.filter((m) => essentialSet.has(m.message_key));
+    const q = searchQuery.trim().toLowerCase();
+    if (q) {
+      list = list.filter(
+        (m) =>
+          m.message_key.toLowerCase().includes(q) ||
+          m.description.toLowerCase().includes(q) ||
+          m.message_text.toLowerCase().includes(q)
+      );
+    }
+    if (list.length) acc[cat] = list;
+    return acc;
+  }, {});
+
+  const reviewedCount = ESSENTIAL_KEYS.filter((k) => reviewed.has(k)).length;
 
   if (!authed) {
     return (
@@ -272,7 +330,6 @@ export default function AdminBotWorkflows() {
 
   return (
     <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
-      <AdminSubNav activeOverride="/admin/bot-workflows" />
 
       <div className="flex items-center justify-between">
         <div>
@@ -332,16 +389,38 @@ export default function AdminBotWorkflows() {
           </Card>
         )}
 
-        {/* ---- Search ---- */}
-        <div className="mb-4 relative">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            type="text"
-            placeholder="Search messages..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9"
-          />
+        {/* ---- Setup progress ---- */}
+        <div className="mb-4">
+          <div className="flex items-center justify-between text-xs mb-1.5">
+            <span className="font-semibold">Setup progress</span>
+            <span className="text-muted-foreground tabular-nums">{reviewedCount} of {ESSENTIAL_KEYS.length} key messages reviewed</span>
+          </div>
+          <div className="h-2 rounded-full bg-muted overflow-hidden" role="progressbar" aria-valuenow={reviewedCount} aria-valuemin={0} aria-valuemax={ESSENTIAL_KEYS.length}>
+            <div className="h-full bg-emerald-500 transition-all" style={{ width: `${Math.round((reviewedCount / ESSENTIAL_KEYS.length) * 100)}%` }} />
+          </div>
+        </div>
+
+        {/* ---- Search + essentials filter ---- */}
+        <div className="mb-4 flex gap-2">
+          <div className="relative flex-1">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              type="text"
+              placeholder="Search messages..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+          <Button
+            variant={essentialsOnly ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setEssentialsOnly((v) => !v)}
+            className="shrink-0 gap-1.5"
+            aria-pressed={essentialsOnly}
+          >
+            <CheckCircle size={14} /> Essentials
+          </Button>
         </div>
 
         {/* ---- Categories ---- */}
@@ -353,7 +432,7 @@ export default function AdminBotWorkflows() {
           </div>
         ) : Object.keys(filteredGrouped).length === 0 ? (
           <div className="text-center py-12 text-muted-foreground">
-            {searchQuery ? 'No messages match your search.' : 'No messages found.'}
+            {searchQuery || essentialsOnly ? 'No messages match these filters.' : 'No messages found.'}
           </div>
         ) : (
           Object.entries(filteredGrouped).map(([cat, items]) => {
@@ -400,7 +479,7 @@ export default function AdminBotWorkflows() {
                         onEditImageChange={setEditImage}
                         onSave={() => updateMutation.mutate({ key: msg.message_key, text: editText, image_url: editImage.trim() })}
                         onCancel={() => setEditingKey(null)}
-                        onPreview={() => { setPreviewKey(msg.message_key); previewMutation.mutate(msg.message_key); }}
+                        onPreview={() => { setPreviewKey(msg.message_key); markReviewed(msg.message_key); previewMutation.mutate(msg.message_key); }}
                         onReset={() => setConfirmResetKey(msg.message_key)}
                         isPending={updateMutation.isPending}
                       />
@@ -608,6 +687,14 @@ function MessageCard({
                   className="w-full px-3 py-2 rounded-lg border border-input bg-transparent text-sm font-mono focus:outline-none focus:ring-1 focus:ring-ring resize-y"
                   autoFocus
                 />
+                {(() => {
+                  const problem = validateTemplate(editText, (msg.variables || '').split(','));
+                  return problem ? (
+                    <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5 flex items-start gap-1.5">
+                      <AlertTriangle size={13} className="shrink-0 mt-0.5" /> {problem}
+                    </p>
+                  ) : null;
+                })()}
                 <div>
                   <label className="text-xs font-semibold">Photo (optional) — sent as image header on WhatsApp</label>
                   <div className="mt-1 flex gap-2">
