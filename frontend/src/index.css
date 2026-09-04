@@ -380,3 +380,17 @@
   .touch-target { min-height: 44px; min-width: 44px; }
   .safe-bottom { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
 }
+
+/* Visible keyboard focus everywhere in admin */
+#admin-main :focus-visible {
+  outline: 2px solid hsl(var(--primary));
+  outline-offset: 2px;
+  border-radius: 0.5rem;
+}
+
+/* Fresh-order arrival pulse */
+@keyframes order-arrive {
+  0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.55); }
+  100% { box-shadow: 0 0 0 14px rgba(16, 185, 129, 0); }
+}
+.order-arrive { animation: order-arrive 1.6s ease-out 3; }

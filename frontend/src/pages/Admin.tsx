@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Pizza, Clock, Phone, MapPin, RefreshCw, Search, Bell, BellOff, LogOut, MessageCircle,
@@ -6,21 +7,27 @@ import {
   LayoutGrid, List, TrendingUp, Wallet, Flame, ArrowUpRight, MoreHorizontal, ShieldCheck,
   Activity, IndianRupee,
 } from 'lucide-react';
-import { adminFetch, getAdminKey, setAdminKey } from '../services/api';
+import { adminFetch, getAdminKey, setAdminKey, apiGet } from '../services/api';
 import { useCountUp } from '../hooks/useCountUp';
-import AdminSubNav from '../components/layout/AdminSubNav';
+import { useRealtime } from '../context/RealtimeContext';
+import { playOrderPing } from '../utils/adminSound';
+import HoldButton from '../components/ui/HoldButton';
 import { Button } from '@/components/shadcn/button';
 import { Badge } from '@/components/shadcn/badge';
 import { Card, CardContent } from '@/components/shadcn/card';
 import { Input } from '@/components/shadcn/input';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/shadcn/dialog';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/shadcn/table';
 import { Skeleton } from '@/components/shadcn/skeleton';
 
 const NEXT_STATUSES: Record<string, { to: string; label: string; primary?: boolean }[]> = {
   placed: [{ to: 'confirmed', label: 'Confirm', primary: true }, { to: 'cancelled', label: 'Cancel' }],
-  confirmed: [{ to: 'preparing', label: 'Fire kitchen', primary: true }, { to: 'cancelled', label: 'Cancel' }],
-  preparing: [{ to: 'ready', label: 'Mark ready', primary: true }],
+  confirmed: [
+    { to: 'out_for_delivery', label: 'Out for delivery', primary: true },
+    { to: 'completed', label: 'Picked up' },
+    { to: 'cancelled', label: 'Cancel' },
+  ],
+  // Legacy exits to close pre-simplify rows still in flight.
+  preparing: [{ to: 'out_for_delivery', label: 'Out for delivery', primary: true }, { to: 'cancelled', label: 'Cancel' }],
   ready: [{ to: 'out_for_delivery', label: 'Out for delivery', primary: true }, { to: 'completed', label: 'Picked up' }],
   out_for_delivery: [{ to: 'delivered', label: 'Delivered', primary: true }],
 };
@@ -29,8 +36,6 @@ const STATUS_TABS = [
   { id: 'active', label: 'Active' },
   { id: 'placed', label: 'New' },
   { id: 'confirmed', label: 'Confirmed' },
-  { id: 'preparing', label: 'Cooking' },
-  { id: 'ready', label: 'Ready' },
   { id: 'out_for_delivery', label: 'En route' },
   { id: 'delivered', label: 'Delivered' },
   { id: 'completed', label: 'Completed' },
@@ -88,10 +93,13 @@ export default function Admin() {
   const [view, setView] = useState<'board' | 'list'>(() => (typeof window !== 'undefined' && window.innerWidth < 768 ? 'board' : 'board'));
   const [soundOn, setSoundOn] = useState(() => { try { return localStorage.getItem('ocp_admin_sound') !== 'off'; } catch { return true; } });
   const [autoRefresh, setAutoRefresh] = useState(true);
-  const [confirmCancel, setConfirmCancel] = useState<AdminOrder | null>(null);
   const queryClient = useQueryClient();
   const prevIdsRef = useRef<Set<number>>(new Set());
   const searchRef = useRef<HTMLInputElement>(null);
+  const { live, lastEvent, lastSeq } = useRealtime();
+  const [freshIds, setFreshIds] = useState<Set<number>>(new Set());
+  const [selId, setSelId] = useState<number | null>(null);
+  const [liveMsg, setLiveMsg] = useState('');
 
   const [, setTick] = useState(0);
   useEffect(() => { const id = setInterval(() => setTick((n) => n + 1), 30000); return () => clearInterval(id); }, []);
@@ -108,9 +116,29 @@ export default function Admin() {
     queryKey: ['admin-orders'],
     queryFn: () => adminFetch<AdminOrder[]>('/admin/orders?limit=50'),
     enabled: authed,
-    refetchInterval: autoRefresh ? 8000 : false,
+    refetchInterval: autoRefresh && !live ? 8000 : false,
     retry: 1,
+    placeholderData: (prev) => prev,
   });
+
+  // Realtime: instant refresh + pulse + sound on order events.
+  useEffect(() => {
+    if (!lastEvent) return;
+    if (lastEvent.type === 'order.created' || lastEvent.type === 'order.status') {
+      queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
+    }
+    if (lastEvent.type === 'order.created') {
+      const d = (lastEvent.data ?? {}) as { order_id?: number; order_number?: string };
+      const id = Number(d.order_id);
+      if (id) {
+        setFreshIds((s) => new Set(s).add(id));
+        setTimeout(() => setFreshIds((s) => { const n = new Set(s); n.delete(id); return n; }), 15000);
+        setLiveMsg(`New order ${d.order_number ?? ''} arrived`);
+        if (soundOn) playOrderPing();
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastSeq]);
 
   const configQuery = useQuery({
     queryKey: ['admin-config'],
@@ -118,26 +146,18 @@ export default function Admin() {
     enabled: authed,
   });
 
+  // Polling fallback beep (realtime path above handles the live case).
   useEffect(() => {
+    if (live) return;
     const orders = ordersQuery.data; if (!orders || !soundOn) return;
     const cur = new Set(orders.map((o) => o.id)); const prev = prevIdsRef.current;
     const first = prev.size === 0 && cur.size > 0;
     if (!first) for (const id of cur) if (!prev.has(id)) {
-      try {
-        const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-        const o = ctx.createOscillator(); const g = ctx.createGain();
-        o.type = 'sine'; o.frequency.value = 880; g.gain.value = 0.14;
-        o.connect(g); g.connect(ctx.destination); o.start();
-        g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5); o.stop(ctx.currentTime + 0.55);
-        const o2 = ctx.createOscillator(); const g2 = ctx.createGain();
-        o2.type = 'sine'; o2.frequency.value = 1320; g2.gain.value = 0.1;
-        o2.connect(g2); g2.connect(ctx.destination);
-        setTimeout(() => { try { o2.start(); g2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.32); o2.stop(ctx.currentTime + 0.36); } catch {} }, 180);
-      } catch {}
+      playOrderPing();
       break;
     }
     prevIdsRef.current = cur;
-  }, [ordersQuery.data, soundOn]);
+  }, [ordersQuery.data, soundOn, live ]);
 
   const statusMutation = useMutation({
     mutationFn: ({ id, status }: { id: number; status: string }) => adminFetch(`/admin/orders/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
@@ -174,6 +194,68 @@ export default function Admin() {
   }, [orders, tab, search]);
 
   const lastUpdated = ordersQuery.dataUpdatedAt ? new Date(ordersQuery.dataUpdatedAt).toLocaleTimeString() : '—';
+
+  // Alerts strip data.
+  const pendingReviews = useQuery({
+    queryKey: ['admin-reviews-pending-count'],
+    queryFn: () => adminFetch<{ reviews: unknown[] }>('/admin/reviews?pending=1').then((r) => r.reviews.length),
+    enabled: authed,
+    refetchInterval: 60000,
+  });
+  const hiddenItems = useQuery({
+    queryKey: ['menu-hidden-count'],
+    queryFn: () => apiGet<{ items: { available: boolean }[] }>('/api/menu').then((d) => d.items.filter((i) => !i.available).length),
+    refetchInterval: 120000,
+  });
+  const staleNew = orders.filter((o) => o.status === 'placed' && Date.now() - new Date(o.created_at).getTime() > 2 * 60 * 1000).length;
+
+  // Palette deep-link: focus an order from global search.
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem('ocp_order_focus');
+      if (!raw) return;
+      sessionStorage.removeItem('ocp_order_focus');
+      const { id, number } = JSON.parse(raw) as { id: number; number: string };
+      setSearch(number ?? '');
+      setSelId(id ?? null);
+      setTimeout(() => document.getElementById(`order-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 400);
+    } catch {}
+  }, []);
+
+  // Keep selection inside the visible list.
+  useEffect(() => {
+    setSelId((cur) => (cur != null && filtered.some((o) => o.id === cur) ? cur : null));
+  }, [filtered]);
+
+  // Board keyboard: j/k move, Enter scrolls, c runs primary action.
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      const tag = t?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || t?.isContentEditable) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (filtered.length === 0) return;
+      if (e.key === 'j' || e.key === 'k') {
+        e.preventDefault();
+        setSelId((cur) => {
+          const idx = cur == null ? -1 : filtered.findIndex((o) => o.id === cur);
+          const next = e.key === 'j'
+            ? filtered[(idx + 1) % filtered.length]
+            : filtered[(idx - 1 + filtered.length) % filtered.length];
+          setTimeout(() => document.getElementById(`order-${next.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
+          return next.id;
+        });
+      } else if (e.key === 'Enter' && selId != null) {
+        document.getElementById(`order-${selId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } else if ((e.key === 'c' || e.key === 'C') && selId != null) {
+        const o = filtered.find((x) => x.id === selId);
+        const next = o ? (NEXT_STATUSES[o.status] ?? []).find((n) => n.to !== 'cancelled') : undefined;
+        if (o && next) statusMutation.mutate({ id: o.id, status: next.to });
+      }
+    };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, [filtered, selId, statusMutation]);
 
   const revenueCountUp = useCountUp(kpi.revenueToday);
   const activeCountUp = useCountUp(kpi.active);
@@ -241,13 +323,13 @@ export default function Admin() {
               </Badge>
             )}
             <div className="hidden sm:flex items-center gap-1">
-              <Button variant={soundOn ? 'default' : 'outline'} size="icon" className="h-10 w-10 rounded-full" onClick={() => setSoundOn((v) => !v)}>
+              <Button variant={soundOn ? 'default' : 'outline'} size="icon" aria-label={soundOn ? 'Mute new-order sound' : 'Unmute new-order sound'} className="h-10 w-10 rounded-full" onClick={() => setSoundOn((v) => !v)}>
                 {soundOn ? <Bell size={14} /> : <BellOff size={14} />}
               </Button>
-              <Button variant={autoRefresh ? 'outline' : 'secondary'} size="icon" className="h-10 w-10 rounded-full" onClick={() => setAutoRefresh((v) => !v)}>
+              <Button variant={autoRefresh ? 'outline' : 'secondary'} size="icon" aria-label={autoRefresh ? 'Pause auto-refresh' : 'Resume auto-refresh'} className="h-10 w-10 rounded-full" onClick={() => setAutoRefresh((v) => !v)}>
                 <Timer size={14} />
               </Button>
-              <Button variant="outline" size="icon" className="h-10 w-10 rounded-full" onClick={() => queryClient.invalidateQueries({ queryKey: ['admin-orders'] })}>
+              <Button variant="outline" size="icon" aria-label="Refresh orders now" className="h-10 w-10 rounded-full" onClick={() => queryClient.invalidateQueries({ queryKey: ['admin-orders'] })}>
                 <RefreshCw size={14} className={ordersQuery.isFetching ? 'animate-spin' : ''} />
               </Button>
             </div>
@@ -260,7 +342,6 @@ export default function Admin() {
       </div>
 
       <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <AdminSubNav activeOverride="/admin" />
 
         {/* KPI Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -301,6 +382,27 @@ export default function Admin() {
           </Card>
         </div>
 
+        {/* Alerts */}
+        {(staleNew > 0 || (pendingReviews.data ?? 0) > 0 || (hiddenItems.data ?? 0) > 0) && (
+          <div className="mt-4 space-y-2">
+            {staleNew > 0 && (
+              <button onClick={() => { setTab('placed'); }} className="w-full text-left px-4 py-2.5 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs font-semibold hover:bg-red-100 transition-colors">
+                {staleNew} new order{staleNew === 1 ? '' : 's'} waiting over 2 min — tap to review
+              </button>
+            )}
+            {(pendingReviews.data ?? 0) > 0 && (
+              <Link to="/admin/reviews" className="block px-4 py-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold hover:bg-amber-100 transition-colors">
+                {pendingReviews.data} review{(pendingReviews.data ?? 0) === 1 ? '' : 's'} awaiting moderation
+              </Link>
+            )}
+            {(hiddenItems.data ?? 0) > 0 && (
+              <Link to="/admin/catalog" className="block px-4 py-2.5 rounded-xl bg-muted border border-border text-muted-foreground text-xs font-semibold hover:bg-muted/70 transition-colors">
+                {hiddenItems.data} menu item{(hiddenItems.data ?? 0) === 1 ? '' : 's'} hidden from customers
+              </Link>
+            )}
+          </div>
+        )}
+
         {/* Toolbar */}
         <Card className="mt-6">
           <CardContent className="p-2">
@@ -320,7 +422,7 @@ export default function Admin() {
                   <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                   <Input ref={searchRef} value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search order, customer, phone…" className="pl-9 pr-16" />
                   <span className="hidden sm:inline-flex absolute right-1.5 top-1/2 -translate-y-1/2 items-center gap-1 px-1.5 py-1 rounded-lg bg-background border border-border text-[10px] font-bold tracking-wide text-muted-foreground">⌘K</span>
-                  {search && <Button variant="ghost" size="icon" className="absolute right-8 sm:right-[52px] top-1/2 -translate-y-1/2 h-7 w-7" onClick={() => setSearch('')}><XCircle size={14} /></Button>}
+                  {search && <Button variant="ghost" size="icon" aria-label="Clear search" className="absolute right-8 sm:right-[52px] top-1/2 -translate-y-1/2 h-7 w-7" onClick={() => setSearch('')}><XCircle size={14} /></Button>}
                 </div>
                 <div className="hidden sm:flex items-center rounded-lg border border-border overflow-hidden">
                   <Button variant={view === 'board' ? 'default' : 'ghost'} size="sm" className="gap-1.5 rounded-r-none" onClick={() => setView('board')}><LayoutGrid size={14} />Board</Button>
@@ -361,7 +463,7 @@ export default function Admin() {
             <CardContent className="py-16 text-center px-6">
               <div className="w-16 h-16 mx-auto rounded-2xl bg-muted border border-border grid place-items-center text-muted-foreground"><ChefHat size={22} /></div>
               <h3 className="font-semibold mt-4">No {tab === 'active' ? 'active' : prettyStatus(tab).toLowerCase()} orders</h3>
-              <p className="text-sm text-muted-foreground mt-1.5 max-w-md mx-auto">{search ? `No match for "${search}". Try a different order number, name or phone.` : tab === 'placed' ? 'New orders land here first. Confirm to fire the kitchen — the customer gets a WhatsApp update.' : 'Orders appear here as they move through the pipeline.'}</p>
+              <p className="text-sm text-muted-foreground mt-1.5 max-w-md mx-auto">{search ? `No match for "${search}". Try a different order number, name or phone.` : tab === 'placed' ? 'New orders land here first. Confirm to start — the customer gets a WhatsApp update.' : 'Orders appear here as they move through the pipeline.'}</p>
               <div className="mt-5 flex justify-center gap-2">
                 {search ? <Button onClick={() => setSearch('')}>Clear search</Button> : <Button variant="outline" onClick={() => queryClient.invalidateQueries({ queryKey: ['admin-orders'] })}>Refresh</Button>}
               </div>
@@ -387,7 +489,7 @@ export default function Admin() {
                     const meta = STATUS_META[o.status] ?? STATUS_META.placed;
                     const urgent = isUrgent(o);
                     return (
-                      <TableRow key={o.id} className={urgent ? 'bg-red-50/40' : ''}>
+                      <TableRow key={o.id} id={`order-${o.id}`} className={`${urgent ? 'bg-red-50/40' : ''} ${selId === o.id ? 'outline outline-2 outline-primary outline-offset-[-2px]' : ''} ${freshIds.has(o.id) ? 'order-arrive' : ''}`}>
                         <TableCell>
                           <div className="font-mono text-xs font-bold">{o.order_number}</div>
                           <div className="text-[11px] text-muted-foreground inline-flex items-center gap-1"><span className={`w-1.5 h-1.5 rounded-full ${o.order_type === 'delivery' ? 'bg-sky-500' : 'bg-muted-foreground'}`} />{o.order_type} • {o.payment_method}</div>
@@ -413,14 +515,22 @@ export default function Admin() {
                         <TableCell>
                           <div className="flex justify-end gap-1.5">
                             {(NEXT_STATUSES[o.status] ?? []).slice(0, 2).map((n) => (
-                              <Button key={n.to} size="sm" disabled={statusMutation.isPending}
-                                variant={n.primary ? 'default' : n.to === 'cancelled' ? 'destructive' : 'outline'}
-                                onClick={() => n.to === 'cancelled' ? setConfirmCancel(o) : statusMutation.mutate({ id: o.id, status: n.to })}
-                                className="text-xs">
-                                {n.label}
-                              </Button>
+                              n.to === 'cancelled' ? (
+                                <HoldButton key={n.to} size="sm" variant="destructive" disabled={statusMutation.isPending}
+                                  onConfirm={() => statusMutation.mutate({ id: o.id, status: 'cancelled' })}
+                                  className="text-xs">
+                                  Hold to cancel
+                                </HoldButton>
+                              ) : (
+                                <Button key={n.to} size="sm" disabled={statusMutation.isPending}
+                                  variant={n.primary ? 'default' : 'outline'}
+                                  onClick={() => statusMutation.mutate({ id: o.id, status: n.to })}
+                                  className="text-xs">
+                                  {n.label}
+                                </Button>
+                              )
                             ))}
-                            <a href={`tel:${o.customer_phone}`}><Button variant="outline" size="icon" className="h-7 w-7"><PhoneCall size={12} /></Button></a>
+                            <a href={`tel:${o.customer_phone}`} aria-label={`Call ${o.customer_name}`}><Button variant="outline" size="icon" className="h-7 w-7"><PhoneCall size={12} /></Button></a>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -436,7 +546,7 @@ export default function Admin() {
               const meta = STATUS_META[o.status] ?? STATUS_META.placed;
               const urgent = isUrgent(o);
               return (
-                <Card key={o.id} className={`group stagger-child flex flex-col overflow-hidden transition-all hover:shadow-md hover:-translate-y-[1px] ${urgent ? 'border-red-200 ring-1 ring-red-100' : ''}`} style={{ animationDelay: `${i * 30}ms` }}>
+                <Card key={o.id} id={`order-${o.id}`} className={`group stagger-child flex flex-col overflow-hidden transition-all hover:shadow-md hover:-translate-y-[1px] ${urgent ? 'border-red-200 ring-1 ring-red-100' : ''} ${selId === o.id ? 'ring-2 ring-primary' : ''} ${freshIds.has(o.id) ? 'ring-2 ring-emerald-400 order-arrive' : ''}`} style={{ animationDelay: `${i * 30}ms` }}>
                   {/* accent */}
                   <div className={`h-1 w-full ${urgent ? 'bg-red-500' : o.status === 'placed' ? 'bg-orange-500' : o.status === 'ready' ? 'bg-emerald-500' : 'bg-primary'}`} />
                   <CardContent className="p-5 flex flex-col flex-1">
@@ -500,15 +610,27 @@ export default function Admin() {
                     {NEXT_STATUSES[o.status] ? (
                       <div className="mt-4 flex gap-2">
                         {NEXT_STATUSES[o.status].map((n) => (
-                          <Button
-                            key={n.to}
-                            disabled={statusMutation.isPending}
-                            variant={n.primary ? 'default' : n.to === 'cancelled' ? 'destructive' : 'outline'}
-                            className="flex-1 gap-1.5"
-                            onClick={() => (n.to === 'cancelled' ? setConfirmCancel(o) : statusMutation.mutate({ id: o.id, status: n.to }))}
-                          >
-                            {n.primary ? <CheckCircle2 size={14} /> : n.to === 'cancelled' ? <XCircle size={14} /> : <MoreHorizontal size={14} />} {n.label}
-                          </Button>
+                          n.to === 'cancelled' ? (
+                            <HoldButton
+                              key={n.to}
+                              disabled={statusMutation.isPending}
+                              variant="destructive"
+                              className="flex-1 gap-1.5"
+                              onConfirm={() => statusMutation.mutate({ id: o.id, status: 'cancelled' })}
+                            >
+                              <XCircle size={14} /> Hold to cancel
+                            </HoldButton>
+                          ) : (
+                            <Button
+                              key={n.to}
+                              disabled={statusMutation.isPending}
+                              variant={n.primary ? 'default' : 'outline'}
+                              className="flex-1 gap-1.5"
+                              onClick={() => statusMutation.mutate({ id: o.id, status: n.to })}
+                            >
+                              {n.primary ? <CheckCircle2 size={14} /> : <MoreHorizontal size={14} />} {n.label}
+                            </Button>
+                          )
                         ))}
                       </div>
                     ) : (
@@ -521,25 +643,11 @@ export default function Admin() {
           </div>
         )}
 
-        {/* Cancel confirm dialog */}
-        <Dialog open={!!confirmCancel} onOpenChange={(open) => { if (!open) setConfirmCancel(null); }}>
-          <DialogContent className="sm:max-w-[420px]">
-            <DialogHeader>
-              <div className="w-10 h-10 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive grid place-items-center"><XCircle size={18} /></div>
-              <DialogTitle>Cancel {confirmCancel?.order_number}?</DialogTitle>
-              <DialogDescription>
-                This will notify <span className="font-semibold text-foreground">{confirmCancel?.customer_name}</span> on WhatsApp and move the order to <span className="font-mono text-xs px-1 py-0.5 bg-destructive/10 border border-destructive/20 rounded">cancelled</span>. This cannot be undone.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setConfirmCancel(null)}>Keep order</Button>
-              <Button variant="destructive" disabled={statusMutation.isPending} onClick={() => { statusMutation.mutate({ id: confirmCancel!.id, status: 'cancelled' }); setConfirmCancel(null); }}>Yes, cancel</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <div aria-live="polite" className="sr-only">{liveMsg}</div>
 
         <div className="mt-8 flex items-center justify-center gap-2 text-[11px] text-muted-foreground">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live sync every 8s · Status changes notify customers on WhatsApp
+          <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${live ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+          {live ? 'Live sync · Status changes notify customers on WhatsApp' : 'Live paused — polling every 8s'}
         </div>
       </div>
     </div>

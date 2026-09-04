@@ -2,6 +2,10 @@ import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import Navbar from './components/layout/Navbar';
 import Footer from './components/layout/Footer';
+import AdminSubNav from './components/layout/AdminSubNav';
+import { RealtimeProvider, useRealtime } from './context/RealtimeContext';
+import AdminPalette from './components/admin/AdminPalette';
+import { useState, useEffect } from 'react';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import Landing from './pages/Landing';
 import Home from './pages/Home';
@@ -58,8 +62,33 @@ function PageShell({ children, className = '' }: { children: React.ReactNode; cl
 
 function AdminPageShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="page-enter">
-      {children}
+    <RealtimeProvider>
+      <div className="page-enter min-h-screen bg-background lg:flex lg:items-stretch">
+        <a href="#admin-main" className="sr-only focus:not-sr-only focus:absolute focus:z-[60] focus:px-4 focus:py-2 focus:bg-zinc-900 focus:text-white focus:rounded-xl focus:m-2">
+          Skip to content
+        </a>
+        <AdminSubNav />
+        <main id="admin-main" className="flex-1 min-w-0">
+          <ConnBanner />
+          {children}
+        </main>
+      </div>
+      <AdminPalette />
+    </RealtimeProvider>
+  );
+}
+
+function ConnBanner() {
+  const { live, reconnect } = useRealtime();
+  const [wasLive, setWasLive] = useState(false);
+  useEffect(() => {
+    if (live) setWasLive(true);
+  }, [live ]);
+  if (live || !wasLive) return null;
+  return (
+    <div className="bg-amber-100 border-b border-amber-200 text-amber-900 text-xs px-4 py-2 flex items-center justify-center gap-2" role="alert">
+      <span>Live updates paused — reconnecting…</span>
+      <button onClick={reconnect} className="font-bold underline">Retry now</button>
     </div>
   );
 }
