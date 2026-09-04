@@ -6,7 +6,6 @@ import { adminFetch, getAdminKey } from '../services/api';
 import { apiGet } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
-import AdminSubNav from '../components/layout/AdminSubNav';
 import { Card, CardContent } from '@/components/shadcn/card';
 import { Button } from '@/components/shadcn/button';
 import { Input } from '@/components/shadcn/input';
@@ -127,11 +126,33 @@ export default function AdminCatalog() {
   });
   const deleteMut = useMutation({
     mutationFn: (id: number) => adminFetch(`/admin/menu/${id}`, { method: 'DELETE' }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['catalog-menu'] }),
+    onSuccess: (_d, id) => {
+      qc.invalidateQueries({ queryKey: ['catalog-menu'] });
+      const stashed = items.find((i) => i.id === id);
+      if (stashed) {
+        const snapshot = { ...stashed };
+        toast.push({
+          type: 'success', title: `${snapshot.name} deleted`,
+          action: {
+            label: 'Undo',
+            onClick: async () => {
+              const { id: _drop, ...body } = snapshot as Record<string, unknown>;
+              await adminFetch('/admin/menu', { method: 'POST', body: JSON.stringify(body) });
+              qc.invalidateQueries({ queryKey: ['catalog-menu'] });
+            },
+          },
+        });
+      }
+    },
   });
 
   // ---- Crusts ----
-  const [tab, setTab] = useState<'items' | 'crusts'>('items');
+  const [tab, setTab] = useState<'items' | 'crusts' | 'media'>('items');
+  const [selectMode, setSelectMode] = useState(false);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [confirmMediaDelete, setConfirmMediaDelete] = useState<{ name: string } | null>(null);
+  const [mediaUploading, setMediaUploading] = useState(false);
+  const mediaFileRef = useRef<HTMLInputElement>(null);
   const [editingCrust, setEditingCrust] = useState<Crust | null>(null);
   const [showCrustModal, setShowCrustModal] = useState(false);
   const [crustForm, setCrustForm] = useState<CrustForm>(emptyCrustForm);
@@ -207,6 +228,102 @@ export default function AdminCatalog() {
 
   const categories: Category[] = menuQuery.data?.categories ?? catQuery.data ?? [];
   const items: MenuItem[] = menuQuery.data?.items ?? [];
+
+  // ---- Media library ----
+  interface MediaFile { name: string; size: number; modified: string; url: string; referenced: boolean }
+  const filesQuery = useQuery({
+    queryKey: ['admin-uploads'],
+    queryFn: () => adminFetch<{ files: MediaFile[] }>('/admin/uploads').then((r) => r.files ?? []),
+    enabled: authed && tab === 'media',
+  });
+  const mediaDeleteMut = useMutation({
+    mutationFn: (name: string) => adminFetch(`/admin/uploads/${encodeURIComponent(name)}`, { method: 'DELETE' }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-uploads'] }); toast.push({ type: 'success', title: 'File deleted' }); },
+    onError: (e: Error) => toast.push({ type: 'error', title: e.message }),
+  });
+  const uploadToLibrary = async (f: File) => {
+    if (!f.type.startsWith('image/')) { toast.push({ type: 'warning', title: 'Please choose an image file' }); return; }
+    if (f.size > 5 << 20) { toast.push({ type: 'warning', title: 'Image too large — max 5MB' }); return; }
+    setMediaUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append('image', f);
+      const res = await fetch('/admin/upload', {
+        method: 'POST',
+        headers: { 'X-Admin-Key': getAdminKey() },
+        body: fd,
+      });
+      const data = await res.json().catch(() => null) as { url?: string; error?: string } | null;
+      if (!res.ok) throw new Error(data?.error ?? `Upload failed ${res.status}`);
+      qc.invalidateQueries({ queryKey: ['admin-uploads'] });
+      toast.push({ type: 'success', title: 'Uploaded to library' });
+    } catch (e) { toast.push({ type: 'error', title: e instanceof Error ? e.message : 'Upload failed' }); }
+    finally { setMediaUploading(false); }
+  };
+  const copyUrl = async (url: string) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.push({ type: 'success', title: 'URL copied' });
+    } catch {
+      toast.push({ type: 'warning', title: url });
+    }
+  };
+
+  // ---- Bulk ops + undo ----
+  const toggleSelect = (id: number) => {
+    setSelected((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  };
+  const bulkSetAvailable = async (available: boolean) => {
+    const targets = items.filter((i) => selected.has(i.id));
+    const prev = targets.map((i) => ({ id: i.id, available: i.available }));
+    try {
+      await Promise.all(targets.map((i) => adminFetch(`/admin/menu/${i.id}`, { method: 'PUT', body: JSON.stringify({ available }) })));
+      qc.invalidateQueries({ queryKey: ['catalog-menu'] });
+      setSelected(new Set());
+      toast.push({
+        type: 'success', title: `${targets.length} item${targets.length === 1 ? '' : 's'} ${available ? 'shown' : 'hidden'}`,
+        action: {
+          label: 'Undo',
+          onClick: async () => {
+            await Promise.all(prev.map((p) => adminFetch(`/admin/menu/${p.id}`, { method: 'PUT', body: JSON.stringify({ available: p.available }) })));
+            qc.invalidateQueries({ queryKey: ['catalog-menu'] });
+          },
+        },
+      });
+    } catch (e) { toast.push({ type: 'error', title: e instanceof Error ? e.message : 'Bulk update failed' }); }
+  };
+  const bulkDelete = async () => {
+    const targets = items.filter((i) => selected.has(i.id));
+    const snapshot = targets.map((i) => ({ ...i }));
+    try {
+      await Promise.all(targets.map((i) => adminFetch(`/admin/menu/${i.id}`, { method: 'DELETE' })));
+      qc.invalidateQueries({ queryKey: ['catalog-menu'] });
+      setSelected(new Set());
+      setSelectMode(false);
+      toast.push({
+        type: 'success', title: `${targets.length} item${targets.length === 1 ? '' : 's'} deleted`,
+        action: {
+          label: 'Undo',
+          onClick: async () => {
+            for (const s of snapshot) {
+              const { id, ...body } = s as Record<string, unknown>;
+              await adminFetch('/admin/menu', { method: 'POST', body: JSON.stringify(body) });
+            }
+            qc.invalidateQueries({ queryKey: ['catalog-menu'] });
+          },
+        },
+      });
+    } catch (e) { toast.push({ type: 'error', title: e instanceof Error ? e.message : 'Bulk delete failed' }); }
+  };
+  const exportCsv = () => {
+    const rows = [['id', 'name', 'slug', 'price', 'available', 'category_id'], ...filtered.map((i) => [i.id, i.name, i.slug, i.price, i.available, i.category_id])];
+    const csv = rows.map((r) => r.map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    a.download = 'menu-export.csv';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
 
   const filtered = useMemo(() => {
     let out = items;
@@ -312,15 +429,16 @@ export default function AdminCatalog() {
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2"><Pizza size={20} className="text-orange-600" /> Menu Studio <Badge>Bot + Site sync</Badge></h1>
           <p className="text-sm text-zinc-500 mt-1">Edit once — live on website and WhatsApp instantly. Images via <code className="px-1 py-0.5 bg-zinc-100 rounded text-xs">/uploads</code>.</p>
         </div>
-        <Button onClick={tab === 'items' ? openCreate : openCrustCreate} className="inline-flex items-center gap-2"><Plus size={16} /> {tab === 'items' ? 'New item' : 'New crust'}</Button>
+        {tab !== 'media' && (
+          <Button onClick={tab === 'items' ? openCreate : openCrustCreate} className="inline-flex items-center gap-2"><Plus size={16} /> {tab === 'items' ? 'New item' : 'New crust'}</Button>
+        )}
       </div>
 
       {/* Sub-nav */}
-      <AdminSubNav activeOverride="/admin/catalog" />
 
-      {/* Items / Crusts tabs */}
+      {/* Items / Crusts / Media tabs */}
       <div className="mt-4 flex gap-1 p-1 bg-stone-100 rounded-2xl w-fit text-sm">
-        {(['items', 'crusts'] as const).map((t) => (
+        {(['items', 'crusts', 'media'] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -361,8 +479,25 @@ export default function AdminCatalog() {
             <option value="egg">Egg</option>
           </select>
           <label className="inline-flex items-center gap-1.5 text-xs font-medium"><input type="checkbox" checked={showAvailOnly} onChange={(e) => setShowAvailOnly(e.target.checked)} /> Available only</label>
+          <Button variant={selectMode ? 'default' : 'outline'} size="sm" onClick={() => { setSelectMode((v) => !v); setSelected(new Set()); }}>
+            {selectMode ? 'Done' : 'Select'}
+          </Button>
+          <Button variant="ghost" size="sm" onClick={exportCsv} title="Download visible items as CSV">Export</Button>
         </div>
       </div>
+
+      {/* Bulk bar */}
+      {selectMode && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 px-4 py-2.5 rounded-2xl bg-zinc-900 text-white text-xs font-semibold sticky top-2 z-20 shadow-lg">
+          <span>{selected.size} selected</span>
+          <span className="flex-1" />
+          <button onClick={() => setSelected(new Set(filtered.map((i) => i.id)))} className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 transition-colors">All visible</button>
+          <button onClick={() => bulkSetAvailable(true)} disabled={selected.size === 0} className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 transition-colors disabled:opacity-40">Show</button>
+          <button onClick={() => bulkSetAvailable(false)} disabled={selected.size === 0} className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 transition-colors disabled:opacity-40">Hide</button>
+          <button onClick={bulkDelete} disabled={selected.size === 0} className="px-2.5 py-1 rounded-lg bg-red-600 hover:bg-red-500 transition-colors disabled:opacity-40">Delete</button>
+          <button onClick={() => { setSelected(new Set()); setSelectMode(false); }} className="px-2.5 py-1 rounded-lg hover:bg-white/10 transition-colors" aria-label="Exit select mode"><X size={13} /></button>
+        </div>
+      )}
 
       {/* Grid */}
       {menuQuery.isLoading ? (
@@ -375,16 +510,26 @@ export default function AdminCatalog() {
       ) : (
         <div className="mt-6 grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {filtered.map((it) => (
-            <Card key={it.id} className="overflow-hidden flex flex-col group">
+            <Card key={it.id} className={`overflow-hidden flex flex-col group ${selected.has(it.id) ? 'ring-2 ring-primary' : ''}`}>
               <div className="aspect-[4/3] bg-zinc-50 relative overflow-hidden">
+                {selectMode && (
+                  <button
+                    onClick={() => toggleSelect(it.id)}
+                    aria-label={selected.has(it.id) ? `Deselect ${it.name}` : `Select ${it.name}`}
+                    aria-pressed={selected.has(it.id)}
+                    className={`absolute bottom-2 left-2 z-10 w-7 h-7 rounded-full border-2 grid place-items-center transition-colors ${selected.has(it.id) ? 'bg-zinc-900 border-zinc-900 text-white' : 'bg-white/90 border-white text-transparent'}`}
+                  >
+                    <Check size={14} />
+                  </button>
+                )}
                 {it.image_url ? <img src={it.image_url} alt={it.name} className="w-full h-full object-cover group-hover:scale-[1.02] transition" loading="lazy" /> : <div className="w-full h-full grid place-items-center text-zinc-300"><ImageIcon size={28} /></div>}
                 <div className="absolute top-2 left-2 flex gap-1">
                   <Badge variant={it.available ? 'default' : 'destructive'}>{it.available ? 'Available' : 'Hidden'}</Badge>
                   {it.is_new && <Badge className="bg-orange-600 text-white">New</Badge>}
                 </div>
                 <div className="absolute top-2 right-2 flex gap-1">
-                  <Button variant="ghost" size="icon" onClick={() => openEdit(it)} className="w-8 h-8 rounded-full bg-white/90 backdrop-blur border grid place-items-center hover:bg-white"><Pencil size={14} /></Button>
-                  <Button variant="ghost" size="icon" onClick={() => setConfirmDelete({ id: it.id, name: it.name })} className="w-8 h-8 rounded-full bg-white/90 backdrop-blur border grid place-items-center hover:bg-red-50 text-red-600"><Trash2 size={14} /></Button>
+                  <Button variant="ghost" size="icon" aria-label={`Edit ${it.name}`} onClick={() => openEdit(it)} className="w-8 h-8 rounded-full bg-white/90 backdrop-blur border grid place-items-center hover:bg-white"><Pencil size={14} /></Button>
+                  <Button variant="ghost" size="icon" aria-label={`Delete ${it.name}`} onClick={() => setConfirmDelete({ id: it.id, name: it.name })} className="w-8 h-8 rounded-full bg-white/90 backdrop-blur border grid place-items-center hover:bg-red-50 text-red-600"><Trash2 size={14} /></Button>
                 </div>
               </div>
               <CardContent className="p-4 flex-1 flex flex-col">
@@ -407,7 +552,21 @@ export default function AdminCatalog() {
                   <Button onClick={() => openEdit(it)} className="flex-1 inline-flex items-center justify-center gap-1"><Pencil size={12} /> Edit</Button>
                   <Button variant={it.available ? 'outline' : 'default'} onClick={async () => {
                     const next = !it.available;
-                    try { await adminFetch(`/admin/menu/${it.id}`, { method: 'PUT', body: JSON.stringify({ available: next }) }); qc.invalidateQueries({ queryKey: ['catalog-menu'] }); } catch {}
+                    const prev = it.available;
+                    try {
+                      await adminFetch(`/admin/menu/${it.id}`, { method: 'PUT', body: JSON.stringify({ available: next }) });
+                      qc.invalidateQueries({ queryKey: ['catalog-menu'] });
+                      toast.push({
+                        type: 'success', title: `${it.name} ${next ? 'shown' : 'hidden'}`,
+                        action: {
+                          label: 'Undo',
+                          onClick: async () => {
+                            await adminFetch(`/admin/menu/${it.id}`, { method: 'PUT', body: JSON.stringify({ available: prev }) });
+                            qc.invalidateQueries({ queryKey: ['catalog-menu'] });
+                          },
+                        },
+                      });
+                    } catch {}
                   }} className={it.available ? '' : 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700'}>{it.available ? <><EyeOff size={12} /> Hide</> : <><Eye size={12} /> Show</>}</Button>
                 </div>
               </CardContent>
@@ -462,7 +621,7 @@ export default function AdminCatalog() {
                         <Button variant="outline" size="sm" onClick={() => openCrustEdit(c)}>
                           <Pencil size={12} /> Edit
                         </Button>
-                        <Button variant="destructive" size="icon" onClick={() => setConfirmCrustDelete({ id: c.id, name: c.name })}>
+                          <Button variant="destructive" size="icon" aria-label={`Delete crust ${c.name}`} onClick={() => setConfirmCrustDelete({ id: c.id, name: c.name })}>
                           <Trash2 size={13} />
                         </Button>
                       </div>
@@ -526,6 +685,50 @@ export default function AdminCatalog() {
           onConfirm={() => { crustDeleteMut.mutate(confirmCrustDelete.id); setConfirmCrustDelete(null); }}
           onCancel={() => setConfirmCrustDelete(null)}
         />
+      )}
+
+      {tab === 'media' && (
+      <div className="mt-4">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm text-zinc-500">Shared image library. Copy a URL into any image field. Unreferenced files are safe to delete.</p>
+          <div className="flex gap-2 shrink-0">
+            <input type="file" ref={mediaFileRef} accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadToLibrary(f); if (mediaFileRef.current) mediaFileRef.current.value = ''; }} />
+            <Button onClick={() => mediaFileRef.current?.click()} disabled={mediaUploading} className="inline-flex items-center gap-2">
+              <Upload size={14} /> {mediaUploading ? 'Uploading…' : 'Upload'}
+            </Button>
+          </div>
+        </div>
+        {filesQuery.isLoading ? (
+          <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-36 rounded-2xl" />)}</div>
+        ) : (filesQuery.data ?? []).length === 0 ? (
+          <Card className="mt-4 py-12 text-center px-4">
+            <ImageIcon size={24} className="mx-auto text-zinc-300" />
+            <p className="font-semibold mt-2">No uploads yet</p>
+          </Card>
+        ) : (
+          <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3">
+            {(filesQuery.data ?? []).map((f) => (
+              <Card key={f.name} className="overflow-hidden flex flex-col">
+                <div className="aspect-square bg-zinc-50 relative group">
+                  <img src={f.url} alt={f.name} className="w-full h-full object-cover" loading="lazy" />
+                  <button
+                    onClick={() => setConfirmMediaDelete({ name: f.name })}
+                    aria-label={`Delete ${f.name}`}
+                    className="absolute top-1.5 right-1.5 w-7 h-7 rounded-full bg-white/90 border grid place-items-center text-red-600 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+                <div className="p-2.5">
+                  <div className="text-[11px] font-mono truncate" title={f.name}>{f.name}</div>
+                  <div className="text-[11px] text-zinc-400 mt-0.5">{(f.size / 1024).toFixed(0)} KB {f.referenced ? '· in use' : '· unused'}</div>
+                  <Button variant="outline" size="sm" className="w-full mt-2 h-7 text-xs" onClick={() => copyUrl(f.url)}>Copy URL</Button>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
       )}
 
       {/* Modal */}
@@ -611,6 +814,17 @@ export default function AdminCatalog() {
           confirmLabel="Delete"
           onConfirm={() => { deleteMut.mutate(confirmDelete.id); setConfirmDelete(null); }}
           onCancel={() => setConfirmDelete(null)}
+        />
+      )}
+      {confirmMediaDelete && (
+        <ConfirmDialog
+          open
+          title={`Delete ${confirmMediaDelete.name}?`}
+          message="Items using this image will show a broken image until updated."
+          danger
+          confirmLabel="Delete"
+          onConfirm={() => { mediaDeleteMut.mutate(confirmMediaDelete.name); setConfirmMediaDelete(null); }}
+          onCancel={() => setConfirmMediaDelete(null)}
         />
       )}
     </div>

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { CheckCircle2, AlertCircle, Info, X } from 'lucide-react';
 import type { Toast } from '../types';
 
-type ToastInput = Omit<Toast, 'id'> & { action?: { label: string; to: string } };
+type ToastInput = Omit<Toast, 'id'> & { action?: { label: string; to: string } | { label: string; onClick: () => void } };
 const Ctx = createContext<{ toasts: Toast[]; push: (t: ToastInput) => void; dismiss: (id: string) => void }>(null!);
 export const useToast = () => useContext(Ctx);
 
@@ -15,7 +15,7 @@ const typeConfig = {
 };
 
 export function ToastProvider({ children }: { children: ReactNode }) {
-  const [toasts, setToasts] = useState<(Toast & { action?: { label: string; to: string }; dismissing?: boolean })[]>([]);
+  const [toasts, setToasts] = useState<(Toast & { action?: { label: string; to?: string; onClick?: () => void }; dismissing?: boolean })[]>([]);
 
   const dismiss = useCallback((id: string) => {
     setToasts((prev) => prev.map((t) => t.id === id ? { ...t, dismissing: true } : t));
@@ -48,12 +48,21 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               <Icon size={16} className="shrink-0" />
               <span className="flex-1 min-w-0">{t.title}</span>
               {t.action && (
-                <Link
-                  to={t.action.to}
-                  className="ml-1 underline underline-offset-2 font-bold hover:text-white/80 transition-colors whitespace-nowrap"
-                >
-                  {t.action.label}
-                </Link>
+                'to' in t.action && t.action.to ? (
+                  <Link
+                    to={t.action.to}
+                    className="ml-1 underline underline-offset-2 font-bold hover:text-white/80 transition-colors whitespace-nowrap"
+                  >
+                    {t.action.label}
+                  </Link>
+                ) : (
+                  <button
+                    onClick={() => { ('onClick' in t.action! && t.action.onClick)?.(); dismiss(t.id); }}
+                    className="ml-1 underline underline-offset-2 font-bold hover:text-white/80 transition-colors whitespace-nowrap cursor-pointer"
+                  >
+                    {t.action.label}
+                  </button>
+                )
               )}
               {t.type === 'success' && !t.action && (
                 <Link
