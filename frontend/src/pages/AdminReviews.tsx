@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { Star, Check, X } from 'lucide-react';
 import { adminFetch, getAdminKey } from '../services/api';
+import { useRealtime } from '../context/RealtimeContext';
 import { useToast } from '../context/ToastContext';
-import AdminSubNav from '../components/layout/AdminSubNav';
 import { Card, CardContent } from '@/components/shadcn/card';
 import { Button } from '@/components/shadcn/button';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/shadcn/table';
@@ -31,12 +31,20 @@ export default function AdminReviews() {
   const toast = useToast();
   const [pendingOnly, setPendingOnly] = useState(false);
 
+  const { lastEvent, lastSeq } = useRealtime();
   const reviewsQuery = useQuery({
     queryKey: ['admin-reviews', pendingOnly],
     queryFn: () =>
       adminFetch<{ reviews: Review[] }>(`/admin/reviews${pendingOnly ? '?pending=1' : ''}`).then((r) => r.reviews),
     enabled: authed,
   });
+
+  useEffect(() => {
+    if (lastEvent?.type === 'review.created') {
+      qc.invalidateQueries({ queryKey: ['admin-reviews'] });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastSeq]);
 
   const moderateMut = useMutation({
     mutationFn: ({ id, approved }: { id: number; approved: boolean }) =>
@@ -66,7 +74,6 @@ export default function AdminReviews() {
 
   return (
     <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
-      <AdminSubNav activeOverride="/admin/reviews" />
 
       <div className="flex items-center justify-between">
         <div>

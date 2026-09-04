@@ -179,6 +179,7 @@ func (h *WebhookHandler) HandleWebhook(c *gin.Context) {
 	}
 	if body != "" {
 		_ = services.SaveWhatsAppMessage(phone, "in", body, messageID)
+		services.BroadcastRealtime("chat.message", map[string]interface{}{"phone": phone, "dir": "in"})
 	}
 
 	// If human has taken over, don't let bot auto-reply — keep in HUMAN_SUPPORT for live board

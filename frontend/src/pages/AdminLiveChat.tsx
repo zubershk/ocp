@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { MessageCircle, Send, Phone, User, Clock, Search, Bot, Hand, RefreshCw, ShoppingCart, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { adminFetch, getAdminKey } from '../services/api';
-import AdminSubNav from '../components/layout/AdminSubNav';
+import { useRealtime } from '../context/RealtimeContext';
 import { Card, CardContent } from '@/components/shadcn/card';
 import { Button } from '@/components/shadcn/button';
 import { Input } from '@/components/shadcn/input';
@@ -45,19 +45,27 @@ export default function AdminLiveChat() {
   const [input, setInput] = useState('');
   const listRef = useRef<HTMLDivElement>(null);
   const qc = useQueryClient();
+  const { live, lastEvent, lastSeq } = useRealtime();
+
+  useEffect(() => {
+    if (!lastEvent || lastEvent.type !== 'chat.message') return;
+    qc.invalidateQueries({ queryKey: ['admin-conversations'] });
+    qc.invalidateQueries({ queryKey: ['admin-chat'] });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastSeq]);
 
   const convQuery = useQuery({
     queryKey: ['admin-conversations'],
     queryFn: () => adminFetch<{ conversations: Conversation[] }>('/admin/conversations?limit=50').then((r) => r.conversations),
     enabled: authed,
-    refetchInterval: 5000,
+    refetchInterval: live ? false : 5000,
   });
 
   const chatQuery = useQuery({
     queryKey: ['admin-chat', selected],
     queryFn: () => adminFetch<{ messages: ChatMessage[]; state: string; cart: unknown }>(`/admin/conversations/${selected}/messages?limit=100`),
     enabled: authed && !!selected,
-    refetchInterval: 3000,
+    refetchInterval: live ? false : 3000,
   });
 
   const sendMut = useMutation({
@@ -113,7 +121,6 @@ export default function AdminLiveChat() {
 
   return (
     <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-4 h-[calc(100vh-64px)] flex flex-col">
-      <AdminSubNav activeOverride="/admin/chats" />
 
       <Card className="flex-1 overflow-hidden flex min-h-0 mt-3">
         {/* Left list */}
@@ -121,7 +128,7 @@ export default function AdminLiveChat() {
           <div className="p-3 border-b border-border">
             <div className="flex items-center justify-between">
               <h2 className="font-bold text-sm flex items-center gap-1.5"><MessageCircle size={14} className="text-emerald-600" /> Chats <Badge variant="secondary" className="text-xs font-mono">{conversations.length}</Badge></h2>
-              <Button variant="ghost" size="icon" onClick={() => convQuery.refetch()} className="w-7 h-7"><RefreshCw size={12} className={convQuery.isFetching ? 'animate-spin' : ''} /></Button>
+              <Button variant="ghost" size="icon" aria-label="Refresh conversations" onClick={() => convQuery.refetch()} className="w-7 h-7"><RefreshCw size={12} className={convQuery.isFetching ? 'animate-spin' : ''} /></Button>
             </div>
             <div className="relative mt-2">
               <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
