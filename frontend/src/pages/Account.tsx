@@ -47,6 +47,10 @@ export default function Account() {
   if (!customer) return null;
 
   const orders = (ordersQuery.data ?? []) as OrderRow[];
+  // Derived live from history so the counters can never drift from
+  // what the customer actually sees below.
+  const orderCount = orders.length;
+  const totalSpent = orders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -75,11 +79,11 @@ export default function Account() {
             <div className="mt-4 grid grid-cols-2 gap-3">
               <div className="rounded-xl bg-zinc-50 border border-zinc-100 p-3 text-center">
                 <div className="text-[11px] font-semibold tracking-wide text-zinc-500">Orders</div>
-                <div className="text-xl font-bold tabular-nums">{customer.total_orders}</div>
+                <div className="text-xl font-bold tabular-nums">{ordersQuery.isLoading ? '—' : orderCount}</div>
               </div>
               <div className="rounded-xl bg-zinc-50 border border-zinc-100 p-3 text-center">
                 <div className="text-[11px] font-semibold tracking-wide text-zinc-500">Spent</div>
-                <div className="text-xl font-bold tabular-nums">₹{customer.total_spent.toLocaleString('en-IN')}</div>
+                <div className="text-xl font-bold tabular-nums">₹{ordersQuery.isLoading ? '—' : totalSpent.toLocaleString('en-IN')}</div>
               </div>
             </div>
             <div className="mt-4 space-y-2 text-sm">
@@ -132,7 +136,7 @@ export default function Account() {
                   </div>
                   <div className="text-right shrink-0">
                     <div className="font-bold tabular-nums">₹{Number(o.total).toLocaleString('en-IN')}</div>
-                    <Link to={`/order/${o.id}`} className="text-xs font-semibold text-orange-600 hover:underline inline-flex items-center gap-1">View <ArrowRight size={12} /></Link>
+                    <Link to={`/r/order/${o.id}`} className="text-xs font-semibold text-orange-600 hover:underline inline-flex items-center gap-1">View <ArrowRight size={12} /></Link>
                   </div>
                 </div>
               ))}

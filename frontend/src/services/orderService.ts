@@ -1,4 +1,5 @@
 import { apiGet, apiPost, apiBaseUrl } from './api';
+import { getCustomerToken } from './authService';
 
 // ------------------------------------------------------------------
 // Website order API (Phase 2.2 + security fix)
@@ -185,9 +186,13 @@ export const orderService = {
   async getOrder(idOrNumber: string): Promise<OrderView | null> {
     try {
       const token = tokenFor(idOrNumber);
+      const bearer = getCustomerToken();
       const response = await apiGet<ApiOrderResponse>(
         `/api/orders/${encodeURIComponent(idOrNumber)}`,
-        token ? { 'X-Order-Token': token } : {},
+        {
+          ...(token ? { 'X-Order-Token': token } : {}),
+          ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}),
+        },
       );
       return toView(response.order, response.notification);
     } catch (error) {

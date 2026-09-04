@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { Flame, Plus, Pizza, SlidersHorizontal, X, ChevronDown, Search, ArrowRight } from 'lucide-react';
 import { useMenuItems } from '../hooks/useMenu';
 import { useCart } from '../context/CartContext';
+import { useCrusts } from '../context/CrustContext';
 import { useToast } from '../context/ToastContext';
 import { useGsapReveal } from '../hooks/useGsap';
 import SearchAutocomplete from '../components/ui/SearchAutocomplete';
@@ -33,6 +34,7 @@ export default function Menu() {
   const [showFilters, setShowFilters] = useState(false);
   const { items: menuItems, loading } = useMenuItems();
   const { addItem } = useCart();
+  const { defaultCrust } = useCrusts();
   const { push } = useToast();
   const deliveryHours = useDeliveryHours();
   const categoryBarRef = useRef<HTMLDivElement>(null);
@@ -62,7 +64,7 @@ export default function Menu() {
   }, [menuItems, q, cat, vegOnly, sort]);
 
   const quickAdd = (item: (typeof menuItems)[number]) => {
-    addItem(item, 'regular', 'tossed', 1);
+    addItem(item, 'regular', defaultCrust, 1);
     push({ type: 'success', title: `Added ${item.name} to cart` });
   };
 
