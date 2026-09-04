@@ -35,7 +35,9 @@ curl -fsSL https://raw.githubusercontent.com/zubershk/ocp/master/install.sh | ba
 - Customise pizzas (size, crust, toppings) and see price updates live
 - Place orders with address autocomplete (Nominatim-powered) and delivery radius check
 - Pay by cash or UPI on arrival
-- Track order status in real-time (10-second polling) with a visual timeline
+- Track order status in real-time (10-second polling) with a visual timeline and per-step timestamps
+- Rate delivered orders with overall + per-item stars (verified purchase, moderated before going public)
+- Browse verified customer reviews with live rating aggregates on every product
 - WhatsApp OTP login — no passwords, just a 6-digit code
 - View order history and reorder past orders
 - PWA support — works offline, installs to home screen, push notification ready
@@ -57,14 +59,17 @@ curl -fsSL https://raw.githubusercontent.com/zubershk/ocp/master/install.sh | ba
 
 - **Brand settings** — logo, favicon, primary/secondary/accent colors, heading and body fonts with live preview
 - **Content pages** — About, Terms, Privacy, FAQ managed via CMS editor with meta tags
-- **Offers & promotions** — create deals with badges, codes, discount amounts, min order
-- **Banner carousel** — add/edit home page banners with background colors and CTA buttons
+- **Offers & promotions** — create deals with badges, codes, discount amounts, min order; live on the homepage strip and Offers page
+- **Banner carousel** — add/edit home page banners with background colors, CTA buttons and images
+- **Family packs page** — promo card text plus pack list (titles, subtitles, menu-item slugs, active flags); prices stay live from menu items
+- **Reviews moderation** — approve or hide verified-purchase reviews before they go public
+- **Crust management** — full admin UI: create/edit/delete crusts with per-size extra charges
+- **Menu item flags** — spicy, Jain, new badge, availability, and hide-crust-selector for fixed bundles
 - **SEO settings** — meta title, description, OG image, favicon
 - **Social links** — Instagram, Facebook, Twitter, YouTube, WhatsApp
 - **Footer** — copyright text, tagline, delivery hours, outlet info — all dynamic
 - **Bot message templates** — every WhatsApp response stored in DB, editable via admin with live WhatsApp preview, variable reference ({name}, {order_number}, {brand_name}, etc.), per-message reset to defaults
 - **Business configuration** — sizes, payment methods, category icons, order prefix, currency, delivery fee, min order — all configurable for any business type
-- **Crust management** — crust names and per-size prices managed via admin CRUD API
 - **Menu categories** — names, descriptions, sort order, icons configurable from admin
 
 **WhatsApp Campaign Runner:**
@@ -86,7 +91,7 @@ curl -fsSL https://raw.githubusercontent.com/zubershk/ocp/master/install.sh | ba
 | Backend | Go 1.21 + Gin web framework |
 | Database | PostgreSQL 14+ |
 | Frontend | React 19 + TypeScript + Vite |
-| Styling | Tailwind CSS |
+| Styling | Tailwind CSS + shadcn/ui (admin dashboard) |
 | State | React Context + TanStack Query |
 | Animations | GSAP (GreenSock) |
 | WhatsApp | Evolution GO (self-hosted WhatsApp API) |
@@ -118,7 +123,8 @@ Tech-OCP/
 │   │   ├── api_handler.go        # Public menu/order API, CORS, security headers
 │   │   ├── webhook_handler.go    # Evolution GO WhatsApp webhook
 │   │   ├── auth_handler.go       # WhatsApp OTP login
-│   │   ├── site_settings_handler.go  # Site settings, pages, categories API
+│   │   ├── site_settings_handler.go  # Site settings, pages, categories, offers, banners, packs API
+│   │   ├── review_handler.go     # Verified-purchase reviews + moderation
 │   │   └── rate_limit.go         # IP-based rate limiting
 │   ├── admin/
 │   │   └── admin_handler.go      # Admin CRUD, analytics, team, audit, broadcast
@@ -137,7 +143,7 @@ Tech-OCP/
 │   │   ├── live_chat_service.go  # WhatsApp message persistence
 │   │   ├── evolution_client.go   # Evolution GO HTTP client
 │   │   └── whatsapp_cart_service.go  # Persistent WhatsApp cart
-│   ├── migrations/               # 16 SQL migration files
+│   ├── migrations/               # 19 SQL migration files
 │   ├── uploads/                  # Menu item product photos
 │   ├── .env.example              # Environment template
 │   └── go.mod / go.sum
@@ -275,6 +281,9 @@ The bot runs 16 migrations on startup covering:
 | 014 | Site settings (banners, offers, contacts) |
 | 015 | Site pages (FAQ, Privacy, Terms) |
 | 016 | Business config (sizes, payments, fees) |
+| 017 | Family packs page config (promo card + pack list) |
+| 018 | Item `no_crust` flag (hide crust selector for bundles) |
+| 019 | Verified-purchase reviews table |
 
 ### 3. Backend
 
@@ -394,7 +403,7 @@ The codebase has been audited and hardened for production use:
 - **Input validation** — all fields length-bounded, numeric ranges checked, enums enforced
 - **SQL injection** — 100% parameterized queries across all handlers
 - **XSS prevention** — no `dangerouslySetInnerHTML`, React auto-escaping, CSP `script-src 'self'`
-- **File uploads** — content-type sniffing, 5MB limit, random filenames (no path traversal)
+- **File uploads** — content-type sniffing, any image type, 10MB limit, random filenames (no path traversal)
 - **Session tokens** — 192-bit entropy, SHA-256 hashed at rest, 24-hour expiry, server-side invalidation on logout
 - **IDOR protection** — order access requires access token or Bearer ownership (no sequential IDs exposed)
 - **Idempotency** — unique key per order creation request prevents duplicate orders
@@ -415,8 +424,13 @@ The codebase has been audited and hardened for production use:
 | `GET` | `/api/crusts` | Crust catalog with per-size prices |
 | `GET` | `/api/crusts/:slug` | Get crust options for a given item |
 | `POST` | `/api/orders` | Place a new order (idempotency key, DB pricing) |
-| `GET` | `/api/orders/:token` | Get order details by access token |
-| `GET` | `/api/tracking/:token` | Public order tracking (status, ETA, items) |
+| `GET` | `/api/orders/:id` | Get order details, items with slugs, and status timeline (`X-Order-Token` header) |
+| `GET` | `/api/offers` | Active promo offers for the storefront |
+| `GET` | `/api/banners` | Active homepage banners |
+| `GET` | `/api/family-packs` | Offers page config (promo card + active packs) |
+| `POST` | `/api/reviews` | Submit a verified review (delivered orders only, order token required) |
+| `GET` | `/api/reviews` | Approved reviews (optional `?item=slug`, `?limit=`) |
+| `GET` | `/api/reviews/summary` | Overall + per-item rating aggregates |
 | `GET` | `/api/config` | Restaurant configuration |
 | `GET` | `/api/outlets` | Outlet locations |
 | `GET` | `/api/business-config` | Sizes, payments, icons, delivery config |
@@ -448,7 +462,7 @@ The codebase has been audited and hardened for production use:
 | `POST` | `/admin/menu` | Create menu item |
 | `PUT` | `/admin/menu/:id` | Update menu item |
 | `DELETE` | `/admin/menu/:id` | Delete menu item |
-| `POST` | `/admin/upload` | Upload product photo (5MB max, content-type validated) |
+| `POST` | `/admin/upload` | Upload product photo (any image type, 10MB max, content-type validated) |
 | `GET` | `/admin/analytics` | Sales/order analytics (daily/weekly/monthly) |
 | `GET` | `/admin/users` | List admin users |
 | `POST` | `/admin/users` | Create admin user |
@@ -488,6 +502,10 @@ The codebase has been audited and hardened for production use:
 | `POST` | `/admin/crusts` | Create a crust |
 | `PUT` | `/admin/crusts/:id` | Update a crust |
 | `DELETE` | `/admin/crusts/:id` | Delete a crust |
+| `GET` | `/admin/family-packs` | Get offers page config |
+| `PUT` | `/admin/family-packs` | Update offers page config |
+| `GET` | `/admin/reviews` | List reviews (optional `?pending=1`) |
+| `PATCH` | `/admin/reviews/:id` | Approve or hide a review |
 
 ### Webhook
 
@@ -506,12 +524,16 @@ Login with your `BOT_ADMIN_KEY`. The key is stored in browser localStorage only.
 
 **Tabs:**
 - **Orders** — Live order queue with status controls, sound alerts, filter by status (New, Confirmed, Cooking, Ready, En Route, Delivered, Completed, Cancelled)
-- **Menu Studio** — Add/edit/delete menu items with image upload, manage categories, configure crust variants with per-size pricing
+- **Menu Studio** — Add/edit/delete menu items with image upload, manage categories; **Crusts tab** to create/edit/delete crusts with per-size pricing; per-item flags (spicy, Jain, new, available, hide-crust-selector)
 - **Live Chat** — WhatsApp conversation viewer, read incoming messages, send replies directly from admin
 - **Analytics** — Sales charts with daily/weekly/monthly breakdowns, order volume, revenue tracking
 - **Team** — Manage staff accounts with role-based access
 - **Settings** — Restaurant name, hours, delivery config + site customization links
 - **Audit Log** — Who did what, when, from where (every admin action tracked)
+- **Offers** — Promo cards with badges, codes, discounts, images
+- **Banners** — Homepage carousel with CTA buttons and images
+- **Packs** — Offers-page promo card text plus family pack list linked to live menu items
+- **Reviews** — Moderate verified-purchase reviews (approve/hide) before they go public
 
 **Site Customization (under Settings):**
 - **Brand** — Logo, favicon, primary/secondary/accent colors, heading and body fonts with live preview
@@ -536,13 +558,14 @@ Login with your `BOT_ADMIN_KEY`. The key is stored in browser localStorage only.
 | `/` | Landing | Hero, menu preview, location pill, banner carousel, GSAP animations |
 | `/r` | Home | Food mood cards, category scroll, menu items, floating cart bar |
 | `/r/menu` | Menu | Filter chips, search autocomplete, category tabs, item grid |
-| `/r/menu/:slug` | Product | Image zoom, crust selection, size picker, add to cart with flying animation |
+| `/r/menu/item/:id` | Product | Image zoom, crust selection (hidden for bundles), size picker, live ratings, add to cart with flying animation |
 | `/r/cart` | Cart | Item list, quantity adjust, subtotal, tax, proceed to checkout |
 | `/r/checkout` | Checkout | Address autocomplete (Nominatim), OTP flow, order summary, idempotency |
-| `/r/order/:token` | Order Tracking | Real-time status timeline (10s polling), order details, items |
+| `/r/order/:id` | Order Tracking | Real-time status timeline with timestamps (10s polling), order details, review form on delivery |
 | `/r/login` | Login | WhatsApp OTP send/verify, phone input |
 | `/r/account` | Account | Profile, order history, logout |
-| `/r/offers` | Offers | Family packs, BOGO, cheese burst deals, menu links |
+| `/r/offers` | Offers | Admin-managed promos with copy-code buttons, live family packs with real prices |
+| `/r/reviews` | Reviews | Verified customer reviews with rating summary |
 | `/r/locations` | Locations | Outlet cards with address, hours, online ordering status |
 | `/r/about` | About | Restaurant story (API-driven) |
 | `/r/contact` | Contact | Contact form, map, restaurant info |
