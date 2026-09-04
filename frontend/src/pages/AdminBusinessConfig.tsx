@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Save, Plus, X, Settings, CreditCard, Ruler, Palette, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
+import { Save, Plus, X, Settings, CreditCard, Ruler, Palette, RefreshCw, ChevronDown, ChevronUp, MessageCircle } from 'lucide-react';
 import { Link as RouterLink } from 'react-router-dom';
 import { adminFetch } from '../services/api';
 import { useToast } from '../context/ToastContext';
@@ -36,6 +36,9 @@ interface BusinessConfig {
   business_type: string;
   currency_symbol: string;
   tax_label: string;
+  whatsapp_lists?: boolean;
+  whatsapp_photos?: boolean;
+  public_base_url?: string;
 }
 
 const ICON_OPTIONS = [
@@ -76,7 +79,7 @@ export default function AdminBusinessConfig() {
   const qc = useQueryClient();
   const toast = useToast();
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
-    general: true, sizes: true, payments: true, icons: false,
+    general: true, sizes: true, payments: true, icons: false, whatsapp: false,
   });
 
   const { data: config, isLoading } = useQuery<BusinessConfig>({
@@ -268,6 +271,36 @@ export default function AdminBusinessConfig() {
               min="0" step="1" />
           </Field>
         </div>
+      </Section>
+
+      {/* WhatsApp Browsing */}
+      <Section title="WhatsApp Browsing" icon={<MessageCircle size={18} />} expanded={expandedSections.whatsapp} onToggle={() => toggle('whatsapp')}>
+        <p className="text-xs text-muted-foreground mb-3">How customers browse the menu over WhatsApp. Changes apply instantly — no restart needed.</p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Field label="Browse style">
+            <select
+              value={(cfg.whatsapp_lists ?? false) ? 'lists' : 'buttons'}
+              onChange={e => update({ whatsapp_lists: e.target.value === 'lists' })}
+              className="w-full border border-input bg-transparent rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-ring focus:outline-none">
+              <option value="buttons">Quick-reply buttons (default)</option>
+              <option value="lists">Native list messages</option>
+            </select>
+          </Field>
+          <Field label="Item photos">
+            <select
+              value={(cfg.whatsapp_photos ?? true) ? 'on' : 'off'}
+              onChange={e => update({ whatsapp_photos: e.target.value === 'on' })}
+              className="w-full border border-input bg-transparent rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-ring focus:outline-none">
+              <option value="on">Show dish photos</option>
+              <option value="off">Text only</option>
+            </select>
+          </Field>
+          <Field label="Public base URL">
+            <Input value={cfg.public_base_url ?? ''} onChange={e => update({ public_base_url: e.target.value })}
+              placeholder="https://bot.yourdomain.com" />
+          </Field>
+        </div>
+        <p className="text-xs text-muted-foreground mt-3">Native lists show up to 10 options per message but need a recent WhatsApp client. Photos need the public base URL for relative /uploads images (absolute URLs always work).</p>
       </Section>
 
       {/* Sizes */}
