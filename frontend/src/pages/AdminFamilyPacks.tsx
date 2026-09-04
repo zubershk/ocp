@@ -5,7 +5,6 @@ import { ArrowLeft, Plus, Pencil, Trash2, Save, Package, AlertTriangle } from 'l
 import { adminFetch, getAdminKey } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
-import AdminSubNav from '../components/layout/AdminSubNav';
 import { Card, CardContent } from '@/components/shadcn/card';
 import { Button } from '@/components/shadcn/button';
 import { Input } from '@/components/shadcn/input';
@@ -120,7 +119,6 @@ export default function AdminFamilyPacks() {
 
   return (
     <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
-      <AdminSubNav activeOverride="/admin/family-packs" />
 
       <div className="flex items-center gap-3">
         <Link to="/admin/offers" className="p-2 rounded-xl hover:bg-muted"><ArrowLeft size={18} /></Link>
@@ -174,7 +172,7 @@ export default function AdminFamilyPacks() {
               <CardContent className="py-6">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="font-semibold">{editingId ? 'Edit Pack' : 'New Pack'}</h2>
-                  <Button variant="ghost" size="icon" onClick={() => { setShowForm(false); setEditingId(null); }}>✕</Button>
+                  <Button variant="ghost" size="icon" aria-label="Close form" onClick={() => { setShowForm(false); setEditingId(null); }}>✕</Button>
                 </div>
                 <div className="space-y-4 max-w-2xl">
                   <div>
@@ -257,7 +255,7 @@ export default function AdminFamilyPacks() {
                               <Button variant="outline" size="sm" onClick={() => openEdit(p)}>
                                 <Pencil size={12} /> Edit
                               </Button>
-                              <Button variant="destructive" size="icon" onClick={() => setConfirmDelete({ id: p.id, name: p.title })}>
+                              <Button variant="destructive" size="icon" aria-label={`Delete pack ${p.title}`} onClick={() => setConfirmDelete({ id: p.id, name: p.title })}>
                                 <Trash2 size={13} />
                               </Button>
                             </div>

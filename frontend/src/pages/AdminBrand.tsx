@@ -3,7 +3,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Save, ArrowLeft, Palette, Type, Image, Upload } from 'lucide-react';
 import { adminFetch, getAdminKey } from '../services/api';
 import { useToast } from '../context/ToastContext';
-import AdminSubNav from '../components/layout/AdminSubNav';
 import { Card, CardContent } from '@/components/shadcn/card';
 import { Button } from '@/components/shadcn/button';
 import { Input } from '@/components/shadcn/input';
@@ -100,10 +99,9 @@ export default function AdminBrand() {
 
   return (
     <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
-      <AdminSubNav activeOverride="/admin/brand" />
 
       <div className="flex items-center gap-3 mt-4">
-        <Button variant="outline" size="icon" onClick={() => window.history.back()} className="w-9 h-9"><ArrowLeft size={16} /></Button>
+        <Button variant="outline" size="icon" aria-label="Go back" onClick={() => window.history.back()} className="w-9 h-9"><ArrowLeft size={16} /></Button>
         <h1 className="text-2xl font-bold tracking-tight">Brand Settings</h1>
       </div>
       <p className="text-sm text-muted-foreground mt-1 ml-12">Customize colors, logo, and typography for your storefront.</p>

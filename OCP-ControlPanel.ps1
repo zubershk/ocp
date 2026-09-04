@@ -39,6 +39,30 @@ $psCmd.AddScript({
     function Send-Cmd($cmd) {
         try { wsl -u pizza -e bash -c $cmd 2>$null | Out-Null } catch {}
     }
+    function Clear-StrayBot {
+        # Kill stray bot-ocp processes (manual nohup runs) that squat :8090
+        # and crash-loop the systemd service with "bind: address already in use".
+        # Only kills pizza-owned processes; root-owned squatters are reported.
+        try { wsl -u pizza -e bash -c "pkill -f 'bot-ocp'; sleep 1" 2>$null | Out-Null } catch {}
+    }
+    function Test-BotPort {
+        try {
+            $code = wsl -u pizza -e bash -c "curl -s -m 4 -o /dev/null -w '%{http_code}' http://localhost:8090/health" 2>$null
+            return "$code".Trim() -eq '200'
+        } catch { return $false }
+    }
+    function Start-BotClean {
+        param([string]$AfterMsg = 'Bot started')
+        Clear-StrayBot
+        Send-Cmd 'export XDG_RUNTIME_DIR=/run/user/$(id -u); systemctl --user start orange-cheese-pizza-bot'
+        Start-Sleep -Seconds 4
+        if (Test-BotPort) {
+            $Sync.Logs.Enqueue('[OK] Bot healthy on :8090')
+        } else {
+            $Sync.Logs.Enqueue('[WARN] Bot not responding — port 8090 may be held by a root process.')
+            $Sync.Logs.Enqueue("[FIX] Run in PowerShell: wsl -u root -e bash -c 'pkill -f bot-ocp'")
+        }
+    }
     function Get-Frontend {
         try {
             $p = Get-Process -Name "node" -ErrorAction SilentlyContinue | Where-Object {
@@ -79,9 +103,16 @@ $psCmd.AddScript({
             switch ($cmd) {
                 'start_all' {
                     $Sync.Logs.Enqueue('[INFO] Starting all services + frontend...')
+                    Clear-StrayBot
                     Send-Cmd 'export XDG_RUNTIME_DIR=/run/user/$(id -u); systemctl --user start evolution-go orange-cheese-pizza-bot ocp-campaign-runner'
                     Start-FrontendDev
-                    $Sync.Logs.Enqueue('[OK] All services + frontend started')
+                    Start-Sleep -Seconds 4
+                    if (Test-BotPort) {
+                        $Sync.Logs.Enqueue('[OK] All services + frontend started (bot healthy)')
+                    } else {
+                        $Sync.Logs.Enqueue('[WARN] Bot not responding — possible port squatter on :8090.')
+                        $Sync.Logs.Enqueue("[FIX] Press FIX PORTS, or run: wsl -u root -e bash -c 'pkill -f bot-ocp'")
+                    }
                 }
                 'stop_all' {
                     $Sync.Logs.Enqueue('[INFO] Stopping all services + frontend...')
@@ -91,7 +122,19 @@ $psCmd.AddScript({
                 }
                 'start_bot' {
                     $Sync.Logs.Enqueue('[INFO] Starting bot...')
-                    Send-Cmd 'export XDG_RUNTIME_DIR=/run/user/$(id -u); systemctl --user start orange-cheese-pizza-bot'
+                    Start-BotClean
+                }
+                'fix_ports' {
+                    $Sync.Logs.Enqueue('[INFO] Clearing stray processes on service ports...')
+                    try { wsl -u pizza -e bash -c "pkill -f 'bot-ocp'; pkill -f 'evolution-go'; sleep 1" 2>$null | Out-Null } catch {}
+                    Send-Cmd 'export XDG_RUNTIME_DIR=/run/user/$(id -u); systemctl --user restart evolution-go orange-cheese-pizza-bot'
+                    Start-Sleep -Seconds 5
+                    if (Test-BotPort) {
+                        $Sync.Logs.Enqueue('[OK] Ports clear, bot healthy on :8090')
+                    } else {
+                        $Sync.Logs.Enqueue('[WARN] Still blocked — a root-owned process holds :8090.')
+                        $Sync.Logs.Enqueue("[FIX] Run in PowerShell: wsl -u root -e bash -c 'pkill -f bot-ocp'")
+                    }
                 }
                 'start_evo' {
                     $Sync.Logs.Enqueue('[INFO] Starting Evolution GO...')
@@ -438,6 +481,23 @@ $btnAdmin.Size = New-Object System.Drawing.Size(120, 32)
 $form.Controls.Add($btnAdmin)
 $btnAdmin.Add_Click({
     [System.Diagnostics.Process]::Start('http://localhost:5173/admin')
+})
+
+$btnFixPorts = New-Object System.Windows.Forms.Button
+$btnFixPorts.Text = [char]0x2692 + '  Fix Ports'
+$btnFixPorts.Font = New-Object System.Drawing.Font('Segoe UI', 9)
+$btnFixPorts.BackColor = [System.Drawing.Color]::FromArgb(35, 35, 50)
+$btnFixPorts.ForeColor = [System.Drawing.Color]::FromArgb(200, 200, 220)
+$btnFixPorts.FlatStyle = 'Flat'
+$btnFixPorts.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(60, 60, 80)
+$btnFixPorts.Cursor = 'Hand'
+$btnFixPorts.Location = New-Object System.Drawing.Point(280, 225)
+$btnFixPorts.Size = New-Object System.Drawing.Size(120, 32)
+$form.Controls.Add($btnFixPorts)
+$btnFixPorts.Add_Click({
+    $lblFooter.Text = 'Clearing stray processes...'
+    $Sync.Command = 'fix_ports'
+    $Sync.CommandReady = $true
 })
 
 # ---- log section ----

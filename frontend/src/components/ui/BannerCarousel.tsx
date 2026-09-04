@@ -44,7 +44,7 @@ export default function BannerCarousel() {
             )}
           </div>
           {b.image_url && (
-            <img src={b.image_url} alt="" className="hidden sm:block w-40 h-40 lg:w-48 lg:h-48 rounded-2xl object-cover shrink-0" />
+            <img src={b.image_url} alt="" className="block w-24 h-24 sm:w-40 sm:h-40 lg:w-48 lg:h-48 rounded-2xl object-cover shrink-0" />
           )}
         </div>
       </div>

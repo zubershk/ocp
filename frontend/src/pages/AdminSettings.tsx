@@ -5,7 +5,6 @@ import { Save, Plus, Pencil, Trash2, MapPin, Phone, Clock, Store, AlertTriangle,
 import { adminFetch, getAdminKey } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
-import AdminSubNav from '../components/layout/AdminSubNav';
 import { Card, CardContent } from '@/components/shadcn/card';
 import { Button } from '@/components/shadcn/button';
 import { Input } from '@/components/shadcn/input';
@@ -148,7 +147,6 @@ export default function AdminSettings() {
 
   return (
     <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
-      <AdminSubNav activeOverride="/admin/settings" />
 
       <div className="flex items-center gap-2">
         <h1 className="text-2xl font-bold tracking-tight">Restaurant Settings</h1>
@@ -224,7 +222,7 @@ export default function AdminSettings() {
                 <div className="text-[11px] font-mono text-zinc-400 mt-1">/{o.slug} • sort {o.sort_order}</div>
                 <div className="mt-3 flex gap-2">
                   <Button variant="outline" size="sm" onClick={() => openEdit(o)} className="flex-1 inline-flex items-center justify-center gap-1"><Pencil size={12} /> Edit</Button>
-                  <Button variant="destructive" size="icon" onClick={() => setConfirmDelete({ id: o.id, name: o.name })}><Trash2 size={14} /></Button>
+                  <Button variant="destructive" size="icon" aria-label={`Delete outlet ${o.name}`} onClick={() => setConfirmDelete({ id: o.id, name: o.name })}><Trash2 size={14} /></Button>
                 </div>
               </Card>
             ))}

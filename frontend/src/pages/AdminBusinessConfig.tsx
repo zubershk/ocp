@@ -4,7 +4,6 @@ import { Save, Plus, X, Settings, CreditCard, Ruler, Palette, RefreshCw, Chevron
 import { Link as RouterLink } from 'react-router-dom';
 import { adminFetch } from '../services/api';
 import { useToast } from '../context/ToastContext';
-import AdminSubNav from '../components/layout/AdminSubNav';
 import { Button } from '@/components/shadcn/button';
 import { Card, CardContent } from '@/components/shadcn/card';
 import { Input } from '@/components/shadcn/input';
@@ -198,7 +197,6 @@ export default function AdminBusinessConfig() {
 
   return (
     <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
-      <AdminSubNav activeOverride="/admin/business-config" />
 
       <div className="flex items-center justify-between">
         <div>
@@ -320,7 +318,7 @@ export default function AdminBusinessConfig() {
                   className="rounded border-input" />
                 Active
               </label>
-              <Button variant="ghost" size="icon" className="size-7 text-muted-foreground hover:text-destructive" onClick={() => removeSize(i)}>
+              <Button variant="ghost" size="icon" aria-label="Remove size option" className="size-7 text-muted-foreground hover:text-destructive" onClick={() => removeSize(i)}>
                 <X size={16} />
               </Button>
             </div>
@@ -356,7 +354,7 @@ export default function AdminBusinessConfig() {
                   className="rounded border-input" />
                 Active
               </label>
-              <Button variant="ghost" size="icon" className="size-7 text-muted-foreground hover:text-destructive" onClick={() => removePayment(i)}>
+              <Button variant="ghost" size="icon" aria-label="Remove payment method" className="size-7 text-muted-foreground hover:text-destructive" onClick={() => removePayment(i)}>
                 <X size={16} />
               </Button>
             </div>
@@ -380,7 +378,7 @@ export default function AdminBusinessConfig() {
               </select>
               <span className="text-2xl">{icon}</span>
               {slug !== 'default' && (
-                <Button variant="ghost" size="icon" className="size-7 text-muted-foreground hover:text-destructive" onClick={() => removeIcon(slug)}>
+                <Button variant="ghost" size="icon" aria-label={`Remove icon for ${slug}`} className="size-7 text-muted-foreground hover:text-destructive" onClick={() => removeIcon(slug)}>
                   <X size={16} />
                 </Button>
               )}

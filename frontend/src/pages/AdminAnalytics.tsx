@@ -3,7 +3,6 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { TrendingUp, IndianRupee, ShoppingBag, Flame, BarChart3, Trophy, Clock } from 'lucide-react';
 import { adminFetch, getAdminKey } from '../services/api';
-import AdminSubNav from '../components/layout/AdminSubNav';
 import { Card, CardContent } from '@/components/shadcn/card';
 import { Skeleton } from '@/components/shadcn/skeleton';
 import { Badge } from '@/components/shadcn/badge';
@@ -14,6 +13,7 @@ interface Analytics {
   by_status: Record<string, number>;
   top_items: { name: string; quantity: number; revenue: number }[];
   by_day: { day: string; revenue: number; orders: number }[];
+  by_hour: { hour: number; orders: number }[];
 }
 
 export default function AdminAnalytics() {
@@ -44,7 +44,6 @@ export default function AdminAnalytics() {
 
   return (
     <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
-      <AdminSubNav activeOverride="/admin/analytics" />
 
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2"><BarChart3 size={20} className="text-violet-600" /> Analytics <Badge>Live</Badge></h1>
@@ -106,6 +105,40 @@ export default function AdminAnalytics() {
                   );
                 })}
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Peak hours heatmap */}
+          <Card className="mt-6">
+            <CardContent className="p-6">
+              <h2 className="font-semibold">Peak hours <span className="text-xs font-normal text-muted-foreground">· orders by hour, last 7 days</span></h2>
+              {(() => {
+                const hours = data?.by_hour ?? [];
+                const max = Math.max(1, ...hours.map((h) => h.orders));
+                const peak = hours.reduce((a, b) => (b.orders > a.orders ? b : a), { hour: 0, orders: 0 });
+                return (
+                  <>
+                    <div className="mt-4 grid grid-cols-12 gap-1.5" role="img" aria-label={`Busiest hour ${peak.hour}:00 with ${peak.orders} orders`}>
+                      {hours.map((h) => (
+                        <div
+                          key={h.hour}
+                          title={`${h.hour}:00 — ${h.orders} orders`}
+                          className="aspect-square rounded-lg grid place-items-center text-[10px] font-mono transition-colors"
+                          style={{
+                            backgroundColor: `rgba(249, 115, 22, ${h.orders === 0 ? 0.06 : 0.15 + 0.85 * (h.orders / max)})`,
+                            color: h.orders / max > 0.5 ? '#fff' : '#a8a29e',
+                          }}
+                        >
+                          {h.hour}
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-3">
+                      {peak.orders > 0 ? <>Busiest: <span className="font-bold text-foreground">{peak.hour}:00</span> ({peak.orders} orders) — staff the kitchen accordingly.</> : 'No orders in the last 7 days.'}
+                    </p>
+                  </>
+                );
+              })()}
             </CardContent>
           </Card>
 

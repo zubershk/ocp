@@ -5,7 +5,6 @@ import { ArrowLeft, Plus, Pencil, Trash2, Save, Image, AlertTriangle, Upload } f
 import { adminFetch, getAdminKey } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
-import AdminSubNav from '../components/layout/AdminSubNav';
 import { Card, CardContent } from '@/components/shadcn/card';
 import { Button } from '@/components/shadcn/button';
 import { Input } from '@/components/shadcn/input';
@@ -164,7 +163,6 @@ export default function AdminBanners() {
 
   return (
     <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
-      <AdminSubNav activeOverride="/admin/banners" />
 
       <div className="flex items-center gap-3">
         <Link to="/admin/settings" className="p-2 rounded-xl hover:bg-muted"><ArrowLeft size={18} /></Link>
@@ -178,7 +176,7 @@ export default function AdminBanners() {
             <CardContent className="py-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="font-semibold">{editingId ? 'Edit Banner' : 'New Banner'}</h2>
-                <Button variant="ghost" size="icon" onClick={() => { setShowForm(false); setEditingId(null); }}>✕</Button>
+                <Button variant="ghost" size="icon" aria-label="Close form" onClick={() => { setShowForm(false); setEditingId(null); }}>✕</Button>
               </div>
 
               <div className="space-y-4">
@@ -314,9 +312,21 @@ export default function AdminBanners() {
               <CardContent className="py-8 text-center">
                 <Image size={24} className="mx-auto text-muted-foreground" />
                 <p className="text-sm text-muted-foreground mt-2">No banners yet. Create one to get started.</p>
-                <Button onClick={openNew} className="mt-3">
-                  <Plus size={14} /> Create first banner
-                </Button>
+                <div className="mt-3 flex items-center justify-center gap-2">
+                  <Button onClick={openNew}>
+                    <Plus size={14} /> Create first banner
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setEditingId(null);
+                      setForm({ ...EMPTY_FORM, title: 'Fresh & Hot, Delivered Fast', subtitle: 'Order in seconds on web or WhatsApp' });
+                      setShowForm(true);
+                    }}
+                  >
+                    Try a sample
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           ) : (
@@ -356,7 +366,7 @@ export default function AdminBanners() {
                           <Button variant="outline" size="sm" onClick={() => openEdit(b)}>
                             <Pencil size={12} /> Edit
                           </Button>
-                          <Button variant="destructive" size="icon" onClick={() => handleDelete(b.id)}>
+                          <Button variant="destructive" size="icon" aria-label={`Delete banner ${b.title}`} onClick={() => handleDelete(b.id)}>
                             <Trash2 size={13} />
                           </Button>
                         </div>
