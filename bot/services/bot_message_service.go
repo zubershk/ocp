@@ -69,6 +69,61 @@ func (s *BotMessageService) syncDefaults() {
 		}
 	}
 	_ = synced
+	syncTemplateUpgrades()
+}
+
+// templateUpgrades rewrites rows that still carry a previous compiled-in
+// default. Rows an admin customized (text differs) are never touched.
+var templateUpgrades = [][3]string{
+	// NOTE: the 015 seed lacked the E'' prefix on these two keys, so the
+	// stored text contains literal backslash-n sequences — match those.
+	{"cart_item_added",
+		"{{.ItemName}}\\n{{.Size}}\\n{{.CrustName}}\\nQty: {{.Quantity}}\\nRs.{{.Total}}",
+		"{{.ItemName}}{{if .Size}}\n{{.Size}}{{end}}{{if .CrustName}}\n{{.CrustName}}{{end}}\nQty: {{.Quantity}}\nRs.{{.Total}}"},
+	{"selection_summary",
+		"*Your selection:*\\n\\n\\U0001F355 {{.ItemName}}\\n{{.Size}}\\n{{.CrustName}}\\nRs.{{.Price}}",
+		"*Your selection:*\n\n🍕 {{.ItemName}}{{if .Size}}\n{{.Size}}{{end}}{{if .CrustName}}\n{{.CrustName}}{{end}}\nRs.{{.Price}}"},
+	{"order_summary_body",
+		"🍕 ORDER SUMMARY\n\nCustomer: {{.Name}}\nOrder type: {{.DeliveryType}}\n\nItems:\n{{.Items}}\nSubtotal: Rs.{{.Subtotal}}\nDelivery: Rs.0\nTotal: Rs.{{.Total}}\n\nPayment: {{.Payment}}\n\n{{.AddressBlock}}",
+		"🍕 ORDER SUMMARY\n\nCustomer: {{.Name}}\nOrder type: {{.DeliveryType}}\n\nItems:\n{{.Items}}\nSubtotal: Rs.{{.Subtotal}}\nDelivery: Rs.{{.Delivery}}\nTotal: Rs.{{.Total}}\n\nPayment: {{.Payment}}\n\n{{.AddressBlock}}"},
+}
+
+func syncTemplateUpgrades() {
+	for _, u := range templateUpgrades {
+		if _, err := database.DB.Exec(
+			`UPDATE bot_messages SET message_text = $1, updated_at = CURRENT_TIMESTAMP
+			 WHERE message_key = $2 AND message_text = $3`,
+			u[2], u[0], u[1]); err != nil {
+			log.Printf("[BotMessages] template upgrade failed for %q: %v", u[0], err)
+		}
+	}
+	// newlineFixTemplates repairs seeds stored with literal backslash-n
+	// (migration 015 lines missing the E'' prefix). Only exact matches are
+	// rewritten — customized rows are never touched.
+	for key, fixed := range newlineFixTemplates {
+		broken := strings.ReplaceAll(fixed, "\n", "\\n")
+		if _, err := database.DB.Exec(
+			`UPDATE bot_messages SET message_text = $1, updated_at = CURRENT_TIMESTAMP
+			 WHERE message_key = $2 AND message_text = $3`,
+			fixed, key, broken); err != nil {
+			log.Printf("[BotMessages] newline fix failed for %q: %v", key, err)
+		}
+	}
+}
+
+// newlineFixTemplates holds the correct (real-newline) text for every
+// template seeded without the E'' prefix in migration 015.
+var newlineFixTemplates = map[string]string{
+	"name_greeting_delivery":      "Nice to meet you, {{.Name}}!\n\nWhat's your delivery address?",
+	"address_saved_body":          "We have your saved address:\n\n{{.Address}}\n\nUse this address?",
+	"order_failed":                "Couldn't place your order: {{.Error}}\n\nType 'cart' to review and retry.",
+	"notification_support_request": "*CUSTOMER REQUESTED SUPPORT*\n\nWhatsApp: {{.Phone}}\nName: {{.Name}}\nCurrent order: {{.Order}}\nCart lines: {{.CartCount}}\n\nReply to them directly on WhatsApp.",
+	"profile_body":                "WhatsApp: {{.Phone}}\nAddress: {{.Address}}\nLandmark: {{.Landmark}}\nOrders: {{.OrderCount}}\nSpent: Rs.{{.TotalSpent}}",
+	"support_team_notified":       "The team will reach out here.\nType 'menu' whenever you're ready.",
+	"location_body":               "{{.Address}}\n\nTel: {{.Phone}}\nKitchen: {{.KitchenHours}}\nDelivery: {{.DeliveryHours}}",
+	"unknown_input":               "I didn't quite understand that.\n\n{{.Options}}",
+	"status_view_body":            "Status: {{.Emoji}} {{.Status}}\n\n{{.Items}}\nTotal: Rs.{{.Total}}",
+	"status_order_detail":         "Status: {{.Emoji}} {{.Status}}\nPlaced: {{.Date}}\n\n{{.Items}}Total: Rs.{{.Total}}",
 }
 
 // loadAll loads all bot_messages from the database into memory.

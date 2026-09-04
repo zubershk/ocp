@@ -5,16 +5,16 @@ import { orderService, type OrderView } from '../services/orderService';
 import { useRestaurantPhone, useDeliveryHours } from '../context/RestaurantContext';
 import { useGsapFadeIn } from '../hooks/useGsap';
 
-const labels: Record<string, string> = { placed: 'Order Placed', confirmed: 'Confirmed', preparing: 'Preparing', ready: 'Ready', out_for_delivery: 'Out for Delivery', delivered: 'Delivered', cancelled: 'Cancelled' };
-const orderSteps = ['placed', 'confirmed', 'preparing', 'ready', 'out_for_delivery', 'delivered'];
+const labels: Record<string, string> = { placed: 'Order Placed', confirmed: 'Confirmed', out_for_delivery: 'Out for Delivery', delivered: 'Delivered', completed: 'Completed', cancelled: 'Cancelled' };
+const orderSteps = ['placed', 'confirmed', 'out_for_delivery', 'delivered'];
 const stepHints: Record<number, string> = {
   0: 'We received your order',
   1: 'Restaurant confirmed',
-  2: 'Kitchen is preparing',
-  3: 'Ready for pickup/delivery',
-  4: 'Rider on the way',
-  5: 'Delivered! Enjoy your meal',
+  2: 'Rider on the way',
+  3: 'Delivered! Enjoy your meal',
 };
+// Pre-simplify statuses still stored on old rows map onto the short flow.
+const legacyStep: Record<string, string> = { preparing: 'confirmed', ready: 'confirmed', completed: 'delivered' };
 
 export default function Order() {
   const { id } = useParams();
@@ -54,7 +54,8 @@ export default function Order() {
   if (state === 'loading') return <div className="container-page py-12 text-center text-sm text-zinc-500">Loading order…</div>;
   if (state === 'missing' || !order) return <div className="container-page py-12 text-center"><h2 className="text-xl font-bold">Order not found</h2><p className="text-sm text-zinc-500 mt-1">Check your order ID or place a new order</p><Link to="/r/menu" className="inline-flex mt-4 px-5 py-2 rounded-xl bg-brand-600 text-white">Go to Menu</Link></div>;
 
-  const statusIndex = Math.max(0, orderSteps.indexOf(order.status));
+  const flowStatus = legacyStep[order.status] ?? order.status;
+  const statusIndex = Math.max(0, orderSteps.indexOf(flowStatus));
   const current = orderSteps[statusIndex];
   const waNumber = restaurantPhone;
   const isLive = !['delivered', 'cancelled'].includes(order.status);
@@ -99,7 +100,7 @@ export default function Order() {
   return (
     <div className="container-page py-8">
       <div ref={titleRef} className="max-w-3xl mx-auto">
-        {order.status === 'placed' && (
+        {(order.status === 'placed' || (order.status === 'confirmed' && Date.now() - new Date(order.createdAt).getTime() < 30 * 60 * 1000)) && (
           <div className="mb-4 rounded-2xl bg-emerald-50 border border-emerald-200 p-5 flex items-start gap-3 animate-slide-in-up">
             <PartyPopper size={22} className="text-emerald-700 shrink-0 mt-0.5" aria-hidden />
             <div>
@@ -122,7 +123,7 @@ export default function Order() {
                   Live
                 </span>
               )}
-              <span className="px-3 py-1 rounded-full bg-brand-100 text-brand-700 text-xs font-bold">{labels[current] ?? order.status}</span>
+              <span className="px-3 py-1 rounded-full bg-brand-100 text-brand-700 text-xs font-bold">{labels[order.status] ?? labels[current] ?? order.status}</span>
             </div>
           </div>
 
