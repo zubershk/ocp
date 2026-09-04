@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -121,8 +122,14 @@ func main() {
 	_ = os.MkdirAll("./uploads", 0755)
 	router.Static("/uploads", "./uploads")
 
-	// Webhook endpoints — REJECT if secret is not configured (prevents impersonation)
+	// Webhook endpoints — the bundled Evolution GO fork sends no auth
+	// headers, so loopback senders (local Evolution) are trusted by
+	// source IP while remote senders must present the secret.
 	webhookAuth := func(c *gin.Context) {
+		if ip := net.ParseIP(c.ClientIP()); ip != nil && ip.IsLoopback() {
+			c.Next()
+			return
+		}
 		if cfg.WebhookSecret == "" {
 			log.Println("SECURITY: EVOLUTION_WEBHOOK_SECRET not set — rejecting webhook")
 			c.JSON(500, gin.H{"error": "webhook not configured"})
@@ -235,6 +242,9 @@ func main() {
 		adminGroup.PUT("/banners", siteHandler.UpdateBanners)
 		adminGroup.GET("/family-packs", siteHandler.GetFamilyPacks)
 		adminGroup.PUT("/family-packs", siteHandler.UpdateFamilyPacks)
+		adminGroup.GET("/events/stream", func(c *gin.Context) { services.StreamEvents(c) })
+		adminGroup.GET("/uploads", adminHandler.ListUploads)
+		adminGroup.DELETE("/uploads/:name", adminHandler.RequireRole("owner", "manager"), adminHandler.DeleteUpload)
 		adminGroup.GET("/reviews", reviewHandler.ListReviewsAdmin)
 		adminGroup.PATCH("/reviews/:id", adminHandler.RequireRole("owner", "manager"), reviewHandler.ModerateReview)
 		// Bot message templates
