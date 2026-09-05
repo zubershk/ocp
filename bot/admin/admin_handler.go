@@ -27,14 +27,16 @@ import (
 type AdminHandler struct {
 	menuService     *services.MenuService
 	orderService    *services.OrderService
+	posOrderService *services.POSOrderService
 	evolutionClient *services.EvolutionClient
 	config          *config.Config
 }
 
-func NewAdminHandler(menuService *services.MenuService, orderService *services.OrderService, evolutionClient *services.EvolutionClient, cfg *config.Config) *AdminHandler {
+func NewAdminHandler(menuService *services.MenuService, orderService *services.OrderService, posOrderService *services.POSOrderService, evolutionClient *services.EvolutionClient, cfg *config.Config) *AdminHandler {
 	return &AdminHandler{
 		menuService:     menuService,
 		orderService:    orderService,
+		posOrderService: posOrderService,
 		evolutionClient: evolutionClient,
 		config:          cfg,
 	}
@@ -920,6 +922,247 @@ func (h *AdminHandler) UpdateOrderStatus(c *gin.Context) {
 		"notification": notification,
 	})
 	auditLog(c, "update_order_status", order.OrderNumber, map[string]interface{}{"status": req.Status, "id": id})
+}
+
+// GetPOSMenu returns the POS menu for the current restaurant.
+func (h *AdminHandler) GetPOSMenu(c *gin.Context) {
+	restaurantID := c.GetInt("restaurantID")
+	items, err := services.GetMenuItems(restaurantID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"menu": items})
+}
+
+// ---------- POS order endpoints ----------
+
+// CreatePOSOrder creates a new POS order draft.
+func (h *AdminHandler) CreatePOSOrder(c *gin.Context) {
+	var draft services.DraftOrder
+	if err := c.ShouldBindJSON(&draft); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
+		return
+	}
+	order, err := h.posOrderService.CreateOrder(draft.RestaurantID, draft.OutletID, draft.Items, draft.TableID, draft.Source)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"order": order})
+}
+
+// GetPOSOrder returns a POS order by ID.
+func (h *AdminHandler) GetPOSOrder(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid ID"})
+		return
+	}
+	order, err := h.orderService.GetOrderByID(id, services.ResolveRestaurant(c.GetInt("restaurantID")))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "order not found"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"order": order})
+}
+
+// UpdatePOSOrder updates a POS order (items, table, status).
+func (h *AdminHandler) UpdatePOSOrder(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid ID"})
+		return
+	}
+	if err := h.posOrderService.UpdateOrder(id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"updated": true})
+}
+
+// HoldPOSOrder holds a POS order.
+func (h *AdminHandler) HoldPOSOrder(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid ID"})
+		return
+	}
+	au, _ := c.Get("adminUser")
+	userID := 0
+	if a, ok := au.(*adminUserCtx); ok && a != nil {
+		userID = a.ID
+	}
+	ok := h.posOrderService.HoldOrder(id, userID, "manual")
+	if !ok {
+		c.JSON(http.StatusConflict, gin.H{"error": "order already held or could not be held"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"held": true})
+}
+
+// ResumePOSOrder resumes a held POS order.
+func (h *AdminHandler) ResumePOSOrder(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid ID"})
+		return
+	}
+	err = h.posOrderService.ResumeOrder(id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"resumed": true})
+}
+
+// TakePaymentPOSOrder records a payment for a POS order.
+func (h *AdminHandler) TakePaymentPOSOrder(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid ID"})
+		return
+	}
+	var req services.PaymentRecord
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
+		return
+	}
+	paymentID, _, err := h.posOrderService.TakePayment(id, req.Method, req.Amount, req.Tendered, req.Reference, req.ReceivedBy)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"payment_id": paymentID})
+}
+
+// RefundPOSOrder records a refund for a POS order payment.
+func (h *AdminHandler) RefundPOSOrder(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid ID"})
+		return
+	}
+	var req services.PaymentRecord
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
+		return
+	}
+	restaurantID := c.GetInt("restaurantID")
+	outletID := c.GetInt("outletID")
+	paymentID, err := services.RefundPayment(req.ID, id, restaurantID, outletID, req.Amount, req.Reference, req.ReceivedBy)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"payment_id": paymentID})
+}
+
+// GetPOSOrderTables returns tables for the current restaurant/outlet.
+func (h *AdminHandler) GetPOSOrderTables(c *gin.Context) {
+	restaurantID := c.GetInt("restaurantID")
+	outletID := c.GetInt("outletID")
+	tables, err := services.GetTables(restaurantID, outletID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"tables": tables})
+}
+
+// AssignTableToOrder assigns a table to a POS order.
+func (h *AdminHandler) AssignTableToOrder(c *gin.Context) {
+	orderID, err := strconv.Atoi(c.Param("order_id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid order ID"})
+		return
+	}
+	tableID, err := strconv.Atoi(c.Param("table_id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid table ID"})
+		return
+	}
+	restaurantID := c.GetInt("restaurantID")
+	outletID := c.GetInt("outletID")
+	err = h.posOrderService.SetTable(orderID, tableID, restaurantID, outletID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"assigned": true})
+}
+
+// GetPOSDiscounts returns active discounts for the current restaurant.
+func (h *AdminHandler) GetPOSDiscounts(c *gin.Context) {
+	restaurantID := c.GetInt("restaurantID")
+	currentTime := time.Now()
+	discounts, err := services.ListActiveDiscounts(restaurantID, currentTime)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"discounts": discounts})
+}
+
+// ApplyPOSDiscount applies a discount to a POS order.
+func (h *AdminHandler) ApplyPOSDiscount(c *gin.Context) {
+	orderID, err := strconv.Atoi(c.Param("order_id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid order ID"})
+		return
+	}
+	discountID, err := strconv.Atoi(c.Param("discount_id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid discount ID"})
+		return
+	}
+	err = h.posOrderService.ApplyDiscount(orderID, discountID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"applied": true})
+}
+
+// RemovePOSDiscount removes a discount from a POS order.
+func (h *AdminHandler) RemovePOSDiscount(c *gin.Context) {
+	orderID, err := strconv.Atoi(c.Param("order_id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid order ID"})
+		return
+	}
+	err = services.RemoveDiscountFromOrder(orderID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"removed": true})
+}
+
+// CalculatePOSPrice calculates the price breakdown for a POS order line.
+func (h *AdminHandler) CalculatePOSPrice(c *gin.Context) {
+	itemID, err := strconv.Atoi(c.Param("item_id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid item ID"})
+		return
+	}
+	size := c.Query("size")
+	crust := c.Query("crust")
+	discountType := c.Query("discount_type")
+	discountValue, _ := strconv.ParseInt(c.Query("discount_value"), 10, 64)
+	taxPercent, _ := strconv.ParseInt(c.Query("tax_percent"), 10, 64)
+
+	item, err := h.menuService.GetItemByIdentifier(strconv.Itoa(itemID))
+	if err != nil || item == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "item not found"})
+		return
+	}
+	br, err := services.ResolvePriceBreakdown(item, size, crust, discountType, discountValue, taxPercent)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"price_breakdown": br})
 }
 
 // DebugWhatsApp returns live conversation internals for support/diagnosis.
