@@ -57,6 +57,7 @@ func main() {
 	menuService := services.NewMenuService()
 	cartService := services.NewCartService()
 	orderService := services.NewOrderService()
+	posOrderService := services.NewPOSOrderService()
 	stateService := services.NewCustomerStateService()
 	restaurantConfigService := services.NewRestaurantConfigService()
 	botMessageService := services.NewBotMessageService()
@@ -99,7 +100,7 @@ func main() {
 	}()
 
 	// Initialize admin handler
-	adminHandler := admin.NewAdminHandler(menuService, orderService, evolutionClient, cfg)
+	adminHandler := admin.NewAdminHandler(menuService, orderService, posOrderService, evolutionClient, cfg)
 	admin.SetBotMessageService(botMessageService)
 
 	// Site settings handler
@@ -269,6 +270,21 @@ func main() {
 		adminGroup.POST("/crusts", adminHandler.RequireRole("owner", "manager"), adminHandler.CreateCrust)
 		adminGroup.PUT("/crusts/:id", adminHandler.RequireRole("owner", "manager"), adminHandler.UpdateCrust)
 		adminGroup.DELETE("/crusts/:id", adminHandler.RequireRole("owner", "manager"), adminHandler.DeleteCrust)
+		// POS endpoints
+		adminGroup.GET("/pos/menu", adminHandler.GetPOSMenu)
+		adminGroup.POST("/pos/orders", adminHandler.CreatePOSOrder)
+		adminGroup.GET("/pos/orders/:id", adminHandler.GetPOSOrder)
+		adminGroup.PATCH("/pos/orders/:id", adminHandler.UpdatePOSOrder)
+		adminGroup.POST("/pos/orders/:id/hold", adminHandler.HoldPOSOrder)
+		adminGroup.POST("/pos/orders/:id/resume", adminHandler.ResumePOSOrder)
+		adminGroup.POST("/pos/orders/:id/payments", adminHandler.TakePaymentPOSOrder)
+		adminGroup.POST("/pos/orders/:id/refunds", adminHandler.RefundPOSOrder)
+		adminGroup.GET("/pos/tables", adminHandler.GetPOSOrderTables)
+		adminGroup.PATCH("/pos/tables/:id", adminHandler.AssignTableToOrder)
+		adminGroup.GET("/pos/discounts", adminHandler.GetPOSDiscounts)
+		adminGroup.POST("/pos/discounts", adminHandler.ApplyPOSDiscount)
+		adminGroup.DELETE("/pos/discounts/:id", adminHandler.RemovePOSDiscount)
+		adminGroup.GET("/pos/price", adminHandler.CalculatePOSPrice)
 	}
 
 	// Health / readiness — SaaS observability
