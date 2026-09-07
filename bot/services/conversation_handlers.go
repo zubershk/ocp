@@ -937,7 +937,7 @@ func (e *ConversationEngine) placeOrder(conv *conversation, phone string) {
 		Landmark:      conv.Context["landmark"],
 		PaymentMethod: orDefault(conv.Context["payment"], "cod"),
 		Items:         items,
-		Source:        "whatsapp",
+		Source:        SourceWhatsApp,
 	}
 	result, err := e.orders.Create(req, "")
 	if err != nil {

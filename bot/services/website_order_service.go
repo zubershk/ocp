@@ -207,11 +207,12 @@ func (s *WebsiteOrderService) Create(req *WebsiteOrderRequest, idempotencyKey st
 	if err != nil {
 		return nil, err
 	}
-	if req.DeliveryType != "delivery" && req.DeliveryType != "pickup" {
-		return nil, badRequest("delivery_type must be delivery or pickup")
+	req.DeliveryType = NormalizeOrderType(req.DeliveryType)
+	if req.DeliveryType != OrderTypeDelivery && req.DeliveryType != OrderTypeTakeaway {
+		return nil, badRequest("delivery_type must be delivery or takeaway")
 	}
 	address := strings.TrimSpace(req.Address)
-	if req.DeliveryType == "delivery" && address == "" {
+	if req.DeliveryType == OrderTypeDelivery && address == "" {
 		return nil, badRequest("address is required for delivery")
 	}
 	biz := GetBizConfig()
@@ -313,8 +314,8 @@ func (s *WebsiteOrderService) Create(req *WebsiteOrderRequest, idempotencyKey st
 	orderNumber := fmt.Sprintf("%s-%s-%04d", strings.ToUpper(biz.OrderPrefix), time.Now().Format("20060102"), seq)
 
 	source := req.Source
-	if source != "whatsapp" {
-		source = "website" // authoritative default; never trust client values blindly
+	if source != SourceWhatsApp {
+		source = SourceWebsite // authoritative default; never trust client values blindly
 	}
 
 	var (

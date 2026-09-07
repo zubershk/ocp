@@ -272,12 +272,20 @@ func (s *OrderService) CreateOrder(order *models.Order) error {
 	if order.OutletID <= 0 {
 		order.OutletID = DefaultOutletID(order.RestaurantID)
 	}
+	// Canonical vocabulary (Phase 2). This legacy writer is only used
+	// by the WhatsApp state machine, so an empty source means whatsapp;
+	// the old CHECK-free schema defaulted it to 'website' and mislabeled
+	// legacy bot orders.
+	order.OrderType = NormalizeOrderType(order.OrderType)
+	if order.Source == "" {
+		order.Source = SourceWhatsApp
+	}
 	// Insert order
 	err = tx.QueryRow(`
-		INSERT INTO orders (order_number, customer_name, customer_phone, order_type, address, landmark, payment_method, subtotal, delivery_fee, discount, total, status, restaurant_id, outlet_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NULLIF($14, 0))
+		INSERT INTO orders (order_number, customer_name, customer_phone, order_type, address, landmark, payment_method, subtotal, delivery_fee, discount, total, status, source, restaurant_id, outlet_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 		RETURNING id, created_at, updated_at
-	`, order.OrderNumber, order.CustomerName, order.CustomerPhone, order.OrderType, order.Address, order.Landmark, order.PaymentMethod, order.Subtotal, order.DeliveryFee, order.Discount, order.Total, order.Status, order.RestaurantID, order.OutletID).Scan(&order.ID, &order.CreatedAt, &order.UpdatedAt)
+	`, order.OrderNumber, order.CustomerName, order.CustomerPhone, order.OrderType, order.Address, order.Landmark, order.PaymentMethod, order.Subtotal, order.DeliveryFee, order.Discount, order.Total, order.Status, order.Source, order.RestaurantID, order.OutletID).Scan(&order.ID, &order.CreatedAt, &order.UpdatedAt)
 	if err != nil {
 		return err
 	}
