@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"orangecheesepizza/bot/database"
+	"orangecheesepizza/bot/services"
 
 	"github.com/gin-gonic/gin"
 )
@@ -31,7 +32,9 @@ func (h *SiteSettingsHandler) GetSiteSettings(c *gin.Context) {
 		placeholders[i] = "$" + strconv.Itoa(i+1)
 		args[i] = k
 	}
-	rows, err := database.DB.Query(`SELECT key, value FROM site_settings WHERE key IN (`+strings.Join(placeholders, ",")+`)`, args...)
+	// Public storefront serves the default restaurant until Phase 4 routing.
+	args = append(args, services.ResolveRestaurant(0))
+	rows, err := database.DB.Query(`SELECT key, value FROM site_settings WHERE key IN (`+strings.Join(placeholders, ",")+`) AND restaurant_id = $`+strconv.Itoa(len(args)), args...)
 	if err != nil {
 		// table may not exist yet — return empty defaults
 		c.JSON(http.StatusOK, gin.H{"settings": map[string]interface{}{}})
@@ -57,7 +60,8 @@ func (h *SiteSettingsHandler) GetPage(c *gin.Context) {
 	var updatedAt string
 	err := database.DB.QueryRow(
 		`SELECT id, title, content, meta_title, meta_desc, updated_at::text
-		 FROM site_pages WHERE slug=$1 AND published=true`, slug,
+		 FROM site_pages WHERE slug=$1 AND published=true AND restaurant_id=$2`, slug,
+		services.ResolveRestaurant(0),
 	).Scan(&id, &title, &content, &metaTitle, &metaDesc, &updatedAt)
 	if err == sql.ErrNoRows {
 		c.JSON(http.StatusNotFound, gin.H{"error": "page not found"})
@@ -76,7 +80,8 @@ func (h *SiteSettingsHandler) GetPage(c *gin.Context) {
 func (h *SiteSettingsHandler) GetMenuCategories(c *gin.Context) {
 	rows, err := database.DB.Query(
 		`SELECT id, slug, name, description, image_url, sort_order
-		 FROM menu_categories WHERE active=true ORDER BY sort_order, name`)
+		 FROM menu_categories WHERE active=true AND restaurant_id=$1 ORDER BY sort_order, name`,
+		services.ResolveRestaurant(0))
 	if err != nil {
 		// table may not exist yet — return empty
 		c.JSON(http.StatusOK, gin.H{"categories": []map[string]interface{}{}})
@@ -104,7 +109,9 @@ func (h *SiteSettingsHandler) GetMenuCategories(c *gin.Context) {
 // --- Admin endpoints ---
 
 func (h *SiteSettingsHandler) GetSiteSettingsAdmin(c *gin.Context) {
-	rows, err := database.DB.Query(`SELECT key, value, updated_at::text FROM site_settings ORDER BY key`)
+	rows, err := database.DB.Query(
+		`SELECT key, value, updated_at::text FROM site_settings WHERE restaurant_id=$1 ORDER BY key`,
+		services.ResolveRestaurant(c.GetInt("restaurantID")))
 	if err != nil {
 		// table may not exist yet — return empty
 		c.JSON(http.StatusOK, gin.H{"settings": []map[string]interface{}{}})
@@ -142,13 +149,19 @@ func (h *SiteSettingsHandler) UpdateSiteSetting(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
-	_, err := database.DB.Exec(
-		`INSERT INTO site_settings (key, value) VALUES ($1, $2::jsonb)
-		 ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=NOW()`,
-		key, []byte(*req.Value),
+	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
+	res, err := database.DB.Exec(
+		`INSERT INTO site_settings (key, value, restaurant_id) VALUES ($1, $2::jsonb, $3)
+		 ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=NOW()
+		 WHERE site_settings.restaurant_id = $3`,
+		key, []byte(*req.Value), rid,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update setting"})
+		return
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "setting not found"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"updated": true})
@@ -157,7 +170,8 @@ func (h *SiteSettingsHandler) UpdateSiteSetting(c *gin.Context) {
 func (h *SiteSettingsHandler) ListPages(c *gin.Context) {
 	rows, err := database.DB.Query(
 		`SELECT id, slug, title, content, meta_title, meta_desc, published, updated_at::text
-		 FROM site_pages ORDER BY id`)
+		 FROM site_pages WHERE restaurant_id=$1 ORDER BY id`,
+		services.ResolveRestaurant(c.GetInt("restaurantID")))
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"pages": []map[string]interface{}{}})
 		return
@@ -190,7 +204,8 @@ func (h *SiteSettingsHandler) GetPageAdmin(c *gin.Context) {
 	var published bool
 	err := database.DB.QueryRow(
 		`SELECT id, title, content, meta_title, meta_desc, published, updated_at::text
-		 FROM site_pages WHERE slug=$1`, slug,
+		 FROM site_pages WHERE slug=$1 AND restaurant_id=$2`, slug,
+		services.ResolveRestaurant(c.GetInt("restaurantID")),
 	).Scan(&id, &title, &content, &metaTitle, &metaDesc, &published, &updatedAt)
 	if err == sql.ErrNoRows {
 		c.JSON(http.StatusNotFound, gin.H{"error": "page not found"})
@@ -232,17 +247,24 @@ func (h *SiteSettingsHandler) UpsertPage(c *gin.Context) {
 	if req.Published != nil {
 		published = *req.Published
 	}
+	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
 	var id int
 	err := database.DB.QueryRow(
-		`INSERT INTO site_pages (slug, title, content, meta_title, meta_desc, published)
-		 VALUES ($1,$2,$3,$4,$5,$6)
+		`INSERT INTO site_pages (slug, title, content, meta_title, meta_desc, published, restaurant_id)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7)
 		 ON CONFLICT (slug) DO UPDATE SET
 		   title=EXCLUDED.title, content=EXCLUDED.content,
 		   meta_title=EXCLUDED.meta_title, meta_desc=EXCLUDED.meta_desc,
 		   published=EXCLUDED.published, updated_at=NOW()
+		 WHERE site_pages.restaurant_id=$7
 		 RETURNING id`,
-		slug, req.Title, req.Content, req.MetaTitle, req.MetaDesc, published,
+		slug, req.Title, req.Content, req.MetaTitle, req.MetaDesc, published, rid,
 	).Scan(&id)
+	if err == sql.ErrNoRows {
+		// Conflict hit another tenant's slug: reveal nothing.
+		c.JSON(http.StatusNotFound, gin.H{"error": "page not found"})
+		return
+	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save page"})
 		return
@@ -252,7 +274,8 @@ func (h *SiteSettingsHandler) UpsertPage(c *gin.Context) {
 
 func (h *SiteSettingsHandler) DeletePage(c *gin.Context) {
 	slug := c.Param("slug")
-	res, err := database.DB.Exec(`DELETE FROM site_pages WHERE slug=$1`, slug)
+	res, err := database.DB.Exec(`DELETE FROM site_pages WHERE slug=$1 AND restaurant_id=$2`,
+		slug, services.ResolveRestaurant(c.GetInt("restaurantID")))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete page"})
 		return
@@ -268,7 +291,8 @@ func (h *SiteSettingsHandler) DeletePage(c *gin.Context) {
 func (h *SiteSettingsHandler) GetMenuCategoriesAdmin(c *gin.Context) {
 	rows, err := database.DB.Query(
 		`SELECT id, slug, name, description, image_url, sort_order, active, updated_at::text
-		 FROM menu_categories ORDER BY sort_order, name`)
+		 FROM menu_categories WHERE restaurant_id=$1 ORDER BY sort_order, name`,
+		services.ResolveRestaurant(c.GetInt("restaurantID")))
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"categories": []map[string]interface{}{}})
 		return
@@ -321,9 +345,10 @@ func (h *SiteSettingsHandler) CreateCategory(c *gin.Context) {
 	}
 	var id int
 	err := database.DB.QueryRow(
-		`INSERT INTO menu_categories (slug, name, description, image_url, sort_order, active)
-		 VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
+		`INSERT INTO menu_categories (slug, name, description, image_url, sort_order, active, restaurant_id)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
 		req.Slug, req.Name, req.Description, req.ImageURL, req.SortOrder, active,
+		services.ResolveRestaurant(c.GetInt("restaurantID")),
 	).Scan(&id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create category"})
@@ -389,9 +414,16 @@ func (h *SiteSettingsHandler) UpdateCategory(c *gin.Context) {
 	}
 	set = append(set, "updated_at=NOW()")
 	args = append(args, id)
-	_, err = database.DB.Exec(`UPDATE menu_categories SET `+strings.Join(set, ", ")+` WHERE id=$`+strconv.Itoa(n), args...)
+	n++
+	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
+	args = append(args, rid)
+	res, err := database.DB.Exec(`UPDATE menu_categories SET `+strings.Join(set, ", ")+` WHERE id=$`+strconv.Itoa(n-1)+` AND restaurant_id=$`+strconv.Itoa(n), args...)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update category"})
+		return
+	}
+	if affected, _ := res.RowsAffected(); affected == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "category not found"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"updated": true})
@@ -403,7 +435,8 @@ func (h *SiteSettingsHandler) DeleteCategory(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid ID"})
 		return
 	}
-	res, err := database.DB.Exec(`DELETE FROM menu_categories WHERE id=$1`, id)
+	res, err := database.DB.Exec(`DELETE FROM menu_categories WHERE id=$1 AND restaurant_id=$2`,
+		id, services.ResolveRestaurant(c.GetInt("restaurantID")))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete category"})
 		return
@@ -416,15 +449,38 @@ func (h *SiteSettingsHandler) DeleteCategory(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"deleted": true})
 }
 
+// settingValue reads one site_settings key for a restaurant.
+// restaurantID 0 resolves to the default (public storefront behavior).
+func settingValue(key string, restaurantID int) ([]byte, error) {
+	var value []byte
+	err := database.DB.QueryRow(
+		`SELECT value FROM site_settings WHERE key=$1 AND restaurant_id=$2`,
+		key, services.ResolveRestaurant(restaurantID)).Scan(&value)
+	return value, err
+}
+
+// upsertSetting writes one site_settings key for a restaurant.
+// Returns rows affected (0 = key owned by another tenant).
+func upsertSetting(key string, raw []byte, restaurantID int) (int64, error) {
+	// NOTE: UNIQUE(key) becomes UNIQUE(key, restaurant_id) in migration 022.
+	// Until then the guarded conflict target below prevents cross-tenant writes.
+	res, err := database.DB.Exec(
+		`INSERT INTO site_settings (key, value, restaurant_id) VALUES ($1, $2::jsonb, $3)
+		 ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=NOW()
+		 WHERE site_settings.restaurant_id = $3`,
+		key, raw, services.ResolveRestaurant(restaurantID),
+	)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
+}
+
 // --- Offers / Banners (stored in site_settings) ---
 
 func (h *SiteSettingsHandler) GetOffers(c *gin.Context) {
-	var value []byte
-	err := database.DB.QueryRow(`SELECT value FROM site_settings WHERE key='offers'`).Scan(&value)
-	if err == sql.ErrNoRows {
-		c.JSON(http.StatusOK, gin.H{"offers": []interface{}{}})
-		return
-	}
+	value, err := settingValue("offers", c.GetInt("restaurantID"))
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"offers": []interface{}{}})
 		return
@@ -440,26 +496,20 @@ func (h *SiteSettingsHandler) UpdateOffers(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
-	raw := []byte(*req.Offers)
-	_, err := database.DB.Exec(
-		`INSERT INTO site_settings (key, value) VALUES ('offers', $1::jsonb)
-		 ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=NOW()`,
-		raw,
-	)
+	n, err := upsertSetting("offers", []byte(*req.Offers), c.GetInt("restaurantID"))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update offers"})
+		return
+	}
+	if n == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "offers not found"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"updated": true})
 }
 
 func (h *SiteSettingsHandler) GetBanners(c *gin.Context) {
-	var value []byte
-	err := database.DB.QueryRow(`SELECT value FROM site_settings WHERE key='banners'`).Scan(&value)
-	if err == sql.ErrNoRows {
-		c.JSON(http.StatusOK, gin.H{"banners": []interface{}{}})
-		return
-	}
+	value, err := settingValue("banners", c.GetInt("restaurantID"))
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"banners": []interface{}{}})
 		return
@@ -475,14 +525,13 @@ func (h *SiteSettingsHandler) UpdateBanners(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
-	raw := []byte(*req.Banners)
-	_, err := database.DB.Exec(
-		`INSERT INTO site_settings (key, value) VALUES ('banners', $1::jsonb)
-		 ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=NOW()`,
-		raw,
-	)
+	n, err := upsertSetting("banners", []byte(*req.Banners), c.GetInt("restaurantID"))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update banners"})
+		return
+	}
+	if n == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "banners not found"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"updated": true})
@@ -491,8 +540,7 @@ func (h *SiteSettingsHandler) UpdateBanners(c *gin.Context) {
 // --- Public endpoints for customer-facing pages ---
 
 func (h *SiteSettingsHandler) GetOffersPublic(c *gin.Context) {
-	var value []byte
-	err := database.DB.QueryRow(`SELECT value FROM site_settings WHERE key='offers'`).Scan(&value)
+	value, err := settingValue("offers", 0)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"offers": []interface{}{}})
 		return
@@ -512,8 +560,7 @@ func (h *SiteSettingsHandler) GetOffersPublic(c *gin.Context) {
 }
 
 func (h *SiteSettingsHandler) GetBannersPublic(c *gin.Context) {
-	var value []byte
-	err := database.DB.QueryRow(`SELECT value FROM site_settings WHERE key='banners'`).Scan(&value)
+	value, err := settingValue("banners", 0)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"banners": []interface{}{}})
 		return
@@ -535,12 +582,7 @@ func (h *SiteSettingsHandler) GetBannersPublic(c *gin.Context) {
 // --- Family packs page config (BOGO card + pack list) ---
 
 func (h *SiteSettingsHandler) GetFamilyPacks(c *gin.Context) {
-	var value []byte
-	err := database.DB.QueryRow(`SELECT value FROM site_settings WHERE key='family_packs'`).Scan(&value)
-	if err == sql.ErrNoRows {
-		c.JSON(http.StatusOK, gin.H{"family_packs": defaultFamilyPacks()})
-		return
-	}
+	value, err := settingValue("family_packs", c.GetInt("restaurantID"))
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"family_packs": defaultFamilyPacks()})
 		return
@@ -557,21 +599,20 @@ func (h *SiteSettingsHandler) UpdateFamilyPacks(c *gin.Context) {
 		return
 	}
 	raw := []byte(*req.FamilyPacks)
-	_, err := database.DB.Exec(
-		`INSERT INTO site_settings (key, value) VALUES ('family_packs', $1::jsonb)
-		 ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=NOW()`,
-		raw,
-	)
+	n, err := upsertSetting("family_packs", raw, c.GetInt("restaurantID"))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update family packs"})
+		return
+	}
+	if n == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "family packs not found"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"updated": true})
 }
 
 func (h *SiteSettingsHandler) GetFamilyPacksPublic(c *gin.Context) {
-	var value []byte
-	err := database.DB.QueryRow(`SELECT value FROM site_settings WHERE key='family_packs'`).Scan(&value)
+	value, err := settingValue("family_packs", 0)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"family_packs": defaultFamilyPacks()})
 		return

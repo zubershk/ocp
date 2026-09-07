@@ -20,7 +20,7 @@ type stubMenuReader struct {
 	err        error
 }
 
-func (s *stubMenuReader) GetCategoriesWithSlug() ([]models.MenuCategory, error) {
+func (s *stubMenuReader) GetCategoriesWithSlug(_ int) ([]models.MenuCategory, error) {
 	if s.err != nil {
 		return nil, s.err
 	}

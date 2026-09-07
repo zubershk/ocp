@@ -2,6 +2,7 @@ package services
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -77,12 +78,21 @@ var globalBizCfg *BusinessConfig
 var bizCfgMu sync.RWMutex
 
 func LoadBusinessConfig() *BusinessConfig {
+	return LoadBusinessConfigFor(0)
+}
+
+// LoadBusinessConfigFor loads one restaurant's config (0 = default).
+// The process-wide cache always tracks the default restaurant used by
+// the bot runtime; admin reads go through GetBusinessConfig below.
+func LoadBusinessConfigFor(restaurantID int) *BusinessConfig {
+	rid := ResolveRestaurant(restaurantID)
 	bizCfgMu.Lock()
 	defer bizCfgMu.Unlock()
 
 	var raw []byte
 	err := database.DB.QueryRow(
-		`SELECT value::text FROM site_settings WHERE key = 'bot_config'`,
+		`SELECT value::text FROM site_settings WHERE key = 'bot_config' AND restaurant_id = $1`,
+		rid,
 	).Scan(&raw)
 	if err != nil {
 		log.Printf("[BusinessConfig] failed to load from DB: %v (using defaults)", err)
@@ -126,8 +136,18 @@ func LoadBusinessConfig() *BusinessConfig {
 		cfg.CategoryIcons = defaultBusinessConfig().CategoryIcons
 	}
 
-	globalBizCfg = &cfg
-	return globalBizCfg
+	if rid == ResolveRestaurant(0) {
+		globalBizCfg = &cfg
+		return globalBizCfg
+	}
+	out := cfg
+	return &out
+}
+
+// GetBusinessConfigFor reads one restaurant's config without touching
+// the process cache (admin paths).
+func GetBusinessConfigFor(restaurantID int) *BusinessConfig {
+	return LoadBusinessConfigFor(restaurantID)
 }
 
 func GetBizConfig() *BusinessConfig {
@@ -145,21 +165,27 @@ func ReloadBizConfig() {
 }
 
 // SaveBusinessConfig persists the config to DB and refreshes cache.
-func SaveBusinessConfig(cfg *BusinessConfig) error {
+func SaveBusinessConfig(cfg *BusinessConfig, restaurantID int) error {
+	rid := ResolveRestaurant(restaurantID)
 	raw, err := json.Marshal(cfg)
 	if err != nil {
 		return err
 	}
-	_, err = database.DB.Exec(
-		`UPDATE site_settings SET value = $1::jsonb, updated_at = NOW() WHERE key = 'bot_config'`,
-		string(raw),
+	res, err := database.DB.Exec(
+		`UPDATE site_settings SET value = $1::jsonb, updated_at = NOW() WHERE key = 'bot_config' AND restaurant_id = $2`,
+		string(raw), rid,
 	)
 	if err != nil {
 		return err
 	}
-	bizCfgMu.Lock()
-	globalBizCfg = cfg
-	bizCfgMu.Unlock()
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("business config not found")
+	}
+	if rid == ResolveRestaurant(0) {
+		bizCfgMu.Lock()
+		globalBizCfg = cfg
+		bizCfgMu.Unlock()
+	}
 	return nil
 }
 

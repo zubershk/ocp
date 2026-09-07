@@ -261,8 +261,10 @@ func DeleteSession(token string) error {
 }
 
 // CustomerOrderByIdentifier fetches an order if it belongs to phone (either 10-digit or 91-prefixed).
+// Scoped to the phone owner's restaurant so tenants never resolve each other's orders.
 func CustomerOrderByIdentifier(phone, identifier string) (*WebsiteOrderResult, error) {
 	// try numeric id vs order_number, with phone ownership check (both 10-digit and 91+ forms)
+	rid := restaurantForPhone(phone)
 	candidates := []string{phone}
 	if len(phone) == 10 {
 		candidates = append(candidates, "91"+phone)
@@ -274,13 +276,13 @@ func CustomerOrderByIdentifier(phone, identifier string) (*WebsiteOrderResult, e
 		var q string
 		var arg interface{}
 		if isNumericID(identifier) {
-			q = `SELECT id FROM orders WHERE id = $1 AND customer_phone = $2`
+			q = `SELECT id FROM orders WHERE id = $1 AND customer_phone = $2 AND restaurant_id = $3`
 			arg = identifier
 		} else {
-			q = `SELECT id FROM orders WHERE order_number = $1 AND customer_phone = $2`
+			q = `SELECT id FROM orders WHERE order_number = $1 AND customer_phone = $2 AND restaurant_id = $3`
 			arg = identifier
 		}
-		err := database.DB.QueryRow(q, arg, p).Scan(&orderID)
+		err := database.DB.QueryRow(q, arg, p, rid).Scan(&orderID)
 		if err == sql.ErrNoRows {
 			continue
 		}

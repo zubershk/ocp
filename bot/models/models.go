@@ -115,6 +115,8 @@ type Order struct {
 	CreatedAt     time.Time   `json:"created_at"`
 	UpdatedAt     time.Time   `json:"updated_at"`
 	Items         []OrderItem `json:"items,omitempty"`
+	RestaurantID  int         `json:"restaurant_id,omitempty"`
+	OutletID      int         `json:"outlet_id,omitempty"`
 }
 
 type OrderItem struct {

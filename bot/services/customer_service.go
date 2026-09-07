@@ -43,16 +43,30 @@ func canonicalForStorage(phone string) string {
 	return cleaned
 }
 
+// restaurantForPhone resolves the owning restaurant of a customer phone.
+// Unknown phones attach to the default restaurant (single-tenant behavior;
+// per-sender identity routing arrives in Phase 4).
+func restaurantForPhone(phone string) int {
+	var rid sql.NullInt64
+	_ = database.DB.QueryRow(
+		`SELECT restaurant_id FROM customers WHERE whatsapp_number = $1 ORDER BY id LIMIT 1`,
+		canonicalForStorage(phone)).Scan(&rid)
+	if rid.Valid && rid.Int64 > 0 {
+		return int(rid.Int64)
+	}
+	return ResolveRestaurant(0)
+}
+
 // GetOrCreateCustomer upserts by whatsapp_number and refreshes last_seen.
 func GetOrCreateCustomer(phone string) (*Customer, error) {
 	phone = canonicalForStorage(phone)
 	_, err := database.DB.Exec(`
-		INSERT INTO customers (whatsapp_number, last_seen_at)
-		VALUES ($1, CURRENT_TIMESTAMP)
+		INSERT INTO customers (whatsapp_number, last_seen_at, restaurant_id)
+		VALUES ($1, CURRENT_TIMESTAMP, $2)
 		ON CONFLICT (whatsapp_number) DO UPDATE SET
 			last_seen_at = CURRENT_TIMESTAMP,
 			updated_at = CURRENT_TIMESTAMP
-	`, phone)
+	`, phone, ResolveRestaurant(0))
 	if err != nil {
 		return nil, err
 	}
@@ -121,17 +135,19 @@ func RecordCustomerOrder(phone string, total float64) error {
 }
 
 // CustomerOrders returns recent orders belonging strictly to this number,
-// each with its line items for status views and history.
+// each with its line items for status views and history. Scoped to the
+// phone owner's restaurant so tenants never see each other's orders.
 func CustomerOrders(phone string, limit int) ([]models.Order, error) {
 	phone = canonicalForStorage(phone)
+	rid := restaurantForPhone(phone)
 	rows, err := database.DB.Query(`
 		SELECT id, order_number, customer_name, customer_phone, order_type,
 		       payment_method, subtotal, delivery_fee, discount, total, status,
 		       created_at, updated_at
 		FROM orders
-		WHERE customer_phone = $1
-		ORDER BY id DESC LIMIT $2
-	`, phone, limit)
+		WHERE customer_phone = $1 AND restaurant_id = $2
+		ORDER BY id DESC LIMIT $3
+	`, phone, rid, limit)
 	if err != nil {
 		return nil, err
 	}
