@@ -46,9 +46,10 @@ func hashAdminKey(k string) string {
 }
 
 type adminUserCtx struct {
-	ID   int
-	Name string
-	Role string
+	ID    int
+	Name  string
+	Role  string
+	OrgID int
 }
 
 func getAdminUserByKey(key string) (*adminUserCtx, error) {
@@ -56,8 +57,22 @@ func getAdminUserByKey(key string) (*adminUserCtx, error) {
 		return nil, nil
 	}
 	h := hashAdminKey(key)
+	// New users table first (populated by migration 021 backfill).
 	var u adminUserCtx
-	err := database.DB.QueryRow(`SELECT id, name, role FROM admin_users WHERE key_hash=$1 AND active=true`, h).Scan(&u.ID, &u.Name, &u.Role)
+	err := database.DB.QueryRow(
+		`SELECT id, name, role, organization_id FROM users WHERE key_hash=$1 AND active=true`,
+		h).Scan(&u.ID, &u.Name, &u.Role, &u.OrgID)
+	if err == nil {
+		_, _ = database.DB.Exec(`UPDATE users SET last_seen_at=CURRENT_TIMESTAMP WHERE id=$1`, u.ID)
+		return &u, nil
+	}
+	if err != sql.ErrNoRows {
+		return nil, err
+	}
+	// Backstop: pre-cutover admin_users rows (e.g. keys created after 021
+	// by the still-unmigrated Team page). Org resolves at middleware time.
+	var legacy adminUserCtx
+	err = database.DB.QueryRow(`SELECT id, name, role FROM admin_users WHERE key_hash=$1 AND active=true`, h).Scan(&legacy.ID, &legacy.Name, &legacy.Role)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -65,8 +80,8 @@ func getAdminUserByKey(key string) (*adminUserCtx, error) {
 		return nil, err
 	}
 	// touch last_seen
-	_, _ = database.DB.Exec(`UPDATE admin_users SET last_seen_at=CURRENT_TIMESTAMP WHERE id=$1`, u.ID)
-	return &u, nil
+	_, _ = database.DB.Exec(`UPDATE admin_users SET last_seen_at=CURRENT_TIMESTAMP WHERE id=$1`, legacy.ID)
+	return &legacy, nil
 }
 
 // EnsureOwnerSeed creates an owner from BOT_ADMIN_KEY if no admins exist (SaaS bootstrap).
@@ -1009,7 +1024,13 @@ func (h *AdminHandler) SetConversationState(c *gin.Context) {
 func (h *AdminHandler) GetMeAdmin(c *gin.Context) {
 	u, _ := c.Get("adminUser")
 	if au, ok := u.(*adminUserCtx); ok && au != nil {
-		c.JSON(http.StatusOK, gin.H{"id": au.ID, "name": au.Name, "role": au.Role})
+		// org/restaurant are additive; existing clients ignore extras.
+		c.JSON(http.StatusOK, gin.H{
+			"id": au.ID, "name": au.Name, "role": au.Role,
+			"organization_id": c.GetInt("orgID"),
+			"restaurant_id":   c.GetInt("restaurantID"),
+			"outlet_id":       c.GetInt("outletID"),
+		})
 		return
 	}
 	// env owner fallback

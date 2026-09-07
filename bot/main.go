@@ -46,6 +46,8 @@ func main() {
 	}
 	// Seed owner from BOT_ADMIN_KEY if no admin_users yet (SaaS bootstrap)
 	admin.EnsureOwnerSeed(cfg)
+	// Ensure bootstrap tenant rows exist (idempotent; mirrors 021)
+	admin.EnsureTenantBootstrap()
 
 	// Load business config from DB (sizes, payments, icons, delivery fee, etc.)
 	services.LoadBusinessConfig()
@@ -192,8 +194,12 @@ func main() {
 	adminGroup := router.Group("/admin")
 	adminGroup.Use(handlers.RateLimit(60, time.Minute))
 	adminGroup.Use(adminHandler.RequireAdminKey())
+	// Tenant context for every admin call. Handlers ignore these keys
+	// until PR 3 scopes them; behavior is unchanged in PR 2.
+	adminGroup.Use(admin.TenantMiddleware())
 	{
 		adminGroup.GET("/health", adminHandler.Health)
+		adminGroup.GET("/tenant/context", adminHandler.GetTenantContext)
 		adminGroup.GET("/menu", adminHandler.GetMenu)
 		adminGroup.POST("/menu", adminHandler.RequireRole("owner", "manager"), adminHandler.CreateMenuItem)
 		adminGroup.PUT("/menu/:id", adminHandler.RequireRole("owner", "manager"), adminHandler.UpdateMenuItem)
