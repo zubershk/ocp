@@ -51,24 +51,35 @@ func NewBotMessageService() *BotMessageService {
 
 // syncDefaults inserts any compiled-in keys missing from the DB so new
 // messages appear in the admin dashboard with zero migrations.
-// Existing rows are never touched (admin edits are sacred).
-func (s *BotMessageService) syncDefaults() {
+// Existing rows are never touched (admin edits are sacred). Coverage is
+// ensured for every restaurant, not just the default.
+func syncDefaultsFor(restaurantID int) {
 	defs := defaultMessages()
 	meta := defaultMessageMeta()
-	synced := 0
 	for key, text := range defs {
 		m, _ := meta[key]
 		if _, err := database.DB.Exec(`
-			INSERT INTO bot_messages (message_key, category, description, message_text, variables)
-			VALUES ($1, $2, $3, $4, $5)
-			ON CONFLICT (message_key) DO NOTHING
-		`, key, m.Category, m.Description, text, m.Variables); err == nil {
-			synced++
-		} else {
+			INSERT INTO bot_messages (message_key, category, description, message_text, variables, restaurant_id)
+			VALUES ($1, $2, $3, $4, $5, $6)
+			ON CONFLICT (message_key, restaurant_id) DO NOTHING
+		`, key, m.Category, m.Description, text, m.Variables, restaurantID); err != nil {
 			log.Printf("[BotMessages] sync failed for %q: %v", key, err)
 		}
 	}
-	_ = synced
+}
+func (s *BotMessageService) syncDefaults() {
+	rows, err := database.DB.Query(`SELECT id FROM restaurants`)
+	if err != nil {
+		syncDefaultsFor(ResolveRestaurant(0))
+	} else {
+		defer rows.Close()
+		for rows.Next() {
+			var rid int
+			if err := rows.Scan(&rid); err == nil {
+				syncDefaultsFor(rid)
+			}
+		}
+	}
 	syncTemplateUpgrades()
 }
 
@@ -126,14 +137,16 @@ var newlineFixTemplates = map[string]string{
 	"status_order_detail":         "Status: {{.Emoji}} {{.Status}}\nPlaced: {{.Date}}\n\n{{.Items}}Total: Rs.{{.Total}}",
 }
 
-// loadAll loads all bot_messages from the database into memory.
+// loadAll loads the default restaurant's bot_messages into memory.
+// The runtime cache always tracks the default restaurant; per-tenant
+// admin reads go straight to the DB (ListFor/GetFor).
 func (s *BotMessageService) loadAll() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	rows, err := database.DB.Query(
 		`SELECT id, message_key, category, COALESCE(description,''), message_text, COALESCE(variables,''), COALESCE(image_url,''), active
-		 FROM bot_messages ORDER BY id`)
+		 FROM bot_messages WHERE restaurant_id = $1 ORDER BY id`, ResolveRestaurant(0))
 	if err != nil {
 		log.Printf("[BotMessages] failed to load from DB: %v (using defaults)", err)
 		return
@@ -209,41 +222,62 @@ func (s *BotMessageService) Render(key string, data map[string]interface{}) stri
 	return buf.String()
 }
 
+// scanBotMessage reads one bot_messages row into a BotMessage.
+func scanBotMessage(scanner interface {
+	Scan(dest ...interface{}) error
+}) (BotMessage, error) {
+	var m BotMessage
+	err := scanner.Scan(&m.ID, &m.Key, &m.Category, &m.Description, &m.MessageText, &m.Variables, &m.ImageURL, &m.Active)
+	return m, err
+}
+
 // GetMessage returns a BotMessage by key (for admin editing).
-func (s *BotMessageService) GetMessage(key string) (*BotMessage, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	m, ok := s.messages[key]
-	if !ok {
+func (s *BotMessageService) GetMessage(key string, restaurantID int) (*BotMessage, bool) {
+	var m BotMessage
+	err := database.DB.QueryRow(
+		`SELECT id, message_key, category, COALESCE(description,''), message_text, COALESCE(variables,''), COALESCE(image_url,''), active
+		 FROM bot_messages WHERE message_key = $1 AND restaurant_id = $2`,
+		key, ResolveRestaurant(restaurantID)).Scan(
+		&m.ID, &m.Key, &m.Category, &m.Description, &m.MessageText, &m.Variables, &m.ImageURL, &m.Active)
+	if err != nil {
 		return &BotMessage{Key: key, MessageText: defaultMessage(key), Active: true}, false
 	}
-	return m, true
+	return &m, true
 }
 
 // GetAllMessages returns all messages grouped by category (for admin UI).
-func (s *BotMessageService) GetAllMessages() []BotMessage {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	out := make([]BotMessage, 0, len(s.messages))
-	for _, m := range s.messages {
-		out = append(out, *m)
+func (s *BotMessageService) GetAllMessages(restaurantID int) []BotMessage {
+	rows, err := database.DB.Query(
+		`SELECT id, message_key, category, COALESCE(description,''), message_text, COALESCE(variables,''), COALESCE(image_url,''), active
+		 FROM bot_messages WHERE restaurant_id = $1 ORDER BY id`,
+		ResolveRestaurant(restaurantID))
+	if err != nil {
+		return []BotMessage{}
+	}
+	defer rows.Close()
+	out := []BotMessage{}
+	for rows.Next() {
+		if m, err := scanBotMessage(rows); err == nil {
+			out = append(out, m)
+		}
 	}
 	return out
 }
 
 // UpdateMessage updates a single message template in DB and cache.
 // Image is preserved by ResetMessage and updated when provided (nil = keep).
-func (s *BotMessageService) UpdateMessage(key, text string, imageURL *string) error {
+func (s *BotMessageService) UpdateMessage(key, text string, imageURL *string, restaurantID int) error {
+	rid := ResolveRestaurant(restaurantID)
 	var res sql.Result
 	var err error
 	if imageURL != nil {
 		res, err = database.DB.Exec(
-			`UPDATE bot_messages SET message_text = $1, image_url = $2, updated_at = CURRENT_TIMESTAMP WHERE message_key = $3`,
-			text, *imageURL, key)
+			`UPDATE bot_messages SET message_text = $1, image_url = $2, updated_at = CURRENT_TIMESTAMP WHERE message_key = $3 AND restaurant_id = $4`,
+			text, *imageURL, key, rid)
 	} else {
 		res, err = database.DB.Exec(
-			`UPDATE bot_messages SET message_text = $1, updated_at = CURRENT_TIMESTAMP WHERE message_key = $2`,
-			text, key)
+			`UPDATE bot_messages SET message_text = $1, updated_at = CURRENT_TIMESTAMP WHERE message_key = $2 AND restaurant_id = $3`,
+			text, key, rid)
 	}
 	if err != nil {
 		return err
@@ -252,14 +286,16 @@ func (s *BotMessageService) UpdateMessage(key, text string, imageURL *string) er
 	if n == 0 {
 		return fmt.Errorf("message key %q not found", key)
 	}
-	s.mu.Lock()
-	if m, ok := s.messages[key]; ok {
-		m.MessageText = text
-		if imageURL != nil {
-			m.ImageURL = *imageURL
+	if rid == ResolveRestaurant(0) {
+		s.mu.Lock()
+		if m, ok := s.messages[key]; ok {
+			m.MessageText = text
+			if imageURL != nil {
+				m.ImageURL = *imageURL
+			}
 		}
+		s.mu.Unlock()
 	}
-	s.mu.Unlock()
 	return nil
 }
 
@@ -275,15 +311,15 @@ func (s *BotMessageService) MessageImage(key string) string {
 }
 
 // ResetMessage resets a message to its compiled-in default (image kept).
-func (s *BotMessageService) ResetMessage(key string) error {
+func (s *BotMessageService) ResetMessage(key string, restaurantID int) error {
 	def := defaultMessage(key)
-	return s.UpdateMessage(key, def, nil)
+	return s.UpdateMessage(key, def, nil, restaurantID)
 }
 
 // ResetAllMessages resets all messages to compiled-in defaults.
-func (s *BotMessageService) ResetAllMessages() error {
+func (s *BotMessageService) ResetAllMessages(restaurantID int) error {
 	for key := range defaultMessages() {
-		if err := s.ResetMessage(key); err != nil {
+		if err := s.ResetMessage(key, restaurantID); err != nil {
 			return err
 		}
 	}
@@ -302,15 +338,19 @@ func (s *BotMessageService) GetMessageKeys() []string {
 }
 
 // GetMessageCategories returns distinct categories.
-func (s *BotMessageService) GetMessageCategories() []string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	seen := map[string]bool{}
+func (s *BotMessageService) GetMessageCategories(restaurantID int) []string {
+	rows, err := database.DB.Query(
+		`SELECT DISTINCT category FROM bot_messages WHERE restaurant_id = $1 ORDER BY category`,
+		ResolveRestaurant(restaurantID))
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
 	var cats []string
-	for _, m := range s.messages {
-		if !seen[m.Category] {
-			seen[m.Category] = true
-			cats = append(cats, m.Category)
+	for rows.Next() {
+		var c string
+		if err := rows.Scan(&c); err == nil {
+			cats = append(cats, c)
 		}
 	}
 	return cats

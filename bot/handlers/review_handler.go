@@ -19,9 +19,10 @@ func NewReviewHandler() *ReviewHandler {
 }
 
 type reviewOrder struct {
-	OrderID int
-	Name    string
-	Phone   string
+	OrderID      int
+	Name         string
+	Phone        string
+	RestaurantID int
 }
 
 // resolveOrder verifies the caller may review orderID: either the
@@ -29,27 +30,32 @@ type reviewOrder struct {
 // Only delivered orders can be reviewed.
 func (h *ReviewHandler) resolveOrder(c *gin.Context, orderID int) *reviewOrder {
 	var (
-		status      string
-		accessToken string
-		name        string
-		phone       string
+		status       string
+		accessToken  string
+		name         string
+		phone        string
+		restaurantID sql.NullInt64
 	)
 	err := database.DB.QueryRow(
-		`SELECT status, COALESCE(access_token,''), customer_name, customer_phone
+		`SELECT status, COALESCE(access_token,''), customer_name, customer_phone, restaurant_id
 		 FROM orders WHERE id = $1`, orderID,
-	).Scan(&status, &accessToken, &name, &phone)
+	).Scan(&status, &accessToken, &name, &phone, &restaurantID)
 	if err != nil {
 		return nil
 	}
 	if status != "delivered" {
 		return nil
 	}
+	rid := 0
+	if restaurantID.Valid {
+		rid = int(restaurantID.Int64)
+	}
 	if token := c.GetHeader("X-Order-Token"); token != "" && accessToken != "" && token == accessToken {
-		return &reviewOrder{OrderID: orderID, Name: name, Phone: phone}
+		return &reviewOrder{OrderID: orderID, Name: name, Phone: phone, RestaurantID: rid}
 	}
 	if bearerPhone := customerPhoneFromBearer(c); bearerPhone != "" {
 		if owned, err := services.CustomerOrderByIdentifier(bearerPhone, strconv.Itoa(orderID)); err == nil && owned != nil {
-			return &reviewOrder{OrderID: orderID, Name: name, Phone: phone}
+			return &reviewOrder{OrderID: orderID, Name: name, Phone: phone, RestaurantID: rid}
 		}
 	}
 	return nil
@@ -91,12 +97,12 @@ func (h *ReviewHandler) CreateReview(c *gin.Context) {
 		return
 	}
 	_, err := database.DB.Exec(`
-		INSERT INTO reviews (order_id, item_slug, customer_name, customer_phone, rating, title, body)
-		VALUES ($1, '', $2, $3, $4, $5, $6)
+		INSERT INTO reviews (order_id, item_slug, customer_name, customer_phone, rating, title, body, restaurant_id)
+		VALUES ($1, '', $2, $3, $4, $5, $6, NULLIF($7, 0))
 		ON CONFLICT (order_id, item_slug) DO UPDATE SET
 			rating=EXCLUDED.rating, title=EXCLUDED.title, body=EXCLUDED.body,
 			approved=false, created_at=CURRENT_TIMESTAMP
-	`, req.OrderID, ord.Name, ord.Phone, req.Rating, title, body)
+	`, req.OrderID, ord.Name, ord.Phone, req.Rating, title, body, ord.RestaurantID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save review"})
 		return
@@ -106,11 +112,11 @@ func (h *ReviewHandler) CreateReview(c *gin.Context) {
 			continue
 		}
 		_, _ = database.DB.Exec(`
-			INSERT INTO reviews (order_id, item_slug, customer_name, customer_phone, rating, title, body)
-			VALUES ($1, $2, $3, $4, $5, '', '')
+			INSERT INTO reviews (order_id, item_slug, customer_name, customer_phone, rating, title, body, restaurant_id)
+			VALUES ($1, $2, $3, $4, $5, '', '', NULLIF($6, 0))
 			ON CONFLICT (order_id, item_slug) DO UPDATE SET
 				rating=EXCLUDED.rating, approved=false, created_at=CURRENT_TIMESTAMP
-		`, req.OrderID, strings.TrimSpace(ir.ItemSlug), ord.Name, ord.Phone, ir.Rating)
+		`, req.OrderID, strings.TrimSpace(ir.ItemSlug), ord.Name, ord.Phone, ir.Rating, ord.RestaurantID)
 	}
 	services.BroadcastRealtime("review.created", map[string]interface{}{"order_id": req.OrderID})
 	c.JSON(http.StatusCreated, gin.H{"saved": true})
@@ -122,10 +128,11 @@ func (h *ReviewHandler) ListReviews(c *gin.Context) {
 	if n, err := strconv.Atoi(c.DefaultQuery("limit", "20")); err == nil && n > 0 && n <= 100 {
 		limit = n
 	}
-	args := []interface{}{}
-	where := `WHERE approved = true`
+	rid := services.ResolveRestaurant(0)
+	args := []interface{}{rid}
+	where := `WHERE approved = true AND restaurant_id = $1`
 	if slug := strings.TrimSpace(c.Query("item")); slug != "" {
-		where += ` AND item_slug = $1`
+		where += ` AND item_slug = $2`
 		args = append(args, slug)
 	}
 	args = append(args, limit)
@@ -153,17 +160,18 @@ func (h *ReviewHandler) ListReviews(c *gin.Context) {
 
 // ReviewSummary handles GET /api/reviews/summary — overall + per-item aggregates.
 func (h *ReviewHandler) ReviewSummary(c *gin.Context) {
+	rid := services.ResolveRestaurant(0)
 	var avg sql.NullFloat64
 	var count int
 	_ = database.DB.QueryRow(`
 		SELECT AVG(rating), COUNT(*) FROM reviews
-		WHERE approved = true AND item_slug = ''
-	`).Scan(&avg, &count)
+		WHERE approved = true AND item_slug = '' AND restaurant_id = $1
+	`, rid).Scan(&avg, &count)
 	rows, err := database.DB.Query(`
 		SELECT item_slug, AVG(rating), COUNT(*) FROM reviews
-		WHERE approved = true AND item_slug <> ''
+		WHERE approved = true AND item_slug <> '' AND restaurant_id = $1
 		GROUP BY item_slug
-	`)
+	`, rid)
 	perItem := map[string]map[string]interface{}{}
 	if err == nil {
 		defer rows.Close()
@@ -196,15 +204,18 @@ func (h *ReviewHandler) ListReviewsAdmin(c *gin.Context) {
 	if n, err := strconv.Atoi(c.DefaultQuery("limit", "100")); err == nil && n > 0 && n <= 500 {
 		limit = n
 	}
-	where := ""
+	extra := ""
 	if c.Query("pending") == "1" {
-		where = "WHERE approved = false"
+		extra = " AND r.approved = false"
 	}
+	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
 	rows, err := database.DB.Query(`
-		SELECT id, order_id, item_slug, customer_name, COALESCE(customer_phone,''),
-		       rating, COALESCE(title,''), COALESCE(body,''), approved, created_at
-		FROM reviews `+where+` ORDER BY created_at DESC LIMIT $1
-	`, limit)
+		SELECT r.id, r.order_id, r.item_slug, r.customer_name, COALESCE(r.customer_phone,''),
+		       r.rating, COALESCE(r.title,''), COALESCE(r.body,''), r.approved, r.created_at
+		FROM reviews r
+		JOIN orders o ON o.id = r.order_id AND o.restaurant_id = $2
+		WHERE r.restaurant_id = $2`+extra+` ORDER BY r.created_at DESC LIMIT $1
+	`, limit, rid)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load reviews"})
 		return
@@ -236,7 +247,10 @@ func (h *ReviewHandler) ModerateReview(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "approved is required"})
 		return
 	}
-	res, err := database.DB.Exec(`UPDATE reviews SET approved = $1 WHERE id = $2`, *req.Approved, id)
+	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
+	res, err := database.DB.Exec(`UPDATE reviews SET approved = $1 WHERE id = $2 AND restaurant_id = $3
+		AND EXISTS (SELECT 1 FROM orders o WHERE o.id = reviews.order_id AND o.restaurant_id = $3)`,
+		*req.Approved, id, rid)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update review"})
 		return

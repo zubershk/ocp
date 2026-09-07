@@ -58,11 +58,11 @@ func GetWACart(phone string) ([]WACartLine, error) {
 	rows, err := database.DB.Query(`
 		SELECT `+waCartColumns+`
 		FROM whatsapp_cart_items wc
-		JOIN menu_items mi ON mi.id = wc.menu_item_id
-		LEFT JOIN menu_crusts mc ON mc.slug = wc.crust
+		JOIN menu_items mi ON mi.id = wc.menu_item_id AND mi.restaurant_id = $2
+		LEFT JOIN menu_crusts mc ON mc.slug = wc.crust AND mc.restaurant_id = $2
 		WHERE wc.customer_phone = $1
 		ORDER BY wc.id
-	`, phone)
+	`, phone, ResolveRestaurant(0))
 	if err != nil {
 		return nil, err
 	}
@@ -123,10 +123,10 @@ func GetWACartLineByID(phone string, lineID int) (*WACartLine, error) {
 	row := database.DB.QueryRow(`
 		SELECT `+waCartColumns+`
 		FROM whatsapp_cart_items wc
-		JOIN menu_items mi ON mi.id = wc.menu_item_id
-		LEFT JOIN menu_crusts mc ON mc.slug = wc.crust
+		JOIN menu_items mi ON mi.id = wc.menu_item_id AND mi.restaurant_id = $3
+		LEFT JOIN menu_crusts mc ON mc.slug = wc.crust AND mc.restaurant_id = $3
 		WHERE wc.id = $1 AND wc.customer_phone = $2
-	`, lineID, phone)
+	`, lineID, phone, ResolveRestaurant(0))
 	l, _, err := scanWALine(row)
 	if err != nil {
 		return nil, err

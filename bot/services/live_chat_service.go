@@ -29,11 +29,15 @@ type ConversationSummary struct {
 	TotalMessages int    `json:"total_messages"`
 }
 
-// ListConversations returns recent chats ordered by last message.
-func ListConversations(limit, offset int) ([]ConversationSummary, error) {
+// ListConversations returns recent chats ordered by last message,
+// scoped to one restaurant. Message phones without a customer row
+// attach to the default restaurant (single-tenant behavior preserved).
+func ListConversations(limit, offset, restaurantID int) ([]ConversationSummary, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 30
 	}
+	rid := ResolveRestaurant(restaurantID)
+	def := ResolveRestaurant(0)
 	rows, err := database.DB.Query(`
 		SELECT
 			COALESCE(c.whatsapp_number, m.customer_phone) AS phone,
@@ -46,13 +50,14 @@ func ListConversations(limit, offset int) ([]ConversationSummary, error) {
 		FROM (
 			SELECT DISTINCT customer_phone FROM whatsapp_messages
 			UNION
-			SELECT whatsapp_number FROM customers
+			SELECT whatsapp_number FROM customers WHERE restaurant_id = $3
 		) m
 		LEFT JOIN customers c ON c.whatsapp_number = m.customer_phone
 		LEFT JOIN whatsapp_conversations wc ON wc.customer_id = c.id
+		WHERE COALESCE(c.restaurant_id, $4) = $3
 		ORDER BY last_at DESC NULLS LAST, phone DESC
 		LIMIT $1 OFFSET $2
-	`, limit, offset)
+	`, limit, offset, rid, def)
 	if err != nil {
 		return nil, err
 	}
@@ -77,14 +82,18 @@ type ChatMessage struct {
 	CreatedAt string `json:"created_at"`
 }
 
-func ListMessages(phone string, limit int) ([]ChatMessage, error) {
+func ListMessages(phone string, limit, restaurantID int) ([]ChatMessage, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
+	rid := ResolveRestaurant(restaurantID)
 	rows, err := database.DB.Query(`
 		SELECT id, customer_phone, direction, body, COALESCE(message_id,''), created_at::text
-		FROM whatsapp_messages WHERE customer_phone = $1 ORDER BY created_at ASC LIMIT $2
-	`, phone, limit)
+		FROM whatsapp_messages WHERE customer_phone = $1
+		  AND (EXISTS (SELECT 1 FROM customers c WHERE c.whatsapp_number = whatsapp_messages.customer_phone AND c.restaurant_id = $3)
+		       OR $3 = $4)
+		ORDER BY created_at ASC LIMIT $2
+	`, phone, limit, rid, ResolveRestaurant(0))
 	if err != nil {
 		return nil, err
 	}

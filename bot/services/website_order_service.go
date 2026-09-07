@@ -262,8 +262,8 @@ func (s *WebsiteOrderService) Create(req *WebsiteOrderRequest, idempotencyKey st
 		if crustSlug != "" {
 			row := database.DB.QueryRow(`
 				SELECT name, price_regular, price_medium, price_large
-				FROM menu_crusts WHERE slug = $1 AND active = true
-			`, crustSlug)
+				FROM menu_crusts WHERE slug = $1 AND active = true AND restaurant_id = $2
+			`, crustSlug, ResolveRestaurant(0))
 			var cName string
 			var pr, pm, pl sql.NullFloat64
 			if err := row.Scan(&cName, &pr, &pm, &pl); err != nil {
@@ -322,17 +322,19 @@ func (s *WebsiteOrderService) Create(req *WebsiteOrderRequest, idempotencyKey st
 		createdAt   time.Time
 		accessToken string
 	)
+	// Public storefront serves the default restaurant until Phase 4 routing.
+	rid := ResolveRestaurant(0)
 	err = tx.QueryRow(`
 		INSERT INTO orders
 			(order_number, customer_name, customer_phone, email, order_type,
 			 address, landmark, payment_method, subtotal, delivery_fee, discount,
-			 total, status, idempotency_key, source, access_token)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'confirmed',$13,$14,$15)
+			 total, status, idempotency_key, source, access_token, restaurant_id, outlet_id)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'confirmed',$13,$14,$15,$16,$17)
 		RETURNING id, created_at, access_token
 	`, orderNumber, name, phone, strings.TrimSpace(req.Customer.Email), req.DeliveryType,
 		address, strings.TrimSpace(req.Landmark), req.PaymentMethod,
 		subtotal, deliveryFee, discount, total, nullIfEmpty(idempotencyKey), source,
-		orderAccessToken(),
+		orderAccessToken(), rid, DefaultOutletID(rid),
 	).Scan(&orderID, &createdAt, &accessToken)
 	if err != nil {
 		if strings.Contains(err.Error(), "uq_orders_idempotency_key") && idempotencyKey != "" {
@@ -352,9 +354,9 @@ func (s *WebsiteOrderService) Create(req *WebsiteOrderRequest, idempotencyKey st
 		})
 		if _, err := tx.Exec(`
 			INSERT INTO order_items
-				(order_id, menu_item_id, name, quantity, unit_price, options, subtotal)
-			VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7)
-		`, orderID, line.MenuItemID, line.Name, line.Quantity, line.UnitPrice, string(optionsJSON), line.LineTotal); err != nil {
+				(order_id, menu_item_id, name, quantity, unit_price, options, subtotal, restaurant_id)
+			VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8)
+		`, orderID, line.MenuItemID, line.Name, line.Quantity, line.UnitPrice, string(optionsJSON), line.LineTotal, rid); err != nil {
 			return nil, fmt.Errorf("order item insert failed: %w", err)
 		}
 	}
