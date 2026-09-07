@@ -103,7 +103,7 @@ type Order struct {
 	OrderNumber   string      `json:"order_number"`
 	CustomerName  string      `json:"customer_name"`
 	CustomerPhone string      `json:"customer_phone"`
-	OrderType     string      `json:"order_type"` // delivery, pickup
+	OrderType     string      `json:"order_type"` // dine_in, takeaway, delivery, online, whatsapp
 	Address       string      `json:"address"`
 	Landmark      string      `json:"landmark"`
 	PaymentMethod string      `json:"payment_method"` // cash, upi, online
@@ -111,12 +111,18 @@ type Order struct {
 	DeliveryFee   float64     `json:"delivery_fee"`
 	Discount      float64     `json:"discount"`
 	Total         float64     `json:"total"`
-	Status        string      `json:"status"` // pending, confirmed, preparing, ready, out_for_delivery, completed, cancelled
+	Status        string      `json:"status"` // pending, confirmed, preparing, ready, out_for_delivery, completed, cancelled, held
 	CreatedAt     time.Time   `json:"created_at"`
 	UpdatedAt     time.Time   `json:"updated_at"`
 	Items         []OrderItem `json:"items,omitempty"`
 	RestaurantID  int         `json:"restaurant_id,omitempty"`
 	OutletID      int         `json:"outlet_id,omitempty"`
+
+	// Phase 2 (POS) fields.
+	Source     string  `json:"source,omitempty"`      // pos, website, whatsapp, qr
+	TableID    int     `json:"table_id,omitempty"`    // dine-in table; 0 = none
+	DiscountID int     `json:"discount_id,omitempty"` // applied discount; 0 = none
+	TaxAmount  float64 `json:"tax_amount,omitempty"`  // computed tax (0 = tax-inclusive pricing)
 }
 
 type OrderItem struct {
@@ -141,6 +147,58 @@ type OrderEvent struct {
 	EventType   string    `json:"event_type"`
 	Description string    `json:"description"`
 	CreatedAt   time.Time `json:"created_at"`
+}
+
+// Table is a physical restaurant table (Phase 2 POS).
+// Status is stored for cheap floor rendering; the POS reconciles
+// 'occupied' from open orders at query time.
+type Table struct {
+	ID           int       `json:"id"`
+	OutletID     int       `json:"outlet_id"`
+	RestaurantID int       `json:"restaurant_id"`
+	Name         string    `json:"name"`
+	Capacity     int       `json:"capacity"`
+	Status       string    `json:"status"` // free, occupied, reserved, dirty
+	Position     int       `json:"position"`
+	Active       bool      `json:"active"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+// OrderPayment is one payment row against an order (Phase 2 POS).
+// Payments are never deleted; refunds are negative-amount rows
+// linked via RefundOf. Sum(payments) is the amount actually paid.
+type OrderPayment struct {
+	ID           int       `json:"id"`
+	OrderID      int       `json:"order_id"`
+	RestaurantID int       `json:"restaurant_id"`
+	OutletID     int       `json:"outlet_id"`
+	Method       string    `json:"method"` // cash, upi, card, online, other
+	Amount       float64   `json:"amount"` // signed; refunds are negative
+	Tendered     float64   `json:"tendered"`
+	ChangeDue    float64   `json:"change_due"`
+	Reference    string    `json:"reference"`
+	RefundOf     int       `json:"refund_of,omitempty"`
+	ReceivedBy   int       `json:"received_by,omitempty"` // cashier user id
+	CreatedAt    time.Time `json:"created_at"`
+}
+
+// Discount is an order-header discount (Phase 2 POS).
+// Type: "percent" (Value = 0-100) or "flat" (absolute amount).
+// Code "" = open/manual discount applied by a cashier.
+type Discount struct {
+	ID           int        `json:"id"`
+	RestaurantID int        `json:"restaurant_id"`
+	Name         string     `json:"name"`
+	Code         string     `json:"code"`
+	Type         string     `json:"type"` // percent, flat
+	Value        float64    `json:"value"`
+	Active       bool       `json:"active"`
+	StartsAt     *time.Time `json:"starts_at,omitempty"`
+	EndsAt       *time.Time `json:"ends_at,omitempty"`
+	MinSubtotal  float64    `json:"min_subtotal"`
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
 }
 
 type Review struct {
