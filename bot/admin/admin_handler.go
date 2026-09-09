@@ -1188,7 +1188,10 @@ func (h *AdminHandler) RemovePOSDiscount(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"removed": true})
 }
 
-// CalculatePOSPrice calculates the price breakdown for a POS order line.
+// CalculatePOSPrice returns an ADVISORY-ONLY price estimate for UI display.
+// It never writes anything: order creation, discount changes, and payment
+// always recalculate server-side via RecalculateOrderTotals, so a forged
+// browser request cannot submit a cheaper total.
 func (h *AdminHandler) CalculatePOSPrice(c *gin.Context) {
 	itemID, err := strconv.Atoi(c.Param("item_id"))
 	if err != nil {
@@ -1211,7 +1214,7 @@ func (h *AdminHandler) CalculatePOSPrice(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"price_breakdown": br})
+	c.JSON(http.StatusOK, gin.H{"price_breakdown": br, "advisory_only": true})
 }
 
 // DebugWhatsApp returns live conversation internals for support/diagnosis.
