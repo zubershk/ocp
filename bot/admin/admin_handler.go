@@ -1135,6 +1135,10 @@ func (h *AdminHandler) AssignTableToOrder(c *gin.Context) {
 	outletID := c.GetInt("outletID")
 	err = h.posOrderService.SetTable(orderID, tableID, restaurantID, outletID)
 	if err != nil {
+		if services.IsTableConflict(err) {
+			c.JSON(http.StatusConflict, gin.H{"error": safeError(err)})
+			return
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
 		return
 	}
