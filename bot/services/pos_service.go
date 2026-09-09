@@ -607,6 +607,8 @@ func (s *POSOrderService) ApplyDiscount(orderID int, discountID int) error {
 
 // SetTable assigns a table to an order. Verifies the table belongs to
 // the same restaurant/outlet and the order is still mutable.
+// Delegates to the atomic AssignTableToOrder so concurrent claimants
+// get one success and one conflict (see table_service.go).
 func (s *POSOrderService) SetTable(orderID int, tableID int, restaurantID int, outletID int) error {
 	var status string
 	err := database.DB.QueryRow(`SELECT status FROM orders WHERE id = $1`, orderID).Scan(&status)
@@ -619,21 +621,7 @@ func (s *POSOrderService) SetTable(orderID int, tableID int, restaurantID int, o
 	if !CanMutateOrder(status) {
 		return fmt.Errorf("%w: cannot change table on %q order", ErrInvalidOrderTransition, status)
 	}
-	// Verify table exists and matches restaurant/outlet.
-	var tblRestaurantID, tblOutletID int
-	err = database.DB.QueryRow(`
-		SELECT restaurant_id, outlet_id FROM tables WHERE id = $1`, tableID).Scan(&tblRestaurantID, &tblOutletID)
-	if err != nil {
-		return err
-	}
-	if tblRestaurantID != restaurantID || tblOutletID != outletID {
-		return fmt.Errorf("table does not belong to current restaurant/outlet")
-	}
-	// Assign table to order (SET NULL on previous order if any).
-	_, err = database.DB.Exec(`
-		UPDATE orders SET table_id = $2 WHERE id = $1
-	`, orderID, tableID)
-	return err
+	return AssignTableToOrder(orderID, tableID, restaurantID, outletID)
 }
 
 // ------------------------------------------------------------------
