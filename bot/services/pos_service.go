@@ -324,23 +324,33 @@ func (s *POSOrderService) CancelOrder(orderID int) error {
 	return err
 }
 
-// TakePayment records a payment against an order. Returns the payment ID
+// TakePayment records a payment against an order. Returns the payment ID,
+// whether the call replayed an earlier operation (same idempotency key),
 // and the remaining due amount (paise). Append-only: never update a row.
-func (s *POSOrderService) TakePayment(orderID int, method string, amountPaise int64, tenderedPaise int64, reference string, receivedBy int) (paymentID int, duePaise int64, err error) {
-	// Insert payment row; amount is signed (positive for payment, negative for refund).
-	// We store the signed amount; the ledger computes paid/refunded/due.
-	var lastID int
-	err = database.DB.QueryRow(`
-		INSERT INTO order_payments (order_id, restaurant_id, outlet_id, method, amount, tendered, change_due, reference, received_by, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP)
-		RETURNING id
-	`, orderID, nil, nil, method, amountPaise, tenderedPaise, 0, reference, receivedBy).Scan(&lastID)
-	if err != nil {
-		return 0, 0, err
+//
+// Tenant guard: the order must belong to (restaurantID, outletID); the
+// ledger row carries the same tenant so cross-tenant payments are
+// impossible even if a caller forges IDs.
+func (s *POSOrderService) TakePayment(orderID, restaurantID, outletID int, method string, amountPaise int64, tenderedPaise int64, reference string, receivedBy int, idempotencyKey string) (paymentID int, replayed bool, duePaise int64, err error) {
+	var orderRestaurantID, orderOutletID int
+	err = database.DB.QueryRow(
+		`SELECT restaurant_id, outlet_id FROM orders WHERE id = $1`, orderID).Scan(&orderRestaurantID, &orderOutletID)
+	if err == sql.ErrNoRows {
+		return 0, false, 0, fmt.Errorf("order not found")
 	}
-	// Compute due: we derive it later from the payment ledger;
-	// for now return 0 due (caller can recompute).
-	return lastID, 0, nil
+	if err != nil {
+		return 0, false, 0, err
+	}
+	if orderRestaurantID != restaurantID || orderOutletID != outletID {
+		return 0, false, 0, fmt.Errorf("order does not belong to current restaurant/outlet")
+	}
+	paymentID, replayed, err = RecordPayment(orderID, restaurantID, outletID, method, amountPaise, tenderedPaise, reference, receivedBy, idempotencyKey)
+	if err != nil {
+		return 0, false, 0, err
+	}
+	// Compute due: derived from the payment ledger (see ComputeDueFromLedger).
+	_, _, duePaise = ComputeDueFromLedger(orderID)
+	return paymentID, replayed, duePaise, nil
 }
 
 // ComputeDueFromLedger calculates paid, refunded, and due from the order_payments

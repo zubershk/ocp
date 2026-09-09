@@ -1017,6 +1017,9 @@ func (h *AdminHandler) ResumePOSOrder(c *gin.Context) {
 }
 
 // TakePaymentPOSOrder records a payment for a POS order.
+// Idempotent: pass Idempotency-Key (header, preferred) or
+// idempotency_key (body); a replayed key returns the original
+// payment with replayed=true instead of a second ledger row.
 func (h *AdminHandler) TakePaymentPOSOrder(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -1028,12 +1031,18 @@ func (h *AdminHandler) TakePaymentPOSOrder(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
 		return
 	}
-	paymentID, _, err := h.posOrderService.TakePayment(id, req.Method, req.Amount, req.Tendered, req.Reference, req.ReceivedBy)
+	key := c.GetHeader("Idempotency-Key")
+	if key == "" {
+		key = req.IdempotencyKey
+	}
+	restaurantID := c.GetInt("restaurantID")
+	outletID := c.GetInt("outletID")
+	paymentID, replayed, duePaise, err := h.posOrderService.TakePayment(id, restaurantID, outletID, req.Method, req.Amount, req.Tendered, req.Reference, req.ReceivedBy, key)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"payment_id": paymentID})
+	c.JSON(http.StatusOK, gin.H{"payment_id": paymentID, "replayed": replayed, "due_paise": duePaise})
 }
 
 // RefundPOSOrder records a refund for a POS order payment.
