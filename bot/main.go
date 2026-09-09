@@ -277,6 +277,8 @@ func main() {
 		adminGroup.PATCH("/pos/orders/:id", adminHandler.UpdatePOSOrder)
 		adminGroup.POST("/pos/orders/:id/hold", adminHandler.HoldPOSOrder)
 		adminGroup.POST("/pos/orders/:id/resume", adminHandler.ResumePOSOrder)
+		adminGroup.POST("/pos/orders/:id/complete", adminHandler.CompletePOSOrder)
+		adminGroup.POST("/pos/orders/:id/cancel", adminHandler.CancelPOSOrder)
 		adminGroup.POST("/pos/orders/:id/payments", adminHandler.TakePaymentPOSOrder)
 		adminGroup.POST("/pos/orders/:id/refunds", adminHandler.RefundPOSOrder)
 		adminGroup.GET("/pos/tables", adminHandler.GetPOSOrderTables)

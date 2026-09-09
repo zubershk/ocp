@@ -993,7 +993,11 @@ func (h *AdminHandler) HoldPOSOrder(c *gin.Context) {
 	if a, ok := au.(*adminUserCtx); ok && a != nil {
 		userID = a.ID
 	}
-	ok := h.posOrderService.HoldOrder(id, userID, "manual")
+	ok, err := h.posOrderService.HoldOrder(id, userID, "manual")
+	if err != nil {
+		c.JSON(http.StatusConflict, gin.H{"error": safeError(err)})
+		return
+	}
 	if !ok {
 		c.JSON(http.StatusConflict, gin.H{"error": "order already held or could not be held"})
 		return
@@ -1014,6 +1018,35 @@ func (h *AdminHandler) ResumePOSOrder(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"resumed": true})
+}
+
+// CompletePOSOrder completes a fully-paid POS order.
+// Rejects terminal states and any order with outstanding due.
+func (h *AdminHandler) CompletePOSOrder(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid ID"})
+		return
+	}
+	if err := h.posOrderService.CompleteOrder(id); err != nil {
+		c.JSON(http.StatusConflict, gin.H{"error": safeError(err)})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"completed": true})
+}
+
+// CancelPOSOrder cancels a non-terminal POS order.
+func (h *AdminHandler) CancelPOSOrder(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid ID"})
+		return
+	}
+	if err := h.posOrderService.CancelOrder(id); err != nil {
+		c.JSON(http.StatusConflict, gin.H{"error": safeError(err)})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"cancelled": true})
 }
 
 // TakePaymentPOSOrder records a payment for a POS order.

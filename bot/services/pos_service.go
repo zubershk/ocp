@@ -278,50 +278,134 @@ type OrderHoldInfo struct {
 	Version     int // optimistic concurrency version
 }
 
-// HoldOrder attempts to hold an order. Returns false if the order
-// is already held by another cashier (optimistic concurrency check).
-func (s *POSOrderService) HoldOrder(orderID int, heldBy int, reason string) bool {
-	// Optimistic concurrency: increment version and check.
-	// We use a simple approach: update status to 'held' and check rows affected.
-	var rows int
-	err := database.DB.QueryRow(`
-		UPDATE orders SET status = 'held', updated_at = CURRENT_TIMESTAMP
-		WHERE id = $1 AND status != 'held'
-	`, orderID).Scan(&rows)
-	if err != nil || rows == 0 {
-		return false // already held or error
+// HoldOrder moves a draft/confirmed order to held. The status is read
+// first and the write is conditional on it, so two concurrent holders
+// cannot both succeed: the loser sees zero affected rows.
+func (s *POSOrderService) HoldOrder(orderID int, heldBy int, reason string) (bool, error) {
+	var status string
+	err := database.DB.QueryRow(`SELECT status FROM orders WHERE id = $1`, orderID).Scan(&status)
+	if err == sql.ErrNoRows {
+		return false, ErrOrderNotFound
 	}
-	// Record hold info (we could add a holds table, but for now
-	// we just set status and record in the order's updated_at).
-	return true
+	if err != nil {
+		return false, err
+	}
+	if err := RequireTransition(status, OrderStatusHeld); err != nil {
+		return false, err
+	}
+	res, err := database.DB.Exec(`
+		UPDATE orders SET status = 'held', updated_at = CURRENT_TIMESTAMP
+		WHERE id = $1 AND status = $2
+	`, orderID, status)
+	if err != nil {
+		return false, err
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	if rows == 0 {
+		return false, fmt.Errorf("%w: order changed under us", ErrInvalidOrderTransition)
+	}
+	return true, nil
 }
 
-// ResumeOrder resumes a held order. Idempotent: if the order is not held,
-// it stays active.
+// ResumeOrder moves a held order back to confirmed. Resuming anything
+// that is not held is an explicit error, not a silent no-op.
 func (s *POSOrderService) ResumeOrder(orderID int) error {
-	_, err := database.DB.Exec(`
+	var status string
+	err := database.DB.QueryRow(`SELECT status FROM orders WHERE id = $1`, orderID).Scan(&status)
+	if err == sql.ErrNoRows {
+		return ErrOrderNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if err := RequireTransition(status, OrderStatusConfirmed); err != nil {
+		return err
+	}
+	res, err := database.DB.Exec(`
 		UPDATE orders SET status = 'confirmed', updated_at = CURRENT_TIMESTAMP
 		WHERE id = $1 AND status = 'held'
 	`, orderID)
-	return err
+	if err != nil {
+		return err
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return fmt.Errorf("%w: order changed under us", ErrInvalidOrderTransition)
+	}
+	return nil
 }
 
-// CompleteOrder completes a paid order.
+// CompleteOrder completes a confirmed order once its ledger balance is
+// fully paid (due == 0). Completed orders are terminal: no further
+// hold, payment, discount, or table change is possible.
 func (s *POSOrderService) CompleteOrder(orderID int) error {
-	_, err := database.DB.Exec(`
+	var status string
+	err := database.DB.QueryRow(`SELECT status FROM orders WHERE id = $1`, orderID).Scan(&status)
+	if err == sql.ErrNoRows {
+		return ErrOrderNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if err := RequireTransition(status, OrderStatusCompleted); err != nil {
+		return err
+	}
+	_, _, duePaise := ComputeDueFromLedger(orderID)
+	if duePaise > 0 {
+		return fmt.Errorf("%w: %d paise still due", ErrOrderHasDue, duePaise)
+	}
+	res, err := database.DB.Exec(`
 		UPDATE orders SET status = 'completed', updated_at = CURRENT_TIMESTAMP
-		WHERE id = $1 AND status IN ('confirmed', 'held')
-	`, orderID)
-	return err
+		WHERE id = $1 AND status = $2
+	`, orderID, status)
+	if err != nil {
+		return err
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return fmt.Errorf("%w: order changed under us", ErrInvalidOrderTransition)
+	}
+	return nil
 }
 
-// CancelOrder cancels an order.
+// CancelOrder cancels a non-terminal order. Completed and cancelled
+// orders are terminal and reject cancellation.
 func (s *POSOrderService) CancelOrder(orderID int) error {
-	_, err := database.DB.Exec(`
+	var status string
+	err := database.DB.QueryRow(`SELECT status FROM orders WHERE id = $1`, orderID).Scan(&status)
+	if err == sql.ErrNoRows {
+		return ErrOrderNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if err := RequireTransition(status, OrderStatusCancelled); err != nil {
+		return err
+	}
+	res, err := database.DB.Exec(`
 		UPDATE orders SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP
-		WHERE id = $1
-	`, orderID)
-	return err
+		WHERE id = $1 AND status = $2
+	`, orderID, status)
+	if err != nil {
+		return err
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return fmt.Errorf("%w: order changed under us", ErrInvalidOrderTransition)
+	}
+	return nil
 }
 
 // TakePayment records a payment against an order. Returns the payment ID,
@@ -333,16 +417,20 @@ func (s *POSOrderService) CancelOrder(orderID int) error {
 // impossible even if a caller forges IDs.
 func (s *POSOrderService) TakePayment(orderID, restaurantID, outletID int, method string, amountPaise int64, tenderedPaise int64, reference string, receivedBy int, idempotencyKey string) (paymentID int, replayed bool, duePaise int64, err error) {
 	var orderRestaurantID, orderOutletID int
+	var status string
 	err = database.DB.QueryRow(
-		`SELECT restaurant_id, outlet_id FROM orders WHERE id = $1`, orderID).Scan(&orderRestaurantID, &orderOutletID)
+		`SELECT restaurant_id, outlet_id, status FROM orders WHERE id = $1`, orderID).Scan(&orderRestaurantID, &orderOutletID, &status)
 	if err == sql.ErrNoRows {
-		return 0, false, 0, fmt.Errorf("order not found")
+		return 0, false, 0, ErrOrderNotFound
 	}
 	if err != nil {
 		return 0, false, 0, err
 	}
 	if orderRestaurantID != restaurantID || orderOutletID != outletID {
 		return 0, false, 0, fmt.Errorf("order does not belong to current restaurant/outlet")
+	}
+	if !CanAcceptPayment(status) {
+		return 0, false, 0, fmt.Errorf("%w: cannot take payment on %q order", ErrInvalidOrderTransition, status)
 	}
 	paymentID, replayed, err = RecordPayment(orderID, restaurantID, outletID, method, amountPaise, tenderedPaise, reference, receivedBy, idempotencyKey)
 	if err != nil {
@@ -391,22 +479,44 @@ type OrderEventPayload struct {
 }
 
 // ApplyDiscount applies a discount to an active order. Returns the new
-// discount ID or an error.
+// discount ID or an error. Completed/cancelled orders are frozen.
 func (s *POSOrderService) ApplyDiscount(orderID int, discountID int) error {
+	var status string
+	err := database.DB.QueryRow(`SELECT status FROM orders WHERE id = $1`, orderID).Scan(&status)
+	if err == sql.ErrNoRows {
+		return ErrOrderNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if !CanMutateOrder(status) {
+		return fmt.Errorf("%w: cannot apply discount to %q order", ErrInvalidOrderTransition, status)
+	}
 	// Validate the discount belongs to the order's restaurant and is active.
 	// We simply link the discount via orders.discount_id.
-	_, err := database.DB.Exec(`
+	_, err = database.DB.Exec(`
 		UPDATE orders SET discount_id = $2 WHERE id = $1
 	`, orderID, discountID)
 	return err
 }
 
 // SetTable assigns a table to an order. Verifies the table belongs to
-// the same restaurant/outlet.
+// the same restaurant/outlet and the order is still mutable.
 func (s *POSOrderService) SetTable(orderID int, tableID int, restaurantID int, outletID int) error {
+	var status string
+	err := database.DB.QueryRow(`SELECT status FROM orders WHERE id = $1`, orderID).Scan(&status)
+	if err == sql.ErrNoRows {
+		return ErrOrderNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if !CanMutateOrder(status) {
+		return fmt.Errorf("%w: cannot change table on %q order", ErrInvalidOrderTransition, status)
+	}
 	// Verify table exists and matches restaurant/outlet.
 	var tblRestaurantID, tblOutletID int
-	err := database.DB.QueryRow(`
+	err = database.DB.QueryRow(`
 		SELECT restaurant_id, outlet_id FROM tables WHERE id = $1`, tableID).Scan(&tblRestaurantID, &tblOutletID)
 	if err != nil {
 		return err
