@@ -354,17 +354,16 @@ func (s *POSOrderService) TakePayment(orderID, restaurantID, outletID int, metho
 }
 
 // ComputeDueFromLedger calculates paid, refunded, and due from the order_payments
-// table for a given order. All amounts are in paise.
+// table for a given order. All amounts are in paise. The ledger is
+// authoritative: due = order total - paid + refunded. (orders.total is
+// stored in rupees, so it is converted via rounding, never truncated.)
 func ComputeDueFromLedger(orderID int) (paidPaise int64, refundedPaise int64, duePaise int64) {
-	// Sum all positive amounts = paid
-	// Sum all negative amounts (abs value) = refunded
-	// due = order total - paid + refunded (order total is stored on the order)
-	// We need the order total; read it.
-	var totalPaise int64
-	err := database.DB.QueryRow(`SELECT total FROM orders WHERE id = $1`, orderID).Scan(&totalPaise)
+	var totalRupees float64
+	err := database.DB.QueryRow(`SELECT total FROM orders WHERE id = $1`, orderID).Scan(&totalRupees)
 	if err != nil {
 		return 0, 0, 0
 	}
+	totalPaise := rounding(totalRupees)
 
 	// Sum payments
 	var totalPaid int64
@@ -378,7 +377,7 @@ func ComputeDueFromLedger(orderID int) (paidPaise int64, refundedPaise int64, du
 
 	paidPaise = totalPaid
 	refundedPaise = totalRefund
-	duePaise = totalPaid - totalRefund
+	duePaise = totalPaise - totalPaid + totalRefund
 	if duePaise < 0 {
 		duePaise = 0
 	}

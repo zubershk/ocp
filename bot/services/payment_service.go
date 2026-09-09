@@ -1,7 +1,7 @@
 package services
 
 import (
-	"errors"
+	"database/sql"
 	"time"
 
 	"orangecheesepizza/bot/database"
@@ -91,31 +91,44 @@ func RecordPayment(orderID, restaurantID, outletID int, method string,
 }
 
 // RecordRefund records a refund against an existing payment.
-// amount is the refund amount in paise (positive number; stored as negative in amount).
-// refund_of is the payment ID being refunded.
-func RecordRefund(orderID, refundOf, restaurantID, outletID int, amountPaise int64, reference string, receivedBy int) (int, error) {
-	// Insert a negative-amount payment row linked to the original.
-	var paymentID int
-	err := database.DB.QueryRow(`
-		INSERT INTO order_payments (order_id, restaurant_id, outlet_id,
-			method, amount, tendered, change_due, reference, received_by, refund_of, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP)
-		RETURNING id`,
-		orderID, restaurantID, outletID, "refund", -amountPaise, 0, 0, reference, receivedBy, refundOf).Scan(&paymentID)
-	if err != nil {
-		return 0, err
+// amountPaise is the refund amount in paise (positive number; stored as
+// negative in amount). refund_of is the payment ID being refunded.
+// Like payments, refunds accept an idempotency key so a retried refund
+// never posts twice.
+func RecordRefund(orderID, refundOf, restaurantID, outletID int, amountPaise int64, reference string, receivedBy int, idempotencyKey string) (paymentID int, replayed bool, err error) {
+	key := NormalizeIdempotencyKey(idempotencyKey)
+	if key != "" {
+		if existing, findErr := GetPaymentIDByIdempotencyKey(key, orderID); findErr == nil && existing > 0 {
+			return existing, true, nil
+		}
 	}
-	return paymentID, nil
+	err = database.DB.QueryRow(`
+		INSERT INTO order_payments (order_id, restaurant_id, outlet_id,
+			method, amount, tendered, change_due, reference, received_by, refund_of, idempotency_key, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP)
+		RETURNING id`,
+		orderID, restaurantID, outletID, "refund", -amountPaise, 0, 0, reference, receivedBy, refundOf, nullIfEmpty(key)).Scan(&paymentID)
+	if err != nil {
+		if key != "" && IsUniqueViolation(err, "uq_order_payments_idempotency_key") {
+			if existing, findErr := GetPaymentIDByIdempotencyKey(key, orderID); findErr == nil && existing > 0 {
+				return existing, true, nil
+			}
+		}
+		return 0, false, err
+	}
+	return paymentID, false, nil
 }
 
 // ComputeSummaryFromLedger derives paid / refunded / due from the
 // order_payments table for a given order. All values in paise.
+// The ledger is authoritative: due = total - paid + refunded.
 func ComputeSummaryFromLedger(orderID int) (PaymentSummary, error) {
-	var totalPaise int64
-	err := database.DB.QueryRow(`SELECT total FROM orders WHERE id = $1`, orderID).Scan(&totalPaise)
+	var totalRupees float64
+	err := database.DB.QueryRow(`SELECT total FROM orders WHERE id = $1`, orderID).Scan(&totalRupees)
 	if err != nil {
 		return PaymentSummary{}, err
 	}
+	totalPaise := rounding(totalRupees)
 
 	// Sum all positive amounts = paid
 	var totalPaid int64
@@ -129,12 +142,14 @@ func ComputeSummaryFromLedger(orderID int) (PaymentSummary, error) {
 
 	paid := totalPaid
 	refunded := totalRefund
-	due := totalPaid - totalRefund // due = total - paid + refunded? Let's keep it simple: due = total - paid
+	due := totalPaise - paid + refunded
 	if due < 0 {
 		due = 0
-		// track overpayment as credit
 	}
-	overpaid := totalPaid - totalPaise
+	overpaid := paid - refunded - totalPaise
+	if overpaid < 0 {
+		overpaid = 0
+	}
 
 	return PaymentSummary{
 		Paid:       paid,
@@ -146,18 +161,34 @@ func ComputeSummaryFromLedger(orderID int) (PaymentSummary, error) {
 }
 
 // RefundPayment records a refund for a previous payment.
-// It does not mutate the original payment row; it inserts a new negative-amount row.
-func RefundPayment(paymentID, orderID, restaurantID, outletID int, amountPaise int64, reference string, receivedBy int) (int, error) {
-	// Validate the original payment exists and belongs to the order.
-	var origMethod string
-	var origAmount int64
-	err := database.DB.QueryRow(`SELECT method, amount FROM order_payments WHERE id = $1`, paymentID).Scan(&origMethod, &origAmount)
+// It never mutates the original payment row; it inserts a new
+// negative-amount row linked via refund_of. Every invariant lives in
+// ValidateRefundRequest; the refundable balance is derived from the
+// ledger, never from a stored mutable total.
+func RefundPayment(paymentID, orderID, restaurantID, outletID int, amountPaise int64, reference string, receivedBy int, idempotencyKey string) (paymentIDOut int, replayed bool, err error) {
+	var check RefundCheck
+	var refundOf sql.NullInt64
+	err = database.DB.QueryRow(`
+		SELECT amount, refund_of, order_id, restaurant_id, outlet_id
+		FROM order_payments WHERE id = $1`, paymentID).Scan(
+		&check.OriginalAmountPaise, &refundOf,
+		&check.OriginalOrderID, &check.OriginalRestaurantID, &check.OriginalOutletID)
+	if err == sql.ErrNoRows {
+		return 0, false, ErrRefundNotFound
+	}
 	if err != nil {
-		return 0, errors.New("original payment not found")
+		return 0, false, err
 	}
-	if origAmount > 0 {
-		return 0, errors.New("original payment is not a refund candidate (positive amount)")
+	if refundOf.Valid {
+		check.OriginalRefundOf = int(refundOf.Int64)
 	}
-	// Record the refund row.
-	return RecordRefund(orderID, paymentID, restaurantID, outletID, amountPaise, reference, receivedBy)
+	// Ledger-derived: abs sum of prior refunds against this payment.
+	database.DB.QueryRow(`
+		SELECT COALESCE(SUM(ABS(amount)), 0) FROM order_payments
+		WHERE refund_of = $1 AND amount < 0`, paymentID).Scan(&check.AlreadyRefundedPaise)
+
+	if err := ValidateRefundRequest(check, orderID, restaurantID, outletID, amountPaise); err != nil {
+		return 0, false, err
+	}
+	return RecordRefund(orderID, paymentID, restaurantID, outletID, amountPaise, reference, receivedBy, idempotencyKey)
 }

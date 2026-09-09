@@ -1046,6 +1046,9 @@ func (h *AdminHandler) TakePaymentPOSOrder(c *gin.Context) {
 }
 
 // RefundPOSOrder records a refund for a POS order payment.
+// The ledger stays authoritative: the original payment row is never
+// mutated; the refund posts as a linked negative-amount row. Accepts
+// Idempotency-Key like TakePaymentPOSOrder.
 func (h *AdminHandler) RefundPOSOrder(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -1057,14 +1060,18 @@ func (h *AdminHandler) RefundPOSOrder(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
 		return
 	}
+	key := c.GetHeader("Idempotency-Key")
+	if key == "" {
+		key = req.IdempotencyKey
+	}
 	restaurantID := c.GetInt("restaurantID")
 	outletID := c.GetInt("outletID")
-	paymentID, err := services.RefundPayment(req.ID, id, restaurantID, outletID, req.Amount, req.Reference, req.ReceivedBy)
+	paymentID, replayed, err := services.RefundPayment(req.ID, id, restaurantID, outletID, req.Amount, req.Reference, req.ReceivedBy, key)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"payment_id": paymentID})
+	c.JSON(http.StatusOK, gin.H{"payment_id": paymentID, "replayed": replayed})
 }
 
 // GetPOSOrderTables returns tables for the current restaurant/outlet.
