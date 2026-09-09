@@ -2,8 +2,10 @@ package services
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"math"
+	"strings"
 	"time"
 
 	"orangecheesepizza/bot/database"
@@ -49,7 +51,15 @@ func rounding(rupees float64) int64 {
 
 // PricingFromItem resolves the price for one line item from the menu item,
 // including size variant and crust extra charge. The result is in paise.
+// Crusts resolve against the default restaurant (legacy single-tenant
+// callers); tenant-aware callers must use PricingFromItemFor.
 func PricingFromItem(item *models.MenuItem, size string, crustSlug string) (int64, int64, error) {
+	return PricingFromItemFor(item, size, crustSlug, ResolveRestaurant(0))
+}
+
+// PricingFromItemFor is PricingFromItem scoped to an explicit restaurant
+// so crust charges can never leak across tenants.
+func PricingFromItemFor(item *models.MenuItem, size string, crustSlug string, restaurantID int) (int64, int64, error) {
 	// Base price from the item (already in rupees; convert to paise).
 	basePaise := rounding(item.Price)
 
@@ -66,7 +76,7 @@ func PricingFromItem(item *models.MenuItem, size string, crustSlug string) (int6
 		row := database.DB.QueryRow(`
 			SELECT price_regular, price_medium, price_large
 			FROM menu_crusts WHERE slug = $1 AND active = true AND restaurant_id = $2
-		`, crustSlug, ResolveRestaurant(0))
+		`, crustSlug, restaurantID)
 		var pr, pm, pl sql.NullFloat64
 		if err := row.Scan(&pr, &pm, &pl); err != nil {
 			return 0, 0, fmt.Errorf("crust lookup failed: %w", err)
@@ -175,53 +185,95 @@ func NewPOSOrderService() *POSOrderService {
 }
 
 // CreateOrder creates a new draft order with the given items.
+// Prices are resolved server-side from the menu (size + crust aware);
+// totals are then derived by RecalculateOrderTotals. Client-supplied
+// amounts are never trusted. The header + lines insert atomically.
 func (s *POSOrderService) CreateOrder(restaurantID int, outletID int, items []DraftItem, tableID int, source string) (*models.Order, error) {
+	if len(items) == 0 {
+		return nil, fmt.Errorf("order must contain at least one item")
+	}
+	if !ValidOrderSource(source) {
+		source = SourcePOS // authoritative default; never trust client values blindly
+	}
+	if outletID <= 0 {
+		outletID = DefaultOutletID(restaurantID)
+	}
+	for _, item := range items {
+		if item.Quantity < 1 || item.Quantity > 20 {
+			return nil, fmt.Errorf("quantity for item %d must be between 1 and 20", item.MenuItemID)
+		}
+	}
+
+	tx, err := database.DB.Begin()
+	if err != nil {
+		return nil, fmt.Errorf("tx begin failed: %w", err)
+	}
+	defer tx.Rollback()
+
 	// Build order number
 	var seq int64
-	err := database.DB.QueryRow(`SELECT nextval('ocp_order_number_seq')`).Scan(&seq)
-	if err != nil {
+	if err := tx.QueryRow(`SELECT nextval('ocp_order_number_seq')`).Scan(&seq); err != nil {
 		return nil, fmt.Errorf("order number generation failed: %w", err)
 	}
 	orderNumber := fmt.Sprintf("POS-%s-%04d", time.Now().Format("20060102"), seq)
 
-	// Calculate subtotal from items (base prices only)
-	var subtotalPaise int64
-	for _, item := range items {
-		var itemPrice int64
-		err := database.DB.QueryRow(`
-			SELECT price FROM menu_items WHERE id = $1 AND active = true AND restaurant_id = $2`,
-			item.MenuItemID, restaurantID).Scan(&itemPrice)
-		if err != nil {
-			return nil, fmt.Errorf("item %d not found", item.MenuItemID)
+	// Optional table, verified against the tenant before linking.
+	var tableNull sql.NullInt64
+	if tableID > 0 {
+		var tblRestaurantID, tblOutletID int
+		err := tx.QueryRow(
+			`SELECT restaurant_id, outlet_id FROM tables WHERE id = $1`, tableID).Scan(&tblRestaurantID, &tblOutletID)
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("table not found")
 		}
-		subtotalPaise += itemPrice * int64(item.Quantity)
+		if err != nil {
+			return nil, err
+		}
+		if tblRestaurantID != restaurantID || tblOutletID != outletID {
+			return nil, fmt.Errorf("table does not belong to current restaurant/outlet")
+		}
+		tableNull = sql.NullInt64{Int64: int64(tableID), Valid: true}
 	}
 
-	// Insert order with status 'draft'
+	// Insert order with zeroed totals; RecalculateOrderTotals owns them.
 	var orderID int
-	err = database.DB.QueryRow(`
+	err = tx.QueryRow(`
 		INSERT INTO orders (order_number, customer_name, customer_phone, order_type, address, landmark, payment_method, subtotal, delivery_fee, discount, total, status, source, restaurant_id, outlet_id, table_id)
-		VALUES ($1, '', '', 'dine_in', '', '', '', $2, 0, 0, $2, 'draft', $3, $4, $5, $6)
+		VALUES ($1, '', '', 'dine_in', '', '', '', 0, 0, 0, 0, 'draft', $2, $3, $4, $5)
 		RETURNING id
-	`, orderNumber, subtotalPaise, source, restaurantID, outletID, tableID).Scan(&orderID)
+	`, orderNumber, source, restaurantID, outletID, tableNull).Scan(&orderID)
 	if err != nil {
 		return nil, fmt.Errorf("order insert failed: %w", err)
 	}
 
-	// Insert order items
+	// Insert order items at canonical unit prices.
 	for _, item := range items {
-		var itemName string
-		err := database.DB.QueryRow(`SELECT name FROM menu_items WHERE id = $1`, item.MenuItemID).Scan(&itemName)
+		unitPaise, size, crust, itemName, err := canonicalDraftLine(tx, item, restaurantID)
 		if err != nil {
-			continue
+			return nil, err
 		}
-		var itemPrice int64
-		database.DB.QueryRow(`SELECT price FROM menu_items WHERE id = $1`, item.MenuItemID).Scan(&itemPrice)
-		lineTotal := itemPrice * int64(item.Quantity)
-		_, _ = database.DB.Exec(`
+		lineTotal := unitPaise * int64(item.Quantity)
+		optionsJSON, _ := json.Marshal(map[string]string{
+			"size":  size,
+			"crust": crust,
+		})
+		if _, err := tx.Exec(`
 			INSERT INTO order_items (order_id, menu_item_id, name, quantity, unit_price, options, subtotal, restaurant_id)
-			VALUES ($1, $2, $3, $4, $5, '{}', $6, $7)
-		`, orderID, item.MenuItemID, itemName, item.Quantity, itemPrice, lineTotal, restaurantID)
+			VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8)
+		`, orderID, item.MenuItemID, itemName, item.Quantity,
+			paiseToRupees(unitPaise), string(optionsJSON),
+			paiseToRupees(lineTotal), restaurantID); err != nil {
+			return nil, fmt.Errorf("order item insert failed: %w", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("order commit failed: %w", err)
+	}
+
+	// Authoritative totals: server owns items -> pricing -> discount -> tax -> total.
+	if _, err := RecalculateOrderTotals(orderID, restaurantID); err != nil {
+		return nil, err
 	}
 
 	// Return the order
@@ -232,8 +284,45 @@ func (s *POSOrderService) CreateOrder(restaurantID int, outletID int, items []Dr
 	if err != nil {
 		return nil, err
 	}
-	order.Total = float64(subtotalPaise) / 100
 	return &order, nil
+}
+
+// canonicalDraftLine resolves one draft item to its menu-authoritative
+// unit price (paise), normalized size/crust, and display name.
+func canonicalDraftLine(tx *sql.Tx, item DraftItem, restaurantID int) (unitPaise int64, size, crust, itemName string, err error) {
+	size = strings.ToLower(strings.TrimSpace(item.Size))
+	crust = strings.ToLower(strings.TrimSpace(item.Crust))
+	var price float64
+	var pr, pm, pl sql.NullFloat64
+	err = tx.QueryRow(`
+		SELECT name, price, price_regular, price_medium, price_large
+		FROM menu_items WHERE id = $1 AND active = true AND restaurant_id = $2`,
+		item.MenuItemID, restaurantID).Scan(&itemName, &price, &pr, &pm, &pl)
+	if err == sql.ErrNoRows {
+		return 0, "", "", "", fmt.Errorf("item %d not found", item.MenuItemID)
+	}
+	if err != nil {
+		return 0, "", "", "", err
+	}
+	menuItem := &models.MenuItem{Price: price}
+	if pr.Valid {
+		v := pr.Float64
+		menuItem.PriceRegular = &v
+	}
+	if pm.Valid {
+		v := pm.Float64
+		menuItem.PriceMedium = &v
+	}
+	if pl.Valid {
+		v := pl.Float64
+		menuItem.PriceLarge = &v
+	}
+	menuItem.BuildPriceBySize()
+	unitPaise, _, err = PricingFromItemFor(menuItem, size, crust, restaurantID)
+	if err != nil {
+		return 0, "", "", "", err
+	}
+	return unitPaise, size, crust, itemName, nil
 }
 
 // UpdateOrder updates an existing order's status or table assignment.
@@ -480,9 +569,13 @@ type OrderEventPayload struct {
 
 // ApplyDiscount applies a discount to an active order. Returns the new
 // discount ID or an error. Completed/cancelled orders are frozen.
+// Totals are recalculated server-side after linking: the client never
+// supplies the resulting amounts.
 func (s *POSOrderService) ApplyDiscount(orderID int, discountID int) error {
 	var status string
-	err := database.DB.QueryRow(`SELECT status FROM orders WHERE id = $1`, orderID).Scan(&status)
+	var restaurantID int
+	err := database.DB.QueryRow(
+		`SELECT status, restaurant_id FROM orders WHERE id = $1`, orderID).Scan(&status, &restaurantID)
 	if err == sql.ErrNoRows {
 		return ErrOrderNotFound
 	}
@@ -492,11 +585,23 @@ func (s *POSOrderService) ApplyDiscount(orderID int, discountID int) error {
 	if !CanMutateOrder(status) {
 		return fmt.Errorf("%w: cannot apply discount to %q order", ErrInvalidOrderTransition, status)
 	}
+	rule := GetDiscountByID(discountID)
+	if rule == nil {
+		return fmt.Errorf("discount not found")
+	}
+	if rule.RestaurantID != restaurantID {
+		return fmt.Errorf("discount does not belong to current restaurant")
+	}
 	// Validate the discount belongs to the order's restaurant and is active.
 	// We simply link the discount via orders.discount_id.
 	_, err = database.DB.Exec(`
 		UPDATE orders SET discount_id = $2 WHERE id = $1
 	`, orderID, discountID)
+	if err != nil {
+		return err
+	}
+	// Server owns the resulting totals.
+	_, err = RecalculateOrderTotals(orderID, restaurantID)
 	return err
 }
 

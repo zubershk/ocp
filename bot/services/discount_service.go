@@ -139,9 +139,9 @@ func ListActiveDiscounts(restaurantID int, currentTime time.Time) ([]DiscountRul
 	return rules, rows.Err()
 }
 
-// ApplyDiscountToOrder links a discount to an order. The discount_id on
-// the orders table is set; the resolved discount amount is stored as
-// order.discount (paise) by the caller.
+// ApplyDiscountToOrder links a discount to an order, then recalculates
+// the authoritative totals server-side. The resolved discount amount is
+// never accepted from the client.
 func ApplyDiscountToOrder(orderID int, discountID int) error {
 	// Verify the discount exists and is active.
 	rule := GetDiscountByID(discountID)
@@ -152,16 +152,38 @@ func ApplyDiscountToOrder(orderID int, discountID int) error {
 	if !ok {
 		return errors.New("discount not applicable at this time")
 	}
+	var restaurantID int
+	err := database.DB.QueryRow(
+		`SELECT restaurant_id FROM orders WHERE id = $1`, orderID).Scan(&restaurantID)
+	if err != nil {
+		return err
+	}
+	if rule.RestaurantID != restaurantID {
+		return errors.New("discount does not belong to current restaurant")
+	}
 	// Link discount to order.
-	_, err := database.DB.Exec(`
-		UPDATE orders SET discount_id = $2 WHERE id = $1`, orderID, discountID)
+	if _, err := database.DB.Exec(`
+		UPDATE orders SET discount_id = $2 WHERE id = $1`, orderID, discountID); err != nil {
+		return err
+	}
+	_, err = RecalculateOrderTotals(orderID, restaurantID)
 	return err
 }
 
-// RemoveDiscountFromOrder clears the discount link on an order.
+// RemoveDiscountFromOrder clears the discount link on an order, then
+// recalculates the authoritative totals server-side.
 func RemoveDiscountFromOrder(orderID int) error {
-	_, err := database.DB.Exec(`
-		UPDATE orders SET discount_id = NULL WHERE id = $1`, orderID)
+	var restaurantID int
+	err := database.DB.QueryRow(
+		`SELECT restaurant_id FROM orders WHERE id = $1`, orderID).Scan(&restaurantID)
+	if err != nil {
+		return err
+	}
+	if _, err := database.DB.Exec(`
+		UPDATE orders SET discount_id = NULL WHERE id = $1`, orderID); err != nil {
+		return err
+	}
+	_, err = RecalculateOrderTotals(orderID, restaurantID)
 	return err
 }
 
