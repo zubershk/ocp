@@ -60,6 +60,12 @@ func PricingFromItem(item *models.MenuItem, size string, crustSlug string) (int6
 // PricingFromItemFor is PricingFromItem scoped to an explicit restaurant
 // so crust charges can never leak across tenants.
 func PricingFromItemFor(item *models.MenuItem, size string, crustSlug string, restaurantID int) (int64, int64, error) {
+	return pricingFromItemQ(database.DB, item, size, crustSlug, restaurantID)
+}
+
+// pricingFromItemQ is PricingFromItemFor runnable on any querier,
+// including an open creation transaction.
+func pricingFromItemQ(q dbQuerier, item *models.MenuItem, size string, crustSlug string, restaurantID int) (int64, int64, error) {
 	// Base price from the item (already in rupees; convert to paise).
 	basePaise := rounding(item.Price)
 
@@ -73,7 +79,7 @@ func PricingFromItemFor(item *models.MenuItem, size string, crustSlug string, re
 	// Crust extra charge (if any).
 	var crustPaise int64
 	if crustSlug != "" {
-		row := database.DB.QueryRow(`
+		row := q.QueryRow(`
 			SELECT price_regular, price_medium, price_large
 			FROM menu_crusts WHERE slug = $1 AND active = true AND restaurant_id = $2
 		`, crustSlug, restaurantID)
@@ -267,13 +273,15 @@ func (s *POSOrderService) CreateOrder(restaurantID int, outletID int, items []Dr
 		}
 	}
 
-	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("order commit failed: %w", err)
+	// Authoritative totals inside the same transaction: header, lines,
+	// and totals commit atomically, so a failed recalculation can never
+	// leave a draft persisted with zero/wrong totals.
+	if _, err := recalculateOrderTotalsTx(tx, orderID, restaurantID); err != nil {
+		return nil, err
 	}
 
-	// Authoritative totals: server owns items -> pricing -> discount -> tax -> total.
-	if _, err := RecalculateOrderTotals(orderID, restaurantID); err != nil {
-		return nil, err
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("order commit failed: %w", err)
 	}
 
 	// Return the order
