@@ -51,11 +51,20 @@ func paiseToRupees(paise int64) float64 {
 	return float64(paise) / 100
 }
 
+// dbQuerier is satisfied by both *sql.DB and *sql.Tx, so total
+// recalculation can run inside a caller's transaction (creation) or
+// in its own (discount apply/remove).
+type dbQuerier interface {
+	QueryRow(query string, args ...any) *sql.Row
+	Query(query string, args ...any) (*sql.Rows, error)
+	Exec(query string, args ...any) (sql.Result, error)
+}
+
 // loadDiscountForRecalc resolves the order's linked discount into a
 // validated (type, value-paise) pair. Unlinked, foreign, inactive,
 // expired, or below-minimum discounts resolve to ("none", 0): totals
 // stay correct even if the rule changed after linking.
-func loadDiscountForRecalc(discountID sql.NullInt64, orderRestaurantID int, subtotalPaise int64, now time.Time) (string, int64) {
+func loadDiscountForRecalc(q dbQuerier, discountID sql.NullInt64, orderRestaurantID int, subtotalPaise int64, now time.Time) (string, int64) {
 	if !discountID.Valid {
 		return "none", 0
 	}
@@ -64,7 +73,7 @@ func loadDiscountForRecalc(discountID sql.NullInt64, orderRestaurantID int, subt
 	var active bool
 	var startsAt, endsAt sql.NullTime
 	var minSubtotal float64
-	err := database.DB.QueryRow(`
+	err := q.QueryRow(`
 		SELECT type, value, active, starts_at, ends_at, min_subtotal
 		FROM discounts WHERE id = $1 AND restaurant_id = $2`,
 		discountID.Int64, orderRestaurantID).Scan(
@@ -95,11 +104,18 @@ func loadDiscountForRecalc(discountID sql.NullInt64, orderRestaurantID int, subt
 // Frozen (completed/cancelled) orders are rejected: history must not
 // change. Returns the canonical summary in paise.
 func RecalculateOrderTotals(orderID, restaurantID int) (PriceSummary, error) {
+	return recalculateOrderTotalsTx(database.DB, orderID, restaurantID)
+}
+
+// recalculateOrderTotalsTx is RecalculateOrderTotals runnable inside an
+// existing transaction — used by CreateOrder so header, lines, and
+// totals commit atomically with no zero-total window in between.
+func recalculateOrderTotalsTx(q dbQuerier, orderID, restaurantID int) (PriceSummary, error) {
 	var summary PriceSummary
 
 	var discountID sql.NullInt64
 	var status string
-	err := database.DB.QueryRow(
+	err := q.QueryRow(
 		`SELECT discount_id, status FROM orders WHERE id = $1 AND restaurant_id = $2`,
 		orderID, restaurantID).Scan(&discountID, &status)
 	if err == sql.ErrNoRows {
@@ -112,7 +128,7 @@ func RecalculateOrderTotals(orderID, restaurantID int) (PriceSummary, error) {
 		return summary, fmt.Errorf("%w: cannot recalculate %q order", ErrInvalidOrderTransition, status)
 	}
 
-	rows, err := database.DB.Query(
+	rows, err := q.Query(
 		`SELECT menu_item_id, quantity, options FROM order_items WHERE order_id = $1`,
 		orderID)
 	if err != nil {
@@ -130,7 +146,7 @@ func RecalculateOrderTotals(orderID, restaurantID int) (PriceSummary, error) {
 		}
 		var opts map[string]string
 		_ = json.Unmarshal(optionsJSON, &opts)
-		unitPaise, err := canonicalUnitPrice(menuItemID, opts["size"], opts["crust"], restaurantID)
+		unitPaise, err := canonicalUnitPrice(q, menuItemID, opts["size"], opts["crust"], restaurantID)
 		if err != nil {
 			return summary, err
 		}
@@ -141,17 +157,17 @@ func RecalculateOrderTotals(orderID, restaurantID int) (PriceSummary, error) {
 		return summary, err
 	}
 
-	dType, dValue := loadDiscountForRecalc(discountID, restaurantID, subtotalPaise, time.Now())
+	dType, dValue := loadDiscountForRecalc(q, discountID, restaurantID, subtotalPaise, time.Now())
 
 	var taxPercent float64
-	_ = database.DB.QueryRow(
+	_ = q.QueryRow(
 		`SELECT COALESCE(tax_percent, 0) FROM restaurants WHERE id = $1`,
 		restaurantID).Scan(&taxPercent)
 	taxPercentPaise := int64(taxPercent * 100) // 5% -> 500
 
 	discountPaise, taxPaise, totalPaise := ComputeTotalsFromLines(subtotalPaise, dType, dValue, taxPercentPaise)
 
-	_, err = database.DB.Exec(`
+	_, err = q.Exec(`
 		UPDATE orders
 		SET subtotal = $2, discount = $3, tax_amount = $4, total = $5,
 		    updated_at = CURRENT_TIMESTAMP
@@ -175,11 +191,11 @@ func RecalculateOrderTotals(orderID, restaurantID int) (PriceSummary, error) {
 
 // canonicalUnitPrice resolves one unit's price from the menu (not from
 // any client-supplied amount): base/size price plus crust extra.
-func canonicalUnitPrice(menuItemID int, size, crustSlug string, restaurantID int) (int64, error) {
+func canonicalUnitPrice(q dbQuerier, menuItemID int, size, crustSlug string, restaurantID int) (int64, error) {
 	var name string
 	var price float64
 	var pr, pm, pl sql.NullFloat64
-	err := database.DB.QueryRow(`
+	err := q.QueryRow(`
 		SELECT name, price, price_regular, price_medium, price_large
 		FROM menu_items WHERE id = $1 AND active = true AND restaurant_id = $2`,
 		menuItemID, restaurantID).Scan(&name, &price, &pr, &pm, &pl)
@@ -203,7 +219,7 @@ func canonicalUnitPrice(menuItemID int, size, crustSlug string, restaurantID int
 		item.PriceLarge = &v
 	}
 	item.BuildPriceBySize()
-	unitPaise, _, err := PricingFromItemFor(item, size, crustSlug, restaurantID)
+	unitPaise, _, err := pricingFromItemQ(q, item, size, crustSlug, restaurantID)
 	if err != nil {
 		return 0, err
 	}
