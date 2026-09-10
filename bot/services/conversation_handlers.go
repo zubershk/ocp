@@ -315,7 +315,7 @@ func (e *ConversationEngine) handleMainAction(cust *Customer, conv *conversation
 // ---------- CATEGORIES ----------
 
 func (e *ConversationEngine) showCategories(conv *conversation, phone string) {
-	cats, err := e.menu.GetCategoriesWithSlug()
+	cats, err := e.menu.GetCategoriesWithSlug(0)
 	if err != nil || len(cats) == 0 {
 		e.evolution.SendText(phone, e.msgBrand("category_empty"))
 		return
@@ -354,7 +354,7 @@ func categorySlugOf(m *models.MenuItem) string {
 // ---------- ITEMS ----------
 
 func (e *ConversationEngine) showItems(conv *conversation, phone, catSlug string) {
-	cats, err := e.menu.GetCategoriesWithSlug()
+	cats, err := e.menu.GetCategoriesWithSlug(0)
 	if err != nil {
 		e.evolution.SendText(phone, e.msgBrand("menu_unavailable"))
 		return
@@ -937,7 +937,7 @@ func (e *ConversationEngine) placeOrder(conv *conversation, phone string) {
 		Landmark:      conv.Context["landmark"],
 		PaymentMethod: orDefault(conv.Context["payment"], "cod"),
 		Items:         items,
-		Source:        "whatsapp",
+		Source:        SourceWhatsApp,
 	}
 	result, err := e.orders.Create(req, "")
 	if err != nil {

@@ -208,7 +208,7 @@ func (h *BotHandler) handleMainMenu(phone string, state *models.CustomerState, t
 }
 
 func (h *BotHandler) handleShowCategories(phone string, state *models.CustomerState) error {
-	categories, err := h.menuService.GetCategories()
+	categories, err := h.menuService.GetCategories(0)
 	if err != nil {
 		return err
 	}
@@ -250,12 +250,12 @@ func (h *BotHandler) handleBrowsingMenu(phone string, state *models.CustomerStat
 }
 
 func (h *BotHandler) handleShowCategoryItems(phone string, state *models.CustomerState, categoryID int) error {
-	items, err := h.menuService.GetItemsByCategory(categoryID)
+	items, err := h.menuService.GetItemsByCategory(categoryID, 0)
 	if err != nil {
 		return err
 	}
 
-	category, _ := h.menuService.GetCategoryByID(categoryID)
+	category, _ := h.menuService.GetCategoryByID(categoryID, 0)
 	categoryName := "Items"
 	if category != nil {
 		categoryName = category.Name
@@ -299,7 +299,7 @@ func (h *BotHandler) handleSelectingItem(phone string, state *models.CustomerSta
 }
 
 func (h *BotHandler) handleShowItemDetails(phone string, state *models.CustomerState, itemID int, context map[string]interface{}) error {
-	item, err := h.menuService.GetItemByID(itemID)
+	item, err := h.menuService.GetItemByID(itemID, 0)
 	if err != nil {
 		return err
 	}
@@ -371,7 +371,7 @@ func (h *BotHandler) handleShowQuantitySelector(phone string, state *models.Cust
 			return h.handleShowCategories(phone, state)
 		}
 		var err error
-		currentItem, err = h.menuService.GetItemByID(itemID)
+		currentItem, err = h.menuService.GetItemByID(itemID, 0)
 		if err != nil || currentItem == nil {
 			return h.handleShowCategories(phone, state)
 		}

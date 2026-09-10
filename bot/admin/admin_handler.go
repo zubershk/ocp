@@ -27,14 +27,16 @@ import (
 type AdminHandler struct {
 	menuService     *services.MenuService
 	orderService    *services.OrderService
+	posOrderService *services.POSOrderService
 	evolutionClient *services.EvolutionClient
 	config          *config.Config
 }
 
-func NewAdminHandler(menuService *services.MenuService, orderService *services.OrderService, evolutionClient *services.EvolutionClient, cfg *config.Config) *AdminHandler {
+func NewAdminHandler(menuService *services.MenuService, orderService *services.OrderService, posOrderService *services.POSOrderService, evolutionClient *services.EvolutionClient, cfg *config.Config) *AdminHandler {
 	return &AdminHandler{
 		menuService:     menuService,
 		orderService:    orderService,
+		posOrderService: posOrderService,
 		evolutionClient: evolutionClient,
 		config:          cfg,
 	}
@@ -46,9 +48,10 @@ func hashAdminKey(k string) string {
 }
 
 type adminUserCtx struct {
-	ID   int
-	Name string
-	Role string
+	ID    int
+	Name  string
+	Role  string
+	OrgID int
 }
 
 func getAdminUserByKey(key string) (*adminUserCtx, error) {
@@ -56,8 +59,22 @@ func getAdminUserByKey(key string) (*adminUserCtx, error) {
 		return nil, nil
 	}
 	h := hashAdminKey(key)
+	// New users table first (populated by migration 021 backfill).
 	var u adminUserCtx
-	err := database.DB.QueryRow(`SELECT id, name, role FROM admin_users WHERE key_hash=$1 AND active=true`, h).Scan(&u.ID, &u.Name, &u.Role)
+	err := database.DB.QueryRow(
+		`SELECT id, name, role, organization_id FROM users WHERE key_hash=$1 AND active=true`,
+		h).Scan(&u.ID, &u.Name, &u.Role, &u.OrgID)
+	if err == nil {
+		_, _ = database.DB.Exec(`UPDATE users SET last_seen_at=CURRENT_TIMESTAMP WHERE id=$1`, u.ID)
+		return &u, nil
+	}
+	if err != sql.ErrNoRows {
+		return nil, err
+	}
+	// Backstop: pre-cutover admin_users rows (e.g. keys created after 021
+	// by the still-unmigrated Team page). Org resolves at middleware time.
+	var legacy adminUserCtx
+	err = database.DB.QueryRow(`SELECT id, name, role FROM admin_users WHERE key_hash=$1 AND active=true`, h).Scan(&legacy.ID, &legacy.Name, &legacy.Role)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -65,8 +82,8 @@ func getAdminUserByKey(key string) (*adminUserCtx, error) {
 		return nil, err
 	}
 	// touch last_seen
-	_, _ = database.DB.Exec(`UPDATE admin_users SET last_seen_at=CURRENT_TIMESTAMP WHERE id=$1`, u.ID)
-	return &u, nil
+	_, _ = database.DB.Exec(`UPDATE admin_users SET last_seen_at=CURRENT_TIMESTAMP WHERE id=$1`, legacy.ID)
+	return &legacy, nil
 }
 
 // EnsureOwnerSeed creates an owner from BOT_ADMIN_KEY if no admins exist (SaaS bootstrap).
@@ -95,10 +112,14 @@ func auditLog(c *gin.Context, action, target string, details interface{}) {
 	}
 	b, _ := json.Marshal(details)
 	ip := c.ClientIP()
+	orgID := c.GetInt("orgID")
+	if orgID <= 0 {
+		orgID = 1 // bootstrap org until every caller carries tenant context
+	}
 	if adminID != nil {
-		_, _ = database.DB.Exec(`INSERT INTO admin_audit_log (admin_user_id, admin_name, action, target, details, ip) VALUES ($1,$2,$3,$4,$5::jsonb,$6)`, *adminID, adminName, action, target, string(b), ip)
+		_, _ = database.DB.Exec(`INSERT INTO admin_audit_log (admin_user_id, admin_name, action, target, details, ip, organization_id) VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7)`, *adminID, adminName, action, target, string(b), ip, orgID)
 	} else {
-		_, _ = database.DB.Exec(`INSERT INTO admin_audit_log (admin_name, action, target, details, ip) VALUES ($1,$2,$3,$4::jsonb,$5)`, adminName, action, target, string(b), ip)
+		_, _ = database.DB.Exec(`INSERT INTO admin_audit_log (admin_name, action, target, details, ip, organization_id) VALUES ($1,$2,$3,$4::jsonb,$5,$6)`, adminName, action, target, string(b), ip, orgID)
 	}
 }
 
@@ -177,13 +198,14 @@ func (h *AdminHandler) ListCustomers(c *gin.Context) {
 	}
 	search := c.Query("search")
 
+	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
 	query := `SELECT id, whatsapp_number, COALESCE(name,''), COALESCE(email,''),
 	                 total_orders, total_spent, created_at, last_seen_at
-	          FROM customers`
-	args := []interface{}{}
-	argN := 1
+	          FROM customers WHERE restaurant_id = $1`
+	args := []interface{}{rid}
+	argN := 2
 	if search != "" {
-		query += ` WHERE whatsapp_number ILIKE $` + strconv.Itoa(argN) + ` OR name ILIKE $` + strconv.Itoa(argN)
+		query += ` AND (whatsapp_number ILIKE $` + strconv.Itoa(argN) + ` OR name ILIKE $` + strconv.Itoa(argN) + `)`
 		args = append(args, "%"+search+"%")
 		argN++
 	}
@@ -216,7 +238,7 @@ func (h *AdminHandler) ListCustomers(c *gin.Context) {
 		list = append(list, cr)
 	}
 	var total int
-	_ = database.DB.QueryRow(`SELECT COUNT(*) FROM customers`).Scan(&total)
+	_ = database.DB.QueryRow(`SELECT COUNT(*) FROM customers WHERE restaurant_id = $1`, rid).Scan(&total)
 	c.JSON(http.StatusOK, gin.H{"customers": list, "total": total})
 }
 
@@ -285,7 +307,8 @@ func (h *AdminHandler) BroadcastSend(c *gin.Context) {
 }
 
 func (h *AdminHandler) GetMenu(c *gin.Context) {
-	categories, err := h.menuService.GetCategories()
+	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
+	categories, err := h.menuService.GetCategories(rid)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
@@ -293,7 +316,7 @@ func (h *AdminHandler) GetMenu(c *gin.Context) {
 
 	result := make(map[string]interface{})
 	for _, cat := range categories {
-		items, _ := h.menuService.GetItemsByCategory(cat.ID)
+		items, _ := h.menuService.GetItemsByCategory(cat.ID, rid)
 		result[cat.Name] = items
 	}
 
@@ -346,6 +369,15 @@ func (h *AdminHandler) CreateMenuItem(c *gin.Context) {
 	if dietary == "" {
 		dietary = "veg"
 	}
+	// Category must belong to the caller's restaurant.
+	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
+	var catOK int
+	if err := database.DB.QueryRow(
+		`SELECT id FROM menu_categories WHERE id = $1 AND restaurant_id = $2`,
+		req.CategoryID, rid).Scan(&catOK); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "category not found"})
+		return
+	}
 	// Build website-ready insert with extended columns (idempotent for SaaS)
 	var id int
 	isSpicy := false
@@ -371,18 +403,18 @@ func (h *AdminHandler) CreateMenuItem(c *gin.Context) {
 	err := database.DB.QueryRow(`
 		INSERT INTO menu_items
 		(category_id, name, slug, description, price, price_regular, price_medium, price_large,
-		 image_url, available, sort_order, active, dietary, pizza_subcategory, pizza_type, is_spicy, is_jain, is_new, no_crust)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,true,$12,$13,$14,$15,$16,$17,$18)
+		 image_url, available, sort_order, active, dietary, pizza_subcategory, pizza_type, is_spicy, is_jain, is_new, no_crust, restaurant_id)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,true,$12,$13,$14,$15,$16,$17,$18,$19)
 		RETURNING id
 	`, req.CategoryID, req.Name, slug, req.Description, req.Price,
 		req.PriceRegular, req.PriceMedium, req.PriceLarge,
 		req.ImageURL, available, req.SortOrder,
-		dietary, req.PizzaSubcategory, req.PizzaType, isSpicy, isJain, isNew, noCrust).Scan(&id)
+		dietary, req.PizzaSubcategory, req.PizzaType, isSpicy, isJain, isNew, noCrust, rid).Scan(&id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
 	}
-	item, _ := h.menuService.GetItemByID(id)
+	item, _ := h.menuService.GetItemByID(id, rid)
 	auditLog(c, "create_menu_item", req.Name, map[string]interface{}{"id": id, "slug": slug})
 	c.JSON(http.StatusCreated, item)
 }
@@ -454,7 +486,8 @@ func (h *AdminHandler) UpdateMenuItem(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "description too long (max 2000 characters)"})
 		return
 	}
-	existing, err := h.menuService.GetItemByID(id)
+	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
+	existing, err := h.menuService.GetItemByID(id, rid)
 	if err != nil || existing == nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "item not found"})
 		return
@@ -537,6 +570,16 @@ func (h *AdminHandler) UpdateMenuItem(c *gin.Context) {
 	} else {
 		pl = existing.PriceLarge
 	}
+	// If moving categories, the target must belong to this restaurant.
+	if req.CategoryID != nil && catID != existing.CategoryID {
+		var catOK int
+		if err := database.DB.QueryRow(
+			`SELECT id FROM menu_categories WHERE id = $1 AND restaurant_id = $2`,
+			catID, rid).Scan(&catOK); err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "category not found"})
+			return
+		}
+	}
 	_, err = database.DB.Exec(`
 		UPDATE menu_items SET
 		category_id=$2, name=$3, slug=$4, description=$5, price=$6,
@@ -544,13 +587,13 @@ func (h *AdminHandler) UpdateMenuItem(c *gin.Context) {
 		image_url=$10, available=$11, sort_order=$12, dietary=$13,
 		pizza_subcategory=$14, pizza_type=$15, is_spicy=$16, is_jain=$17, is_new=$18, no_crust=$19,
 		updated_at=CURRENT_TIMESTAMP
-		WHERE id=$1
-	`, id, catID, name, slug, desc, price, pr, pm, pl, img, available, sortOrder, dietary, subcat, ptype, isSpicy, isJain, isNew, noCrust)
+		WHERE id=$1 AND restaurant_id=$20
+	`, id, catID, name, slug, desc, price, pr, pm, pl, img, available, sortOrder, dietary, subcat, ptype, isSpicy, isJain, isNew, noCrust, rid)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
 	}
-	updated, _ := h.menuService.GetItemByID(id)
+	updated, _ := h.menuService.GetItemByID(id, rid)
 	// Field-level diff so the audit log shows what actually changed.
 	diff := map[string]map[string]interface{}{}
 	diffField := func(field string, from, to interface{}) {
@@ -582,7 +625,11 @@ func (h *AdminHandler) DeleteMenuItem(c *gin.Context) {
 		return
 	}
 
-	if err := h.menuService.DeleteItem(id); err != nil {
+	if err := h.menuService.DeleteItem(id, services.ResolveRestaurant(c.GetInt("restaurantID"))); err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "item not found"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
 	}
@@ -610,7 +657,7 @@ func (h *AdminHandler) CreateCategory(c *gin.Context) {
 		return
 	}
 
-	cat, err := h.menuService.CreateCategory(req.Name, req.Description, req.SortOrder)
+	cat, err := h.menuService.CreateCategory(req.Name, req.Description, req.SortOrder, services.ResolveRestaurant(c.GetInt("restaurantID")))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
@@ -709,7 +756,7 @@ func (h *AdminHandler) ListUploads(c *gin.Context) {
 			"name": e.Name(), "size": info.Size(),
 			"modified":    info.ModTime().UTC().Format(time.RFC3339),
 			"url":         "/uploads/" + e.Name(),
-			"referenced":  h.uploadReferenced(e.Name()),
+			"referenced":  h.uploadReferenced(e.Name(), services.ResolveRestaurant(c.GetInt("restaurantID"))),
 		})
 	}
 	c.JSON(http.StatusOK, gin.H{"files": out})
@@ -717,14 +764,14 @@ func (h *AdminHandler) ListUploads(c *gin.Context) {
 
 // uploadReferenced reports whether a file is still pointed at by any
 // menu item, offer, banner, page, or brand setting (best effort).
-func (h *AdminHandler) uploadReferenced(name string) bool {
+func (h *AdminHandler) uploadReferenced(name string, restaurantID int) bool {
 	url := "/uploads/" + name
 	var n int
 	_ = database.DB.QueryRow(`
 		SELECT (
-			(SELECT COUNT(*) FROM menu_items WHERE image_url LIKE '%' || $1 || '%') +
-			(SELECT COUNT(*) FROM site_settings WHERE value::text LIKE '%' || $1 || '%')
-		)`, url).Scan(&n)
+			(SELECT COUNT(*) FROM menu_items WHERE image_url LIKE '%' || $1 || '%' AND restaurant_id = $2) +
+			(SELECT COUNT(*) FROM site_settings WHERE value::text LIKE '%' || $1 || '%' AND restaurant_id = $2)
+		)`, url, services.ResolveRestaurant(restaurantID)).Scan(&n)
 	return n > 0
 }
 
@@ -750,7 +797,7 @@ func (h *AdminHandler) DeleteUpload(c *gin.Context) {
 
 // GetCategoriesAdmin returns website categories with slug for the dashboard.
 func (h *AdminHandler) GetCategoriesAdmin(c *gin.Context) {
-	cats, err := h.menuService.GetCategoriesWithSlug()
+	cats, err := h.menuService.GetCategoriesWithSlug(services.ResolveRestaurant(c.GetInt("restaurantID")))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
@@ -785,15 +832,16 @@ func (h *AdminHandler) GetOrders(c *gin.Context) {
 		}
 	}
 
-	orders, err := h.orderService.GetAllOrders(limit, offset)
+	orders, err := h.orderService.GetAllOrders(limit, offset, services.ResolveRestaurant(c.GetInt("restaurantID")))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
 	}
 
 	// Embed items so the restaurant board renders full tickets.
+	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
 	for i := range orders {
-		full, err := h.orderService.GetOrderByID(orders[i].ID)
+		full, err := h.orderService.GetOrderByID(orders[i].ID, rid)
 		if err == nil && full != nil {
 			orders[i].Items = full.Items
 		}
@@ -809,7 +857,7 @@ func (h *AdminHandler) GetOrder(c *gin.Context) {
 		return
 	}
 
-	order, err := h.orderService.GetOrderByID(id)
+	order, err := h.orderService.GetOrderByID(id, services.ResolveRestaurant(c.GetInt("restaurantID")))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
@@ -844,7 +892,7 @@ func (h *AdminHandler) UpdateOrderStatus(c *gin.Context) {
 	}
 
 	// Explicit lifecycle + post-commit customer WhatsApp notification.
-	order, notification, err := services.ApplyStatusChange(id, req.Status, h.evolutionClient, h.config)
+	order, notification, err := services.ApplyStatusChange(id, req.Status, h.evolutionClient, h.config, services.ResolveRestaurant(c.GetInt("restaurantID")))
 	if err != nil {
 		var transitionErr *services.TransitionError
 		if errors.As(err, &transitionErr) {
@@ -876,6 +924,340 @@ func (h *AdminHandler) UpdateOrderStatus(c *gin.Context) {
 	auditLog(c, "update_order_status", order.OrderNumber, map[string]interface{}{"status": req.Status, "id": id})
 }
 
+// GetPOSMenu returns the POS menu for the current restaurant.
+func (h *AdminHandler) GetPOSMenu(c *gin.Context) {
+	restaurantID := c.GetInt("restaurantID")
+	items, err := services.GetMenuItems(restaurantID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"menu": items})
+}
+
+// ---------- POS order endpoints ----------
+
+// CreatePOSOrder creates a new POS order draft.
+// Tenant is taken from middleware context, never from the body: a
+// caller cannot forge restaurant/outlet IDs, and the source is always
+// stamped pos on this endpoint.
+func (h *AdminHandler) CreatePOSOrder(c *gin.Context) {
+	var draft services.DraftOrder
+	if err := c.ShouldBindJSON(&draft); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
+		return
+	}
+	restaurantID := c.GetInt("restaurantID")
+	outletID := c.GetInt("outletID")
+	order, err := h.posOrderService.CreateOrder(restaurantID, outletID, draft.Items, draft.TableID, services.SourcePOS)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"order": order})
+}
+
+// GetPOSOrder returns a POS order by ID.
+func (h *AdminHandler) GetPOSOrder(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid ID"})
+		return
+	}
+	order, err := h.orderService.GetOrderByID(id, services.ResolveRestaurant(c.GetInt("restaurantID")))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "order not found"})
+		return
+	}
+	if order == nil {
+		// Tenant-scoped miss (including cross-tenant IDs): same 404,
+		// never a 200 with a null body.
+		c.JSON(http.StatusNotFound, gin.H{"error": "order not found"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"order": order})
+}
+
+// UpdatePOSOrder updates a POS order (items, table, status).
+func (h *AdminHandler) UpdatePOSOrder(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid ID"})
+		return
+	}
+	if err := h.posOrderService.UpdateOrder(id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"updated": true})
+}
+
+// HoldPOSOrder holds a POS order.
+func (h *AdminHandler) HoldPOSOrder(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid ID"})
+		return
+	}
+	au, _ := c.Get("adminUser")
+	userID := 0
+	if a, ok := au.(*adminUserCtx); ok && a != nil {
+		userID = a.ID
+	}
+	ok, err := h.posOrderService.HoldOrder(id, userID, "manual")
+	if err != nil {
+		c.JSON(http.StatusConflict, gin.H{"error": safeError(err)})
+		return
+	}
+	if !ok {
+		c.JSON(http.StatusConflict, gin.H{"error": "order already held or could not be held"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"held": true})
+}
+
+// ResumePOSOrder resumes a held POS order.
+func (h *AdminHandler) ResumePOSOrder(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid ID"})
+		return
+	}
+	err = h.posOrderService.ResumeOrder(id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"resumed": true})
+}
+
+// CompletePOSOrder completes a fully-paid POS order.
+// Rejects terminal states and any order with outstanding due.
+func (h *AdminHandler) CompletePOSOrder(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid ID"})
+		return
+	}
+	if err := h.posOrderService.CompleteOrder(id); err != nil {
+		c.JSON(http.StatusConflict, gin.H{"error": safeError(err)})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"completed": true})
+}
+
+// CancelPOSOrder cancels a non-terminal POS order.
+func (h *AdminHandler) CancelPOSOrder(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid ID"})
+		return
+	}
+	if err := h.posOrderService.CancelOrder(id); err != nil {
+		c.JSON(http.StatusConflict, gin.H{"error": safeError(err)})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"cancelled": true})
+}
+
+// TakePaymentPOSOrder records a payment for a POS order.
+// Idempotent: pass Idempotency-Key (header, preferred) or
+// idempotency_key (body); a replayed key returns the original
+// payment with replayed=true instead of a second ledger row.
+func (h *AdminHandler) TakePaymentPOSOrder(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid ID"})
+		return
+	}
+	var req services.PaymentRecord
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
+		return
+	}
+	key := c.GetHeader("Idempotency-Key")
+	if key == "" {
+		key = req.IdempotencyKey
+	}
+	// Attribute the payment to the calling cashier when the body omits
+	// it: received_by is a FK to users, so a bare 0 would violate it.
+	receivedBy := req.ReceivedBy
+	if receivedBy == 0 {
+		if au, _ := c.Get("adminUser"); au != nil {
+			if a, ok := au.(*adminUserCtx); ok && a != nil {
+				receivedBy = a.ID
+			}
+		}
+	}
+	restaurantID := c.GetInt("restaurantID")
+	outletID := c.GetInt("outletID")
+	paymentID, replayed, duePaise, err := h.posOrderService.TakePayment(id, restaurantID, outletID, req.Method, req.Amount, req.Tendered, req.Reference, receivedBy, key)
+	if err != nil {
+		if errors.Is(err, services.ErrIdempotencyKeyTooLong) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "idempotency key exceeds 120 characters"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"payment_id": paymentID, "replayed": replayed, "due_paise": duePaise})
+}
+
+// RefundPOSOrder records a refund for a POS order payment.
+// The ledger stays authoritative: the original payment row is never
+// mutated; the refund posts as a linked negative-amount row. Accepts
+// Idempotency-Key like TakePaymentPOSOrder.
+func (h *AdminHandler) RefundPOSOrder(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid ID"})
+		return
+	}
+	var req services.PaymentRecord
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
+		return
+	}
+	key := c.GetHeader("Idempotency-Key")
+	if key == "" {
+		key = req.IdempotencyKey
+	}
+	restaurantID := c.GetInt("restaurantID")
+	outletID := c.GetInt("outletID")
+	receivedBy := req.ReceivedBy
+	if receivedBy == 0 {
+		if au, _ := c.Get("adminUser"); au != nil {
+			if a, ok := au.(*adminUserCtx); ok && a != nil {
+				receivedBy = a.ID
+			}
+		}
+	}
+	paymentID, replayed, err := services.RefundPayment(req.ID, id, restaurantID, outletID, req.Amount, req.Reference, receivedBy, key)
+	if err != nil {
+		if errors.Is(err, services.ErrIdempotencyKeyTooLong) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "idempotency key exceeds 120 characters"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"payment_id": paymentID, "replayed": replayed})
+}
+
+// GetPOSOrderTables returns tables for the current restaurant/outlet.
+func (h *AdminHandler) GetPOSOrderTables(c *gin.Context) {
+	restaurantID := c.GetInt("restaurantID")
+	outletID := c.GetInt("outletID")
+	tables, err := services.GetTables(restaurantID, outletID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"tables": tables})
+}
+
+// AssignTableToOrder assigns a table to a POS order.
+func (h *AdminHandler) AssignTableToOrder(c *gin.Context) {
+	orderID, err := strconv.Atoi(c.Param("order_id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid order ID"})
+		return
+	}
+	tableID, err := strconv.Atoi(c.Param("table_id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid table ID"})
+		return
+	}
+	restaurantID := c.GetInt("restaurantID")
+	outletID := c.GetInt("outletID")
+	err = h.posOrderService.SetTable(orderID, tableID, restaurantID, outletID)
+	if err != nil {
+		if services.IsTableConflict(err) {
+			c.JSON(http.StatusConflict, gin.H{"error": safeError(err)})
+			return
+		}
+		c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"assigned": true})
+}
+
+// GetPOSDiscounts returns active discounts for the current restaurant.
+func (h *AdminHandler) GetPOSDiscounts(c *gin.Context) {
+	restaurantID := c.GetInt("restaurantID")
+	currentTime := time.Now()
+	discounts, err := services.ListActiveDiscounts(restaurantID, currentTime)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"discounts": discounts})
+}
+
+// ApplyPOSDiscount applies a discount to a POS order.
+func (h *AdminHandler) ApplyPOSDiscount(c *gin.Context) {
+	orderID, err := strconv.Atoi(c.Param("order_id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid order ID"})
+		return
+	}
+	discountID, err := strconv.Atoi(c.Param("discount_id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid discount ID"})
+		return
+	}
+	err = h.posOrderService.ApplyDiscount(orderID, discountID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"applied": true})
+}
+
+// RemovePOSDiscount removes a discount from a POS order.
+func (h *AdminHandler) RemovePOSDiscount(c *gin.Context) {
+	orderID, err := strconv.Atoi(c.Param("order_id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid order ID"})
+		return
+	}
+	err = services.RemoveDiscountFromOrder(orderID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"removed": true})
+}
+
+// CalculatePOSPrice returns an ADVISORY-ONLY price estimate for UI display.
+// It never writes anything: order creation, discount changes, and payment
+// always recalculate server-side via RecalculateOrderTotals, so a forged
+// browser request cannot submit a cheaper total.
+func (h *AdminHandler) CalculatePOSPrice(c *gin.Context) {
+	itemID, err := strconv.Atoi(c.Param("item_id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid item ID"})
+		return
+	}
+	size := c.Query("size")
+	crust := c.Query("crust")
+	discountType := c.Query("discount_type")
+	discountValue, _ := strconv.ParseInt(c.Query("discount_value"), 10, 64)
+	taxPercent, _ := strconv.ParseInt(c.Query("tax_percent"), 10, 64)
+
+	item, err := h.menuService.GetItemByIdentifier(strconv.Itoa(itemID))
+	if err != nil || item == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "item not found"})
+		return
+	}
+	br, err := services.ResolvePriceBreakdown(item, size, crust, discountType, discountValue, taxPercent)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"price_breakdown": br, "advisory_only": true})
+}
+
 // DebugWhatsApp returns live conversation internals for support/diagnosis.
 func (h *AdminHandler) DebugWhatsApp(c *gin.Context) {
 	phone := cleanPhoneParam(c.Param("phone"))
@@ -885,7 +1267,7 @@ func (h *AdminHandler) DebugWhatsApp(c *gin.Context) {
 		return
 	}
 	cart, _ := h.menuService.GetCartDebug(phone)
-	orders, _ := h.orderService.GetOrdersByPhone(phone)
+	orders, _ := h.orderService.GetOrdersByPhone(phone, services.ResolveRestaurant(c.GetInt("restaurantID")))
 	c.JSON(http.StatusOK, gin.H{
 		"phone":         phone,
 		"state":         state,
@@ -910,7 +1292,7 @@ func (h *AdminHandler) ListConversations(c *gin.Context) {
 			offset = v
 		}
 	}
-	list, err := services.ListConversations(limit, offset)
+	list, err := services.ListConversations(limit, offset, services.ResolveRestaurant(c.GetInt("restaurantID")))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
@@ -926,7 +1308,7 @@ func (h *AdminHandler) GetChatMessages(c *gin.Context) {
 			limit = v
 		}
 	}
-	msgs, err := services.ListMessages(phone, limit)
+	msgs, err := services.ListMessages(phone, limit, services.ResolveRestaurant(c.GetInt("restaurantID")))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
@@ -1009,7 +1391,13 @@ func (h *AdminHandler) SetConversationState(c *gin.Context) {
 func (h *AdminHandler) GetMeAdmin(c *gin.Context) {
 	u, _ := c.Get("adminUser")
 	if au, ok := u.(*adminUserCtx); ok && au != nil {
-		c.JSON(http.StatusOK, gin.H{"id": au.ID, "name": au.Name, "role": au.Role})
+		// org/restaurant are additive; existing clients ignore extras.
+		c.JSON(http.StatusOK, gin.H{
+			"id": au.ID, "name": au.Name, "role": au.Role,
+			"organization_id": c.GetInt("orgID"),
+			"restaurant_id":   c.GetInt("restaurantID"),
+			"outlet_id":       c.GetInt("outletID"),
+		})
 		return
 	}
 	// env owner fallback
@@ -1017,7 +1405,9 @@ func (h *AdminHandler) GetMeAdmin(c *gin.Context) {
 }
 
 func (h *AdminHandler) ListAdminUsers(c *gin.Context) {
-	rows, err := database.DB.Query(`SELECT id, name, role, active, created_at::text, last_seen_at::text FROM admin_users ORDER BY id`)
+	rows, err := database.DB.Query(
+		`SELECT id, name, role, active, created_at::text, last_seen_at::text FROM users WHERE organization_id=$1 ORDER BY id`,
+		c.GetInt("orgID"))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
@@ -1046,8 +1436,8 @@ func (h *AdminHandler) CreateAdminUser(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
 		return
 	}
-	if req.Role != "owner" && req.Role != "manager" && req.Role != "kitchen" && req.Role != "viewer" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "role must be owner/manager/kitchen/viewer"})
+	if req.Role != "owner" && req.Role != "manager" && req.Role != "kitchen" && req.Role != "cashier" && req.Role != "viewer" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "role must be owner/manager/kitchen/cashier/viewer"})
 		return
 	}
 	// generate key
@@ -1059,7 +1449,9 @@ func (h *AdminHandler) CreateAdminUser(c *gin.Context) {
 	plain := hex.EncodeToString(b)
 	hash := hashAdminKey(plain)
 	var id int
-	err := database.DB.QueryRow(`INSERT INTO admin_users (name, key_hash, role) VALUES ($1,$2,$3) RETURNING id`, req.Name, hash, req.Role).Scan(&id)
+	err := database.DB.QueryRow(
+		`INSERT INTO users (organization_id, name, key_hash, role) VALUES ($1,$2,$3,$4) RETURNING id`,
+		c.GetInt("orgID"), req.Name, hash, req.Role).Scan(&id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
@@ -1074,9 +1466,14 @@ func (h *AdminHandler) DeleteAdminUser(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid ID"})
 		return
 	}
-	_, err = database.DB.Exec(`DELETE FROM admin_users WHERE id=$1`, id)
+	res, err := database.DB.Exec(`DELETE FROM users WHERE id=$1 AND organization_id=$2`,
+		id, c.GetInt("orgID"))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
+		return
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
 		return
 	}
 	auditLog(c, "delete_admin_user", strconv.Itoa(id), nil)
@@ -1090,7 +1487,9 @@ func (h *AdminHandler) GetAuditLog(c *gin.Context) {
 			limit = v
 		}
 	}
-	rows, err := database.DB.Query(`SELECT id, COALESCE(admin_name,'') , action, COALESCE(target,''), COALESCE(details::text,'{}'), COALESCE(ip,''), created_at::text FROM admin_audit_log ORDER BY id DESC LIMIT $1`, limit)
+	rows, err := database.DB.Query(
+		`SELECT id, COALESCE(admin_name,'') , action, COALESCE(target,''), COALESCE(details::text,'{}'), COALESCE(ip,''), created_at::text FROM admin_audit_log WHERE organization_id=$2 ORDER BY id DESC LIMIT $1`,
+		limit, c.GetInt("orgID"))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
@@ -1110,17 +1509,18 @@ func (h *AdminHandler) GetAuditLog(c *gin.Context) {
 }
 
 func (h *AdminHandler) GetAnalytics(c *gin.Context) {
+	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
 	// Today
 	var todayRevenue float64
 	var todayCount int
-	_ = database.DB.QueryRow(`SELECT COALESCE(SUM(total),0), COUNT(*) FROM orders WHERE created_at::date = CURRENT_DATE AND status != 'cancelled'`).Scan(&todayRevenue, &todayCount)
+	_ = database.DB.QueryRow(`SELECT COALESCE(SUM(total),0), COUNT(*) FROM orders WHERE created_at::date = CURRENT_DATE AND status != 'cancelled' AND restaurant_id = $1`, rid).Scan(&todayRevenue, &todayCount)
 	// Week (last 7 days inclusive)
 	var weekRevenue float64
 	var weekCount int
-	_ = database.DB.QueryRow(`SELECT COALESCE(SUM(total),0), COUNT(*) FROM orders WHERE created_at >= CURRENT_DATE - INTERVAL '6 days' AND status != 'cancelled'`).Scan(&weekRevenue, &weekCount)
+	_ = database.DB.QueryRow(`SELECT COALESCE(SUM(total),0), COUNT(*) FROM orders WHERE created_at >= CURRENT_DATE - INTERVAL '6 days' AND status != 'cancelled' AND restaurant_id = $1`, rid).Scan(&weekRevenue, &weekCount)
 
 	// Orders by status
-	statusRows, _ := database.DB.Query(`SELECT status, COUNT(*) FROM orders GROUP BY status`)
+	statusRows, _ := database.DB.Query(`SELECT status, COUNT(*) FROM orders WHERE restaurant_id = $1 GROUP BY status`, rid)
 	statusMap := map[string]int{}
 	if statusRows != nil {
 		defer statusRows.Close()
@@ -1141,9 +1541,9 @@ func (h *AdminHandler) GetAnalytics(c *gin.Context) {
 	rows, err := database.DB.Query(`
 		SELECT oi.name, SUM(oi.quantity)::int, SUM(oi.subtotal)
 		FROM order_items oi JOIN orders o ON o.id = oi.order_id
-		WHERE o.created_at >= CURRENT_DATE - INTERVAL '30 days' AND o.status != 'cancelled'
+		WHERE o.created_at >= CURRENT_DATE - INTERVAL '30 days' AND o.status != 'cancelled' AND o.restaurant_id = $1
 		GROUP BY oi.name ORDER BY SUM(oi.quantity) DESC LIMIT 5
-	`)
+	`, rid)
 	if err == nil && rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -1165,9 +1565,9 @@ func (h *AdminHandler) GetAnalytics(c *gin.Context) {
 	dayRows, err := database.DB.Query(`
 		SELECT to_char(d::date,'YYYY-MM-DD') as day, COALESCE(SUM(o.total),0), COUNT(o.id)
 		FROM generate_series(CURRENT_DATE - INTERVAL '6 days', CURRENT_DATE, '1 day') d
-		LEFT JOIN orders o ON o.created_at::date = d::date AND o.status != 'cancelled'
+		LEFT JOIN orders o ON o.created_at::date = d::date AND o.status != 'cancelled' AND o.restaurant_id = $1
 		GROUP BY d::date ORDER BY d::date
-	`)
+	`, rid)
 	if err == nil && dayRows != nil {
 		defer dayRows.Close()
 		for dayRows.Next() {
@@ -1190,9 +1590,9 @@ func (h *AdminHandler) GetAnalytics(c *gin.Context) {
 	}
 	hourRows, err := database.DB.Query(`
 		SELECT EXTRACT(HOUR FROM created_at)::int AS h, COUNT(*)
-		FROM orders WHERE created_at >= CURRENT_DATE - INTERVAL '6 days'
+		FROM orders WHERE created_at >= CURRENT_DATE - INTERVAL '6 days' AND restaurant_id = $1
 		GROUP BY h
-	`)
+	`, rid)
 	if err == nil && hourRows != nil {
 		defer hourRows.Close()
 		for hourRows.Next() {
@@ -1215,7 +1615,9 @@ func (h *AdminHandler) GetAnalytics(c *gin.Context) {
 // --- Settings: outlets + restaurant config ---
 
 func (h *AdminHandler) GetOutletsAdmin(c *gin.Context) {
-	rows, err := database.DB.Query(`SELECT id, slug, name, address_lines, phones, delivery_hours, online_ordering, active, sort_order FROM restaurant_outlets ORDER BY sort_order, name`)
+	rows, err := database.DB.Query(
+		`SELECT id, slug, name, address_lines, phones, delivery_hours, online_ordering, active, sort_order FROM outlets WHERE restaurant_id=$1 ORDER BY sort_order, name`,
+		services.ResolveRestaurant(c.GetInt("restaurantID")))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
@@ -1285,9 +1687,9 @@ func (h *AdminHandler) CreateOutlet(c *gin.Context) {
 	}
 	var id int
 	err := database.DB.QueryRow(`
-		INSERT INTO restaurant_outlets (slug, name, address_lines, phones, delivery_hours, online_ordering, sort_order)
-		VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id
-	`, req.Slug, req.Name, stringSlice(req.AddressLines), stringSlice(req.Phones), req.DeliveryHours, online, req.SortOrder).Scan(&id)
+		INSERT INTO outlets (restaurant_id, slug, name, address_lines, phones, delivery_hours, online_ordering, sort_order)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id
+	`, services.ResolveRestaurant(c.GetInt("restaurantID")), req.Slug, req.Name, stringSlice(req.AddressLines), stringSlice(req.Phones), req.DeliveryHours, online, req.SortOrder).Scan(&id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
@@ -1359,9 +1761,16 @@ func (h *AdminHandler) UpdateOutlet(c *gin.Context) {
 	}
 	set = append(set, "updated_at=CURRENT_TIMESTAMP")
 	args = append(args, id)
-	_, err = database.DB.Exec(`UPDATE restaurant_outlets SET `+strings.Join(set, ", ")+` WHERE id=$`+strconv.Itoa(n), args...)
+	n++
+	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
+	args = append(args, rid)
+	res, err := database.DB.Exec(`UPDATE outlets SET `+strings.Join(set, ", ")+` WHERE id=$`+strconv.Itoa(n-1)+` AND restaurant_id=$`+strconv.Itoa(n), args...)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update outlet"})
+		return
+	}
+	if affected, _ := res.RowsAffected(); affected == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "outlet not found"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"updated": true})
@@ -1373,9 +1782,14 @@ func (h *AdminHandler) DeleteOutlet(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid ID"})
 		return
 	}
-	_, err = database.DB.Exec(`DELETE FROM restaurant_outlets WHERE id=$1`, id)
+	res, err := database.DB.Exec(`DELETE FROM outlets WHERE id=$1 AND restaurant_id=$2`,
+		id, services.ResolveRestaurant(c.GetInt("restaurantID")))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete outlet (it may still have orders)"})
+		return
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "outlet not found"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"deleted": true})
@@ -1393,7 +1807,9 @@ func (h *AdminHandler) GetConfigAdmin(c *gin.Context) {
 		PaymentInfo  string `json:"payment_info"`
 		SupportPhone string `json:"support_phone"`
 	}
-	err := database.DB.QueryRow(`SELECT id, name, phone, address, map_url, opening_hours::text, delivery_area::text, payment_info::text, support_phone FROM restaurant_config LIMIT 1`).Scan(&row.ID, &row.Name, &row.Phone, &row.Address, &row.MapURL, &row.OpeningHours, &row.DeliveryArea, &row.PaymentInfo, &row.SupportPhone)
+	err := database.DB.QueryRow(
+		`SELECT id, name, phone, address, map_url, opening_hours::text, delivery_area::text, payment_info::text, support_phone FROM restaurant_config WHERE restaurant_id=$1 LIMIT 1`,
+		services.ResolveRestaurant(c.GetInt("restaurantID"))).Scan(&row.ID, &row.Name, &row.Phone, &row.Address, &row.MapURL, &row.OpeningHours, &row.DeliveryArea, &row.PaymentInfo, &row.SupportPhone)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
@@ -1484,9 +1900,15 @@ func (h *AdminHandler) UpdateConfigAdmin(c *gin.Context) {
 		return
 	}
 	set = append(set, "updated_at=CURRENT_TIMESTAMP")
-	_, err := database.DB.Exec(`UPDATE restaurant_config SET `+strings.Join(set, ", ")+` WHERE id=(SELECT id FROM restaurant_config LIMIT 1)`, args...)
+	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
+	args = append(args, rid)
+	res, err := database.DB.Exec(`UPDATE restaurant_config SET `+strings.Join(set, ", ")+` WHERE restaurant_id=$`+strconv.Itoa(n), args...)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
+		return
+	}
+	if affected, _ := res.RowsAffected(); affected == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "restaurant config not found"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"updated": true})
@@ -1601,8 +2023,9 @@ func (h *AdminHandler) ListBotMessages(c *gin.Context) {
 		c.JSON(500, gin.H{"error": "bot message service not initialized"})
 		return
 	}
-	messages := botMsgSvc.GetAllMessages()
-	c.JSON(200, gin.H{"messages": messages, "categories": botMsgSvc.GetMessageCategories()})
+	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
+	messages := botMsgSvc.GetAllMessages(rid)
+	c.JSON(200, gin.H{"messages": messages, "categories": botMsgSvc.GetMessageCategories(rid)})
 }
 
 // GetBotMessage returns a single message template by key.
@@ -1612,7 +2035,8 @@ func (h *AdminHandler) GetBotMessage(c *gin.Context) {
 		return
 	}
 	key := c.Param("key")
-	msg, found := botMsgSvc.GetMessage(key)
+	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
+	msg, found := botMsgSvc.GetMessage(key, rid)
 	if !found {
 		c.JSON(404, gin.H{"error": "message not found"})
 		return
@@ -1639,7 +2063,7 @@ func (h *AdminHandler) UpdateBotMessage(c *gin.Context) {
 		c.JSON(400, gin.H{"error": "message_text is required"})
 		return
 	}
-	if err := botMsgSvc.UpdateMessage(key, req.MessageText, req.ImageURL); err != nil {
+	if err := botMsgSvc.UpdateMessage(key, req.MessageText, req.ImageURL, services.ResolveRestaurant(c.GetInt("restaurantID"))); err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
@@ -1654,7 +2078,7 @@ func (h *AdminHandler) ResetBotMessage(c *gin.Context) {
 		return
 	}
 	key := c.Param("key")
-	if err := botMsgSvc.ResetMessage(key); err != nil {
+	if err := botMsgSvc.ResetMessage(key, services.ResolveRestaurant(c.GetInt("restaurantID"))); err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
@@ -1668,7 +2092,7 @@ func (h *AdminHandler) ResetAllBotMessages(c *gin.Context) {
 		c.JSON(500, gin.H{"error": "bot message service not initialized"})
 		return
 	}
-	if err := botMsgSvc.ResetAllMessages(); err != nil {
+	if err := botMsgSvc.ResetAllMessages(services.ResolveRestaurant(c.GetInt("restaurantID"))); err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
@@ -1692,7 +2116,7 @@ func (h *AdminHandler) RenderBotMessagePreview(c *gin.Context) {
 	}
 	rendered := botMsgSvc.Render(key, req.Data)
 	resp := gin.H{"rendered": rendered}
-	if msg, found := botMsgSvc.GetMessage(key); found && strings.TrimSpace(msg.ImageURL) != "" {
+	if msg, found := botMsgSvc.GetMessage(key, services.ResolveRestaurant(c.GetInt("restaurantID"))); found && strings.TrimSpace(msg.ImageURL) != "" {
 		resp["image_url"] = msg.ImageURL
 	}
 	c.JSON(200, resp)
@@ -1737,7 +2161,7 @@ func sampleData(key string) map[string]interface{} {
 // ---------- Business Configuration ----------
 
 func (h *AdminHandler) GetBusinessConfig(c *gin.Context) {
-	cfg := services.GetBizConfig()
+	cfg := services.GetBusinessConfigFor(services.ResolveRestaurant(c.GetInt("restaurantID")))
 	c.JSON(200, cfg)
 }
 
@@ -1747,7 +2171,7 @@ func (h *AdminHandler) UpdateBusinessConfig(c *gin.Context) {
 		c.JSON(400, gin.H{"error": "invalid JSON"})
 		return
 	}
-	if err := services.SaveBusinessConfig(&cfg); err != nil {
+	if err := services.SaveBusinessConfig(&cfg, services.ResolveRestaurant(c.GetInt("restaurantID"))); err != nil {
 		c.JSON(500, gin.H{"error": "failed to save: " + err.Error()})
 		return
 	}
@@ -1770,8 +2194,8 @@ func (h *AdminHandler) GetCrustsAdmin(c *gin.Context) {
 		SELECT id, slug, name, COALESCE(description,''),
 		       COALESCE(price_regular,0), COALESCE(price_medium,0), COALESCE(price_large,0),
 		       active, sort_order
-		FROM menu_crusts ORDER BY sort_order
-	`)
+		FROM menu_crusts WHERE restaurant_id=$1 ORDER BY sort_order
+	`, services.ResolveRestaurant(c.GetInt("restaurantID")))
 	if err != nil {
 		c.JSON(500, gin.H{"error": "failed to load crusts"})
 		return
@@ -1821,9 +2245,10 @@ func (h *AdminHandler) CreateCrust(c *gin.Context) {
 	}
 	var id int
 	err := database.DB.QueryRow(`
-		INSERT INTO menu_crusts (slug, name, description, price_regular, price_medium, price_large, sort_order)
-		VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id
-	`, req.Slug, req.Name, req.Description, req.PriceRegular, req.PriceMedium, req.PriceLarge, req.SortOrder).Scan(&id)
+		INSERT INTO menu_crusts (slug, name, description, price_regular, price_medium, price_large, sort_order, restaurant_id)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id
+	`, req.Slug, req.Name, req.Description, req.PriceRegular, req.PriceMedium, req.PriceLarge, req.SortOrder,
+		services.ResolveRestaurant(c.GetInt("restaurantID"))).Scan(&id)
 	if err != nil {
 		c.JSON(500, gin.H{"error": "failed to create crust: " + err.Error()})
 		return
@@ -1852,14 +2277,19 @@ func (h *AdminHandler) UpdateCrust(c *gin.Context) {
 		c.JSON(400, gin.H{"error": "invalid JSON"})
 		return
 	}
-	_, err = database.DB.Exec(`
+	res, err := database.DB.Exec(`
 		UPDATE menu_crusts SET slug=$1, name=$2, description=$3,
 		       price_regular=$4, price_medium=$5, price_large=$6,
 		       active=$7, sort_order=$8
-		WHERE id=$9
-	`, req.Slug, req.Name, req.Description, req.PriceRegular, req.PriceMedium, req.PriceLarge, req.Active, req.SortOrder, id)
+		WHERE id=$9 AND restaurant_id=$10
+	`, req.Slug, req.Name, req.Description, req.PriceRegular, req.PriceMedium, req.PriceLarge, req.Active, req.SortOrder, id,
+		services.ResolveRestaurant(c.GetInt("restaurantID")))
 	if err != nil {
 		c.JSON(500, gin.H{"error": "failed to update crust"})
+		return
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		c.JSON(404, gin.H{"error": "crust not found"})
 		return
 	}
 	auditLog(c, "update_crust", "updated crust: "+req.Name, req.Name)
@@ -1872,11 +2302,16 @@ func (h *AdminHandler) DeleteCrust(c *gin.Context) {
 		c.JSON(400, gin.H{"error": "invalid id"})
 		return
 	}
+	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
 	var name string
-	database.DB.QueryRow(`SELECT name FROM menu_crusts WHERE id=$1`, id).Scan(&name)
-	_, err = database.DB.Exec(`DELETE FROM menu_crusts WHERE id=$1`, id)
+	database.DB.QueryRow(`SELECT name FROM menu_crusts WHERE id=$1 AND restaurant_id=$2`, id, rid).Scan(&name)
+	res, err := database.DB.Exec(`DELETE FROM menu_crusts WHERE id=$1 AND restaurant_id=$2`, id, rid)
 	if err != nil {
 		c.JSON(500, gin.H{"error": "failed to delete crust"})
+		return
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		c.JSON(404, gin.H{"error": "crust not found"})
 		return
 	}
 	auditLog(c, "delete_crust", "deleted crust: "+name, name)
