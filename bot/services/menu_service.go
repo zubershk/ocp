@@ -14,13 +14,13 @@ func NewMenuService() *MenuService {
 	return &MenuService{}
 }
 
-func (s *MenuService) GetCategories() ([]models.MenuCategory, error) {
+func (s *MenuService) GetCategories(restaurantID int) ([]models.MenuCategory, error) {
 	rows, err := database.DB.Query(`
 		SELECT id, name, description, sort_order, active, created_at, updated_at
 		FROM menu_categories
-		WHERE active = true
+		WHERE active = true AND restaurant_id = $1
 		ORDER BY sort_order, name
-	`)
+	`, ResolveRestaurant(restaurantID))
 	if err != nil {
 		return nil, err
 	}
@@ -37,26 +37,26 @@ func (s *MenuService) GetCategories() ([]models.MenuCategory, error) {
 	return categories, nil
 }
 
-func (s *MenuService) GetCategoryByID(id int) (*models.MenuCategory, error) {
+func (s *MenuService) GetCategoryByID(id, restaurantID int) (*models.MenuCategory, error) {
 	var cat models.MenuCategory
 	err := database.DB.QueryRow(`
 		SELECT id, name, description, sort_order, active, created_at, updated_at
 		FROM menu_categories
-		WHERE id = $1 AND active = true
-	`, id).Scan(&cat.ID, &cat.Name, &cat.Description, &cat.SortOrder, &cat.Active, &cat.CreatedAt, &cat.UpdatedAt)
+		WHERE id = $1 AND active = true AND restaurant_id = $2
+	`, id, ResolveRestaurant(restaurantID)).Scan(&cat.ID, &cat.Name, &cat.Description, &cat.SortOrder, &cat.Active, &cat.CreatedAt, &cat.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	return &cat, err
 }
 
-func (s *MenuService) GetItemsByCategory(categoryID int) ([]models.MenuItem, error) {
+func (s *MenuService) GetItemsByCategory(categoryID, restaurantID int) ([]models.MenuItem, error) {
 	rows, err := database.DB.Query(`
 		SELECT id, category_id, name, description, price, image_url, available, sort_order, active, created_at, updated_at
 		FROM menu_items
-		WHERE category_id = $1 AND active = true AND available = true
+		WHERE category_id = $1 AND active = true AND available = true AND restaurant_id = $2
 		ORDER BY sort_order, name
-	`, categoryID)
+	`, categoryID, ResolveRestaurant(restaurantID))
 	if err != nil {
 		return nil, err
 	}
@@ -75,14 +75,14 @@ func (s *MenuService) GetItemsByCategory(categoryID int) ([]models.MenuItem, err
 	return items, nil
 }
 
-func (s *MenuService) GetItemByID(id int) (*models.MenuItem, error) {
+func (s *MenuService) GetItemByID(id, restaurantID int) (*models.MenuItem, error) {
 	var item models.MenuItem
 	err := database.DB.QueryRow(`
 		SELECT id, category_id, name, slug, description, price, image_url, available, sort_order, active, created_at, updated_at,
 		price_regular, price_medium, price_large, COALESCE(dietary,'veg'), COALESCE(pizza_subcategory,''), COALESCE(pizza_type,''), is_spicy, is_jain, is_new, COALESCE(no_crust,false)
 		FROM menu_items
-		WHERE id = $1 AND active = true
-	`, id).Scan(&item.ID, &item.CategoryID, &item.Name, &item.Slug, &item.Description, &item.Price, &item.ImageURL, &item.Available, &item.SortOrder, &item.Active, &item.CreatedAt, &item.UpdatedAt,
+		WHERE id = $1 AND active = true AND restaurant_id = $2
+	`, id, ResolveRestaurant(restaurantID)).Scan(&item.ID, &item.CategoryID, &item.Name, &item.Slug, &item.Description, &item.Price, &item.ImageURL, &item.Available, &item.SortOrder, &item.Active, &item.CreatedAt, &item.UpdatedAt,
 		&item.PriceRegular, &item.PriceMedium, &item.PriceLarge, &item.Dietary, &item.PizzaSubcategory, &item.PizzaType, &item.IsSpicy, &item.IsJain, &item.IsNew, &item.NoCrust)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -116,13 +116,13 @@ func (s *MenuService) GetOptionsByItemID(itemID int) ([]models.MenuItemOption, e
 	return options, nil
 }
 
-func (s *MenuService) CreateCategory(name, description string, sortOrder int) (*models.MenuCategory, error) {
+func (s *MenuService) CreateCategory(name, description string, sortOrder, restaurantID int) (*models.MenuCategory, error) {
 	var cat models.MenuCategory
 	err := database.DB.QueryRow(`
-		INSERT INTO menu_categories (name, description, sort_order, active)
-		VALUES ($1, $2, $3, true)
+		INSERT INTO menu_categories (name, description, sort_order, active, restaurant_id)
+		VALUES ($1, $2, $3, true, $4)
 		RETURNING id, name, description, sort_order, active, created_at, updated_at
-	`, name, description, sortOrder).Scan(&cat.ID, &cat.Name, &cat.Description, &cat.SortOrder, &cat.Active, &cat.CreatedAt, &cat.UpdatedAt)
+	`, name, description, sortOrder, ResolveRestaurant(restaurantID)).Scan(&cat.ID, &cat.Name, &cat.Description, &cat.SortOrder, &cat.Active, &cat.CreatedAt, &cat.UpdatedAt)
 	return &cat, err
 }
 
@@ -147,9 +147,15 @@ func (s *MenuService) UpdateItem(id int, name, description string, price float64
 	return &item, err
 }
 
-func (s *MenuService) DeleteItem(id int) error {
-	_, err := database.DB.Exec(`DELETE FROM menu_items WHERE id = $1`, id)
-	return err
+func (s *MenuService) DeleteItem(id, restaurantID int) error {
+	res, err := database.DB.Exec(`DELETE FROM menu_items WHERE id = $1 AND restaurant_id = $2`, id, ResolveRestaurant(restaurantID))
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
 }
 
 type CartService struct{}
@@ -164,9 +170,9 @@ func (s *CartService) GetCart(phone string) ([]models.CartItem, error) {
 		       mi.id, mi.category_id, mi.name, mi.description, mi.price, mi.image_url, mi.available, mi.sort_order, mi.active, mi.created_at, mi.updated_at
 		FROM carts c
 		JOIN menu_items mi ON c.menu_item_id = mi.id
-		WHERE c.customer_phone = $1
+		WHERE c.customer_phone = $1 AND mi.restaurant_id = $2
 		ORDER BY c.created_at
-	`, phone)
+	`, phone, ResolveRestaurant(0))
 	if err != nil {
 		return nil, err
 	}
@@ -191,7 +197,7 @@ func (s *CartService) GetCart(phone string) ([]models.CartItem, error) {
 func (s *CartService) AddItem(phone string, menuItemID, quantity int, options map[string]interface{}) error {
 	// Get menu item price
 	var price float64
-	err := database.DB.QueryRow(`SELECT price FROM menu_items WHERE id = $1`, menuItemID).Scan(&price)
+	err := database.DB.QueryRow(`SELECT price FROM menu_items WHERE id = $1 AND restaurant_id = $2`, menuItemID, ResolveRestaurant(0)).Scan(&price)
 	if err != nil {
 		return err
 	}
@@ -259,12 +265,27 @@ func (s *OrderService) CreateOrder(order *models.Order) error {
 	}
 	defer tx.Rollback()
 
+	// Tenant stamp (legacy bot path has no context: default restaurant).
+	if order.RestaurantID <= 0 {
+		order.RestaurantID = ResolveRestaurant(0)
+	}
+	if order.OutletID <= 0 {
+		order.OutletID = DefaultOutletID(order.RestaurantID)
+	}
+	// Canonical vocabulary (Phase 2). This legacy writer is only used
+	// by the WhatsApp state machine, so an empty source means whatsapp;
+	// the old CHECK-free schema defaulted it to 'website' and mislabeled
+	// legacy bot orders.
+	order.OrderType = NormalizeOrderType(order.OrderType)
+	if order.Source == "" {
+		order.Source = SourceWhatsApp
+	}
 	// Insert order
 	err = tx.QueryRow(`
-		INSERT INTO orders (order_number, customer_name, customer_phone, order_type, address, landmark, payment_method, subtotal, delivery_fee, discount, total, status)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		INSERT INTO orders (order_number, customer_name, customer_phone, order_type, address, landmark, payment_method, subtotal, delivery_fee, discount, total, status, source, restaurant_id, outlet_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 		RETURNING id, created_at, updated_at
-	`, order.OrderNumber, order.CustomerName, order.CustomerPhone, order.OrderType, order.Address, order.Landmark, order.PaymentMethod, order.Subtotal, order.DeliveryFee, order.Discount, order.Total, order.Status).Scan(&order.ID, &order.CreatedAt, &order.UpdatedAt)
+	`, order.OrderNumber, order.CustomerName, order.CustomerPhone, order.OrderType, order.Address, order.Landmark, order.PaymentMethod, order.Subtotal, order.DeliveryFee, order.Discount, order.Total, order.Status, order.Source, order.RestaurantID, order.OutletID).Scan(&order.ID, &order.CreatedAt, &order.UpdatedAt)
 	if err != nil {
 		return err
 	}
@@ -273,9 +294,9 @@ func (s *OrderService) CreateOrder(order *models.Order) error {
 	for _, item := range order.Items {
 		optionsJSON, _ := json.Marshal(item.Options)
 		_, err = tx.Exec(`
-			INSERT INTO order_items (order_id, menu_item_id, name, quantity, unit_price, options, subtotal)
-			VALUES ($1, $2, $3, $4, $5, $6, $7)
-		`, order.ID, item.MenuItemID, item.Name, item.Quantity, item.UnitPrice, optionsJSON, item.Subtotal)
+			INSERT INTO order_items (order_id, menu_item_id, name, quantity, unit_price, options, subtotal, restaurant_id)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		`, order.ID, item.MenuItemID, item.Name, item.Quantity, item.UnitPrice, optionsJSON, item.Subtotal, order.RestaurantID)
 		if err != nil {
 			return err
 		}
@@ -299,12 +320,12 @@ func (s *OrderService) CreateOrder(order *models.Order) error {
 	return nil
 }
 
-func (s *OrderService) GetOrderByID(id int) (*models.Order, error) {
+func (s *OrderService) GetOrderByID(id, restaurantID int) (*models.Order, error) {
 	var order models.Order
 	err := database.DB.QueryRow(`
-		SELECT id, order_number, customer_name, customer_phone, order_type, address, landmark, payment_method, subtotal, delivery_fee, discount, total, status, created_at, updated_at
-		FROM orders WHERE id = $1
-	`, id).Scan(&order.ID, &order.OrderNumber, &order.CustomerName, &order.CustomerPhone, &order.OrderType, &order.Address, &order.Landmark, &order.PaymentMethod, &order.Subtotal, &order.DeliveryFee, &order.Discount, &order.Total, &order.Status, &order.CreatedAt, &order.UpdatedAt)
+		SELECT id, order_number, customer_name, customer_phone, order_type, COALESCE(address,''), COALESCE(landmark,''), payment_method, subtotal, delivery_fee, discount, total, status, created_at, updated_at
+		FROM orders WHERE id = $1 AND restaurant_id = $2
+	`, id, ResolveRestaurant(restaurantID)).Scan(&order.ID, &order.OrderNumber, &order.CustomerName, &order.CustomerPhone, &order.OrderType, &order.Address, &order.Landmark, &order.PaymentMethod, &order.Subtotal, &order.DeliveryFee, &order.Discount, &order.Total, &order.Status, &order.CreatedAt, &order.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -341,11 +362,11 @@ func (s *OrderService) GetOrderByID(id int) (*models.Order, error) {
 	return &order, nil
 }
 
-func (s *OrderService) GetOrdersByPhone(phone string) ([]models.Order, error) {
+func (s *OrderService) GetOrdersByPhone(phone string, restaurantID int) ([]models.Order, error) {
 	rows, err := database.DB.Query(`
 		SELECT id, order_number, customer_name, customer_phone, order_type, address, landmark, payment_method, subtotal, delivery_fee, discount, total, status, created_at, updated_at
-		FROM orders WHERE customer_phone = $1 ORDER BY created_at DESC
-	`, phone)
+		FROM orders WHERE customer_phone = $1 AND restaurant_id = $2 ORDER BY created_at DESC
+	`, phone, ResolveRestaurant(restaurantID))
 	if err != nil {
 		return nil, err
 	}
@@ -377,11 +398,11 @@ func (s *OrderService) UpdateOrderStatus(orderID int, status string) error {
 	return err
 }
 
-func (s *OrderService) GetAllOrders(limit, offset int) ([]models.Order, error) {
+func (s *OrderService) GetAllOrders(limit, offset, restaurantID int) ([]models.Order, error) {
 	rows, err := database.DB.Query(`
-		SELECT id, order_number, customer_name, customer_phone, order_type, address, landmark, payment_method, subtotal, delivery_fee, discount, total, status, created_at, updated_at
-		FROM orders ORDER BY created_at DESC LIMIT $1 OFFSET $2
-	`, limit, offset)
+		SELECT id, order_number, customer_name, customer_phone, order_type, COALESCE(address,''), COALESCE(landmark,''), payment_method, subtotal, delivery_fee, discount, total, status, created_at, updated_at
+		FROM orders WHERE restaurant_id = $3 ORDER BY created_at DESC LIMIT $1 OFFSET $2
+	`, limit, offset, ResolveRestaurant(restaurantID))
 	if err != nil {
 		return nil, err
 	}
@@ -455,11 +476,17 @@ func NewRestaurantConfigService() *RestaurantConfigService {
 }
 
 func (s *RestaurantConfigService) GetConfig() (*models.RestaurantConfig, error) {
+	return s.GetConfigFor(0)
+}
+
+// GetConfigFor reads one restaurant's config (0 = default, used by the
+// bot runtime and public API until Phase 4 routing).
+func (s *RestaurantConfigService) GetConfigFor(restaurantID int) (*models.RestaurantConfig, error) {
 	var config models.RestaurantConfig
 	err := database.DB.QueryRow(`
 		SELECT id, name, phone, address, map_url, opening_hours, delivery_area, payment_info, support_phone, created_at, updated_at
-		FROM restaurant_config LIMIT 1
-	`).Scan(&config.ID, &config.Name, &config.Phone, &config.Address, &config.MapURL, &config.OpeningHours, &config.DeliveryArea, &config.PaymentInfo, &config.SupportPhone, &config.CreatedAt, &config.UpdatedAt)
+		FROM restaurant_config WHERE restaurant_id = $1 LIMIT 1
+	`, ResolveRestaurant(restaurantID)).Scan(&config.ID, &config.Name, &config.Phone, &config.Address, &config.MapURL, &config.OpeningHours, &config.DeliveryArea, &config.PaymentInfo, &config.SupportPhone, &config.CreatedAt, &config.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -501,13 +528,13 @@ func scanWebsiteItem(scanner interface {
 }
 
 // GetCategoriesWithSlug returns all active categories ordered for the website.
-func (s *MenuService) GetCategoriesWithSlug() ([]models.MenuCategory, error) {
+func (s *MenuService) GetCategoriesWithSlug(restaurantID int) ([]models.MenuCategory, error) {
 	rows, err := database.DB.Query(`
 		SELECT id, name, COALESCE(slug, ''), COALESCE(description, ''), sort_order, active, created_at, updated_at
 		FROM menu_categories
-		WHERE active = true
+		WHERE active = true AND restaurant_id = $1
 		ORDER BY sort_order, name
-	`)
+	`, ResolveRestaurant(restaurantID))
 	if err != nil {
 		return nil, err
 	}
@@ -525,13 +552,15 @@ func (s *MenuService) GetCategoriesWithSlug() ([]models.MenuCategory, error) {
 }
 
 // GetAllActiveItems returns every active menu item for the website catalog.
+// Bot runtime and public API resolve the default restaurant internally;
+// multi-restaurant storefront routing arrives in Phase 4.
 func (s *MenuService) GetAllActiveItems() ([]models.MenuItem, error) {
 	rows, err := database.DB.Query(`
 		SELECT ` + websiteItemColumns + `
 		FROM menu_items
-		WHERE active = true AND available = true
+		WHERE active = true AND available = true AND restaurant_id = $1
 		ORDER BY category_id, sort_order, name
-	`)
+	`, ResolveRestaurant(0))
 	if err != nil {
 		return nil, err
 	}
@@ -549,8 +578,11 @@ func (s *MenuService) GetAllActiveItems() ([]models.MenuItem, error) {
 }
 
 // GetItemByIdentifier resolves an item by numeric ID or by slug.
+// Bot runtime and public API resolve the default restaurant internally;
+// multi-restaurant storefront routing arrives in Phase 4.
 func (s *MenuService) GetItemByIdentifier(identifier string) (*models.MenuItem, error) {
-	query := `SELECT ` + websiteItemColumns + ` FROM menu_items WHERE active = true AND `
+	rid := ResolveRestaurant(0)
+	query := `SELECT ` + websiteItemColumns + ` FROM menu_items WHERE active = true AND restaurant_id = $2 AND `
 	var arg string
 	if isNumericID(identifier) {
 		query += `id = $1 AND available = true`
@@ -560,7 +592,7 @@ func (s *MenuService) GetItemByIdentifier(identifier string) (*models.MenuItem, 
 		arg = identifier
 	}
 
-	row := database.DB.QueryRow(query, arg)
+	row := database.DB.QueryRow(query, arg, rid)
 	item, err := scanWebsiteItem(row)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -594,12 +626,13 @@ type CrustInfo struct {
 }
 
 // GetActiveCrusts returns the backend-owned crust catalog (Phase 3).
+// Bot runtime and public API resolve the default restaurant internally.
 func (s *MenuService) GetActiveCrusts() ([]CrustInfo, error) {
 	rows, err := database.DB.Query(`
 		SELECT slug, name, COALESCE(description,''),
 		       COALESCE(price_regular,0), COALESCE(price_medium,0), COALESCE(price_large,0)
-		FROM menu_crusts WHERE active = true ORDER BY sort_order
-	`)
+		FROM menu_crusts WHERE active = true AND restaurant_id = $1 ORDER BY sort_order
+	`, ResolveRestaurant(0))
 	if err != nil {
 		return nil, err
 	}

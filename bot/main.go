@@ -46,6 +46,8 @@ func main() {
 	}
 	// Seed owner from BOT_ADMIN_KEY if no admin_users yet (SaaS bootstrap)
 	admin.EnsureOwnerSeed(cfg)
+	// Ensure bootstrap tenant rows exist (idempotent; mirrors 021)
+	admin.EnsureTenantBootstrap()
 
 	// Load business config from DB (sizes, payments, icons, delivery fee, etc.)
 	services.LoadBusinessConfig()
@@ -55,6 +57,7 @@ func main() {
 	menuService := services.NewMenuService()
 	cartService := services.NewCartService()
 	orderService := services.NewOrderService()
+	posOrderService := services.NewPOSOrderService()
 	stateService := services.NewCustomerStateService()
 	restaurantConfigService := services.NewRestaurantConfigService()
 	botMessageService := services.NewBotMessageService()
@@ -97,7 +100,7 @@ func main() {
 	}()
 
 	// Initialize admin handler
-	adminHandler := admin.NewAdminHandler(menuService, orderService, evolutionClient, cfg)
+	adminHandler := admin.NewAdminHandler(menuService, orderService, posOrderService, evolutionClient, cfg)
 	admin.SetBotMessageService(botMessageService)
 
 	// Site settings handler
@@ -192,12 +195,16 @@ func main() {
 	adminGroup := router.Group("/admin")
 	adminGroup.Use(handlers.RateLimit(60, time.Minute))
 	adminGroup.Use(adminHandler.RequireAdminKey())
+	// Tenant context for every admin call. Handlers ignore these keys
+	// until PR 3 scopes them; behavior is unchanged in PR 2.
+	adminGroup.Use(admin.TenantMiddleware())
 	{
 		adminGroup.GET("/health", adminHandler.Health)
+		adminGroup.GET("/tenant/context", adminHandler.GetTenantContext)
 		adminGroup.GET("/menu", adminHandler.GetMenu)
-		adminGroup.POST("/menu", adminHandler.RequireRole("owner", "manager"), adminHandler.CreateMenuItem)
-		adminGroup.PUT("/menu/:id", adminHandler.RequireRole("owner", "manager"), adminHandler.UpdateMenuItem)
-		adminGroup.DELETE("/menu/:id", adminHandler.RequireRole("owner", "manager"), adminHandler.DeleteMenuItem)
+		adminGroup.POST("/menu", adminHandler.RequireRole("owner", "manager"), adminHandler.RequirePermission("menu.update"), adminHandler.CreateMenuItem)
+		adminGroup.PUT("/menu/:id", adminHandler.RequireRole("owner", "manager"), adminHandler.RequirePermission("menu.update"), adminHandler.UpdateMenuItem)
+		adminGroup.DELETE("/menu/:id", adminHandler.RequireRole("owner", "manager"), adminHandler.RequirePermission("menu.update"), adminHandler.DeleteMenuItem)
 		adminGroup.POST("/category", adminHandler.RequireRole("owner", "manager"), adminHandler.CreateCategory)
 		adminGroup.GET("/categories", adminHandler.GetCategoriesAdmin)
 		adminGroup.POST("/upload", adminHandler.RequireRole("owner", "manager"), adminHandler.UploadImage)
@@ -218,9 +225,9 @@ func main() {
 		adminGroup.DELETE("/users/:id", adminHandler.RequireRole("owner"), adminHandler.DeleteAdminUser)
 		adminGroup.GET("/audit", adminHandler.RequireRole("owner", "manager"), adminHandler.GetAuditLog)
 		adminGroup.GET("/me", adminHandler.GetMeAdmin)
-		adminGroup.GET("/orders", adminHandler.GetOrders)
-		adminGroup.GET("/orders/:id", adminHandler.GetOrder)
-		adminGroup.PATCH("/orders/:id/status", adminHandler.RequireRole("owner", "manager", "kitchen"), adminHandler.UpdateOrderStatus)
+		adminGroup.GET("/orders", adminHandler.RequirePermission("orders.view"), adminHandler.GetOrders)
+		adminGroup.GET("/orders/:id", adminHandler.RequirePermission("orders.view"), adminHandler.GetOrder)
+		adminGroup.PATCH("/orders/:id/status", adminHandler.RequireRole("owner", "manager", "kitchen"), adminHandler.RequirePermission("orders.update"), adminHandler.UpdateOrderStatus)
 		adminGroup.GET("/debug/whatsapp/:phone", adminHandler.DebugWhatsApp)
 		// Campaign runner integration
 		adminGroup.GET("/customers", adminHandler.RequireRole("owner", "manager"), adminHandler.ListCustomers)
@@ -263,6 +270,25 @@ func main() {
 		adminGroup.POST("/crusts", adminHandler.RequireRole("owner", "manager"), adminHandler.CreateCrust)
 		adminGroup.PUT("/crusts/:id", adminHandler.RequireRole("owner", "manager"), adminHandler.UpdateCrust)
 		adminGroup.DELETE("/crusts/:id", adminHandler.RequireRole("owner", "manager"), adminHandler.DeleteCrust)
+		// POS endpoints — guarded by pos.* permissions (matrix in
+		// services.POSRoleGrants, seeded by migration 026). Owner
+		// bypasses permission checks via RequirePermission.
+		adminGroup.GET("/pos/menu", adminHandler.RequirePermission("pos.read"), adminHandler.GetPOSMenu)
+		adminGroup.POST("/pos/orders", adminHandler.RequireRole("owner", "manager", "cashier"), adminHandler.RequirePermission("pos.create_order"), adminHandler.CreatePOSOrder)
+		adminGroup.GET("/pos/orders/:id", adminHandler.RequirePermission("pos.read"), adminHandler.GetPOSOrder)
+		adminGroup.PATCH("/pos/orders/:id", adminHandler.RequireRole("owner", "manager", "cashier"), adminHandler.RequirePermission("pos.update_order"), adminHandler.UpdatePOSOrder)
+		adminGroup.POST("/pos/orders/:id/hold", adminHandler.RequireRole("owner", "manager", "cashier"), adminHandler.RequirePermission("pos.update_order"), adminHandler.HoldPOSOrder)
+		adminGroup.POST("/pos/orders/:id/resume", adminHandler.RequireRole("owner", "manager", "cashier"), adminHandler.RequirePermission("pos.update_order"), adminHandler.ResumePOSOrder)
+		adminGroup.POST("/pos/orders/:id/complete", adminHandler.RequireRole("owner", "manager", "cashier"), adminHandler.RequirePermission("pos.update_order"), adminHandler.CompletePOSOrder)
+		adminGroup.POST("/pos/orders/:id/cancel", adminHandler.RequireRole("owner", "manager"), adminHandler.RequirePermission("pos.update_order"), adminHandler.CancelPOSOrder)
+		adminGroup.POST("/pos/orders/:id/payments", adminHandler.RequireRole("owner", "manager", "cashier"), adminHandler.RequirePermission("pos.take_payment"), adminHandler.TakePaymentPOSOrder)
+		adminGroup.POST("/pos/orders/:id/refunds", adminHandler.RequireRole("owner", "manager"), adminHandler.RequirePermission("pos.refund"), adminHandler.RefundPOSOrder)
+		adminGroup.GET("/pos/tables", adminHandler.RequirePermission("pos.read"), adminHandler.GetPOSOrderTables)
+		adminGroup.PATCH("/pos/tables/:id", adminHandler.RequireRole("owner", "manager"), adminHandler.RequirePermission("pos.manage_tables"), adminHandler.AssignTableToOrder)
+		adminGroup.GET("/pos/discounts", adminHandler.RequirePermission("pos.read"), adminHandler.GetPOSDiscounts)
+		adminGroup.POST("/pos/discounts", adminHandler.RequireRole("owner", "manager"), adminHandler.RequirePermission("pos.apply_discount"), adminHandler.ApplyPOSDiscount)
+		adminGroup.DELETE("/pos/discounts/:id", adminHandler.RequireRole("owner", "manager"), adminHandler.RequirePermission("pos.apply_discount"), adminHandler.RemovePOSDiscount)
+		adminGroup.GET("/pos/price", adminHandler.RequirePermission("pos.read"), adminHandler.CalculatePOSPrice)
 	}
 
 	// Health / readiness — SaaS observability

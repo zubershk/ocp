@@ -105,12 +105,12 @@ func StatusUpdateText(status, orderNumber string) string {
 // ApplyStatusChange validates the transition, persists it atomically,
 // then notifies the CUSTOMER on WhatsApp (best effort, never fails the
 // request). Returns the updated order plus the notification outcome.
-func ApplyStatusChange(orderID int, newStatus string, evolution *EvolutionClient, cfg *config.Config) (*models.Order, WhatsAppOutcome, error) {
+func ApplyStatusChange(orderID int, newStatus string, evolution *EvolutionClient, cfg *config.Config, restaurantID int) (*models.Order, WhatsAppOutcome, error) {
 	if !ValidStatus[newStatus] {
 		return nil, WhatsAppOutcome{}, fmt.Errorf("unknown status %q", newStatus)
 	}
 
-	order, err := defaultOrderService.GetOrderByID(orderID)
+	order, err := defaultOrderService.GetOrderByID(orderID, ResolveRestaurant(restaurantID))
 	if err != nil {
 		return nil, WhatsAppOutcome{}, err
 	}

@@ -14,7 +14,7 @@ import (
 
 // MenuReader is the surface the public website API needs from the menu service.
 type MenuReader interface {
-	GetCategoriesWithSlug() ([]models.MenuCategory, error)
+	GetCategoriesWithSlug(restaurantID int) ([]models.MenuCategory, error)
 	GetAllActiveItems() ([]models.MenuItem, error)
 	GetItemByIdentifier(identifier string) (*models.MenuItem, error)
 	GetActiveCrusts() ([]services.CrustInfo, error)
@@ -106,9 +106,10 @@ type menuResponse struct {
 	Items      []models.MenuItem     `json:"items"`
 }
 
-// GetMenu handles GET /api/menu
+// GetMenu handles GET /api/menu (default restaurant; per-restaurant
+// storefront routing arrives in Phase 4).
 func (h *ApiHandler) GetMenu(c *gin.Context) {
-	categories, err := h.menu.GetCategoriesWithSlug()
+	categories, err := h.menu.GetCategoriesWithSlug(0)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load categories"})
 		return
@@ -202,7 +203,10 @@ func (h *ApiHandler) GetOrder(c *gin.Context) {
 
 // GetOutlets handles GET /api/outlets — public SaaS settings.
 func (h *ApiHandler) GetOutlets(c *gin.Context) {
-	rows, err := database.DB.Query(`SELECT id, slug, name, address_lines, phones, delivery_hours, online_ordering, active, sort_order FROM restaurant_outlets WHERE active=true ORDER BY sort_order, name`)
+	// Public storefront serves the default restaurant until Phase 4 routing.
+	rows, err := database.DB.Query(
+		`SELECT id, slug, name, address_lines, phones, delivery_hours, online_ordering, active, sort_order FROM outlets WHERE active=true AND restaurant_id=$1 ORDER BY sort_order, name`,
+		services.ResolveRestaurant(0))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load outlets"})
 		return
