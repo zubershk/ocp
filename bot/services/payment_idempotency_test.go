@@ -7,15 +7,26 @@ import (
 )
 
 func TestNormalizeIdempotencyKey(t *testing.T) {
-	if got := NormalizeIdempotencyKey(""); got != "" {
-		t.Fatalf("empty key should stay empty, got %q", got)
+	if got, err := NormalizeIdempotencyKey(""); err != nil || got != "" {
+		t.Fatalf("empty key should stay empty, got %q, err %v", got, err)
 	}
-	if got := NormalizeIdempotencyKey("  PAY-500-abc  "); got != "PAY-500-abc" {
-		t.Fatalf("key should be trimmed, got %q", got)
+	if got, err := NormalizeIdempotencyKey("  PAY-500-abc  "); err != nil || got != "PAY-500-abc" {
+		t.Fatalf("key should be trimmed, got %q, err %v", got, err)
 	}
-	long := strings.Repeat("k", MaxIdempotencyKeyLen+40)
-	if got := NormalizeIdempotencyKey(long); len(got) != MaxIdempotencyKeyLen {
-		t.Fatalf("key should be capped at %d, got %d", MaxIdempotencyKeyLen, len(got))
+	exact := strings.Repeat("k", MaxIdempotencyKeyLen)
+	if got, err := NormalizeIdempotencyKey(exact); err != nil || got != exact {
+		t.Fatalf("120-char key must be stored verbatim, err %v", err)
+	}
+}
+
+func TestNormalizeIdempotencyKeyTooLong(t *testing.T) {
+	// Two keys sharing a 120-char prefix but differing after it must
+	// never collapse into one stored key: reject, don't truncate.
+	prefix := strings.Repeat("k", MaxIdempotencyKeyLen)
+	for _, key := range []string{prefix + "AAA", prefix + "BBB", strings.Repeat("k", MaxIdempotencyKeyLen+1)} {
+		if _, err := NormalizeIdempotencyKey(key); !errors.Is(err, ErrIdempotencyKeyTooLong) {
+			t.Fatalf("expected ErrIdempotencyKeyTooLong for %d-char key, got %v", len(key), err)
+		}
 	}
 }
 

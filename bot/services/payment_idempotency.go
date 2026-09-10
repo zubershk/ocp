@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 )
 
 // ------------------------------------------------------------------
@@ -25,14 +26,21 @@ import (
 // MaxIdempotencyKeyLen caps stored keys (matches VARCHAR(120)).
 const MaxIdempotencyKeyLen = 120
 
-// NormalizeIdempotencyKey trims and caps a client-supplied key.
-// Empty input stays empty (no idempotency requested).
-func NormalizeIdempotencyKey(key string) string {
+// ErrIdempotencyKeyTooLong is returned when a client sends a key that
+// cannot be stored. Keys are never truncated: truncating two distinct
+// keys ("<120-char-prefix>AAA" vs "<120-char-prefix>BBB") into the same
+// stored value would merge two distinct operations into one payment.
+var ErrIdempotencyKeyTooLong = errors.New("idempotency key too long")
+
+// NormalizeIdempotencyKey trims a client-supplied key and rejects it
+// when it exceeds the stored limit. Empty input stays empty (no
+// idempotency requested); 1..120 characters are stored verbatim.
+func NormalizeIdempotencyKey(key string) (string, error) {
 	key = strings.TrimSpace(key)
-	if len(key) > MaxIdempotencyKeyLen {
-		key = key[:MaxIdempotencyKeyLen]
+	if utf8.RuneCountInString(key) > MaxIdempotencyKeyLen {
+		return "", fmt.Errorf("%w: max %d characters", ErrIdempotencyKeyTooLong, MaxIdempotencyKeyLen)
 	}
-	return key
+	return key, nil
 }
 
 // IsUniqueViolation reports whether err is a Postgres unique-violation

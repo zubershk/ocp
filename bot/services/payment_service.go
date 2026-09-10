@@ -62,7 +62,10 @@ func RecordPayment(orderID, restaurantID, outletID int, method string,
 	amountPaise int64, tenderedPaise int64, reference string,
 	receivedBy int, idempotencyKey string) (paymentID int, replayed bool, err error) {
 
-	key := NormalizeIdempotencyKey(idempotencyKey)
+	key, err := NormalizeIdempotencyKey(idempotencyKey)
+	if err != nil {
+		return 0, false, err
+	}
 	if key != "" {
 		if existing, findErr := GetPaymentIDByIdempotencyKey(key, orderID); findErr == nil && existing > 0 {
 			return existing, true, nil
@@ -96,7 +99,10 @@ func RecordPayment(orderID, restaurantID, outletID int, method string,
 // Like payments, refunds accept an idempotency key so a retried refund
 // never posts twice.
 func RecordRefund(orderID, refundOf, restaurantID, outletID int, amountPaise int64, reference string, receivedBy int, idempotencyKey string) (paymentID int, replayed bool, err error) {
-	key := NormalizeIdempotencyKey(idempotencyKey)
+	key, err := NormalizeIdempotencyKey(idempotencyKey)
+	if err != nil {
+		return 0, false, err
+	}
 	if key != "" {
 		if existing, findErr := GetPaymentIDByIdempotencyKey(key, orderID); findErr == nil && existing > 0 {
 			return existing, true, nil
