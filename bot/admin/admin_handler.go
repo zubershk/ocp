@@ -938,13 +938,18 @@ func (h *AdminHandler) GetPOSMenu(c *gin.Context) {
 // ---------- POS order endpoints ----------
 
 // CreatePOSOrder creates a new POS order draft.
+// Tenant is taken from middleware context, never from the body: a
+// caller cannot forge restaurant/outlet IDs, and the source is always
+// stamped pos on this endpoint.
 func (h *AdminHandler) CreatePOSOrder(c *gin.Context) {
 	var draft services.DraftOrder
 	if err := c.ShouldBindJSON(&draft); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
 		return
 	}
-	order, err := h.posOrderService.CreateOrder(draft.RestaurantID, draft.OutletID, draft.Items, draft.TableID, draft.Source)
+	restaurantID := c.GetInt("restaurantID")
+	outletID := c.GetInt("outletID")
+	order, err := h.posOrderService.CreateOrder(restaurantID, outletID, draft.Items, draft.TableID, services.SourcePOS)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return

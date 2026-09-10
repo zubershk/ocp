@@ -270,23 +270,25 @@ func main() {
 		adminGroup.POST("/crusts", adminHandler.RequireRole("owner", "manager"), adminHandler.CreateCrust)
 		adminGroup.PUT("/crusts/:id", adminHandler.RequireRole("owner", "manager"), adminHandler.UpdateCrust)
 		adminGroup.DELETE("/crusts/:id", adminHandler.RequireRole("owner", "manager"), adminHandler.DeleteCrust)
-		// POS endpoints
-		adminGroup.GET("/pos/menu", adminHandler.GetPOSMenu)
-		adminGroup.POST("/pos/orders", adminHandler.CreatePOSOrder)
-		adminGroup.GET("/pos/orders/:id", adminHandler.GetPOSOrder)
-		adminGroup.PATCH("/pos/orders/:id", adminHandler.UpdatePOSOrder)
-		adminGroup.POST("/pos/orders/:id/hold", adminHandler.HoldPOSOrder)
-		adminGroup.POST("/pos/orders/:id/resume", adminHandler.ResumePOSOrder)
-		adminGroup.POST("/pos/orders/:id/complete", adminHandler.CompletePOSOrder)
-		adminGroup.POST("/pos/orders/:id/cancel", adminHandler.CancelPOSOrder)
-		adminGroup.POST("/pos/orders/:id/payments", adminHandler.TakePaymentPOSOrder)
-		adminGroup.POST("/pos/orders/:id/refunds", adminHandler.RefundPOSOrder)
-		adminGroup.GET("/pos/tables", adminHandler.GetPOSOrderTables)
-		adminGroup.PATCH("/pos/tables/:id", adminHandler.AssignTableToOrder)
-		adminGroup.GET("/pos/discounts", adminHandler.GetPOSDiscounts)
-		adminGroup.POST("/pos/discounts", adminHandler.ApplyPOSDiscount)
-		adminGroup.DELETE("/pos/discounts/:id", adminHandler.RemovePOSDiscount)
-		adminGroup.GET("/pos/price", adminHandler.CalculatePOSPrice)
+		// POS endpoints — guarded by pos.* permissions (matrix in
+		// services.POSRoleGrants, seeded by migration 026). Owner
+		// bypasses permission checks via RequirePermission.
+		adminGroup.GET("/pos/menu", adminHandler.RequirePermission("pos.read"), adminHandler.GetPOSMenu)
+		adminGroup.POST("/pos/orders", adminHandler.RequireRole("owner", "manager", "cashier"), adminHandler.RequirePermission("pos.create_order"), adminHandler.CreatePOSOrder)
+		adminGroup.GET("/pos/orders/:id", adminHandler.RequirePermission("pos.read"), adminHandler.GetPOSOrder)
+		adminGroup.PATCH("/pos/orders/:id", adminHandler.RequireRole("owner", "manager", "cashier"), adminHandler.RequirePermission("pos.update_order"), adminHandler.UpdatePOSOrder)
+		adminGroup.POST("/pos/orders/:id/hold", adminHandler.RequireRole("owner", "manager", "cashier"), adminHandler.RequirePermission("pos.update_order"), adminHandler.HoldPOSOrder)
+		adminGroup.POST("/pos/orders/:id/resume", adminHandler.RequireRole("owner", "manager", "cashier"), adminHandler.RequirePermission("pos.update_order"), adminHandler.ResumePOSOrder)
+		adminGroup.POST("/pos/orders/:id/complete", adminHandler.RequireRole("owner", "manager", "cashier"), adminHandler.RequirePermission("pos.update_order"), adminHandler.CompletePOSOrder)
+		adminGroup.POST("/pos/orders/:id/cancel", adminHandler.RequireRole("owner", "manager"), adminHandler.RequirePermission("pos.update_order"), adminHandler.CancelPOSOrder)
+		adminGroup.POST("/pos/orders/:id/payments", adminHandler.RequireRole("owner", "manager", "cashier"), adminHandler.RequirePermission("pos.take_payment"), adminHandler.TakePaymentPOSOrder)
+		adminGroup.POST("/pos/orders/:id/refunds", adminHandler.RequireRole("owner", "manager"), adminHandler.RequirePermission("pos.refund"), adminHandler.RefundPOSOrder)
+		adminGroup.GET("/pos/tables", adminHandler.RequirePermission("pos.read"), adminHandler.GetPOSOrderTables)
+		adminGroup.PATCH("/pos/tables/:id", adminHandler.RequireRole("owner", "manager"), adminHandler.RequirePermission("pos.manage_tables"), adminHandler.AssignTableToOrder)
+		adminGroup.GET("/pos/discounts", adminHandler.RequirePermission("pos.read"), adminHandler.GetPOSDiscounts)
+		adminGroup.POST("/pos/discounts", adminHandler.RequireRole("owner", "manager"), adminHandler.RequirePermission("pos.apply_discount"), adminHandler.ApplyPOSDiscount)
+		adminGroup.DELETE("/pos/discounts/:id", adminHandler.RequireRole("owner", "manager"), adminHandler.RequirePermission("pos.apply_discount"), adminHandler.RemovePOSDiscount)
+		adminGroup.GET("/pos/price", adminHandler.RequirePermission("pos.read"), adminHandler.CalculatePOSPrice)
 	}
 
 	// Health / readiness — SaaS observability
