@@ -6,13 +6,23 @@ import (
 )
 
 func TestCanTransitionDraft(t *testing.T) {
-	for _, to := range []string{OrderStatusHeld, OrderStatusConfirmed, OrderStatusCancelled, OrderStatusDraft} {
+	for _, to := range []string{OrderStatusHeld, OrderStatusConfirmed, OrderStatusCancelled} {
 		if !CanTransition(OrderStatusDraft, to) {
 			t.Fatalf("draft -> %q should be allowed", to)
 		}
 	}
 	if CanTransition(OrderStatusDraft, OrderStatusCompleted) {
 		t.Fatal("draft -> completed must not skip payment")
+	}
+}
+
+func TestCanTransitionSameStateRejected(t *testing.T) {
+	// A repeated hold/resume/complete is a conflict, never a success:
+	// HoldOrder's second grab must fail so two cashiers cannot both win.
+	for _, s := range []string{OrderStatusDraft, OrderStatusHeld, OrderStatusConfirmed, OrderStatusCompleted, OrderStatusCancelled} {
+		if CanTransition(s, s) {
+			t.Fatalf("%q -> %q must be rejected", s, s)
+		}
 	}
 }
 
@@ -34,7 +44,7 @@ func TestCanTransitionHeld(t *testing.T) {
 func TestCanTransitionTerminal(t *testing.T) {
 	for _, from := range []string{OrderStatusCompleted, OrderStatusCancelled} {
 		for _, to := range []string{OrderStatusDraft, OrderStatusHeld, OrderStatusConfirmed, OrderStatusCompleted, OrderStatusCancelled} {
-			if from != to && CanTransition(from, to) {
+			if CanTransition(from, to) {
 				t.Fatalf("%q -> %q must be rejected: terminal state", from, to)
 			}
 		}

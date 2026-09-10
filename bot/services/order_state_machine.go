@@ -76,9 +76,11 @@ var orderTransitions = map[string]map[string]bool{
 }
 
 // CanTransition reports whether status may move from -> to.
+// Same-state "moves" are rejected: a repeated hold/resume/complete is
+// a conflict or a client bug, never a silent success.
 func CanTransition(from, to string) bool {
 	if from == to {
-		return true // idempotent replays of the same state are harmless
+		return false
 	}
 	nexts, ok := orderTransitions[from]
 	if !ok {
