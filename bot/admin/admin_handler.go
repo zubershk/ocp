@@ -1077,6 +1077,10 @@ func (h *AdminHandler) TakePaymentPOSOrder(c *gin.Context) {
 	outletID := c.GetInt("outletID")
 	paymentID, replayed, duePaise, err := h.posOrderService.TakePayment(id, restaurantID, outletID, req.Method, req.Amount, req.Tendered, req.Reference, req.ReceivedBy, key)
 	if err != nil {
+		if errors.Is(err, services.ErrIdempotencyKeyTooLong) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "idempotency key exceeds 120 characters"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
 	}
@@ -1106,6 +1110,10 @@ func (h *AdminHandler) RefundPOSOrder(c *gin.Context) {
 	outletID := c.GetInt("outletID")
 	paymentID, replayed, err := services.RefundPayment(req.ID, id, restaurantID, outletID, req.Amount, req.Reference, req.ReceivedBy, key)
 	if err != nil {
+		if errors.Is(err, services.ErrIdempotencyKeyTooLong) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "idempotency key exceeds 120 characters"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
 	}
