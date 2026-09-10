@@ -171,12 +171,42 @@ func ComputeSummaryFromLedger(orderID int) (PaymentSummary, error) {
 // negative-amount row linked via refund_of. Every invariant lives in
 // ValidateRefundRequest; the refundable balance is derived from the
 // ledger, never from a stored mutable total.
+//
+// Atomicity: validation + insertion run inside one transaction holding
+// a row lock (SELECT ... FOR UPDATE) on the original payment, so two
+// concurrent refunds against the same payment serialize: the loser
+// re-reads the winner's row and fails ErrRefundExceedsRemain instead
+// of over-refunding.
 func RefundPayment(paymentID, orderID, restaurantID, outletID int, amountPaise int64, reference string, receivedBy int, idempotencyKey string) (paymentIDOut int, replayed bool, err error) {
+	key, err := NormalizeIdempotencyKey(idempotencyKey)
+	if err != nil {
+		return 0, false, err
+	}
+
+	tx, err := database.DB.Begin()
+	if err != nil {
+		return 0, false, err
+	}
+	defer tx.Rollback()
+
+	if key != "" {
+		var existing int
+		err := tx.QueryRow(
+			`SELECT id FROM order_payments WHERE idempotency_key = $1 AND order_id = $2`,
+			key, orderID).Scan(&existing)
+		if err == nil && existing > 0 {
+			return existing, true, nil
+		}
+		if err != nil && err != sql.ErrNoRows {
+			return 0, false, err
+		}
+	}
+
 	var check RefundCheck
 	var refundOf sql.NullInt64
-	err = database.DB.QueryRow(`
+	err = tx.QueryRow(`
 		SELECT amount, refund_of, order_id, restaurant_id, outlet_id
-		FROM order_payments WHERE id = $1`, paymentID).Scan(
+		FROM order_payments WHERE id = $1 FOR UPDATE`, paymentID).Scan(
 		&check.OriginalAmountPaise, &refundOf,
 		&check.OriginalOrderID, &check.OriginalRestaurantID, &check.OriginalOutletID)
 	if err == sql.ErrNoRows {
@@ -188,13 +218,38 @@ func RefundPayment(paymentID, orderID, restaurantID, outletID int, amountPaise i
 	if refundOf.Valid {
 		check.OriginalRefundOf = int(refundOf.Int64)
 	}
-	// Ledger-derived: abs sum of prior refunds against this payment.
-	database.DB.QueryRow(`
+	// Ledger-derived within the same lock: abs sum of prior refunds
+	// against this payment, including rows committed by a winner that
+	// held this lock before us.
+	err = tx.QueryRow(`
 		SELECT COALESCE(SUM(ABS(amount)), 0) FROM order_payments
 		WHERE refund_of = $1 AND amount < 0`, paymentID).Scan(&check.AlreadyRefundedPaise)
+	if err != nil {
+		return 0, false, err
+	}
 
 	if err := ValidateRefundRequest(check, orderID, restaurantID, outletID, amountPaise); err != nil {
 		return 0, false, err
 	}
-	return RecordRefund(orderID, paymentID, restaurantID, outletID, amountPaise, reference, receivedBy, idempotencyKey)
+	err = tx.QueryRow(`
+		INSERT INTO order_payments (order_id, restaurant_id, outlet_id,
+			method, amount, tendered, change_due, reference, received_by, refund_of, idempotency_key, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP)
+		RETURNING id`,
+		orderID, restaurantID, outletID, "refund", -amountPaise, 0, 0, reference, receivedBy, paymentID, nullIfEmpty(key)).Scan(&paymentIDOut)
+	if err != nil {
+		// A failed statement poisons the transaction, so roll back
+		// before looking up the concurrent winner on a fresh query.
+		_ = tx.Rollback()
+		if key != "" && IsUniqueViolation(err, "uq_order_payments_idempotency_key") {
+			if existing, findErr := GetPaymentIDByIdempotencyKey(key, orderID); findErr == nil && existing > 0 {
+				return existing, true, nil
+			}
+		}
+		return 0, false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, false, err
+	}
+	return paymentIDOut, false, nil
 }
