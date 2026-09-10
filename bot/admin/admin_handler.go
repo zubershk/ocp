@@ -969,6 +969,12 @@ func (h *AdminHandler) GetPOSOrder(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "order not found"})
 		return
 	}
+	if order == nil {
+		// Tenant-scoped miss (including cross-tenant IDs): same 404,
+		// never a 200 with a null body.
+		c.JSON(http.StatusNotFound, gin.H{"error": "order not found"})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"order": order})
 }
 
@@ -1073,9 +1079,19 @@ func (h *AdminHandler) TakePaymentPOSOrder(c *gin.Context) {
 	if key == "" {
 		key = req.IdempotencyKey
 	}
+	// Attribute the payment to the calling cashier when the body omits
+	// it: received_by is a FK to users, so a bare 0 would violate it.
+	receivedBy := req.ReceivedBy
+	if receivedBy == 0 {
+		if au, _ := c.Get("adminUser"); au != nil {
+			if a, ok := au.(*adminUserCtx); ok && a != nil {
+				receivedBy = a.ID
+			}
+		}
+	}
 	restaurantID := c.GetInt("restaurantID")
 	outletID := c.GetInt("outletID")
-	paymentID, replayed, duePaise, err := h.posOrderService.TakePayment(id, restaurantID, outletID, req.Method, req.Amount, req.Tendered, req.Reference, req.ReceivedBy, key)
+	paymentID, replayed, duePaise, err := h.posOrderService.TakePayment(id, restaurantID, outletID, req.Method, req.Amount, req.Tendered, req.Reference, receivedBy, key)
 	if err != nil {
 		if errors.Is(err, services.ErrIdempotencyKeyTooLong) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "idempotency key exceeds 120 characters"})
@@ -1108,7 +1124,15 @@ func (h *AdminHandler) RefundPOSOrder(c *gin.Context) {
 	}
 	restaurantID := c.GetInt("restaurantID")
 	outletID := c.GetInt("outletID")
-	paymentID, replayed, err := services.RefundPayment(req.ID, id, restaurantID, outletID, req.Amount, req.Reference, req.ReceivedBy, key)
+	receivedBy := req.ReceivedBy
+	if receivedBy == 0 {
+		if au, _ := c.Get("adminUser"); au != nil {
+			if a, ok := au.(*adminUserCtx); ok && a != nil {
+				receivedBy = a.ID
+			}
+		}
+	}
+	paymentID, replayed, err := services.RefundPayment(req.ID, id, restaurantID, outletID, req.Amount, req.Reference, receivedBy, key)
 	if err != nil {
 		if errors.Is(err, services.ErrIdempotencyKeyTooLong) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "idempotency key exceeds 120 characters"})
