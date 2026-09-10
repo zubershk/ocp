@@ -1,10 +1,8 @@
 package services
 
 import (
-	"database/sql"
 	"errors"
 	"fmt"
-	"os"
 	"sync"
 	"testing"
 	"time"
@@ -34,35 +32,7 @@ import (
 
 func openStagingDB(t *testing.T) {
 	t.Helper()
-	dsn := os.Getenv("OCP_TEST_DATABASE_URL")
-	if dsn == "" {
-		dsn = os.Getenv("BOT_DATABASE_URL")
-	}
-	if dsn == "" {
-		t.Skip("no staging DB: set OCP_TEST_DATABASE_URL to run POS concurrency tests")
-	}
-	db, err := sql.Open("postgres", dsn)
-	if err != nil {
-		t.Fatalf("open staging DB: %v", err)
-	}
-	if err := db.Ping(); err != nil {
-		t.Fatalf("ping staging DB: %v", err)
-	}
-	var hasKey bool
-	err = db.QueryRow(`
-		SELECT EXISTS(
-			SELECT 1 FROM information_schema.columns
-			WHERE table_name = 'order_payments' AND column_name = 'idempotency_key'
-		)`).Scan(&hasKey)
-	if err != nil || !hasKey {
-		t.Fatalf("staging DB missing POS hardening schema (need migrations through 026): %v", err)
-	}
-	old := database.DB
-	database.DB = db
-	t.Cleanup(func() {
-		database.DB = old
-		_ = db.Close()
-	})
+	stagingDB(t) // migrated staging DB, or Skip when unconfigured
 }
 
 func TestConcurrentRefundsCannotOverRefund(t *testing.T) {
@@ -137,11 +107,11 @@ func TestConcurrentRefundsCannotOverRefund(t *testing.T) {
 		t.Fatalf("expected exactly 1 successful refund, got %d (errs=%v)", succeeded, errs)
 	}
 
-	var refunded int64
+	var refundedRupees float64
 	must("sum", database.DB.QueryRow(
 		`SELECT COALESCE(SUM(ABS(amount)), 0) FROM order_payments WHERE refund_of = $1 AND amount < 0`,
-		payID).Scan(&refunded))
-	if refunded != 80000 {
+		payID).Scan(&refundedRupees))
+	if refunded := paiseFromDecimal(refundedRupees); refunded != 80000 {
 		t.Fatalf("expected ₹800 refunded total, got %d paise", refunded)
 	}
 }
