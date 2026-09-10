@@ -550,19 +550,19 @@ func ComputeDueFromLedger(orderID int) (paidPaise int64, refundedPaise int64, du
 	}
 	totalPaise := rounding(totalRupees)
 
-	// Sum payments
-	var totalPaid int64
+	// Sum payments (DECIMAL reads as rupees first; see RefundPayment).
+	var paidRupees float64
 	database.DB.QueryRow(`
-		SELECT COALESCE(SUM(amount), 0) FROM order_payments WHERE order_id = $1 AND amount > 0`, orderID).Scan(&totalPaid)
+		SELECT COALESCE(SUM(amount), 0) FROM order_payments WHERE order_id = $1 AND amount > 0`, orderID).Scan(&paidRupees)
 
-	// Sum refunds (negative amounts)
-	var totalRefund int64
+	// Sum refunds (negative amounts).
+	var refundedRupees float64
 	database.DB.QueryRow(`
-		SELECT COALESCE(SUM(ABS(amount)), 0) FROM order_payments WHERE order_id = $1 AND amount < 0`, orderID).Scan(&totalRefund)
+		SELECT COALESCE(SUM(ABS(amount)), 0) FROM order_payments WHERE order_id = $1 AND amount < 0`, orderID).Scan(&refundedRupees)
 
-	paidPaise = totalPaid
-	refundedPaise = totalRefund
-	duePaise = totalPaise - totalPaid + totalRefund
+	paidPaise = paiseFromDecimal(paidRupees)
+	refundedPaise = paiseFromDecimal(refundedRupees)
+	duePaise = totalPaise - paidPaise + refundedPaise
 	if duePaise < 0 {
 		duePaise = 0
 	}

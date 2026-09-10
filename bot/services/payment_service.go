@@ -2,6 +2,7 @@ package services
 
 import (
 	"database/sql"
+	"math"
 	"time"
 
 	"orangecheesepizza/bot/database"
@@ -39,6 +40,28 @@ type PaymentSummary struct {
 	Due          int64  // paise still due (order total - paid + refunded)
 	Total        int64  // order total paise
 	Overpaid     int64  // paise paid in excess of total (credit for next visit)
+}
+
+// paiseFromDecimal converts a DECIMAL ledger value that already holds
+// whole paise into int64. It must NOT use rounding() (rupees→paise):
+// order_payments.amount stores paise, while orders.total stores rupees.
+// Mixing the two up inflates every ledger read 100x and defeats refund
+// validation — exactly the over-refund staging caught.
+func paiseFromDecimal(v float64) int64 {
+	if v < 0 {
+		return int64(math.Ceil(v - 0.5))
+	}
+	return int64(math.Floor(v + 0.5))
+}
+
+// nullReceiver maps a cashier user ID to a nullable FK value: 0 means
+// "unattributed" (e.g. the legacy env owner, who has no users row),
+// never a dangling reference.
+func nullReceiver(receivedBy int) any {
+	if receivedBy <= 0 {
+		return nil
+	}
+	return receivedBy
 }
 
 // GetPaymentIDByIdempotencyKey returns the ledger row for a key scoped
@@ -80,7 +103,7 @@ func RecordPayment(orderID, restaurantID, outletID int, method string,
 			method, amount, tendered, change_due, reference, received_by, idempotency_key, created_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP)
 		RETURNING id`,
-		orderID, restaurantID, outletID, method, amountPaise, tenderedPaise, 0, reference, receivedBy, nullIfEmpty(key)).Scan(&paymentID)
+		orderID, restaurantID, outletID, method, amountPaise, tenderedPaise, 0, reference, nullReceiver(receivedBy), nullIfEmpty(key)).Scan(&paymentID)
 	if err != nil {
 		// Concurrent duplicate won the INSERT race: return the winner.
 		if key != "" && IsUniqueViolation(err, "uq_order_payments_idempotency_key") {
@@ -113,7 +136,7 @@ func RecordRefund(orderID, refundOf, restaurantID, outletID int, amountPaise int
 			method, amount, tendered, change_due, reference, received_by, refund_of, idempotency_key, created_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP)
 		RETURNING id`,
-		orderID, restaurantID, outletID, "refund", -amountPaise, 0, 0, reference, receivedBy, refundOf, nullIfEmpty(key)).Scan(&paymentID)
+		orderID, restaurantID, outletID, "refund", -amountPaise, 0, 0, reference, nullReceiver(receivedBy), refundOf, nullIfEmpty(key)).Scan(&paymentID)
 	if err != nil {
 		if key != "" && IsUniqueViolation(err, "uq_order_payments_idempotency_key") {
 			if existing, findErr := GetPaymentIDByIdempotencyKey(key, orderID); findErr == nil && existing > 0 {
@@ -136,18 +159,18 @@ func ComputeSummaryFromLedger(orderID int) (PaymentSummary, error) {
 	}
 	totalPaise := rounding(totalRupees)
 
-	// Sum all positive amounts = paid
-	var totalPaid int64
+	// Sum all positive amounts = paid (DECIMAL reads as rupees first).
+	var paidRupees float64
 	database.DB.QueryRow(`
-		SELECT COALESCE(SUM(amount), 0) FROM order_payments WHERE order_id = $1 AND amount > 0`, orderID).Scan(&totalPaid)
+		SELECT COALESCE(SUM(amount), 0) FROM order_payments WHERE order_id = $1 AND amount > 0`, orderID).Scan(&paidRupees)
 
-	// Sum absolute value of negative amounts = refunded
-	var totalRefund int64
+	// Sum absolute value of negative amounts = refunded.
+	var refundedRupees float64
 	database.DB.QueryRow(`
-		SELECT COALESCE(SUM(ABS(amount)), 0) FROM order_payments WHERE order_id = $1 AND amount < 0`, orderID).Scan(&totalRefund)
+		SELECT COALESCE(SUM(ABS(amount)), 0) FROM order_payments WHERE order_id = $1 AND amount < 0`, orderID).Scan(&refundedRupees)
 
-	paid := totalPaid
-	refunded := totalRefund
+	paid := paiseFromDecimal(paidRupees)
+	refunded := paiseFromDecimal(refundedRupees)
 	due := totalPaise - paid + refunded
 	if due < 0 {
 		due = 0
@@ -204,10 +227,11 @@ func RefundPayment(paymentID, orderID, restaurantID, outletID int, amountPaise i
 
 	var check RefundCheck
 	var refundOf sql.NullInt64
+	var origAmountRupees float64
 	err = tx.QueryRow(`
 		SELECT amount, refund_of, order_id, restaurant_id, outlet_id
 		FROM order_payments WHERE id = $1 FOR UPDATE`, paymentID).Scan(
-		&check.OriginalAmountPaise, &refundOf,
+		&origAmountRupees, &refundOf,
 		&check.OriginalOrderID, &check.OriginalRestaurantID, &check.OriginalOutletID)
 	if err == sql.ErrNoRows {
 		return 0, false, ErrRefundNotFound
@@ -215,18 +239,24 @@ func RefundPayment(paymentID, orderID, restaurantID, outletID int, amountPaise i
 	if err != nil {
 		return 0, false, err
 	}
+	// Ledger amounts are DECIMAL holding whole paise: convert without
+	// the rupees→paise scaling (see paiseFromDecimal). Scanning NUMERIC
+	// straight into int64 fails ("100000.00").
+	check.OriginalAmountPaise = paiseFromDecimal(origAmountRupees)
 	if refundOf.Valid {
 		check.OriginalRefundOf = int(refundOf.Int64)
 	}
 	// Ledger-derived within the same lock: abs sum of prior refunds
 	// against this payment, including rows committed by a winner that
 	// held this lock before us.
+	var refundedRupees float64
 	err = tx.QueryRow(`
 		SELECT COALESCE(SUM(ABS(amount)), 0) FROM order_payments
-		WHERE refund_of = $1 AND amount < 0`, paymentID).Scan(&check.AlreadyRefundedPaise)
+		WHERE refund_of = $1 AND amount < 0`, paymentID).Scan(&refundedRupees)
 	if err != nil {
 		return 0, false, err
 	}
+	check.AlreadyRefundedPaise = paiseFromDecimal(refundedRupees)
 
 	if err := ValidateRefundRequest(check, orderID, restaurantID, outletID, amountPaise); err != nil {
 		return 0, false, err
@@ -236,7 +266,7 @@ func RefundPayment(paymentID, orderID, restaurantID, outletID int, amountPaise i
 			method, amount, tendered, change_due, reference, received_by, refund_of, idempotency_key, created_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP)
 		RETURNING id`,
-		orderID, restaurantID, outletID, "refund", -amountPaise, 0, 0, reference, receivedBy, paymentID, nullIfEmpty(key)).Scan(&paymentIDOut)
+		orderID, restaurantID, outletID, "refund", -amountPaise, 0, 0, reference, nullReceiver(receivedBy), paymentID, nullIfEmpty(key)).Scan(&paymentIDOut)
 	if err != nil {
 		// A failed statement poisons the transaction, so roll back
 		// before looking up the concurrent winner on a fresh query.

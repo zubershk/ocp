@@ -71,44 +71,62 @@ func ValidateDiscountRules(rule DiscountRule, orderSubtotalPaise int64,
 	return true, ""
 }
 
+// scanDiscountRow maps one discount row into a DiscountRule.
+// Ledger-adjacent values arrive as DECIMAL/nullable timestamps, so
+// value and window scan into float64/NullTime first: scanning NUMERIC
+// straight into int64 fails ("10.00"), and NULL into time.Time fails.
+// Percent values convert to the 0-10000 scale used by Discount().
+func scanDiscountRow(scan func(dest ...any) error) (*DiscountRule, error) {
+	var rule DiscountRule
+	var dtype string
+	var value, minSubtotal float64
+	var startsAt, endsAt sql.NullTime
+	if err := scan(
+		&rule.ID, &rule.RestaurantID, &rule.Name, &rule.Code,
+		&dtype, &value, &rule.Active,
+		&startsAt, &endsAt, &minSubtotal); err != nil {
+		return nil, err
+	}
+	rule.Type = dtype
+	rule.MinSubtotal = rounding(minSubtotal)
+	if startsAt.Valid {
+		rule.StartsAt = startsAt.Time
+	}
+	if endsAt.Valid {
+		rule.EndsAt = endsAt.Time
+	}
+	if dtype == "percent" {
+		rule.Value = int64(value * 100) // 10% -> 1000
+	} else {
+		rule.Value = rounding(value) // rupees -> paise
+	}
+	return &rule, nil
+}
+
 // GetDiscountByCode returns the discount rule for a given code at a
 // restaurant, or nil if not found.
 func GetDiscountByCode(restaurantID int, code string) *DiscountRule {
-	var rule DiscountRule
-	err := database.DB.QueryRow(`
+	rule, err := scanDiscountRow(database.DB.QueryRow(`
 		SELECT id, restaurant_id, name, code, type, value, active,
 		       starts_at, ends_at, min_subtotal
 		FROM discounts WHERE restaurant_id = $1 AND code = $2`,
-		restaurantID, code).Scan(
-		&rule.ID, &rule.RestaurantID, &rule.Name, &rule.Code,
-		&rule.Type, &rule.Value, &rule.Active,
-		&rule.StartsAt, &rule.EndsAt, &rule.MinSubtotal)
-	if err == sql.ErrNoRows {
-		return nil
-	}
+		restaurantID, code).Scan)
 	if err != nil {
 		return nil
 	}
-	return &rule
+	return rule
 }
 
 // GetDiscountByID returns the discount rule by its internal ID.
 func GetDiscountByID(discountID int) *DiscountRule {
-	var rule DiscountRule
-	err := database.DB.QueryRow(`
+	rule, err := scanDiscountRow(database.DB.QueryRow(`
 		SELECT id, restaurant_id, name, code, type, value, active,
 		       starts_at, ends_at, min_subtotal
-		FROM discounts WHERE id = $1`, discountID).Scan(
-		&rule.ID, &rule.RestaurantID, &rule.Name, &rule.Code,
-		&rule.Type, &rule.Value, &rule.Active,
-		&rule.StartsAt, &rule.EndsAt, &rule.MinSubtotal)
-	if err == sql.ErrNoRows {
-		return nil
-	}
+		FROM discounts WHERE id = $1`, discountID).Scan)
 	if err != nil {
 		return nil
 	}
-	return &rule
+	return rule
 }
 
 // ListActiveDiscounts returns all active discounts for a restaurant.
@@ -124,16 +142,13 @@ func ListActiveDiscounts(restaurantID int, currentTime time.Time) ([]DiscountRul
 
 	var rules []DiscountRule
 	for rows.Next() {
-		var r DiscountRule
-		if err := rows.Scan(
-			&r.ID, &r.RestaurantID, &r.Name, &r.Code,
-			&r.Type, &r.Value, &r.Active,
-			&r.StartsAt, &r.EndsAt, &r.MinSubtotal); err != nil {
+		r, err := scanDiscountRow(rows.Scan)
+		if err != nil {
 			return nil, err
 		}
-		ok, _ := ValidateDiscountRules(r, 0, currentTime) // subtotal checked by caller
+		ok, _ := ValidateDiscountRules(*r, 0, currentTime) // subtotal checked by caller
 		if ok {
-			rules = append(rules, r)
+			rules = append(rules, *r)
 		}
 	}
 	return rules, rows.Err()

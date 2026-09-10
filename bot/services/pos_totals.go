@@ -134,27 +134,48 @@ func recalculateOrderTotalsTx(q dbQuerier, orderID, restaurantID int) (PriceSumm
 	if err != nil {
 		return summary, err
 	}
-	defer rows.Close()
-
-	var subtotalPaise int64
-	itemCount := 0
+	// Drain the lines BEFORE any further query: q may be an open
+	// transaction whose single connection is held by rows. Issuing
+	// another statement on the same tx mid-iteration interleaves on
+	// the wire (pq: unexpected Parse response) or deadlocks.
+	type orderLine struct {
+		menuItemID int
+		quantity   int
+		size       string
+		crust      string
+	}
+	var lines []orderLine
 	for rows.Next() {
 		var menuItemID, quantity int
 		var optionsJSON []byte
 		if err := rows.Scan(&menuItemID, &quantity, &optionsJSON); err != nil {
+			rows.Close()
 			return summary, err
 		}
 		var opts map[string]string
 		_ = json.Unmarshal(optionsJSON, &opts)
-		unitPaise, err := canonicalUnitPrice(q, menuItemID, opts["size"], opts["crust"], restaurantID)
+		lines = append(lines, orderLine{
+			menuItemID: menuItemID,
+			quantity:   quantity,
+			size:       opts["size"],
+			crust:      opts["crust"],
+		})
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return summary, err
+	}
+	rows.Close()
+
+	var subtotalPaise int64
+	itemCount := 0
+	for _, line := range lines {
+		unitPaise, err := canonicalUnitPrice(q, line.menuItemID, line.size, line.crust, restaurantID)
 		if err != nil {
 			return summary, err
 		}
-		subtotalPaise += unitPaise * int64(quantity)
-		itemCount += quantity
-	}
-	if err := rows.Err(); err != nil {
-		return summary, err
+		subtotalPaise += unitPaise * int64(line.quantity)
+		itemCount += line.quantity
 	}
 
 	dType, dValue := loadDiscountForRecalc(q, discountID, restaurantID, subtotalPaise, time.Now())
