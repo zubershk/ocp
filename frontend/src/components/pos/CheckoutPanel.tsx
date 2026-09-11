@@ -213,7 +213,7 @@ export default function CheckoutPanel({
             <ul className="space-y-1 text-xs">
               {payments.map((p) => (
                 <li key={p.paymentId} className="flex justify-between rounded-lg bg-emerald-50 text-emerald-800 px-2.5 py-1.5 font-bold">
-                  <span className="uppercase">{p.method}{p.replayed ? ' · retried (no double-charge)' : ''}</span>
+                  <span className="uppercase">{p.method}</span>
                   <span className="tabular-nums">{formatINR(toRupees(p.amountPaise))}</span>
                 </li>
               ))}
