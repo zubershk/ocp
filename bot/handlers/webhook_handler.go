@@ -133,7 +133,11 @@ func (h *WebhookHandler) HandleWebhook(c *gin.Context) {
 	}
 
 	// Clean phone number (remove @s.whatsapp.net)
-	phone := cleanPhone(sender)
+	// Prefer a real phone number over a LID: in LID privacy mode the
+	// primary sender is `<lid>@lid`, which is not dialable. The PN is
+	// usually still present in an alternate field (SenderAlt, Chat,
+	// remoteJidAlt, ...).
+	phone := resolveSenderPhone(data, info, keyMap, sender)
 	if phone == "" {
 		log.Printf("[wa-debug] bail: no phone. body=%.700s", string(raw))
 		c.JSON(http.StatusOK, gin.H{"status": "no phone"})
@@ -298,6 +302,109 @@ func cleanPhone(phone string) string {
 	}
 	if len(cleaned) == 11 && cleaned[0] == '0' {
 		return cleaned[1:]
+	}
+	return cleaned
+}
+
+// resolveSenderPhone picks the best dialable phone number from the
+// identity fields of an Evolution webhook payload.
+//
+// In LID privacy mode the primary sender (Info.Sender / key.remoteJid)
+// is a `<lid>@lid` address. Storing its digits as whatsapp_number
+// creates customer rows that can never receive messages (campaigns to
+// them fail). The real phone number is usually still present in an
+// alternate field (Info.SenderAlt, key.remoteJidAlt, senderPn, ...),
+// so prefer any phone-like @s.whatsapp.net candidate. Only when no PN
+// candidate exists do we fall back to the legacy cleanPhone(sender)
+// behavior, keeping LID-only contacts on a working (if unsendable)
+// chat row instead of dropping their messages.
+func resolveSenderPhone(data, info, keyMap map[string]interface{}, sender string) string {
+	var cands []string
+	strField := func(m map[string]interface{}, keys ...string) string {
+		if m == nil {
+			return ""
+		}
+		for _, k := range keys {
+			if s, ok := m[k].(string); ok && s != "" {
+				return s
+			}
+		}
+		return ""
+	}
+	// Alternate-identity fields across payload shapes (whatsmeow
+	// MessageInfo, Baileys key, Evolution extras). SenderAlt/Chat first:
+	// evolution-go already swaps Sender<->SenderAlt when it can, so a PN
+	// here is authoritative.
+	if info != nil {
+		for _, k := range []string{"SenderAlt", "senderAlt", "senderalt", "ChatAlt", "chatAlt", "SenderPn", "senderPn", "sender_pn", "ParticipantPn", "participantPn", "Chat"} {
+			if s := strField(info, k); s != "" {
+				cands = append(cands, s)
+			}
+		}
+	}
+	if keyMap != nil {
+		for _, k := range []string{"remoteJidAlt", "RemoteJidAlt", "participantAlt", "ParticipantAlt", "participantPn", "ParticipantPn", "senderPn", "SenderPn"} {
+			if v, ok := keyMap[k]; ok {
+				if s, ok := v.(string); ok && s != "" {
+					cands = append(cands, s)
+				} else if obj, ok := v.(map[string]interface{}); ok {
+					if u, ok := obj["user"].(string); ok {
+						if sv, _ := obj["server"].(string); sv != "" {
+							cands = append(cands, u+"@"+sv)
+						} else {
+							cands = append(cands, u)
+						}
+					}
+				}
+			}
+		}
+	}
+	for _, k := range []string{"SenderAlt", "senderAlt", "senderPn", "SenderPn", "sender_pn", "participantPn", "ParticipantPn", "remoteJidAlt"} {
+		if s := strField(data, k); s != "" {
+			cands = append(cands, s)
+		}
+	}
+	for _, c := range cands {
+		if p := cleanPhoneStrict(c); p != "" {
+			return p
+		}
+	}
+	fallback := cleanPhone(sender)
+	if fallback != "" && len(fallback) > 10 {
+		// LID-only contact: keep the row working, but make it visible in logs.
+		log.Printf("[wa-debug] LID-only sender, storing LID row (unsendable): len=%d", len(fallback))
+	}
+	return fallback
+}
+
+// cleanPhoneStrict extracts a dialable number from a JID candidate.
+// Only @s.whatsapp.net addresses (or bare numbers) that canonicalize
+// to exactly 10 digits qualify; @lid / @g.us / @broadcast addresses
+// return "". Unlike cleanPhone it never returns LID digits.
+func cleanPhoneStrict(jid string) string {
+	server := ""
+	if i := strings.LastIndex(jid, "@"); i >= 0 {
+		server = strings.ToLower(jid[i+1:])
+	}
+	switch server {
+	case "", "s.whatsapp.net":
+		// ok: phone address (or bare digits)
+	default:
+		return ""
+	}
+	cleaned := strings.Map(func(r rune) rune {
+		if r >= '0' && r <= '9' {
+			return r
+		}
+		return -1
+	}, jid)
+	if len(cleaned) == 12 && strings.HasPrefix(cleaned, "91") {
+		cleaned = cleaned[2:]
+	} else if len(cleaned) == 11 && cleaned[0] == '0' {
+		cleaned = cleaned[1:]
+	}
+	if len(cleaned) != 10 {
+		return ""
 	}
 	return cleaned
 }
