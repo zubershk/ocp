@@ -118,7 +118,7 @@ func TestStagingCashierFlow(t *testing.T) {
 	// 1. Create: 2x medium (500) + crust (50) => 2 x 550 = 1100.
 	order, err := svc.CreateOrder(st.restID, st.outID, []DraftItem{
 		{MenuItemID: st.itemID, Size: "medium", Crust: st.crust, Quantity: 2},
-	}, 0, SourcePOS)
+		}, 0, SourcePOS, "dine_in")
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -236,7 +236,7 @@ func TestStagingPaymentIdempotency(t *testing.T) {
 
 	order, err := svc.CreateOrder(st.restID, st.outID, []DraftItem{
 		{MenuItemID: st.itemID, Quantity: 1},
-	}, 0, SourcePOS)
+		}, 0, SourcePOS, "dine_in")
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -275,7 +275,7 @@ func TestStagingTenantIsolation(t *testing.T) {
 
 	order, err := svc.CreateOrder(a.restID, a.outID, []DraftItem{
 		{MenuItemID: a.itemID, Quantity: 1},
-	}, 0, SourcePOS)
+		}, 0, SourcePOS, "dine_in")
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -310,6 +310,46 @@ func TestStagingTenantIsolation(t *testing.T) {
 	}
 }
 
+func TestStagingOrderType(t *testing.T) {
+	stagingDB(t)
+	st := seedStagingTenant(t, "otype")
+	svc := NewPOSOrderService()
+
+	orderTypeOf := func(id int) string {
+		t.Helper()
+		var ot string
+		if err := database.DB.QueryRow(`SELECT order_type FROM orders WHERE id = $1`, id).Scan(&ot); err != nil {
+			t.Fatalf("read type: %v", err)
+		}
+		return ot
+	}
+
+	takeaway, err := svc.CreateOrder(st.restID, st.outID, []DraftItem{
+		{MenuItemID: st.itemID, Quantity: 1},
+	}, 0, SourcePOS, "takeaway")
+	if err != nil {
+		t.Fatalf("create takeaway: %v", err)
+	}
+	if got := orderTypeOf(takeaway.ID); got != OrderTypeTakeaway {
+		t.Fatalf("expected takeaway, got %q", got)
+	}
+	legacy, err := svc.CreateOrder(st.restID, st.outID, []DraftItem{
+		{MenuItemID: st.itemID, Quantity: 1},
+	}, 0, SourcePOS, "pickup")
+	if err != nil {
+		t.Fatalf("create pickup: %v", err)
+	}
+	if got := orderTypeOf(legacy.ID); got != OrderTypeTakeaway {
+		t.Fatalf("pickup must normalize to takeaway, got %q", got)
+	}
+	if err := svc.UpdateOrder(takeaway.ID, "delivery"); err != nil {
+		t.Fatalf("update type: %v", err)
+	}
+	if got := orderTypeOf(takeaway.ID); got != OrderTypeDelivery {
+		t.Fatalf("expected delivery, got %q", got)
+	}
+}
+
 func TestStagingStateMachine(t *testing.T) {
 	stagingDB(t)
 	st := seedStagingTenant(t, "sm")
@@ -317,7 +357,7 @@ func TestStagingStateMachine(t *testing.T) {
 
 	order, err := svc.CreateOrder(st.restID, st.outID, []DraftItem{
 		{MenuItemID: st.itemID, Quantity: 1},
-	}, 0, SourcePOS)
+		}, 0, SourcePOS, "dine_in")
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
