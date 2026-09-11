@@ -394,3 +394,16 @@
   100% { box-shadow: 0 0 0 14px rgba(16, 185, 129, 0); }
 }
 .order-arrive { animation: order-arrive 1.6s ease-out 3; }
+
+/* POS receipt printing: only the receipt card hits paper. */
+@media print {
+  body * { visibility: hidden; }
+  .print-receipt, .print-receipt * { visibility: visible; }
+  .print-receipt {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    border: none;
+    border-radius: 0;
+  }
+}

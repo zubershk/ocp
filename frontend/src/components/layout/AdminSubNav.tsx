@@ -1,10 +1,11 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Pizza, MessageCircle, Settings, BarChart3, Users, ScrollText, LayoutGrid, Megaphone, Image, Tag, Bot, Store, Package, Star, Check, Menu as MenuIcon, X, ExternalLink, PanelLeftClose, PanelLeftOpen, ChevronDown, History } from 'lucide-react';
+import { Pizza, MessageCircle, Settings, BarChart3, Users, ScrollText, LayoutGrid, Megaphone, Image, Tag, Bot, Store, Package, Star, Check, Menu as MenuIcon, X, ExternalLink, PanelLeftClose, PanelLeftOpen, ChevronDown, History, Monitor } from 'lucide-react';
 import { adminFetch, getAdminKey } from '../../services/api';
 
 const items = [
+  { to: '/pos', label: 'POS', icon: Monitor, group: 'Sell', roles: ['owner', 'manager', 'cashier'] },
   { to: '/admin', label: 'Orders', icon: Pizza, exact: true, group: 'Sell', badge: 'active', roles: ['owner', 'manager', 'kitchen', 'viewer'] },
   { to: '/admin/chats', label: 'Chats', icon: MessageCircle, group: 'Sell', roles: ['owner', 'manager', 'kitchen', 'viewer'] },
   { to: '/admin/catalog', label: 'Menu', icon: LayoutGrid, group: 'Catalog', roles: ['owner', 'manager', 'viewer'] },

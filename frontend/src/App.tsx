@@ -47,6 +47,7 @@ const AdminFamilyPacks = lazy(() => import('./pages/AdminFamilyPacks'));
 const AdminReviews = lazy(() => import('./pages/AdminReviews'));
 const AdminBotWorkflows = lazy(() => import('./pages/AdminBotWorkflows'));
 const AdminBusinessConfig = lazy(() => import('./pages/AdminBusinessConfig'));
+const POS = lazy(() => import('./pages/POS'));
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { refetchOnWindowFocus: false, retry: 1 } },
@@ -157,6 +158,7 @@ function AppRoutes() {
       <Route path="/admin/reviews" element={<AdminSuspense><AdminPageShell><AdminReviews /></AdminPageShell></AdminSuspense>} />
       <Route path="/admin/bot-workflows" element={<AdminSuspense><AdminPageShell><AdminBotWorkflows /></AdminPageShell></AdminSuspense>} />
       <Route path="/admin/business-config" element={<AdminSuspense><AdminPageShell><AdminBusinessConfig /></AdminPageShell></AdminSuspense>} />
+      <Route path="/pos" element={<AdminSuspense><POS /></AdminSuspense>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
