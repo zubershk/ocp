@@ -1,24 +1,12 @@
-import { useQuery } from '@tanstack/react-query';
-import { Minus, Plus, ShoppingCart, Trash2 } from 'lucide-react';
-import Button from '../ui/Button';
-import { posApi, formatPaise, type PosOrderType, type PosTable } from '../../services/posService';
+import { ShoppingBag, Trash2 } from 'lucide-react';
 import type { CartLine } from './types';
-
-const ORDER_TYPES: { value: PosOrderType; label: string }[] = [
-  { value: 'dine_in', label: 'Dine-in' },
-  { value: 'takeaway', label: 'Takeaway' },
-  { value: 'delivery', label: 'Delivery' },
-];
+import { formatPaise } from '../../services/posService';
 
 export default function CartPanel({
   cart,
   onQty,
   onRemove,
   onClear,
-  orderType,
-  onOrderType,
-  tableId,
-  onTable,
   onCreate,
   creating,
   canCreate,
@@ -27,112 +15,107 @@ export default function CartPanel({
   onQty: (key: string, delta: number) => void;
   onRemove: (key: string) => void;
   onClear: () => void;
-  orderType: PosOrderType;
-  onOrderType: (t: PosOrderType) => void;
-  tableId: number;
-  onTable: (id: number) => void;
   onCreate: () => void;
   creating: boolean;
   canCreate: boolean;
 }) {
-  const tablesQuery = useQuery({
-    queryKey: ['pos-tables'],
-    queryFn: posApi.getTables,
-    staleTime: 15 * 1000,
-    retry: 1,
-  });
-  const tables: PosTable[] = (tablesQuery.data ?? []).filter((t) => t.active);
-  const freeTables = tables.filter((t) => t.status === 'free');
+  const advisory = cart.reduce(
+    (sum, l) => sum + (l.unitPaise ?? 0) * l.quantity,
+    0,
+  );
+  const missingPrice = cart.some((l) => l.unitPaise == null);
 
   return (
-    <section aria-label="Current sale" className="rounded-3xl border border-zinc-200 bg-white p-4 flex flex-col min-h-0">
-      <div className="flex items-center gap-2">
-        <ShoppingCart size={16} className="text-zinc-500" />
-        <h2 className="font-bold text-sm">Current sale</h2>
-        <span className="ml-auto text-xs font-semibold text-zinc-500 tabular-nums">
-          {cart.reduce((n, l) => n + l.quantity, 0)} items
-        </span>
+    <div className="flex flex-col min-h-0 h-full">
+      <div className="flex items-center gap-2 mb-2">
+        <h2 className="font-bold text-lg">Current order</h2>
+        <span className="text-xs font-bold text-zinc-400 tabular-nums">{cart.reduce((n, l) => n + l.quantity, 0)} items</span>
         {cart.length > 0 && (
-          <button onClick={onClear} className="text-zinc-400 hover:text-red-600 transition-colors" aria-label="Clear sale">
-            <Trash2 size={15} />
+          <button
+            type="button"
+            onClick={onClear}
+            className="ml-auto text-xs font-bold text-zinc-400 hover:text-red-600 inline-flex items-center gap-1"
+          >
+            <Trash2 size={13} /> Clear
           </button>
         )}
       </div>
 
       {cart.length === 0 ? (
-        <p className="text-sm text-zinc-400 text-center py-8">Tap items to start a sale.</p>
+        <div className="flex-1 min-h-40 rounded-2xl border-2 border-dashed border-zinc-200 grid place-items-center text-center p-6">
+          <div>
+            <ShoppingBag className="mx-auto text-zinc-300 mb-2" size={26} />
+            <div className="font-bold text-zinc-500">Start a new order</div>
+            <div className="text-sm text-zinc-400">Tap items from the menu to add them here.</div>
+          </div>
+        </div>
       ) : (
-        <ul className="mt-2 space-y-1.5 overflow-y-auto max-h-64 pr-0.5">
+        <ul className="flex-1 min-h-0 overflow-y-auto space-y-2 pr-0.5">
           {cart.map((l) => (
-            <li key={l.key} className="flex items-center gap-2 rounded-xl bg-stone-50 px-2.5 py-2">
+            <li key={l.key} className="rounded-2xl border-2 border-zinc-100 bg-white p-2.5 flex items-center gap-2.5">
               <div className="min-w-0 flex-1">
-                <div className="text-sm font-semibold truncate">{l.name}</div>
-                <div className="text-[11px] text-zinc-500">
-                  {l.size}
-                  {l.crust ? ` · ${l.crust}` : ''} · {l.unitPaise != null ? formatPaise(l.unitPaise) : 'priced at register'}
+                <div className="font-bold text-sm leading-tight truncate">{l.name}</div>
+                <div className="text-[11px] font-semibold text-zinc-400 capitalize">
+                  {l.size !== 'regular' && l.size}
+                  {l.size !== 'regular' && l.crustName && ' · '}
+                  {l.crustName}
+                  {l.size === 'regular' && !l.crustName && 'Standard'}
                 </div>
+                {l.unitPaise != null && (
+                  <div className="text-xs font-bold text-zinc-500 mt-0.5 tabular-nums">{formatPaise(l.unitPaise)} each</div>
+                )}
               </div>
-              <div className="inline-flex items-center gap-1">
-                <button onClick={() => onQty(l.key, -1)} className="p-1 rounded-lg hover:bg-white" aria-label="Decrease">
-                  <Minus size={13} />
+              <div className="inline-flex items-center gap-1 shrink-0">
+                <button
+                  type="button"
+                  aria-label={`Reduce ${l.name}`}
+                  onClick={() => onQty(l.key, -1)}
+                  className="w-10 h-10 rounded-xl bg-zinc-100 hover:bg-zinc-200 font-black text-lg grid place-items-center active:scale-95"
+                >
+                  −
                 </button>
-                <span className="w-5 text-center text-sm font-bold tabular-nums">{l.quantity}</span>
-                <button onClick={() => onQty(l.key, 1)} className="p-1 rounded-lg hover:bg-white" aria-label="Increase">
-                  <Plus size={13} />
+                <span className="w-8 text-center font-black text-lg tabular-nums">{l.quantity}</span>
+                <button
+                  type="button"
+                  aria-label={`Increase ${l.name}`}
+                  onClick={() => onQty(l.key, 1)}
+                  className="w-10 h-10 rounded-xl bg-zinc-950 text-white hover:bg-zinc-800 font-black text-lg grid place-items-center active:scale-95"
+                >
+                  +
                 </button>
               </div>
-              <button onClick={() => onRemove(l.key)} className="p-1 text-zinc-400 hover:text-red-600" aria-label={`Remove ${l.name}`}>
-                <Trash2 size={13} />
+              <button
+                type="button"
+                aria-label={`Remove ${l.name}`}
+                onClick={() => onRemove(l.key)}
+                className="w-10 h-10 rounded-xl text-zinc-300 hover:text-red-600 hover:bg-red-50 grid place-items-center"
+              >
+                <Trash2 size={16} />
               </button>
             </li>
           ))}
         </ul>
       )}
 
-      <div className="mt-3">
-        <div className="text-[11px] font-bold uppercase tracking-wider text-zinc-500 mb-1.5">Order type</div>
-        <div className="grid grid-cols-3 gap-1.5" role="radiogroup" aria-label="Order type">
-          {ORDER_TYPES.map((o) => (
-            <button
-              key={o.value}
-              type="button"
-              role="radio"
-              aria-checked={orderType === o.value}
-              onClick={() => onOrderType(o.value)}
-              className={`px-2 py-2 rounded-xl text-xs font-bold border transition-colors ${
-                orderType === o.value ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white border-zinc-200 hover:border-zinc-400'
-              }`}
-            >
-              {o.label}
-            </button>
-          ))}
-        </div>
+      <div className="pt-3 mt-3 border-t-2 border-zinc-100 space-y-3">
+        {advisory > 0 && (
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-zinc-500 font-semibold">Estimated total</span>
+            <span className="font-black text-xl tabular-nums">{formatPaise(advisory)}</span>
+          </div>
+        )}
+        {missingPrice && (
+          <p className="text-[11px] text-zinc-400">Some items price at the register when the order is created.</p>
+        )}
+        <button
+          type="button"
+          disabled={!canCreate || creating}
+          onClick={onCreate}
+          className="w-full h-14 rounded-2xl bg-orange-600 hover:bg-orange-500 disabled:bg-zinc-200 disabled:text-zinc-400 disabled:cursor-not-allowed text-white font-black text-lg transition-all active:scale-[0.98] shadow-lg shadow-orange-600/25"
+        >
+          {creating ? 'Creating order…' : 'Create order'}
+        </button>
       </div>
-
-      {orderType === 'dine_in' && (
-        <div className="mt-3">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-zinc-500 mb-1.5">Table</div>
-          <select
-            aria-label="Table"
-            className="w-full h-10 rounded-xl border border-stone-200 bg-white px-3 text-sm font-medium"
-            value={tableId}
-            onChange={(e) => onTable(Number(e.target.value))}
-          >
-            <option value={0}>No table</option>
-            {freeTables.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name} · seats {t.capacity}
-              </option>
-            ))}
-          </select>
-          {tablesQuery.isError && <p className="text-[11px] text-amber-700 mt-1">Tables unavailable — sale can continue without one.</p>}
-        </div>
-      )}
-
-      <Button className="mt-4 w-full" size="lg" loading={creating} disabled={!canCreate} onClick={onCreate}>
-        {cart.length === 0 ? 'Add items first' : 'Create order'}
-      </Button>
-      <p className="text-[11px] text-zinc-400 mt-1.5 text-center">Totals are calculated by the register on creation.</p>
-    </section>
+    </div>
   );
 }

@@ -13,10 +13,11 @@ import {
 } from '../services/posService';
 import PosAuthGate from '../components/pos/PosAuthGate';
 import OutletSwitcher from '../components/pos/OutletSwitcher';
+import PosHeader from '../components/pos/PosHeader';
+import OrderTypeBar from '../components/pos/OrderTypeBar';
 import MenuPanel from '../components/pos/MenuPanel';
 import CartPanel from '../components/pos/CartPanel';
-import OrderPanel from '../components/pos/OrderPanel';
-import PaymentPanel from '../components/pos/PaymentPanel';
+import CheckoutPanel from '../components/pos/CheckoutPanel';
 import HoldDrawer from '../components/pos/HoldDrawer';
 import ReceiptModal from '../components/pos/ReceiptModal';
 import type { CartLine, HeldOrder, RecordedPayment } from '../components/pos/types';
@@ -42,6 +43,8 @@ function saveJSON(key: string, value: unknown): void {
 }
 
 const paymentsKey = (orderId: number): string => `ocp_pos_payments:${orderId}`;
+const heldKey = (outletId: number | null): string => `ocp_pos_held:${outletId ?? 'default'}`;
+const orderKey = (outletId: number | null): string => `ocp_pos_order:${outletId ?? 'default'}`;
 
 export default function POS() {
   const [authed, setAuthed] = useState(() => getAdminKey().length > 0);
@@ -63,20 +66,44 @@ export default function POS() {
   const [receiptOpen, setReceiptOpen] = useState(false);
   const queryClient = useQueryClient();
 
+  const [online, setOnline] = useState(true);
+  useEffect(() => {
+    const handleOnline = () => setOnline(true);
+    const handleOffline = () => setOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
   const roleQuery = useQuery({
     queryKey: ['pos-role'],
-    queryFn: () => adminFetch<{ role?: string; user?: { role?: string } }>('/admin/me').then((r) => r.role ?? r.user?.role ?? 'owner'),
+    queryFn: () => adminFetch<{ role?: string; user?: { role?: string; name?: string } }>('/admin/me').then((r) => r.role ?? r.user?.role ?? 'owner'),
     enabled: authed,
     staleTime: 5 * 60 * 1000,
     retry: 1,
   });
   const role = roleQuery.data ?? 'owner';
+  const operatorName = (roleQuery.data as { user?: { name?: string } } & { user?: { name?: string } })?.user?.name ?? '';
   const canPay = ['owner', 'manager', 'cashier'].includes(role);
   const canDiscount = ['owner', 'manager'].includes(role);
   const canRefund = ['owner', 'manager'].includes(role);
   const canManage = ['owner', 'manager'].includes(role);
 
-  // Shared order read (same key as OrderPanel: one fetch serves both).
+  // Held orders: outlet-scoped
+  const heldKeyCurrent = `ocp_pos_held:${outletId ?? 'default'}`;
+  const orderKeyCurrent = `ocp_pos_order:${outletId ?? 'default'}`;
+  useEffect(() => {
+    const saved = loadJSON<HeldOrder[]>(`ocp_pos_held:${outletId ?? 'default'}`, []);
+    setHeld(saved);
+  }, [outletId]);
+  useEffect(() => {
+    saveJSON(`ocp_pos_held:${outletId ?? 'default'}`, held);
+  }, [outletId, held]);
+
+  // Shared order read
   const orderQuery = useQuery({
     queryKey: ['pos-order', orderId],
     queryFn: () => posApi.getOrder(orderId as number),
@@ -88,20 +115,20 @@ export default function POS() {
   const orderOpen = order != null && ['draft', 'held', 'confirmed'].includes(order.status);
 
   // Restore persisted payment trail when (re)opening an order.
+  const paymentsKey = (orderId: number): string => `ocp_pos_payments:${orderId}`;
   useEffect(() => {
     if (orderId == null) {
       setPayments([]);
       setDuePaise(null);
       return;
     }
-    const saved = loadJSON<{ due: number | null; payments: RecordedPayment[] }>(paymentsKey(orderId), { due: null, payments: [] });
+    const saved = loadJSON<{ due: number | null; payments: RecordedPayment[] }>(`ocp_pos_payments:${orderId}`, { due: null, payments: [] });
     setPayments(saved.payments);
     setDuePaise(saved.due ?? (order ? toPaise(order.total) : null));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderId]);
 
   useEffect(() => {
-    if (orderId != null) saveJSON(paymentsKey(orderId), { due: duePaise, payments });
+    if (orderId != null) saveJSON(`ocp_pos_payments:${orderId}`, { due: duePaise, payments });
   }, [orderId, duePaise, payments]);
 
   useEffect(() => {
@@ -117,7 +144,7 @@ export default function POS() {
     setDuePaise(null);
     setNotice(null);
     try {
-      localStorage.removeItem(ORDER_KEY);
+      localStorage.removeItem(`ocp_pos_order:${outletId ?? 'default'}`);
     } catch {
       /* ignore */
     }
@@ -128,7 +155,7 @@ export default function POS() {
       setOrderId(id);
       setPayments([]);
       setDuePaise(toPaise(totalRupees));
-      saveJSON(ORDER_KEY, id);
+      localStorage.setItem(`ocp_pos_order:${outletId ?? 'default'}`, String(id));
       queryClient.invalidateQueries({ queryKey: ['pos-tables'] });
     },
     [queryClient],
@@ -222,7 +249,10 @@ export default function POS() {
       name: it.name,
       size: it.size ?? '',
       crust: it.crust ?? '',
+      crustName: '',
       quantity: it.quantity,
+      image: '',
+      categoryName: '',
       unitPaise: null,
     }));
     posApi
@@ -237,40 +267,37 @@ export default function POS() {
 
   const outletName = 'Current outlet';
 
-  const header = (
-    <header className="sticky top-0 z-30 bg-zinc-950 text-white">
-      <div className="mx-auto max-w-7xl px-3 sm:px-4 py-2.5 flex items-center gap-2 sm:gap-3">
-        <div className="flex items-center gap-2 min-w-0">
-          <div className="w-8 h-8 rounded-xl bg-orange-600 grid place-items-center shrink-0">
-            <Store size={16} />
-          </div>
-          <div className="min-w-0">
-            <div className="font-bold text-sm leading-tight truncate">POS Terminal</div>
-            <div className="text-[11px] text-zinc-400 capitalize">{role}</div>
-          </div>
-        </div>
-        <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
-          <div className="[&_select]:!bg-zinc-900 [&_select]:!text-white [&_select]:!border-zinc-700 [&_svg]:!text-zinc-400">
-            <OutletSwitcher
-              outletId={outletId}
-              onChange={(id) => {
-                setOutletId(id);
-                resetSale();
-                queryClient.invalidateQueries({ queryKey: ['pos-menu'] });
-                queryClient.invalidateQueries({ queryKey: ['pos-tables'] });
-              }}
-            />
-          </div>
-          <Button size="sm" variant="secondary" onClick={() => setHoldOpen(true)} icon={<PauseCircle size={14} />}>
-            Held{held.length > 0 ? ` (${held.length})` : ''}
-          </Button>
-          <Button size="sm" variant="secondary" onClick={resetSale} icon={<PlusCircle size={14} />}>
-            New sale
-          </Button>
-        </div>
-      </div>
-    </header>
-  );
+  const onOrderTypeChange = (t: PosOrderType) => {
+    setOrderType(t);
+    if (t !== 'dine_in') setTableId(0);
+  };
+
+  const onQty = useCallback((key: string, delta: number) => {
+    setCart((prev) =>
+      prev
+        .map((l) => (l.key === key ? { ...l, quantity: l.quantity + delta } : l))
+        .filter((l) => l.quantity > 0),
+    );
+  }, []);
+
+  const header = useMemo(() => (
+    <PosHeader
+      outletId={outletId}
+      onOutlet={(id) => {
+        setOutletId(id);
+        resetSale();
+        queryClient.invalidateQueries({ queryKey: ['pos-menu'] });
+        queryClient.invalidateQueries({ queryKey: ['pos-tables'] });
+      }}
+      operator={operatorName}
+      role={role}
+      heldCount={held.length}
+      onNewSale={resetSale}
+      onHeld={() => setHoldOpen(true)}
+      onLock={() => setAuthed(false)}
+      online={navigator.onLine}
+    />
+  ), [outletId, operatorName, role, held.length, queryClient]);
 
   const authedView = useMemo(() => {
     if (!authed) return null;
@@ -279,7 +306,14 @@ export default function POS() {
         {header}
         <main className="mx-auto w-full max-w-7xl flex-1 p-3 sm:p-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_400px] items-start">
           <div className="rounded-3xl border border-zinc-200 bg-white p-4 min-h-0">
-            <MenuPanel onAdd={addLine} outletId={outletId} />
+            <OrderTypeBar value={orderType} onChange={(t) => { setOrderType(t); if (t !== 'dine_in') setTableId(0); }} />
+            <MenuPanel onAdd={addLine} outletId={outletId} cart={cart} onQty={(key, delta) => {
+              setCart((prev) =>
+                prev
+                  .map((l) => (l.key === key ? { ...l, quantity: l.quantity + delta } : l))
+                  .filter((l) => l.quantity > 0),
+              );
+            }} />
           </div>
           <div className="space-y-3 min-w-0">
             {fatal && (
@@ -307,49 +341,32 @@ export default function POS() {
                 }
                 onRemove={(key) => setCart((prev) => prev.filter((l) => l.key !== key))}
                 onClear={() => setCart([])}
-                orderType={orderType}
-                onOrderType={setOrderType}
-                tableId={tableId}
-                onTable={setTableId}
                 onCreate={createOrder}
                 creating={creating}
                 canCreate={cart.length > 0 && ['owner', 'manager', 'cashier'].includes(role)}
               />
             ) : (
               <>
-                <OrderPanel
+                <CheckoutPanel
                   orderId={orderId}
-                  canDiscount={canDiscount}
-                  canManage={canManage}
+                  payments={payments}
+                  duePaise={duePaise ?? (order ? toPaise(order.total) : null)}
+                  onPaid={(p, due) => {
+                    setPayments((prev) => [...prev, p]);
+                    setDuePaise(due);
+                  }}
+                  onCompleted={() => {
+                    queryClient.invalidateQueries({ queryKey: ['pos-order', orderId] });
+                    setReceiptOpen(true);
+                  }}
                   onHold={holdCurrent}
-                  onResumeHeld={() => queryClient.invalidateQueries({ queryKey: ['pos-order', orderId] })}
                   onCancel={cancelCurrent}
                   onModify={modifyItems}
-                  holding={holding}
-                  cancelling={cancelling}
-                  notice={notice}
-                  onOpenReceipt={() => setReceiptOpen(true)}
-                  onPay={() => document.getElementById('pos-pay-now')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+                  onReceipt={() => setReceiptOpen(true)}
+                  canPay={canPay}
+                  canDiscount={canDiscount}
                 />
-                {order && (
-                  <div id="pos-pay-now" className="scroll-mt-3">
-                    <PaymentPanel
-                      order={order}
-                      orderOpen={orderOpen}
-                      duePaise={duePaise ?? toPaise(order.total)}
-                      payments={payments}
-                      onPaid={(p, due) => {
-                        setPayments((prev) => [...prev, p]);
-                        setDuePaise(due);
-                      }}
-                      onCompleted={() => {
-                        queryClient.invalidateQueries({ queryKey: ['pos-order', orderId] });
-                        setReceiptOpen(true);
-                      }}
-                      canPay={canPay}
-                    />
-                  </div>
-                )}
+                {/* Payment is handled within CheckoutPanel now */}
                 <Button variant="ghost" size="sm" icon={<ReceiptText size={14} />} onClick={() => setReceiptOpen(true)}>
                   View receipt
                 </Button>
@@ -357,7 +374,14 @@ export default function POS() {
             )}
           </div>
         </main>
-        <HoldDrawer open={holdOpen} onClose={() => setHoldOpen(false)} held={held} onResume={resumeHeld} resumingId={resumingId} />
+        <HoldDrawer
+          open={holdOpen}
+          onClose={() => setHoldOpen(false)}
+          held={held}
+          orderTypes={{}}
+          onResume={resumeHeld}
+          resumingId={resumingId}
+        />
         <ReceiptModal
           open={receiptOpen}
           onClose={() => setReceiptOpen(false)}
@@ -365,6 +389,7 @@ export default function POS() {
           payments={payments}
           canRefund={canRefund}
           outletName={outletName}
+          onNewSale={resetSale}
         />
       </div>
     );
