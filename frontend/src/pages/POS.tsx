@@ -12,7 +12,6 @@ import {
   type PosOrderType,
 } from '../services/posService';
 import PosAuthGate from '../components/pos/PosAuthGate';
-import OutletSwitcher from '../components/pos/OutletSwitcher';
 import PosHeader from '../components/pos/PosHeader';
 import OrderTypeBar from '../components/pos/OrderTypeBar';
 import MenuPanel from '../components/pos/MenuPanel';
@@ -23,8 +22,6 @@ import HoldDrawer from '../components/pos/HoldDrawer';
 import ReceiptModal from '../components/pos/ReceiptModal';
 import type { CartLine, HeldOrder, RecordedPayment } from '../components/pos/types';
 
-const HELD_KEY = 'ocp_pos_held';
-const ORDER_KEY = 'ocp_pos_order';
 const PAYMENTS_KEY = (orderId: number): string => `ocp_pos_payments:${orderId}`;
 
 function loadJSON<T>(key: string, fallback: T): T {
@@ -50,8 +47,8 @@ export default function POS() {
   const [cart, setCart] = useState<CartLine[]>([]);
   const [orderType, setOrderType] = useState<PosOrderType>('dine_in');
   const [tableId, setTableId] = useState(0);
-  const [orderId, setOrderId] = useState<number | null>(() => loadJSON<number | null>(ORDER_KEY, null));
-  const [held, setHeld] = useState<HeldOrder[]>(() => loadJSON<HeldOrder[]>(HELD_KEY, []));
+  const [orderId, setOrderId] = useState<number | null>(null);
+  const [held, setHeld] = useState<HeldOrder[]>([]);
   const [payments, setPayments] = useState<RecordedPayment[]>([]);
   const [duePaise, setDuePaise] = useState<number | null>(null);
   const [creating, setCreating] = useState(false);
@@ -91,23 +88,25 @@ export default function POS() {
   const canManage = ['owner', 'manager'].includes(role);
 
   // Outlet-scoped persistence
+  const heldKey = (id: number | null) => `ocp_pos_held:${id ?? 'default'}`;
+  const orderKey = (id: number | null) => `ocp_pos_order:${id ?? 'default'}`;
   useEffect(() => {
-    const saved = loadJSON<HeldOrder[]>(`${HELD_KEY}:${outletId ?? 'default'}`, []);
+    const saved = loadJSON<HeldOrder[]>(heldKey(outletId), []);
     setHeld(saved);
   }, [outletId]);
   useEffect(() => {
-    saveJSON(`${HELD_KEY}:${outletId ?? 'default'}`, held);
+    saveJSON(heldKey(outletId), held);
   }, [outletId, held]);
 
   // Restore persisted current order id for this outlet
   useEffect(() => {
-    const saved = loadJSON<number | null>(`${ORDER_KEY}:${outletId ?? 'default'}`, null);
+    const saved = loadJSON<number | null>(orderKey(outletId), null);
     setOrderId(saved);
   }, [outletId]);
 
   // Persist current order id
   useEffect(() => {
-    if (orderId != null) saveJSON(`${ORDER_KEY}:${outletId ?? 'default'}`, orderId);
+    if (orderId != null) saveJSON(orderKey(outletId), orderId);
   }, [orderId, outletId]);
 
   // Restore persisted payment trail when (re)opening an order.
@@ -135,7 +134,7 @@ export default function POS() {
     setDuePaise(null);
     setNotice(null);
     try {
-      localStorage.removeItem(`${ORDER_KEY}:${outletId ?? 'default'}`);
+      localStorage.removeItem(`ocp_pos_order:${outletId ?? 'default'}`);
     } catch {
       /* ignore */
     }
@@ -230,11 +229,6 @@ const holdCurrent = async () => {
     } finally {
       setCancelling(false);
     }
-  };
-
-  const onOrderTypeChange = (t: PosOrderType) => {
-    setOrderType(t);
-    if (t !== 'dine_in') setTableId(0);
   };
 
   const onQty = useCallback((key: string, delta: number) => {
