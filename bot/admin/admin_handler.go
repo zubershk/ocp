@@ -1157,17 +1157,23 @@ func (h *AdminHandler) GetPOSOrderTables(c *gin.Context) {
 }
 
 // AssignTableToOrder assigns a table to a POS order.
+// Route: PATCH /pos/tables/:id — :id is the table; the order arrives
+// in the JSON body. (The route carries no :order_id/:table_id params,
+// so reading them there always 400'd; body + :id is the contract.)
 func (h *AdminHandler) AssignTableToOrder(c *gin.Context) {
-	orderID, err := strconv.Atoi(c.Param("order_id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid order ID"})
-		return
-	}
-	tableID, err := strconv.Atoi(c.Param("table_id"))
+	tableID, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid table ID"})
 		return
 	}
+	var req struct {
+		OrderID int `json:"order_id"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || req.OrderID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "order_id is required"})
+		return
+	}
+	orderID := req.OrderID
 	restaurantID := c.GetInt("restaurantID")
 	outletID := c.GetInt("outletID")
 	err = h.posOrderService.SetTable(orderID, tableID, restaurantID, outletID)
@@ -1195,19 +1201,18 @@ func (h *AdminHandler) GetPOSDiscounts(c *gin.Context) {
 }
 
 // ApplyPOSDiscount applies a discount to a POS order.
+// Route: POST /pos/discounts — both IDs arrive in the JSON body.
 func (h *AdminHandler) ApplyPOSDiscount(c *gin.Context) {
-	orderID, err := strconv.Atoi(c.Param("order_id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid order ID"})
+	var req struct {
+		OrderID    int `json:"order_id"`
+		DiscountID int `json:"discount_id"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || req.OrderID <= 0 || req.DiscountID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "order_id and discount_id are required"})
 		return
 	}
-	discountID, err := strconv.Atoi(c.Param("discount_id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid discount ID"})
-		return
-	}
-	err = h.posOrderService.ApplyDiscount(orderID, discountID)
-	if err != nil {
+	orderID, discountID := req.OrderID, req.DiscountID
+	if err := h.posOrderService.ApplyDiscount(orderID, discountID); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
 		return
 	}
@@ -1215,8 +1220,9 @@ func (h *AdminHandler) ApplyPOSDiscount(c *gin.Context) {
 }
 
 // RemovePOSDiscount removes a discount from a POS order.
+// Route: DELETE /pos/discounts/:id — :id is the order ID.
 func (h *AdminHandler) RemovePOSDiscount(c *gin.Context) {
-	orderID, err := strconv.Atoi(c.Param("order_id"))
+	orderID, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid order ID"})
 		return
@@ -1234,7 +1240,14 @@ func (h *AdminHandler) RemovePOSDiscount(c *gin.Context) {
 // always recalculate server-side via RecalculateOrderTotals, so a forged
 // browser request cannot submit a cheaper total.
 func (h *AdminHandler) CalculatePOSPrice(c *gin.Context) {
-	itemID, err := strconv.Atoi(c.Param("item_id"))
+	// Route: GET /pos/price?item_id=.. — the route carries no :item_id
+	// param, so the ID comes from the query string like every other
+	// filter on this endpoint.
+	idStr := c.Param("item_id")
+	if idStr == "" {
+		idStr = c.Query("item_id")
+	}
+	itemID, err := strconv.Atoi(idStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid item ID"})
 		return
