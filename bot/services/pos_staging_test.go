@@ -145,7 +145,7 @@ func TestStagingCashierFlow(t *testing.T) {
 	}
 
 	// 2. Discount 10%: 110000 -> -11000, tax 5% of 99000 = 4950, total 103950 paise.
-	if err := svc.ApplyDiscount(order.ID, st.discID); err != nil {
+	if err := svc.ApplyDiscount(order.ID, st.restID, st.outID, st.discID); err != nil {
 		t.Fatalf("apply discount: %v", err)
 	}
 	if sub, disc, tax, total := readTotals(t, order.ID); sub != 1100 || disc != 110 || tax != 49.50 || total != 1039.50 {
@@ -153,13 +153,13 @@ func TestStagingCashierFlow(t *testing.T) {
 	}
 
 	// 3. Remove discount: back to 1100 + 55 tax = 1155, then re-apply.
-	if err := RemoveDiscountFromOrder(order.ID); err != nil {
+	if err := RemoveDiscountFromOrder(order.ID, st.restID, st.outID); err != nil {
 		t.Fatalf("remove discount: %v", err)
 	}
 	if sub, disc, tax, total := readTotals(t, order.ID); sub != 1100 || disc != 0 || tax != 55 || total != 1155 {
 		t.Fatalf("undiscounted totals wrong: sub=%v disc=%v tax=%v total=%v", sub, disc, tax, total)
 	}
-	if err := svc.ApplyDiscount(order.ID, st.discID); err != nil {
+	if err := svc.ApplyDiscount(order.ID, st.restID, st.outID, st.discID); err != nil {
 		t.Fatalf("re-apply discount: %v", err)
 	}
 
@@ -171,16 +171,16 @@ func TestStagingCashierFlow(t *testing.T) {
 	if err := database.DB.QueryRow(`SELECT status FROM tables WHERE id = $1`, st.tableID).Scan(&tblStatus); err != nil || tblStatus != "occupied" {
 		t.Fatalf("table must be occupied, got %q (%v)", tblStatus, err)
 	}
-	if ok, err := svc.HoldOrder(order.ID, st.userID, "manual"); err != nil || !ok {
+	if ok, err := svc.HoldOrder(order.ID, st.restID, st.outID, st.userID, "manual"); err != nil || !ok {
 		t.Fatalf("hold: ok=%v err=%v", ok, err)
 	}
-	if _, err := svc.HoldOrder(order.ID, st.userID, "manual"); err == nil {
+	if _, err := svc.HoldOrder(order.ID, st.restID, st.outID, st.userID, "manual"); err == nil {
 		t.Fatal("second hold must fail")
 	}
-	if err := svc.ResumeOrder(order.ID); err != nil {
+	if err := svc.ResumeOrder(order.ID, st.restID, st.outID); err != nil {
 		t.Fatalf("resume: %v", err)
 	}
-	if err := svc.ResumeOrder(order.ID); err == nil {
+	if err := svc.ResumeOrder(order.ID, st.restID, st.outID); err == nil {
 		t.Fatal("second resume must fail")
 	}
 
@@ -196,14 +196,14 @@ func TestStagingCashierFlow(t *testing.T) {
 	}
 
 	// 6. Complete, then prove terminal states are frozen.
-	if err := svc.CompleteOrder(order.ID); err != nil {
+	if err := svc.CompleteOrder(order.ID, st.restID, st.outID); err != nil {
 		t.Fatalf("complete: %v", err)
 	}
 	for name, fn := range map[string]func() error{
-		"complete again": func() error { return svc.CompleteOrder(order.ID) },
+		"complete again": func() error { return svc.CompleteOrder(order.ID, st.restID, st.outID) },
 		"pay completed":  func() error { _, _, _, err := svc.TakePayment(order.ID, st.restID, st.outID, "cash", 100, 100, "", st.userID, ""); return err },
-		"hold completed": func() error { _, err := svc.HoldOrder(order.ID, st.userID, "x"); return err },
-		"discount done":  func() error { return RemoveDiscountFromOrder(order.ID) },
+		"hold completed": func() error { _, err := svc.HoldOrder(order.ID, st.restID, st.outID, st.userID, "x"); return err },
+		"discount done":  func() error { return RemoveDiscountFromOrder(order.ID, st.restID, st.outID) },
 	} {
 		if err := fn(); err == nil {
 			t.Fatalf("%s must fail on a completed order", name)
@@ -301,7 +301,7 @@ func TestStagingTenantIsolation(t *testing.T) {
 	if rule := GetDiscountByCode(b.restID, a.discCd); rule != nil {
 		t.Fatal("restaurant B must not see restaurant A discount codes")
 	}
-	if err := svc.ApplyDiscount(order.ID, b.discID); err == nil {
+	if err := svc.ApplyDiscount(order.ID, a.restID, a.outID, b.discID); err == nil {
 		t.Fatal("foreign discount must be rejected")
 	}
 	// Outlet boundary inside one restaurant.
@@ -342,11 +342,72 @@ func TestStagingOrderType(t *testing.T) {
 	if got := orderTypeOf(legacy.ID); got != OrderTypeTakeaway {
 		t.Fatalf("pickup must normalize to takeaway, got %q", got)
 	}
-	if err := svc.UpdateOrder(takeaway.ID, "delivery"); err != nil {
+	if err := svc.UpdateOrder(takeaway.ID, st.restID, st.outID, "delivery"); err != nil {
 		t.Fatalf("update type: %v", err)
 	}
 	if got := orderTypeOf(takeaway.ID); got != OrderTypeDelivery {
 		t.Fatalf("expected delivery, got %q", got)
+	}
+}
+
+func TestStagingMutationTenantEnforcement(t *testing.T) {
+	stagingDB(t)
+	a := seedStagingTenant(t, "mtnta")
+	b := seedStagingTenant(t, "mtntb")
+	svc := NewPOSOrderService()
+
+	order, err := svc.CreateOrder(a.restID, a.outID, []DraftItem{
+		{MenuItemID: a.itemID, Quantity: 1},
+	}, 0, SourcePOS, "dine_in")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	// Tenant B against Tenant A's mutable draft: every mutation must
+	// fail closed with ErrOrderTenantMismatch (never a state error,
+	// never success).
+	bTenant := map[string]func() error{
+		"hold":            func() error { _, err := svc.HoldOrder(order.ID, b.restID, b.outID, b.userID, "x"); return err },
+		"resume":          func() error { return svc.ResumeOrder(order.ID, b.restID, b.outID) },
+		"complete":        func() error { return svc.CompleteOrder(order.ID, b.restID, b.outID) },
+		"cancel":          func() error { return svc.CancelOrder(order.ID, b.restID, b.outID) },
+		"apply discount":  func() error { return svc.ApplyDiscount(order.ID, b.restID, b.outID, b.discID) },
+		"remove discount": func() error { return RemoveDiscountFromOrder(order.ID, b.restID, b.outID) },
+		"update type":     func() error { return svc.UpdateOrder(order.ID, b.restID, b.outID, "delivery") },
+	}
+	for name, fn := range bTenant {
+		if err := fn(); !errors.Is(err, ErrOrderTenantMismatch) {
+			t.Fatalf("cross-tenant %s: expected ErrOrderTenantMismatch, got %v", name, err)
+		}
+	}
+
+	// Same tenant, wrong outlet: outlet scope applies to every mutation.
+	wrongOutlet := map[string]func() error{
+		"hold":            func() error { _, err := svc.HoldOrder(order.ID, a.restID, a.out2ID, a.userID, "x"); return err },
+		"resume":          func() error { return svc.ResumeOrder(order.ID, a.restID, a.out2ID) },
+		"complete":        func() error { return svc.CompleteOrder(order.ID, a.restID, a.out2ID) },
+		"cancel":          func() error { return svc.CancelOrder(order.ID, a.restID, a.out2ID) },
+		"apply discount":  func() error { return svc.ApplyDiscount(order.ID, a.restID, a.out2ID, a.discID) },
+		"remove discount": func() error { return RemoveDiscountFromOrder(order.ID, a.restID, a.out2ID) },
+		"update type":     func() error { return svc.UpdateOrder(order.ID, a.restID, a.out2ID, "delivery") },
+	}
+	for name, fn := range wrongOutlet {
+		if err := fn(); !errors.Is(err, ErrOrderTenantMismatch) {
+			t.Fatalf("wrong-outlet %s: expected ErrOrderTenantMismatch, got %v", name, err)
+		}
+	}
+
+	// Missing order still reports not-found (not tenant mismatch).
+	if _, err := svc.HoldOrder(2147483647, a.restID, a.outID, a.userID, "x"); !errors.Is(err, ErrOrderNotFound) {
+		t.Fatalf("expected ErrOrderNotFound, got %v", err)
+	}
+
+	// Positive control: the owning tenant is unaffected by the guards.
+	if ok, err := svc.HoldOrder(order.ID, a.restID, a.outID, a.userID, "x"); err != nil || !ok {
+		t.Fatalf("own-tenant hold: ok=%v err=%v", ok, err)
+	}
+	if err := svc.ResumeOrder(order.ID, a.restID, a.outID); err != nil {
+		t.Fatalf("own-tenant resume: %v", err)
 	}
 }
 
@@ -363,31 +424,31 @@ func TestStagingStateMachine(t *testing.T) {
 	}
 	// Cannot complete with outstanding due: reach a completable state
 	// first (draft cannot jump straight to completed by design).
-	if ok, err := svc.HoldOrder(order.ID, st.userID, "x"); err != nil || !ok {
+	if ok, err := svc.HoldOrder(order.ID, st.restID, st.outID, st.userID, "x"); err != nil || !ok {
 		t.Fatalf("hold: %v", err)
 	}
-	if err := svc.ResumeOrder(order.ID); err != nil {
+	if err := svc.ResumeOrder(order.ID, st.restID, st.outID); err != nil {
 		t.Fatalf("resume: %v", err)
 	}
-	if err := svc.CompleteOrder(order.ID); !errors.Is(err, ErrOrderHasDue) {
+	if err := svc.CompleteOrder(order.ID, st.restID, st.outID); !errors.Is(err, ErrOrderHasDue) {
 		t.Fatalf("expected ErrOrderHasDue, got %v", err)
 	}
 	// Held cannot jump straight to completed either.
-	if ok, err := svc.HoldOrder(order.ID, st.userID, "x"); err != nil || !ok {
+	if ok, err := svc.HoldOrder(order.ID, st.restID, st.outID, st.userID, "x"); err != nil || !ok {
 		t.Fatalf("hold: %v", err)
 	}
-	if err := svc.CompleteOrder(order.ID); !errors.Is(err, ErrInvalidOrderTransition) {
+	if err := svc.CompleteOrder(order.ID, st.restID, st.outID); !errors.Is(err, ErrInvalidOrderTransition) {
 		t.Fatalf("expected ErrInvalidOrderTransition, got %v", err)
 	}
-	if err := svc.ResumeOrder(order.ID); err != nil {
+	if err := svc.ResumeOrder(order.ID, st.restID, st.outID); err != nil {
 		t.Fatalf("resume: %v", err)
 	}
-	if err := svc.CancelOrder(order.ID); err != nil {
+	if err := svc.CancelOrder(order.ID, st.restID, st.outID); err != nil {
 		t.Fatalf("cancel: %v", err)
 	}
 	for name, err := range map[string]error{
-		"resume cancelled": func() error { return svc.ResumeOrder(order.ID) }(),
-		"hold cancelled":   func() error { _, e := svc.HoldOrder(order.ID, st.userID, "x"); return e }(),
+		"resume cancelled": func() error { return svc.ResumeOrder(order.ID, st.restID, st.outID) }(),
+		"hold cancelled":   func() error { _, e := svc.HoldOrder(order.ID, st.restID, st.outID, st.userID, "x"); return e }(),
 	} {
 		if !errors.Is(err, ErrInvalidOrderTransition) {
 			t.Fatalf("%s: expected ErrInvalidOrderTransition, got %v", name, err)
