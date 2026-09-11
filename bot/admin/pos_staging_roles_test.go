@@ -97,6 +97,9 @@ func stagingRouter(h *AdminHandler) *gin.Engine {
 		h.RequireRole("owner", "manager"), h.RequirePermission("pos.refund"), h.RefundPOSOrder)
 	g.POST("/pos/discounts",
 		h.RequireRole("owner", "manager"), h.RequirePermission("pos.apply_discount"), h.ApplyPOSDiscount)
+	g.DELETE("/pos/discounts/:id",
+		h.RequireRole("owner", "manager"), h.RequirePermission("pos.apply_discount"), h.RemovePOSDiscount)
+	g.GET("/pos/price", h.RequirePermission("pos.read"), h.CalculatePOSPrice)
 	g.PATCH("/pos/tables/:id",
 		h.RequireRole("owner", "manager"), h.RequirePermission("pos.manage_tables"), h.AssignTableToOrder)
 	return r
@@ -240,6 +243,51 @@ func TestStagingPOSRoleMatrix(t *testing.T) {
 	}
 	if w := doReq(t, router, keys["cashier"], "PATCH", "/admin/pos/tables/1", discBody); w.Code != http.StatusForbidden {
 		t.Fatalf("cashier tables: want 403, got %d", w.Code)
+	}
+
+	// Fixed endpoint contracts (were unreachable 400s before the
+	// handler/body-param fix): apply + remove discount, table assign,
+	// advisory price — all through the real HTTP chain.
+	var discID, tableID int
+	if err := database.DB.QueryRow(
+		`INSERT INTO discounts (restaurant_id, name, code, type, value, active, min_subtotal)
+		 VALUES ($1, 'stg', $2, 'percent', 10, true, 0) RETURNING id`,
+		ocpRest, "stg-role-disc-"+suffix).Scan(&discID); err != nil {
+		t.Fatalf("discount: %v", err)
+	}
+	if err := database.DB.QueryRow(
+		`INSERT INTO tables (outlet_id, restaurant_id, name, capacity, position) VALUES ($1, $2, $3, 2, 99) RETURNING id`,
+		ocpOut, ocpRest, "STG-"+suffix[len(suffix)-6:]).Scan(&tableID); err != nil {
+		t.Fatalf("table: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = database.DB.Exec(`DELETE FROM discounts WHERE id = $1`, discID)
+		_, _ = database.DB.Exec(`DELETE FROM tables WHERE id = $1`, tableID)
+	})
+	fxOrder := newDraft()
+	applyBody := map[string]any{"order_id": fxOrder, "discount_id": discID}
+	if w := doReq(t, router, keys["manager"], "POST", "/admin/pos/discounts", applyBody); w.Code != http.StatusOK {
+		t.Fatalf("manager apply discount: want 200, got %d (%s)", w.Code, w.Body.String())
+	}
+	if w := doReq(t, router, keys["manager"], "DELETE",
+		fmt.Sprintf("/admin/pos/discounts/%d", fxOrder), nil); w.Code != http.StatusOK {
+		t.Fatalf("manager remove discount: want 200, got %d (%s)", w.Code, w.Body.String())
+	}
+	assignBody := map[string]any{"order_id": fxOrder}
+	if w := doReq(t, router, keys["manager"], "PATCH",
+		fmt.Sprintf("/admin/pos/tables/%d", tableID), assignBody); w.Code != http.StatusOK {
+		t.Fatalf("manager assign table: want 200, got %d (%s)", w.Code, w.Body.String())
+	}
+	if w := doReq(t, router, keys["viewer"], "GET",
+		fmt.Sprintf("/admin/pos/price?item_id=%d&size=regular", itemID), nil); w.Code != http.StatusOK {
+		t.Fatalf("price estimate: want 200, got %d (%s)", w.Code, w.Body.String())
+	} else {
+		var priceResp struct {
+			AdvisoryOnly bool `json:"advisory_only"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &priceResp); err != nil || !priceResp.AdvisoryOnly {
+			t.Fatalf("price must be flagged advisory_only: %s", w.Body.String())
+		}
 	}
 }
 
