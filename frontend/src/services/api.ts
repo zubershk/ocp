@@ -39,6 +39,15 @@ export function setAdminKey(key: string): void {
   localStorage.setItem(ADMIN_KEY_STORAGE, key);
 }
 
+export class ApiError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+  }
+}
+
 export async function adminFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
@@ -55,7 +64,7 @@ export async function adminFetch<T>(path: string, options: RequestInit = {}): Pr
       payload && typeof payload === 'object' && 'error' in payload
         ? String((payload as { error: unknown }).error)
         : `HTTP ${response.status}`;
-    throw new Error(message);
+    throw new ApiError(response.status, message);
   }
   return payload as T;
 }
