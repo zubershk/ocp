@@ -190,11 +190,24 @@ func NewPOSOrderService() *POSOrderService {
 	return &POSOrderService{}
 }
 
+// normalizePOSOrderType maps a requested fulfillment mode into the
+// canonical set. POS drafts support dine_in/takeaway/delivery;
+// anything else (including legacy pickup) falls back to dine_in
+// rather than failing the sale, except pickup which maps to takeaway.
+func normalizePOSOrderType(t string) string {
+	switch NormalizeOrderType(t) {
+	case OrderTypeDineIn, OrderTypeTakeaway, OrderTypeDelivery:
+		return NormalizeOrderType(t)
+	default:
+		return OrderTypeDineIn
+	}
+}
+
 // CreateOrder creates a new draft order with the given items.
 // Prices are resolved server-side from the menu (size + crust aware);
 // totals are then derived by RecalculateOrderTotals. Client-supplied
 // amounts are never trusted. The header + lines insert atomically.
-func (s *POSOrderService) CreateOrder(restaurantID int, outletID int, items []DraftItem, tableID int, source string) (*models.Order, error) {
+func (s *POSOrderService) CreateOrder(restaurantID int, outletID int, items []DraftItem, tableID int, source string, orderType string) (*models.Order, error) {
 	if len(items) == 0 {
 		return nil, fmt.Errorf("order must contain at least one item")
 	}
@@ -245,9 +258,9 @@ func (s *POSOrderService) CreateOrder(restaurantID int, outletID int, items []Dr
 	var orderID int
 	err = tx.QueryRow(`
 		INSERT INTO orders (order_number, customer_name, customer_phone, order_type, address, landmark, payment_method, subtotal, delivery_fee, discount, total, status, source, restaurant_id, outlet_id, table_id)
-		VALUES ($1, '', '', 'dine_in', '', '', '', 0, 0, 0, 0, 'draft', $2, $3, $4, $5)
+		VALUES ($1, '', '', $2, '', '', '', 0, 0, 0, 0, 'draft', $3, $4, $5, $6)
 		RETURNING id
-	`, orderNumber, source, restaurantID, outletID, tableNull).Scan(&orderID)
+	`, orderNumber, normalizePOSOrderType(orderType), source, restaurantID, outletID, tableNull).Scan(&orderID)
 	if err != nil {
 		return nil, fmt.Errorf("order insert failed: %w", err)
 	}
@@ -333,9 +346,23 @@ func canonicalDraftLine(tx *sql.Tx, item DraftItem, restaurantID int) (unitPaise
 	return unitPaise, size, crust, itemName, nil
 }
 
-// UpdateOrder updates an existing order's status or table assignment.
-func (s *POSOrderService) UpdateOrder(id int) error {
-	_, err := database.DB.Exec(`UPDATE orders SET updated_at = CURRENT_TIMESTAMP WHERE id = $1`, id)
+// UpdateOrder changes a mutable order's fulfillment type. Frozen
+// (completed/cancelled) orders reject the change.
+func (s *POSOrderService) UpdateOrder(id int, orderType string) error {
+	var status string
+	err := database.DB.QueryRow(`SELECT status FROM orders WHERE id = $1`, id).Scan(&status)
+	if err == sql.ErrNoRows {
+		return ErrOrderNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if !CanMutateOrder(status) {
+		return fmt.Errorf("%w: cannot change order type on %q order", ErrInvalidOrderTransition, status)
+	}
+	_, err = database.DB.Exec(
+		`UPDATE orders SET order_type = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+		id, normalizePOSOrderType(orderType))
 	return err
 }
 
@@ -347,6 +374,7 @@ type DraftOrder struct {
 	Items        []DraftItem
 	TableID      int // 0 = none
 	Source       string
+	OrderType    string `json:"order_type"` // dine_in | takeaway | delivery
 }
 
 // DraftItem is a single item in a draft order.

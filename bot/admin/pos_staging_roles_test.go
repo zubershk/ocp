@@ -186,7 +186,7 @@ func TestStagingPOSRoleMatrix(t *testing.T) {
 
 	newDraft := func() int {
 		t.Helper()
-		o, err := pos.CreateOrder(ocpRest, ocpOut, []services.DraftItem{{MenuItemID: itemID, Quantity: 1}}, 0, services.SourcePOS)
+		o, err := pos.CreateOrder(ocpRest, ocpOut, []services.DraftItem{{MenuItemID: itemID, Quantity: 1}}, 0, services.SourcePOS, "dine_in")
 		if err != nil {
 			t.Fatalf("draft: %v", err)
 		}
@@ -352,7 +352,7 @@ func TestStagingTenantIsolationHTTP(t *testing.T) {
 	}
 	pos := services.NewPOSOrderService()
 	orderA, err := pos.CreateOrder(ocpRest, ocpOut,
-		[]services.DraftItem{{MenuItemID: itemID, Quantity: 1}}, 0, services.SourcePOS)
+		[]services.DraftItem{{MenuItemID: itemID, Quantity: 1}}, 0, services.SourcePOS, "takeaway")
 	if err != nil {
 		t.Fatalf("orderA: %v", err)
 	}

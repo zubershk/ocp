@@ -949,7 +949,7 @@ func (h *AdminHandler) CreatePOSOrder(c *gin.Context) {
 	}
 	restaurantID := c.GetInt("restaurantID")
 	outletID := c.GetInt("outletID")
-	order, err := h.posOrderService.CreateOrder(restaurantID, outletID, draft.Items, draft.TableID, services.SourcePOS)
+	order, err := h.posOrderService.CreateOrder(restaurantID, outletID, draft.Items, draft.TableID, services.SourcePOS, draft.OrderType)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
@@ -978,14 +978,22 @@ func (h *AdminHandler) GetPOSOrder(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"order": order})
 }
 
-// UpdatePOSOrder updates a POS order (items, table, status).
+// UpdatePOSOrder updates a mutable POS order's fulfillment type.
+// Body: {order_type: dine_in | takeaway | delivery}.
 func (h *AdminHandler) UpdatePOSOrder(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid ID"})
 		return
 	}
-	if err := h.posOrderService.UpdateOrder(id); err != nil {
+	var req struct {
+		OrderType string `json:"order_type"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
+		return
+	}
+	if err := h.posOrderService.UpdateOrder(id, req.OrderType); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
 	}
