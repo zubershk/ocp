@@ -4,7 +4,10 @@ export interface CartLine {
   name: string;
   size: string;
   crust: string;
+  crustName: string;
   quantity: number;
+  image: string;
+  categoryName: string;
   /** Advisory unit estimate in paise (display only; server reprices). */
   unitPaise: number | null;
 }

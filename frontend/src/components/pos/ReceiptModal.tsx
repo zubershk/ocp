@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Printer, Undo2 } from 'lucide-react';
+import { CheckCircle2, Printer, Undo2 } from 'lucide-react';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
 import { Modal } from '../ui/Modal';
@@ -21,6 +21,7 @@ export default function ReceiptModal({
   payments,
   canRefund,
   outletName,
+  onNewSale,
 }: {
   open: boolean;
   onClose: () => void;
@@ -28,6 +29,7 @@ export default function ReceiptModal({
   payments: RecordedPayment[];
   canRefund: boolean;
   outletName: string;
+  onNewSale?: () => void;
 }) {
   const [refundId, setRefundId] = useState<number | null>(null);
   const [refundAmount, setRefundAmount] = useState('');
@@ -62,6 +64,22 @@ export default function ReceiptModal({
         <p className="text-sm text-zinc-500">No order loaded.</p>
       ) : (
         <div>
+          {order.status === 'completed' && (
+            <div className="rounded-2xl bg-emerald-600 text-white p-4 mb-3 text-center print:hidden">
+              <CheckCircle2 size={28} className="mx-auto" />
+              <div className="font-black text-xl mt-1">Order completed</div>
+              <div className="text-sm opacity-90">Order #{order.order_number} · {formatINR(order.total)} paid</div>
+              {onNewSale && (
+                <button
+                  type="button"
+                  onClick={onNewSale}
+                  className="mt-3 w-full h-12 rounded-xl bg-white text-emerald-700 font-black transition-all active:scale-[0.98]"
+                >
+                  Start next sale
+                </button>
+              )}
+            </div>
+          )}
           <div className="print-receipt rounded-2xl border border-zinc-200 p-4 text-sm">
             <div className="text-center">
               <div className="font-bold">Orange Cheese Pizza</div>
