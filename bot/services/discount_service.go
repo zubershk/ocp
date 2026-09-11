@@ -156,8 +156,8 @@ func ListActiveDiscounts(restaurantID int, currentTime time.Time) ([]DiscountRul
 
 // ApplyDiscountToOrder links a discount to an order, then recalculates
 // the authoritative totals server-side. The resolved discount amount is
-// never accepted from the client.
-func ApplyDiscountToOrder(orderID int, discountID int) error {
+// never accepted from the client. The caller's tenant must own the order.
+func ApplyDiscountToOrder(orderID, restaurantID, outletID, discountID int) error {
 	// Verify the discount exists and is active.
 	rule := GetDiscountByID(discountID)
 	if rule == nil {
@@ -167,13 +167,11 @@ func ApplyDiscountToOrder(orderID int, discountID int) error {
 	if !ok {
 		return errors.New("discount not applicable at this time")
 	}
-	var restaurantID int
-	err := database.DB.QueryRow(
-		`SELECT restaurant_id FROM orders WHERE id = $1`, orderID).Scan(&restaurantID)
+	_, orderRestaurantID, err := loadOrderForMutation(orderID, restaurantID, outletID)
 	if err != nil {
 		return err
 	}
-	if rule.RestaurantID != restaurantID {
+	if rule.RestaurantID != orderRestaurantID {
 		return errors.New("discount does not belong to current restaurant")
 	}
 	// Link discount to order.
@@ -181,16 +179,15 @@ func ApplyDiscountToOrder(orderID int, discountID int) error {
 		UPDATE orders SET discount_id = $2 WHERE id = $1`, orderID, discountID); err != nil {
 		return err
 	}
-	_, err = RecalculateOrderTotals(orderID, restaurantID)
+	_, err = RecalculateOrderTotals(orderID, orderRestaurantID)
 	return err
 }
 
 // RemoveDiscountFromOrder clears the discount link on an order, then
-// recalculates the authoritative totals server-side.
-func RemoveDiscountFromOrder(orderID int) error {
-	var restaurantID int
-	err := database.DB.QueryRow(
-		`SELECT restaurant_id FROM orders WHERE id = $1`, orderID).Scan(&restaurantID)
+// recalculates the authoritative totals server-side. The caller's
+// tenant must own the order.
+func RemoveDiscountFromOrder(orderID, restaurantID, outletID int) error {
+	_, orderRestaurantID, err := loadOrderForMutation(orderID, restaurantID, outletID)
 	if err != nil {
 		return err
 	}
@@ -198,7 +195,7 @@ func RemoveDiscountFromOrder(orderID int) error {
 		UPDATE orders SET discount_id = NULL WHERE id = $1`, orderID); err != nil {
 		return err
 	}
-	_, err = RecalculateOrderTotals(orderID, restaurantID)
+	_, err = RecalculateOrderTotals(orderID, orderRestaurantID)
 	return err
 }
 

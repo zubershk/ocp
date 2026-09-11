@@ -993,7 +993,7 @@ func (h *AdminHandler) UpdatePOSOrder(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
 		return
 	}
-	if err := h.posOrderService.UpdateOrder(id, req.OrderType); err != nil {
+	if err := h.posOrderService.UpdateOrder(id, c.GetInt("restaurantID"), c.GetInt("outletID"), req.OrderType); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
 	}
@@ -1012,7 +1012,7 @@ func (h *AdminHandler) HoldPOSOrder(c *gin.Context) {
 	if a, ok := au.(*adminUserCtx); ok && a != nil {
 		userID = a.ID
 	}
-	ok, err := h.posOrderService.HoldOrder(id, userID, "manual")
+	ok, err := h.posOrderService.HoldOrder(id, c.GetInt("restaurantID"), c.GetInt("outletID"), userID, "manual")
 	if err != nil {
 		c.JSON(http.StatusConflict, gin.H{"error": safeError(err)})
 		return
@@ -1031,7 +1031,7 @@ func (h *AdminHandler) ResumePOSOrder(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid ID"})
 		return
 	}
-	err = h.posOrderService.ResumeOrder(id)
+	err = h.posOrderService.ResumeOrder(id, c.GetInt("restaurantID"), c.GetInt("outletID"))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
@@ -1047,7 +1047,7 @@ func (h *AdminHandler) CompletePOSOrder(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid ID"})
 		return
 	}
-	if err := h.posOrderService.CompleteOrder(id); err != nil {
+	if err := h.posOrderService.CompleteOrder(id, c.GetInt("restaurantID"), c.GetInt("outletID")); err != nil {
 		c.JSON(http.StatusConflict, gin.H{"error": safeError(err)})
 		return
 	}
@@ -1061,7 +1061,7 @@ func (h *AdminHandler) CancelPOSOrder(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid ID"})
 		return
 	}
-	if err := h.posOrderService.CancelOrder(id); err != nil {
+	if err := h.posOrderService.CancelOrder(id, c.GetInt("restaurantID"), c.GetInt("outletID")); err != nil {
 		c.JSON(http.StatusConflict, gin.H{"error": safeError(err)})
 		return
 	}
@@ -1220,7 +1220,7 @@ func (h *AdminHandler) ApplyPOSDiscount(c *gin.Context) {
 		return
 	}
 	orderID, discountID := req.OrderID, req.DiscountID
-	if err := h.posOrderService.ApplyDiscount(orderID, discountID); err != nil {
+	if err := h.posOrderService.ApplyDiscount(orderID, c.GetInt("restaurantID"), c.GetInt("outletID"), discountID); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
 		return
 	}
@@ -1235,7 +1235,7 @@ func (h *AdminHandler) RemovePOSDiscount(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid order ID"})
 		return
 	}
-	err = services.RemoveDiscountFromOrder(orderID)
+	err = services.RemoveDiscountFromOrder(orderID, c.GetInt("restaurantID"), c.GetInt("outletID"))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
