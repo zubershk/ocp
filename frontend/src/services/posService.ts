@@ -224,9 +224,18 @@ export interface DraftLine {
   quantity: number;
 }
 
+export interface PosCategory {
+  id: number;
+  name: string;
+  slug: string;
+}
+
 export const posApi = {
   getMenu: () =>
     posFetch<{ menu: PosMenuItem[] }>('/admin/pos/menu').then((r) => r.menu ?? []),
+
+  getCategories: () =>
+    posFetch<{ categories: PosCategory[] }>('/admin/categories').then((r) => r.categories ?? []),
 
   getOutlets: () =>
     posFetch<{ outlets: PosOutlet[] }>('/admin/outlets').then((r) => r.outlets ?? []),
