@@ -117,6 +117,9 @@ func main() {
 		if c.FullPath() == "/admin/upload" || c.Request.URL.Path == "/admin/upload" {
 			limit = 6 << 20 // 5MB image + multipart overhead
 		}
+		if c.FullPath() == "/admin/broadcast/send" || c.Request.URL.Path == "/admin/broadcast/send" {
+			limit = 8 << 20 // base64 inline media (~5MB file -> ~6.8MB)
+		}
 		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, limit)
 		c.Next()
 	})
