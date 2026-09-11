@@ -190,17 +190,15 @@ func NewPOSOrderService() *POSOrderService {
 	return &POSOrderService{}
 }
 
-// normalizePOSOrderType maps a requested fulfillment mode into the
-// canonical set. POS drafts support dine_in/takeaway/delivery;
-// anything else (including legacy pickup) falls back to dine_in
-// rather than failing the sale, except pickup which maps to takeaway.
-func normalizePOSOrderType(t string) string {
+// NormalizePOSOrderType maps legacy values to the canonical set.
+// The only legacy value is 'pickup' → 'takeaway'.
+// All other invalid inputs return an error.
+func NormalizePOSOrderType(t string) (string, error) {
 	switch NormalizeOrderType(t) {
 	case OrderTypeDineIn, OrderTypeTakeaway, OrderTypeDelivery:
-		return NormalizeOrderType(t)
-	default:
-		return OrderTypeDineIn
+		return NormalizeOrderType(t), nil
 	}
+	return "", fmt.Errorf("invalid order type %q", t)
 }
 
 // CreateOrder creates a new draft order with the given items.
@@ -217,10 +215,9 @@ func (s *POSOrderService) CreateOrder(restaurantID int, outletID int, items []Dr
 	if outletID <= 0 {
 		outletID = DefaultOutletID(restaurantID)
 	}
-	for _, item := range items {
-		if item.Quantity < 1 || item.Quantity > 20 {
-			return nil, fmt.Errorf("quantity for item %d must be between 1 and 20", item.MenuItemID)
-		}
+	normalizedType, err := NormalizePOSOrderType(orderType)
+	if err != nil {
+		return nil, err
 	}
 
 	tx, err := database.DB.Begin()
@@ -260,7 +257,7 @@ func (s *POSOrderService) CreateOrder(restaurantID int, outletID int, items []Dr
 		INSERT INTO orders (order_number, customer_name, customer_phone, order_type, address, landmark, payment_method, subtotal, delivery_fee, discount, total, status, source, restaurant_id, outlet_id, table_id)
 		VALUES ($1, '', '', $2, '', '', '', 0, 0, 0, 0, 'draft', $3, $4, $5, $6)
 		RETURNING id
-	`, orderNumber, normalizePOSOrderType(orderType), source, restaurantID, outletID, tableNull).Scan(&orderID)
+	`, orderNumber, normalizedType, source, restaurantID, outletID, tableNull).Scan(&orderID)
 	if err != nil {
 		return nil, fmt.Errorf("order insert failed: %w", err)
 	}
@@ -357,9 +354,13 @@ func (s *POSOrderService) UpdateOrder(id, restaurantID, outletID int, orderType 
 	if !CanMutateOrder(status) {
 		return fmt.Errorf("%w: cannot change order type on %q order", ErrInvalidOrderTransition, status)
 	}
+	normalized, err := NormalizePOSOrderType(orderType)
+	if err != nil {
+		return err
+	}
 	_, err = database.DB.Exec(
 		`UPDATE orders SET order_type = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
-		id, normalizePOSOrderType(orderType))
+		id, normalized)
 	return err
 }
 

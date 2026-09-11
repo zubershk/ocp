@@ -39,8 +39,8 @@ export default function PosHeader({ outletId, onOutlet, operator, role, heldCoun
         </div>
 
         <div className="hidden md:flex items-center gap-2 text-sm text-zinc-300 mx-auto">
-          <span className="inline-flex items-center gap-1.5 [&_select]:!bg-zinc-800 [&_select]:!text-white [&_select]:!border-zinc-700">
-            <OutletSwitcher outletId={outletId} onChange={onOutlet} />
+          <span className="inline-flex items-center gap-1.5">
+            <OutletSwitcher outletId={outletId} onChange={onOutlet} variant="dark" />
           </span>
           <span
             className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full ${online ? 'bg-emerald-900/60 text-emerald-300' : 'bg-red-900/60 text-red-300'}`}

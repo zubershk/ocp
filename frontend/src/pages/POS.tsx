@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { PauseCircle, PlusCircle, ReceiptText, Store } from 'lucide-react';
+import { PauseCircle, PlusCircle, ReceiptText } from 'lucide-react';
 import Button from '../components/ui/Button';
 import { adminFetch, getAdminKey } from '../services/api';
 import {
@@ -16,14 +16,16 @@ import OutletSwitcher from '../components/pos/OutletSwitcher';
 import PosHeader from '../components/pos/PosHeader';
 import OrderTypeBar from '../components/pos/OrderTypeBar';
 import MenuPanel from '../components/pos/MenuPanel';
+import TablePicker from '../components/pos/TablePicker';
 import CartPanel from '../components/pos/CartPanel';
 import CheckoutPanel from '../components/pos/CheckoutPanel';
 import HoldDrawer from '../components/pos/HoldDrawer';
 import ReceiptModal from '../components/pos/ReceiptModal';
 import type { CartLine, HeldOrder, RecordedPayment } from '../components/pos/types';
 
-const ORDER_KEY = 'ocp_pos_order';
 const HELD_KEY = 'ocp_pos_held';
+const ORDER_KEY = 'ocp_pos_order';
+const PAYMENTS_KEY = (orderId: number): string => `ocp_pos_payments:${orderId}`;
 
 function loadJSON<T>(key: string, fallback: T): T {
   try {
@@ -41,10 +43,6 @@ function saveJSON(key: string, value: unknown): void {
     /* ignore */
   }
 }
-
-const paymentsKey = (orderId: number): string => `ocp_pos_payments:${orderId}`;
-const heldKey = (outletId: number | null): string => `ocp_pos_held:${outletId ?? 'default'}`;
-const orderKey = (outletId: number | null): string => `ocp_pos_order:${outletId ?? 'default'}`;
 
 export default function POS() {
   const [authed, setAuthed] = useState(() => getAdminKey().length > 0);
@@ -86,54 +84,47 @@ export default function POS() {
     retry: 1,
   });
   const role = roleQuery.data ?? 'owner';
-  const operatorName = (roleQuery.data as { user?: { name?: string } } & { user?: { name?: string } })?.user?.name ?? '';
+  const operatorName = ((roleQuery.data as { user?: { name?: string } })?.user?.name) ?? '';
   const canPay = ['owner', 'manager', 'cashier'].includes(role);
   const canDiscount = ['owner', 'manager'].includes(role);
   const canRefund = ['owner', 'manager'].includes(role);
   const canManage = ['owner', 'manager'].includes(role);
 
-  // Held orders: outlet-scoped
-  const heldKeyCurrent = `ocp_pos_held:${outletId ?? 'default'}`;
-  const orderKeyCurrent = `ocp_pos_order:${outletId ?? 'default'}`;
+  // Outlet-scoped persistence
   useEffect(() => {
-    const saved = loadJSON<HeldOrder[]>(`ocp_pos_held:${outletId ?? 'default'}`, []);
+    const saved = loadJSON<HeldOrder[]>(`${HELD_KEY}:${outletId ?? 'default'}`, []);
     setHeld(saved);
   }, [outletId]);
   useEffect(() => {
-    saveJSON(`ocp_pos_held:${outletId ?? 'default'}`, held);
+    saveJSON(`${HELD_KEY}:${outletId ?? 'default'}`, held);
   }, [outletId, held]);
 
-  // Shared order read
-  const orderQuery = useQuery({
-    queryKey: ['pos-order', orderId],
-    queryFn: () => posApi.getOrder(orderId as number),
-    enabled: authed && orderId != null,
-    staleTime: 5 * 1000,
-    retry: 1,
-  });
-  const order: PosOrder | undefined = orderQuery.data;
-  const orderOpen = order != null && ['draft', 'held', 'confirmed'].includes(order.status);
+  // Restore persisted current order id for this outlet
+  useEffect(() => {
+    const saved = loadJSON<number | null>(`${ORDER_KEY}:${outletId ?? 'default'}`, null);
+    setOrderId(saved);
+  }, [outletId]);
+
+  // Persist current order id
+  useEffect(() => {
+    if (orderId != null) saveJSON(`${ORDER_KEY}:${outletId ?? 'default'}`, orderId);
+  }, [orderId, outletId]);
 
   // Restore persisted payment trail when (re)opening an order.
-  const paymentsKey = (orderId: number): string => `ocp_pos_payments:${orderId}`;
   useEffect(() => {
     if (orderId == null) {
       setPayments([]);
       setDuePaise(null);
       return;
     }
-    const saved = loadJSON<{ due: number | null; payments: RecordedPayment[] }>(`ocp_pos_payments:${orderId}`, { due: null, payments: [] });
+    const saved = loadJSON<{ due: number | null; payments: RecordedPayment[] }>(PAYMENTS_KEY(orderId), { due: null, payments: [] });
     setPayments(saved.payments);
-    setDuePaise(saved.due ?? (order ? toPaise(order.total) : null));
+    setDuePaise(saved.due ?? null);
   }, [orderId]);
 
   useEffect(() => {
-    if (orderId != null) saveJSON(`ocp_pos_payments:${orderId}`, { due: duePaise, payments });
+    if (orderId != null) saveJSON(PAYMENTS_KEY(orderId), { due: duePaise, payments });
   }, [orderId, duePaise, payments]);
-
-  useEffect(() => {
-    saveJSON(HELD_KEY, held);
-  }, [held]);
 
   const resetSale = useCallback(() => {
     setCart([]);
@@ -144,18 +135,17 @@ export default function POS() {
     setDuePaise(null);
     setNotice(null);
     try {
-      localStorage.removeItem(`ocp_pos_order:${outletId ?? 'default'}`);
+      localStorage.removeItem(`${ORDER_KEY}:${outletId ?? 'default'}`);
     } catch {
       /* ignore */
     }
-  }, []);
+  }, [outletId]);
 
   const openOrder = useCallback(
     (id: number, totalRupees: number) => {
       setOrderId(id);
       setPayments([]);
       setDuePaise(toPaise(totalRupees));
-      localStorage.setItem(`ocp_pos_order:${outletId ?? 'default'}`, String(id));
       queryClient.invalidateQueries({ queryKey: ['pos-tables'] });
     },
     [queryClient],
@@ -183,6 +173,7 @@ export default function POS() {
         orderType,
       );
       setCart([]);
+      setTableId(0);
       openOrder(created.id, created.total);
     } catch (e) {
       const { status, message } = posErrorMessage(e);
@@ -192,14 +183,15 @@ export default function POS() {
     }
   };
 
-  const holdCurrent = async () => {
-    if (orderId == null || !order) return;
+const holdCurrent = async () => {
+    if (orderId == null) return;
     setHolding(true);
     try {
       await posApi.holdOrder(orderId);
-      setHeld((prev) => [{ id: order.id, orderNumber: order.order_number, total: order.total, at: new Date().toISOString() }, ...prev].slice(0, 20));
+      const data = await posApi.getOrder(orderId);
+      setHeld((prev) => [{ id: data.id, orderNumber: data.order_number, total: data.total, at: new Date().toISOString() }, ...prev].slice(0, 20));
       resetSale();
-      setNotice(`Order #${order.order_number} held.`);
+      setNotice(`Order #${data.order_number} held.`);
     } catch (e) {
       const { status, message } = posErrorMessage(e);
       setNotice(status === 409 ? 'Already held — refreshed.' : message);
@@ -240,33 +232,6 @@ export default function POS() {
     }
   };
 
-  const modifyItems = () => {
-    if (!order) return;
-    if (!window.confirm('Modify items? The current order will be cancelled and its lines restored to the cart.')) return;
-    const lines: CartLine[] = (order.items ?? []).map((it) => ({
-      key: `${it.menu_item_id}|${it.size ?? ''}|${it.crust ?? ''}`,
-      menuItemID: it.menu_item_id,
-      name: it.name,
-      size: it.size ?? '',
-      crust: it.crust ?? '',
-      crustName: '',
-      quantity: it.quantity,
-      image: '',
-      categoryName: '',
-      unitPaise: null,
-    }));
-    posApi
-      .cancelOrder(order.id)
-      .then(() => {
-        resetSale();
-        setCart(lines);
-        setNotice('Lines restored — edit and create a fresh order.');
-      })
-      .catch((e: unknown) => setNotice(posErrorMessage(e).message));
-  };
-
-  const outletName = 'Current outlet';
-
   const onOrderTypeChange = (t: PosOrderType) => {
     setOrderType(t);
     if (t !== 'dine_in') setTableId(0);
@@ -299,6 +264,41 @@ export default function POS() {
     />
   ), [outletId, operatorName, role, held.length, queryClient]);
 
+  const orderQuery = useQuery({
+    queryKey: ['pos-order', orderId],
+    queryFn: () => posApi.getOrder(orderId as number),
+    enabled: authed && orderId != null,
+    staleTime: 5 * 1000,
+    retry: 1,
+  });
+  const order: PosOrder | undefined = orderQuery.data;
+  const orderOpen = order != null && ['draft', 'held', 'confirmed'].includes(order.status);
+
+  const modifyItems = useCallback(() => {
+    if (!order) return;
+    if (!window.confirm('Modify items? The current order will be cancelled and its lines restored to the cart.')) return;
+    const lines: CartLine[] = (order.items ?? []).map((it) => ({
+      key: `${it.menu_item_id}|${it.size ?? ''}|${it.crust ?? ''}`,
+      menuItemID: it.menu_item_id,
+      name: it.name,
+      size: it.size ?? '',
+      crust: it.crust ?? '',
+      crustName: '',
+      quantity: it.quantity,
+      image: '',
+      categoryName: '',
+      unitPaise: null,
+    }));
+    posApi
+      .cancelOrder(order.id)
+      .then(() => {
+        resetSale();
+        setCart(lines);
+        setNotice('Lines restored — edit and create a fresh order.');
+      })
+      .catch((e: unknown) => setNotice(posErrorMessage(e).message));
+  }, [order]);
+
   const authedView = useMemo(() => {
     if (!authed) return null;
     return (
@@ -307,38 +307,28 @@ export default function POS() {
         <main className="mx-auto w-full max-w-7xl flex-1 p-3 sm:p-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_400px] items-start">
           <div className="rounded-3xl border border-zinc-200 bg-white p-4 min-h-0">
             <OrderTypeBar value={orderType} onChange={(t) => { setOrderType(t); if (t !== 'dine_in') setTableId(0); }} />
-            <MenuPanel onAdd={addLine} outletId={outletId} cart={cart} onQty={(key, delta) => {
-              setCart((prev) =>
-                prev
-                  .map((l) => (l.key === key ? { ...l, quantity: l.quantity + delta } : l))
-                  .filter((l) => l.quantity > 0),
-              );
-            }} />
+            {orderId == null && orderType === 'dine_in' && (
+              <div className="mt-3">
+                <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">Select table</p>
+                <TablePicker selected={tableId} onSelect={setTableId} outletId={outletId} />
+              </div>
+            )}
+            <MenuPanel onAdd={addLine} outletId={outletId} cart={cart} onQty={onQty} />
           </div>
           <div className="space-y-3 min-w-0">
             {fatal && (
               <div className="rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700" role="alert">
                 {fatal}{' '}
-                <button className="font-bold underline" onClick={() => setFatal(null)}>
-                  Dismiss
-                </button>
+                <button className="font-bold underline" onClick={() => setFatal(null)}>Dismiss</button>
               </div>
             )}
             {!['owner', 'manager', 'cashier'].includes(role) && (
-              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-                Signed in as {role}: read-only access. Payments, discounts and order changes are disabled.
-              </div>
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">Signed in as {role}: read-only access. Payments, discounts and order changes are disabled.</div>
             )}
             {orderId == null ? (
               <CartPanel
                 cart={cart}
-                onQty={(key, delta) =>
-                  setCart((prev) =>
-                    prev
-                      .map((l) => (l.key === key ? { ...l, quantity: l.quantity + delta } : l))
-                      .filter((l) => l.quantity > 0),
-                  )
-                }
+                onQty={onQty}
                 onRemove={(key) => setCart((prev) => prev.filter((l) => l.key !== key))}
                 onClear={() => setCart([])}
                 onCreate={createOrder}
@@ -350,7 +340,7 @@ export default function POS() {
                 <CheckoutPanel
                   orderId={orderId}
                   payments={payments}
-                  duePaise={duePaise ?? (order ? toPaise(order.total) : null)}
+                  duePaise={duePaise ?? (order ? toPaise(order.total) : 0)}
                   onPaid={(p, due) => {
                     setPayments((prev) => [...prev, p]);
                     setDuePaise(due);
@@ -366,35 +356,25 @@ export default function POS() {
                   canPay={canPay}
                   canDiscount={canDiscount}
                 />
-                {/* Payment is handled within CheckoutPanel now */}
-                <Button variant="ghost" size="sm" icon={<ReceiptText size={14} />} onClick={() => setReceiptOpen(true)}>
-                  View receipt
-                </Button>
+                <Button variant="ghost" size="sm" icon={<ReceiptText size={14} />} onClick={() => setReceiptOpen(true)}>View receipt</Button>
               </>
             )}
           </div>
         </main>
-        <HoldDrawer
-          open={holdOpen}
-          onClose={() => setHoldOpen(false)}
-          held={held}
-          orderTypes={{}}
-          onResume={resumeHeld}
-          resumingId={resumingId}
-        />
+        <HoldDrawer open={holdOpen} onClose={() => setHoldOpen(false)} held={held} orderTypes={{}} onResume={resumeHeld} resumingId={resumingId} />
         <ReceiptModal
           open={receiptOpen}
           onClose={() => setReceiptOpen(false)}
           order={order ?? null}
           payments={payments}
           canRefund={canRefund}
-          outletName={outletName}
+          outletName='Current outlet'
           onNewSale={resetSale}
         />
       </div>
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authed, outletId, cart, orderType, tableId, orderId, order, orderOpen, payments, duePaise, creating, holding, cancelling, resumingId, notice, fatal, holdOpen, receiptOpen, held, role]);
+  }, [authed, outletId, cart, orderType, tableId, orderId, order, orderOpen, payments, duePaise, creating, holding, cancelling, resumingId, notice, fatal, holdOpen, receiptOpen, held, role, modifyItems]);
 
   if (!authed) return <PosAuthGate onAuthed={() => setAuthed(true)} />;
   return authedView;

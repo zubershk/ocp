@@ -5,9 +5,11 @@ import { posApi, getPosOutletId, setPosOutletId } from '../../services/posServic
 export default function OutletSwitcher({
   outletId,
   onChange,
+  variant = 'light',
 }: {
   outletId: number | null;
   onChange: (id: number | null) => void;
+  variant?: 'light' | 'dark';
 }) {
   const outletsQuery = useQuery({
     queryKey: ['pos-outlets'],
@@ -18,13 +20,17 @@ export default function OutletSwitcher({
   const outlets = (outletsQuery.data ?? []).filter((o) => o.active);
   const current = outletId ?? getPosOutletId();
 
+  const selectClass = variant === 'dark'
+    ? 'h-9 rounded-xl border border-zinc-700 bg-zinc-800 px-2.5 text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-brand-500/30 max-w-44'
+    : 'h-9 rounded-xl border border-zinc-200 bg-white px-2.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-500/30 max-w-44';
+
   return (
     <label className="inline-flex items-center gap-2 text-sm">
-      <Store size={15} className="text-zinc-500 shrink-0" />
+      <Store size={15} className={variant === 'dark' ? 'text-zinc-400 shrink-0' : 'text-zinc-500 shrink-0'} />
       <span className="sr-only">Outlet</span>
       <select
         aria-label="Outlet"
-        className="h-9 rounded-xl border border-zinc-200 bg-white px-2.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-500/30 max-w-44"
+        className={selectClass}
         value={current ?? ''}
         disabled={outletsQuery.isLoading || outlets.length === 0}
         onChange={(e) => {
