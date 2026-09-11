@@ -250,6 +250,10 @@ func (h *AdminHandler) BroadcastSend(c *gin.Context) {
 		ImageURL string   `json:"image_url"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
+		if strings.Contains(err.Error(), "request body too large") {
+			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "request too large — image must be under ~5MB"})
+			return
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
 		return
 	}
