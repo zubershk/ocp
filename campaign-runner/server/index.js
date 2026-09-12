@@ -19,7 +19,14 @@ const upload = multer({ dest: UPLOADS_DIR, limits: { fileSize: 10 * 1024 * 1024 
 
 // ── Data helpers ──
 function load(name, fb = []) { const p = join(DATA_DIR, `${name}.json`); return existsSync(p) ? JSON.parse(readFileSync(p, 'utf-8')) : fb; }
-function save(name, data) { writeFileSync(join(DATA_DIR, `${name}.json`), JSON.stringify(data, null, 2)); }
+// Atomic save (tmp + rename) so concurrent writers (dev + prod on one
+// data dir, scheduler ticks) can't truncate each other's files.
+function save(name, data) {
+  const p = join(DATA_DIR, `${name}.json`);
+  const tmp = `${p}.${process.pid}.tmp`;
+  writeFileSync(tmp, JSON.stringify(data, null, 2));
+  renameSync(tmp, p);
+}
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
 
 // ═══════════════════════════════════════════
@@ -38,6 +45,124 @@ app.get('/api/settings', (_req, res) => {
   }));
 });
 app.put('/api/settings', (req, res) => { save('settings', req.body); res.json({ ok: true }); });
+
+// ── Customer helpers ──
+// A sendable number is exactly 10 digits. Longer values are WhatsApp
+// LIDs (13–15 digits) captured from LID-mode contacts — not dialable,
+// so campaigns must skip them instead of failing per-recipient.
+function isSendablePhone(phone) {
+  return typeof phone === 'string' && /^[0-9]{10}$/.test(phone);
+}
+function normPhone(phone) {
+  const d = String(phone || '').replace(/\D/g, '');
+  if (d.length === 10) return d;
+  if (d.length === 12 && d.startsWith('91')) return d.slice(2);
+  if (d.length === 11 && d.startsWith('0')) return d.slice(1);
+  return d; // anything else (e.g. 13–15 digit WhatsApp LIDs) stays invalid
+}
+
+// All customers from bot (preferred) or local fallback, normalized to
+// a common shape { id, phone, name, tags, ... }.
+async function allCustomers() {
+  const settings = load('settings', {});
+  if (settings.botAdminKey) {
+    try {
+      const data = await botApi('/admin/customers?limit=2000');
+      const localTags = load('customer_tags', {});
+      return (data.customers || []).map(c => ({
+        id: String(c.id), phone: c.phone, name: c.name || '', tags: localTags[c.phone] || [],
+        email: c.email || '', total_orders: c.total_orders, total_spent: c.total_spent,
+        createdAt: c.created_at, source: 'bot',
+      }));
+    } catch (err) { /* fall through to local */ }
+  }
+  return load('customers');
+}
+
+// Resolve a campaign's recipients by mode. Returns { phones, skipped }:
+// phones are unique sendable 10-digit numbers; skipped counts contacts
+// excluded for missing/invalid numbers (e.g. LID rows).
+function modeOf(campaign) {
+  if (campaign.recipientMode) return campaign.recipientMode;
+  if (campaign.recipientTag && campaign.recipientTag !== 'all') return 'tag';
+  return 'all';
+}
+
+// Sync validator for explicit phone lists (custom mode). Used at
+// create-time for immediate feedback; sending re-validates.
+function validatePhoneList(list) {
+  const seen = new Set();
+  let skipped = 0;
+  for (const raw of list || []) {
+    const p = normPhone(raw);
+    if (isSendablePhone(p)) seen.add(p);
+    else skipped++;
+  }
+  return { phones: [...seen], skipped };
+}
+
+async function resolvePhonesAsync(campaign) {
+  if (modeOf(campaign) === 'custom') return validatePhoneList(campaign.recipientPhones);
+  const customers = await allCustomers();
+  let filtered = customers;
+  if (modeOf(campaign) === 'tag' && campaign.recipientTag && campaign.recipientTag !== 'all') {
+    filtered = customers.filter(c => (c.tags || []).includes(campaign.recipientTag));
+  }
+  const seen = new Set();
+  let skipped = 0;
+  for (const c of filtered) {
+    const p = normPhone(c.phone);
+    if (isSendablePhone(p)) seen.add(p);
+    else skipped++;
+  }
+  return { phones: [...seen], skipped };
+}
+
+// ── Image resolver ──
+// Evolution's /send/media accepts only absolute http(s) URLs (fetched
+// server-side) or raw base64. A local "/uploads/..." path is neither,
+// so resolve it here: read the file and inline it as base64.
+function resolveImagePayload(imageUrl) {
+  if (!imageUrl) return '';
+  if (/^https?:\/\//i.test(imageUrl)) return imageUrl;
+  const dm = /^data:image\/[a-z0-9.+-]+;base64,(.*)$/i.exec(imageUrl);
+  if (dm) return dm[1];
+  const m = /^\/uploads\/([^/]+)$/.exec(imageUrl);
+  if (!m) throw new Error('image must be an http(s) URL or a library image');
+  const fp = join(UPLOADS_DIR, m[1]);
+  if (!existsSync(fp)) throw new Error('image file not found on server');
+  const buf = readFileSync(fp);
+  if (buf.length > 5 * 1024 * 1024) throw new Error('image too large (max 5MB)');
+  return buf.toString('base64');
+}
+
+// ── Merge tags ──
+// {name} {phone} come from the contact, {brand_name} {time} are built in,
+// anything else comes from the campaign's variables object. Unknown tags
+// are left untouched so typos stay visible instead of silently blanking.
+function renderMessage(template, contact, settings, variables) {
+  const vars = {
+    name: contact?.name || '',
+    phone: contact?.phone || '',
+    brand_name: settings.brandName || '',
+    time: new Date().toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }),
+    ...(variables || {}),
+  };
+  return String(template || '').replace(/\{([a-zA-Z_][a-zA-Z0-9_]*)\}/g, (m, k) =>
+    Object.prototype.hasOwnProperty.call(vars, k) ? String(vars[k] ?? '') : m,
+  );
+}
+
+// Sanitize campaign variables: string keys/values, bounded count/size.
+function sanitizeVariables(v) {
+  const out = {};
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return out;
+  for (const [k, val] of Object.entries(v).slice(0, 20)) {
+    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(k)) continue;
+    out[k] = String(val ?? '').slice(0, 200);
+  }
+  return out;
+}
 
 // ── Bot API helper ──
 async function botApi(path, opts = {}) {
@@ -251,13 +376,24 @@ app.get('/api/campaigns', (_req, res) => { res.json(load('campaigns')); });
 
 app.post('/api/campaigns', (req, res) => {
   const campaigns = load('campaigns');
-  const { name, message, imageUrl, recipientTag, scheduledAt } = req.body;
+  const { name, message, imageUrl, recipientTag, recipientMode, recipientPhones, scheduledAt } = req.body;
   if (!name || !message) return res.status(400).json({ error: 'name and message required' });
+  const mode = recipientMode || (recipientTag && recipientTag !== 'all' ? 'tag' : 'all');
+  if (!['all', 'tag', 'custom'].includes(mode)) return res.status(400).json({ error: 'invalid recipient mode' });
+  let phones = [];
+  if (mode === 'custom') {
+    const v = validatePhoneList(recipientPhones);
+    if (v.phones.length === 0) return res.status(400).json({ error: 'select at least one valid contact' });
+    phones = v.phones;
+  }
   const c = {
-    id: uid(), name, message, imageUrl: imageUrl || '', recipientTag: recipientTag || 'all',
+    id: uid(), name, message, imageUrl: imageUrl || '',
+    recipientMode: mode, recipientTag: mode === 'tag' ? (recipientTag || 'all') : 'all',
+    recipientPhones: mode === 'custom' ? phones : [],
+    variables: sanitizeVariables(req.body.variables),
     scheduledAt: scheduledAt || null,
     status: scheduledAt ? 'scheduled' : 'draft',
-    sent: 0, failed: 0, total: 0, createdAt: new Date().toISOString(), results: [],
+    sent: 0, failed: 0, skipped: 0, total: 0, createdAt: new Date().toISOString(), results: [],
   };
   campaigns.push(c);
   save('campaigns', campaigns);
@@ -268,7 +404,10 @@ app.put('/api/campaigns/:id', (req, res) => {
   const campaigns = load('campaigns');
   const idx = campaigns.findIndex(c => c.id === req.params.id);
   if (idx === -1) return res.status(404).json({ error: 'not found' });
-  campaigns[idx] = { ...campaigns[idx], ...req.body };
+  const body = { ...req.body };
+  if (body.variables !== undefined) body.variables = sanitizeVariables(body.variables);
+  if (body.recipientPhones !== undefined) body.recipientPhones = validatePhoneList(body.recipientPhones).phones;
+  campaigns[idx] = { ...campaigns[idx], ...body };
   save('campaigns', campaigns);
   res.json(campaigns[idx]);
 });
@@ -286,49 +425,49 @@ app.get('/api/campaigns/:id', (req, res) => {
   res.json(c);
 });
 
-app.post('/api/campaigns/:id/send', async (req, res) => {
+// Preview recipient resolution before creating/sending:
+// { recipientMode, recipientTag, recipientPhones } -> { sendable, skipped }
+app.post('/api/campaigns/preview-recipients', async (req, res) => {
+  const { phones, skipped } = await resolvePhonesAsync({
+    recipientMode: req.body.recipientMode || 'all',
+    recipientTag: req.body.recipientTag || 'all',
+    recipientPhones: req.body.recipientPhones || [],
+  });
+  res.json({ sendable: phones.length, skipped });
+});
+
+// Shared send kickoff used by the manual send route and the
+// scheduler. Resolves recipients, marks the campaign sending, and
+// starts background delivery. Returns { ok, total, skipped } or
+// { error, status }.
+async function startSend(id) {
   const campaigns = load('campaigns');
-  const campaign = campaigns.find(c => c.id === req.params.id);
-  if (!campaign) return res.status(404).json({ error: 'not found' });
-  if (campaign.status === 'sending') return res.status(409).json({ error: 'already sending' });
+  const campaign = campaigns.find(c => c.id === id);
+  if (!campaign) return { error: 'not found', status: 404 };
+  if (campaign.status === 'sending') return { error: 'already sending', status: 409 };
+  if (campaign.status === 'done') return { error: 'already sent', status: 409 };
 
-  // Collect phone numbers from customers
-  const settings = load('settings', {});
-  let phones = [];
-
-  if (settings.botAdminKey) {
-    try {
-      const data = await botApi('/admin/customers?limit=2000');
-      let customers = data.customers || [];
-      if (campaign.recipientTag && campaign.recipientTag !== 'all') {
-        const localTags = load('customer_tags', {});
-        customers = customers.filter(c => (localTags[c.phone] || []).includes(campaign.recipientTag));
-      }
-      phones = customers.map(c => c.phone);
-    } catch (err) { /* fall through */ }
-  }
-  if (phones.length === 0) {
-    const localCustomers = load('customers');
-    let filtered = localCustomers;
-    if (campaign.recipientTag && campaign.recipientTag !== 'all') {
-      filtered = localCustomers.filter(c => c.tags?.includes(campaign.recipientTag));
-    }
-    phones = filtered.map(c => c.phone);
-  }
-
-  if (phones.length === 0) return res.status(400).json({ error: 'no recipients' });
+  const { phones, skipped } = await resolvePhonesAsync(campaign);
+  if (phones.length === 0) return { error: skipped > 0 ? `no sendable recipients (${skipped} invalid skipped)` : 'no recipients', status: 400 };
 
   campaign.status = 'sending';
   campaign.total = phones.length;
   campaign.sent = 0;
   campaign.failed = 0;
+  campaign.skipped = skipped;
   campaign.results = [];
   campaign.startedAt = new Date().toISOString();
   save('campaigns', campaigns);
 
   // Send via bot's broadcast endpoint (non-blocking)
   sendCampaignViaBot(campaign, phones).catch(console.error);
-  res.json({ ok: true, total: phones.length });
+  return { ok: true, total: phones.length, skipped };
+}
+
+app.post('/api/campaigns/:id/send', async (req, res) => {
+  const r = await startSend(req.params.id);
+  if (r.error) return res.status(r.status || 400).json({ error: r.error });
+  res.json({ ok: true, total: r.total, skipped: r.skipped });
 });
 
 app.post('/api/campaigns/:id/cancel', (req, res) => {
@@ -344,10 +483,47 @@ async function sendCampaignViaBot(campaign, phones) {
   const settings = load('settings', {});
   const delay = settings.delayMs || 3000;
 
-  // Send in batches of 20 via bot's broadcast endpoint
+  // Resolve the image once: local library paths must become base64,
+  // otherwise every recipient fails at evolution with "invalid base64".
+  let image = '';
+  try {
+    image = resolveImagePayload(campaign.imageUrl);
+  } catch (err) {
+    for (const phone of phones) {
+      campaign.results.push({ phone, ok: false, error: err.message, sentAt: new Date().toISOString() });
+      campaign.failed++;
+    }
+    campaign.status = 'done';
+    campaign.completedAt = new Date().toISOString();
+    const all = load('campaigns');
+    const idx = all.findIndex(c => c.id === campaign.id);
+    if (idx !== -1) all[idx] = { ...campaign };
+    save('campaigns', all);
+    return;
+  }
+
+  // Render per recipient (merge tags), then group identical texts so
+  // untagged campaigns still send in bulk while personalized ones fan
+  // out per unique rendering.
   const batchSize = 20;
-  for (let i = 0; i < phones.length; i += batchSize) {
-    const batch = phones.slice(i, i + batchSize);
+  const customers = await allCustomers();
+  const byPhone = new Map(customers.map(c => [normPhone(c.phone), c]));
+  const groups = new Map(); // rendered text -> phones[]
+  for (const phone of phones) {
+    const contact = byPhone.get(phone) || { phone, name: '' };
+    const text = renderMessage(campaign.message, contact, settings, campaign.variables);
+    if (!groups.has(text)) groups.set(text, []);
+    groups.get(text).push(phone);
+  }
+  // Flatten groups into send batches (<=20), keeping each batch uniform.
+  const batches = [];
+  for (const [text, list] of groups) {
+    for (let i = 0; i < list.length; i += batchSize) batches.push({ text, phones: list.slice(i, i + batchSize) });
+  }
+
+  // Send in batches of 20 via bot's broadcast endpoint
+  for (let bi = 0; bi < batches.length; bi++) {
+    const { text, phones: batch } = batches[bi];
 
     // Check if cancelled
     const fresh = load('campaigns').find(c => c.id === campaign.id);
@@ -358,8 +534,8 @@ async function sendCampaignViaBot(campaign, phones) {
         method: 'POST',
         body: JSON.stringify({
           phones: batch,
-          message: campaign.message,
-          image_url: campaign.imageUrl || '',
+          message: text,
+          image_url: image,
         }),
       });
 
@@ -368,7 +544,7 @@ async function sendCampaignViaBot(campaign, phones) {
         for (const r of result.results) {
           campaign.results.push({
             phone: r.phone,
-            name: '',
+            name: byPhone.get(r.phone)?.name || '',
             ok: r.ok,
             error: r.error || null,
             sentAt: new Date().toISOString(),
@@ -379,13 +555,13 @@ async function sendCampaignViaBot(campaign, phones) {
       } else {
         // API error — mark all as failed
         for (const phone of batch) {
-          campaign.results.push({ phone, ok: false, error: result.error || 'API error', sentAt: new Date().toISOString() });
+          campaign.results.push({ phone, name: byPhone.get(phone)?.name || '', ok: false, error: result.error || 'API error', sentAt: new Date().toISOString() });
           campaign.failed++;
         }
       }
     } catch (err) {
       for (const phone of batch) {
-        campaign.results.push({ phone, ok: false, error: err.message, sentAt: new Date().toISOString() });
+        campaign.results.push({ phone, name: byPhone.get(phone)?.name || '', ok: false, error: err.message, sentAt: new Date().toISOString() });
         campaign.failed++;
       }
     }
@@ -396,7 +572,7 @@ async function sendCampaignViaBot(campaign, phones) {
     if (idx !== -1) all[idx] = { ...campaign };
     save('campaigns', all);
 
-    if (i + batchSize < phones.length && delay > 0) {
+    if (bi + 1 < batches.length && delay > 0) {
       await new Promise(r => setTimeout(r, delay));
     }
   }
@@ -455,33 +631,48 @@ app.get('/api/dashboard', async (_req, res) => {
 // TEST SEND — via bot's broadcast endpoint
 // ═══════════════════════════════════════════
 app.post('/api/test-send', async (req, res) => {
-  const { phone, message, imageUrl } = req.body;
+  const { phone, message, imageUrl, variables } = req.body;
   if (!phone || !message) return res.status(400).json({ error: 'phone and message required' });
 
+  let image = '';
   try {
+    image = resolveImagePayload(imageUrl);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+  try {
+    const settings = load('settings', {});
+    const customers = await allCustomers();
+    const contact = customers.find(c => normPhone(c.phone) === normPhone(phone)) || { phone, name: '' };
+    const text = renderMessage(message, contact, settings, sanitizeVariables(variables));
     const result = await botApi('/admin/broadcast/send', {
       method: 'POST',
-      body: JSON.stringify({ phones: [phone], message, image_url: imageUrl || '' }),
+      body: JSON.stringify({ phones: [normPhone(phone)], message: text, image_url: image }),
     });
     const r = result.results?.[0];
-    res.json({ ok: r?.ok || false, result: r || result });
+    res.json({ ok: r?.ok || false, result: r || result, rendered: text });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
 // ── Scheduled campaign checker (every 30s) ──
-setInterval(() => {
+// Due scheduled campaigns are sent automatically, not demoted.
+setInterval(async () => {
   const campaigns = load('campaigns');
   const now = new Date();
-  let changed = false;
   for (const c of campaigns) {
     if (c.status === 'scheduled' && c.scheduledAt && new Date(c.scheduledAt) <= now) {
-      c.status = 'draft';
-      changed = true;
+      console.log(`[scheduler] firing campaign ${c.id} (${c.name})`);
+      const r = await startSend(c.id);
+      if (r.error) {
+        console.log(`[scheduler] campaign ${c.id} could not start: ${r.error}`);
+        const all = load('campaigns');
+        const idx = all.findIndex(x => x.id === c.id);
+        if (idx !== -1) { all[idx].status = 'draft'; all[idx].scheduledAt = null; save('campaigns', all); }
+      }
     }
   }
-  if (changed) save('campaigns', campaigns);
 }, 30000);
 
 const PORT = process.env.PORT || 3001;
