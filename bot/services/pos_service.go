@@ -190,11 +190,22 @@ func NewPOSOrderService() *POSOrderService {
 	return &POSOrderService{}
 }
 
+// NormalizePOSOrderType maps legacy values to the canonical set.
+// The only legacy value is 'pickup' → 'takeaway'.
+// All other invalid inputs return an error.
+func NormalizePOSOrderType(t string) (string, error) {
+	switch NormalizeOrderType(t) {
+	case OrderTypeDineIn, OrderTypeTakeaway, OrderTypeDelivery:
+		return NormalizeOrderType(t), nil
+	}
+	return "", fmt.Errorf("invalid order type %q", t)
+}
+
 // CreateOrder creates a new draft order with the given items.
 // Prices are resolved server-side from the menu (size + crust aware);
 // totals are then derived by RecalculateOrderTotals. Client-supplied
 // amounts are never trusted. The header + lines insert atomically.
-func (s *POSOrderService) CreateOrder(restaurantID int, outletID int, items []DraftItem, tableID int, source string) (*models.Order, error) {
+func (s *POSOrderService) CreateOrder(restaurantID int, outletID int, items []DraftItem, tableID int, source string, orderType string) (*models.Order, error) {
 	if len(items) == 0 {
 		return nil, fmt.Errorf("order must contain at least one item")
 	}
@@ -204,10 +215,9 @@ func (s *POSOrderService) CreateOrder(restaurantID int, outletID int, items []Dr
 	if outletID <= 0 {
 		outletID = DefaultOutletID(restaurantID)
 	}
-	for _, item := range items {
-		if item.Quantity < 1 || item.Quantity > 20 {
-			return nil, fmt.Errorf("quantity for item %d must be between 1 and 20", item.MenuItemID)
-		}
+	normalizedType, err := NormalizePOSOrderType(orderType)
+	if err != nil {
+		return nil, err
 	}
 
 	tx, err := database.DB.Begin()
@@ -245,9 +255,9 @@ func (s *POSOrderService) CreateOrder(restaurantID int, outletID int, items []Dr
 	var orderID int
 	err = tx.QueryRow(`
 		INSERT INTO orders (order_number, customer_name, customer_phone, order_type, address, landmark, payment_method, subtotal, delivery_fee, discount, total, status, source, restaurant_id, outlet_id, table_id)
-		VALUES ($1, '', '', 'dine_in', '', '', '', 0, 0, 0, 0, 'draft', $2, $3, $4, $5)
+		VALUES ($1, '', '', $2, '', '', '', 0, 0, 0, 0, 'draft', $3, $4, $5, $6)
 		RETURNING id
-	`, orderNumber, source, restaurantID, outletID, tableNull).Scan(&orderID)
+	`, orderNumber, normalizedType, source, restaurantID, outletID, tableNull).Scan(&orderID)
 	if err != nil {
 		return nil, fmt.Errorf("order insert failed: %w", err)
 	}
@@ -333,9 +343,24 @@ func canonicalDraftLine(tx *sql.Tx, item DraftItem, restaurantID int) (unitPaise
 	return unitPaise, size, crust, itemName, nil
 }
 
-// UpdateOrder updates an existing order's status or table assignment.
-func (s *POSOrderService) UpdateOrder(id int) error {
-	_, err := database.DB.Exec(`UPDATE orders SET updated_at = CURRENT_TIMESTAMP WHERE id = $1`, id)
+// UpdateOrder changes a mutable order's fulfillment type. Frozen
+// (completed/cancelled) orders reject the change, as do callers
+// outside the order's tenant.
+func (s *POSOrderService) UpdateOrder(id, restaurantID, outletID int, orderType string) error {
+	status, _, err := loadOrderForMutation(id, restaurantID, outletID)
+	if err != nil {
+		return err
+	}
+	if !CanMutateOrder(status) {
+		return fmt.Errorf("%w: cannot change order type on %q order", ErrInvalidOrderTransition, status)
+	}
+	normalized, err := NormalizePOSOrderType(orderType)
+	if err != nil {
+		return err
+	}
+	_, err = database.DB.Exec(
+		`UPDATE orders SET order_type = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+		id, normalized)
 	return err
 }
 
@@ -347,6 +372,7 @@ type DraftOrder struct {
 	Items        []DraftItem
 	TableID      int // 0 = none
 	Source       string
+	OrderType    string `json:"order_type"` // dine_in | takeaway | delivery
 }
 
 // DraftItem is a single item in a draft order.
@@ -375,15 +401,33 @@ type OrderHoldInfo struct {
 	Version     int // optimistic concurrency version
 }
 
+// loadOrderForMutation loads an order's status after verifying it
+// belongs to the caller's (restaurantID, outletID) tenant. Every POS
+// mutation goes through here so cross-tenant or cross-outlet access
+// fails closed even when a caller forges order IDs. It returns the
+// order's status and restaurant for downstream rule checks.
+func loadOrderForMutation(orderID, restaurantID, outletID int) (status string, orderRestaurantID int, err error) {
+	var orderOutletID int
+	err = database.DB.QueryRow(
+		`SELECT status, restaurant_id, outlet_id FROM orders WHERE id = $1`,
+		orderID).Scan(&status, &orderRestaurantID, &orderOutletID)
+	if err == sql.ErrNoRows {
+		return "", 0, ErrOrderNotFound
+	}
+	if err != nil {
+		return "", 0, err
+	}
+	if orderRestaurantID != restaurantID || orderOutletID != outletID {
+		return "", 0, ErrOrderTenantMismatch
+	}
+	return status, orderRestaurantID, nil
+}
+
 // HoldOrder moves a draft/confirmed order to held. The status is read
 // first and the write is conditional on it, so two concurrent holders
 // cannot both succeed: the loser sees zero affected rows.
-func (s *POSOrderService) HoldOrder(orderID int, heldBy int, reason string) (bool, error) {
-	var status string
-	err := database.DB.QueryRow(`SELECT status FROM orders WHERE id = $1`, orderID).Scan(&status)
-	if err == sql.ErrNoRows {
-		return false, ErrOrderNotFound
-	}
+func (s *POSOrderService) HoldOrder(orderID, restaurantID, outletID int, heldBy int, reason string) (bool, error) {
+	status, _, err := loadOrderForMutation(orderID, restaurantID, outletID)
 	if err != nil {
 		return false, err
 	}
@@ -409,12 +453,8 @@ func (s *POSOrderService) HoldOrder(orderID int, heldBy int, reason string) (boo
 
 // ResumeOrder moves a held order back to confirmed. Resuming anything
 // that is not held is an explicit error, not a silent no-op.
-func (s *POSOrderService) ResumeOrder(orderID int) error {
-	var status string
-	err := database.DB.QueryRow(`SELECT status FROM orders WHERE id = $1`, orderID).Scan(&status)
-	if err == sql.ErrNoRows {
-		return ErrOrderNotFound
-	}
+func (s *POSOrderService) ResumeOrder(orderID, restaurantID, outletID int) error {
+	status, _, err := loadOrderForMutation(orderID, restaurantID, outletID)
 	if err != nil {
 		return err
 	}
@@ -441,12 +481,8 @@ func (s *POSOrderService) ResumeOrder(orderID int) error {
 // CompleteOrder completes a confirmed order once its ledger balance is
 // fully paid (due == 0). Completed orders are terminal: no further
 // hold, payment, discount, or table change is possible.
-func (s *POSOrderService) CompleteOrder(orderID int) error {
-	var status string
-	err := database.DB.QueryRow(`SELECT status FROM orders WHERE id = $1`, orderID).Scan(&status)
-	if err == sql.ErrNoRows {
-		return ErrOrderNotFound
-	}
+func (s *POSOrderService) CompleteOrder(orderID, restaurantID, outletID int) error {
+	status, _, err := loadOrderForMutation(orderID, restaurantID, outletID)
 	if err != nil {
 		return err
 	}
@@ -476,12 +512,8 @@ func (s *POSOrderService) CompleteOrder(orderID int) error {
 
 // CancelOrder cancels a non-terminal order. Completed and cancelled
 // orders are terminal and reject cancellation.
-func (s *POSOrderService) CancelOrder(orderID int) error {
-	var status string
-	err := database.DB.QueryRow(`SELECT status FROM orders WHERE id = $1`, orderID).Scan(&status)
-	if err == sql.ErrNoRows {
-		return ErrOrderNotFound
-	}
+func (s *POSOrderService) CancelOrder(orderID, restaurantID, outletID int) error {
+	status, _, err := loadOrderForMutation(orderID, restaurantID, outletID)
 	if err != nil {
 		return err
 	}
@@ -579,14 +611,8 @@ type OrderEventPayload struct {
 // discount ID or an error. Completed/cancelled orders are frozen.
 // Totals are recalculated server-side after linking: the client never
 // supplies the resulting amounts.
-func (s *POSOrderService) ApplyDiscount(orderID int, discountID int) error {
-	var status string
-	var restaurantID int
-	err := database.DB.QueryRow(
-		`SELECT status, restaurant_id FROM orders WHERE id = $1`, orderID).Scan(&status, &restaurantID)
-	if err == sql.ErrNoRows {
-		return ErrOrderNotFound
-	}
+func (s *POSOrderService) ApplyDiscount(orderID, restaurantID, outletID, discountID int) error {
+	status, orderRestaurantID, err := loadOrderForMutation(orderID, restaurantID, outletID)
 	if err != nil {
 		return err
 	}
@@ -597,7 +623,7 @@ func (s *POSOrderService) ApplyDiscount(orderID int, discountID int) error {
 	if rule == nil {
 		return fmt.Errorf("discount not found")
 	}
-	if rule.RestaurantID != restaurantID {
+	if rule.RestaurantID != orderRestaurantID {
 		return fmt.Errorf("discount does not belong to current restaurant")
 	}
 	// Validate the discount belongs to the order's restaurant and is active.
@@ -618,11 +644,7 @@ func (s *POSOrderService) ApplyDiscount(orderID int, discountID int) error {
 // Delegates to the atomic AssignTableToOrder so concurrent claimants
 // get one success and one conflict (see table_service.go).
 func (s *POSOrderService) SetTable(orderID int, tableID int, restaurantID int, outletID int) error {
-	var status string
-	err := database.DB.QueryRow(`SELECT status FROM orders WHERE id = $1`, orderID).Scan(&status)
-	if err == sql.ErrNoRows {
-		return ErrOrderNotFound
-	}
+	status, _, err := loadOrderForMutation(orderID, restaurantID, outletID)
 	if err != nil {
 		return err
 	}
