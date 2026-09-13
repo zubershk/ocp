@@ -51,6 +51,12 @@ var ErrInvalidOrderTransition = errors.New("invalid order status transition")
 // ErrOrderNotFound is returned when a POS mutation targets a missing order.
 var ErrOrderNotFound = errors.New("order not found")
 
+// ErrOrderTenantMismatch is returned when a POS mutation targets an
+// order belonging to a different restaurant/outlet than the caller.
+// Tenant ownership is enforced server-side on every mutation:
+// a forged order ID from another tenant fails closed here.
+var ErrOrderTenantMismatch = errors.New("order does not belong to current restaurant/outlet")
+
 // ErrOrderHasDue is returned when completing an order that still has
 // an outstanding ledger balance.
 var ErrOrderHasDue = errors.New("order has outstanding due")
