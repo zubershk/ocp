@@ -679,8 +679,12 @@ function CampaignsView() {
   const [step, setStep] = useState(0); // 0=list, 1=compose, 2=recipients, 3=review
   const [compose, setCompose] = useState({ name: '', message: '', imageUrl: '' });
   const [recipientTag, setRecipientTag] = useState('all');
+  const [recipientMode, setRecipientMode] = useState('all'); // all | tag | custom
+  const [selectedPhones, setSelectedPhones] = useState([]); // normalized 10-digit strings
+  const [contactSearch, setContactSearch] = useState('');
+  const [preview, setPreview] = useState({ sendable: 0, skipped: 0 });
   const [scheduledAt, setScheduledAt] = useState('');
-  const [previewPhone, setPreviewPhone] = useState('9876543210');
+  const [media, setMedia] = useState([]);
   const [showProgress, setShowProgress] = useState(null);
   const [liveCampaign, setLiveCampaign] = useState(null);
   const [templates, setTemplates] = useState([]);
@@ -689,6 +693,11 @@ function CampaignsView() {
   const [settings, setSettings] = useState({});
   const [testPhone, setTestPhone] = useState('');
   const [testResult, setTestResult] = useState(null);
+  const [varRows, setVarRows] = useState([
+    { k: 'discount', v: '' }, { k: 'item', v: '' }, { k: 'description', v: '' },
+    { k: 'order_link', v: '' }, { k: 'order_id', v: '' },
+  ]);
+  const msgRef = useRef();
   const fileRef = useRef();
 
   const load = () => {
@@ -697,8 +706,37 @@ function CampaignsView() {
     api('/api/customers/tags').then(setTags);
     api('/api/settings').then(setSettings);
     api('/api/customers/all').then(setCustomers);
+    api('/api/media').then(m => setMedia(Array.isArray(m) ? m : []));
   };
   useEffect(() => { load(); }, []);
+
+  // Helpers: 10-digit sendable numbers only (longer = WhatsApp LID, not dialable)
+  const normPhone = (p) => String(p || '').replace(/\D/g, '').slice(-10);
+  const isSendable = (p) => /^[0-9]{10}$/.test(normPhone(p));
+  const modeOf = (c) => c.recipientMode || (c.recipientTag && c.recipientTag !== 'all' ? 'tag' : 'all');
+  const recipientLabel = (c) => {
+    const m = modeOf(c);
+    if (m === 'custom') return `${(c.recipientPhones || []).length} selected`;
+    if (m === 'tag') return c.recipientTag;
+    return 'All Customers';
+  };
+
+  // Live recipient preview (sendable vs skipped) for all/tag modes;
+  // custom mode is exact by construction.
+  useEffect(() => {
+    if (recipientMode === 'custom') {
+      setPreview({ sendable: selectedPhones.length, skipped: 0 });
+      return;
+    }
+    let live = true;
+    api('/api/campaigns/preview-recipients', {
+      method: 'POST',
+      body: JSON.stringify({ recipientMode, recipientTag }),
+    }).then(r => { if (live && r && typeof r.sendable === 'number') setPreview(r); });
+    return () => { live = false; };
+  }, [recipientMode, recipientTag, selectedPhones, customers.length]);
+
+  const recipientCount = preview.sendable;
 
   // Poll live campaigns
   useEffect(() => {
@@ -709,8 +747,6 @@ function CampaignsView() {
     }, 2000);
     return () => clearInterval(interval);
   }, [showProgress]);
-
-  const recipientCount = recipientTag === 'all' ? customers.length : customers.filter(c => c.tags?.includes(recipientTag)).length;
 
   const applyTemplate = (t) => {
     setCompose({ ...compose, message: t.message });
@@ -727,19 +763,88 @@ function CampaignsView() {
     e.target.value = '';
   };
 
-  const createCampaign = async () => {
-    const res = await api('/api/campaigns', { method: 'POST', body: JSON.stringify({ ...compose, recipientTag, scheduledAt: scheduledAt || null }) });
-    if (res.error) return alert(res.error);
-    setStep(0);
+  const resetWizard = () => {
     setCompose({ name: '', message: '', imageUrl: '' });
     setRecipientTag('all');
+    setRecipientMode('all');
+    setSelectedPhones([]);
+    setContactSearch('');
     setScheduledAt('');
+    setVarRows(defaultVarRows());
+  };
+
+  // Campaign variables as an object for the API (non-empty keys only)
+  const variablesObj = () => {
+    const o = {};
+    for (const { k, v } of varRows) {
+      const key = k.trim();
+      if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key)) o[key] = v;
+    }
+    return o;
+  };
+
+  const defaultVarRows = () => ([
+    { k: 'discount', v: '' }, { k: 'item', v: '' }, { k: 'description', v: '' },
+    { k: 'order_link', v: '' }, { k: 'order_id', v: '' },
+  ]);
+
+  const restoreVarRows = (vars) => {
+    const entries = Object.entries(vars || {});
+    setVarRows(entries.length > 0 ? entries.map(([k, v]) => ({ k, v })) : defaultVarRows());
+  };
+
+  // Insert a {tag} at the cursor of the compose textarea
+  const insertTag = (tag) => {
+    const el = msgRef.current;
+    const token = `{${tag}}`;
+    if (!el) {
+      setCompose({ ...compose, message: (compose.message || '') + token });
+      return;
+    }
+    const start = el.selectionStart ?? compose.message.length;
+    const end = el.selectionEnd ?? compose.message.length;
+    const next = compose.message.slice(0, start) + token + compose.message.slice(end);
+    setCompose({ ...compose, message: next });
+    requestAnimationFrame(() => { el.focus(); el.selectionStart = el.selectionEnd = start + token.length; });
+  };
+
+  // Sample rendering for the preview (real rendering happens per contact at send time)
+  const renderSample = (msg) => {
+    const vars = {
+      name: 'Rahul', phone: '9876543210', brand_name: settings.brandName || 'Orange Cheese Pizza',
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      ...variablesObj(),
+    };
+    return String(msg || '').replace(/\{([a-zA-Z_][a-zA-Z0-9_]*)\}/g, (m, k) =>
+      Object.prototype.hasOwnProperty.call(vars, k) ? String(vars[k] ?? '') : m,
+    );
+  };
+
+  const createCampaign = async () => {
+    if (recipientMode === 'custom' && selectedPhones.length === 0) return alert('Select at least one contact');
+    const res = await api('/api/campaigns', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...compose,
+        recipientMode,
+        recipientTag: recipientMode === 'tag' ? recipientTag : 'all',
+        recipientPhones: recipientMode === 'custom' ? selectedPhones : [],
+        variables: variablesObj(),
+        scheduledAt: scheduledAt || null,
+      }),
+    });
+    if (res.error) return alert(res.error);
+    setStep(0);
+    resetWizard();
     load();
   };
 
   const sendCampaign = async (id) => {
-    if (!confirm('Send this campaign to all recipients?')) return;
-    await api(`/api/campaigns/${id}/send`, { method: 'POST' });
+    const c = campaigns.find(x => x.id === id);
+    const label = c ? recipientLabel(c) : 'all recipients';
+    if (!confirm(`Send this campaign to ${label}?`)) return;
+    const res = await api(`/api/campaigns/${id}/send`, { method: 'POST' });
+    if (res.error) return alert(res.error);
     setShowProgress(id);
     load();
   };
@@ -759,23 +864,25 @@ function CampaignsView() {
   const testSend = async () => {
     if (!testPhone || !compose.message) return alert('Phone and message required');
     setTestResult(null);
-    const res = await api('/api/test-send', { method: 'POST', body: JSON.stringify({ phone: testPhone, message: compose.message, imageUrl: compose.imageUrl }) });
+    const res = await api('/api/test-send', { method: 'POST', body: JSON.stringify({ phone: testPhone, message: compose.message, imageUrl: compose.imageUrl, variables: variablesObj() }) });
     setTestResult(res);
   };
 
   const renderPreview = (msg, img) => {
-    const phone = previewPhone || '9876543210';
     const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const text = renderSample(msg);
+    const hasTags = /{[a-zA-Z_][a-zA-Z0-9_]*}/.test(msg || '');
     return (
       <div className="bg-[#e5ddd5] rounded-2xl p-3 max-w-[280px] shadow-sm">
         {img && <img src={img.startsWith('http') ? img : img} alt="" className="rounded-xl mb-1 w-full object-cover max-h-40" />}
         <div className="bg-white rounded-xl px-3 py-2 shadow-sm relative">
-          <div className="text-sm text-zinc-900 whitespace-pre-line" style={{ lineHeight: 1.4 }}>{msg || 'Your message here...'}</div>
+          <div className="text-sm text-zinc-900 whitespace-pre-line" style={{ lineHeight: 1.4 }}>{text || 'Your message here...'}</div>
           <div className="flex items-center justify-end gap-1 mt-1">
             <span className="text-[10px] text-zinc-400">{now}</span>
             <span className="text-blue-500"><Icons.Check s={12} /></span>
           </div>
         </div>
+        {hasTags && <div className="text-[10px] text-zinc-500 mt-1.5 text-center">Preview with sample data — each contact gets their own values</div>}
       </div>
     );
   };
@@ -789,7 +896,7 @@ function CampaignsView() {
             <h1 className="text-xl font-bold text-zinc-900">Campaigns</h1>
             <p className="text-sm text-zinc-500">{campaigns.length} campaigns</p>
           </div>
-          <button onClick={() => { setStep(1); setCompose({ name: '', message: '', imageUrl: '' }); setRecipientTag('all'); setScheduledAt(''); }}
+          <button onClick={() => { setStep(1); resetWizard(); }}
             className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 transition-colors">
             <Icons.Plus /> New Campaign
           </button>
@@ -825,7 +932,8 @@ function CampaignsView() {
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-bold text-zinc-900">{c.name}</span>
                     <Badge color={c.status === 'draft' ? 'stone' : c.status === 'sending' ? 'blue' : c.status === 'scheduled' ? 'amber' : c.status === 'cancelled' ? 'red' : 'green'}>{c.status}</Badge>
-                    {c.recipientTag && c.recipientTag !== 'all' && <Badge color="brand">{c.recipientTag}</Badge>}
+                    <Badge color="brand">{recipientLabel(c)}</Badge>
+                    {c.skipped > 0 && <Badge color="amber">{c.skipped} skipped</Badge>}
                   </div>
                   <p className="text-xs text-zinc-500 mt-1 line-clamp-2">{c.message}</p>
                   {c.imageUrl && <img src={c.imageUrl} alt="" className="h-16 rounded-lg mt-2 object-cover border border-stone-200" />}
@@ -834,7 +942,7 @@ function CampaignsView() {
                       <span className="text-emerald-600 font-bold">{c.sent} sent</span>
                       <span className="text-red-500 font-bold">{c.failed} failed</span>
                       <span className="text-zinc-400">{c.total} total</span>
-                      {c.scheduledAt && <span className="text-amber-600 inline-flex items-center gap-1"><Icons.Clock /> {new Date(c.scheduledAt).toLocaleString()}</span>}
+                      {c.scheduledAt && (c.status === 'scheduled' || c.status === 'draft') && <span className="text-amber-600 inline-flex items-center gap-1"><Icons.Clock /> {c.status === 'scheduled' ? 'Auto-sends ' : ''}{new Date(c.scheduledAt).toLocaleString()}</span>}
                     </div>
                   )}
                   {/* Progress bar for sending */}
@@ -850,7 +958,7 @@ function CampaignsView() {
                   {c.status === 'draft' && (
                     <>
                       <button onClick={() => sendCampaign(c.id)} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-brand-600 text-white text-xs font-medium hover:bg-brand-700 transition-colors"><Icons.Send s={12} /> Send</button>
-                      <button onClick={() => { setCompose({ name: c.name, message: c.message, imageUrl: c.imageUrl }); setRecipientTag(c.recipientTag || 'all'); setStep(1); }} className="p-1.5 rounded-lg hover:bg-stone-100 text-zinc-400 hover:text-zinc-600"><Icons.Edit /></button>
+                      <button onClick={() => { setCompose({ name: c.name, message: c.message, imageUrl: c.imageUrl }); setRecipientMode(modeOf(c)); setRecipientTag(c.recipientTag || 'all'); setSelectedPhones(c.recipientPhones || []); restoreVarRows(c.variables); setScheduledAt(c.scheduledAt || ''); setStep(1); }} className="p-1.5 rounded-lg hover:bg-stone-100 text-zinc-400 hover:text-zinc-600"><Icons.Edit /></button>
                     </>
                   )}
                   {c.status === 'sending' && (
@@ -878,7 +986,7 @@ function CampaignsView() {
                 </div>
                 <div className="flex justify-between mt-2 text-xs text-zinc-500">
                   <span>{liveCampaign.sent + liveCampaign.failed} / {liveCampaign.total}</span>
-                  <span>{liveCampaign.sent} sent, {liveCampaign.failed} failed</span>
+                  <span>{liveCampaign.sent} sent, {liveCampaign.failed} failed{liveCampaign.skipped > 0 && `, ${liveCampaign.skipped} skipped`}</span>
                 </div>
               </div>
               <div className="space-y-1 max-h-60 overflow-y-auto">
@@ -913,23 +1021,74 @@ function CampaignsView() {
               <Input label="Campaign Name" value={compose.name} onChange={(e) => setCompose({ ...compose, name: e.target.value })} placeholder="e.g. Weekend Special Offer" />
               <div>
                 <label className="text-xs font-medium text-zinc-500 mb-1 block">Message</label>
-                <textarea value={compose.message} onChange={(e) => setCompose({ ...compose, message: e.target.value })} rows={8}
-                  className="w-full px-3 py-2 rounded-xl border border-stone-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-400 resize-none" placeholder="Write your WhatsApp message here..." />
+                <textarea ref={msgRef} value={compose.message} onChange={(e) => setCompose({ ...compose, message: e.target.value })} rows={8}
+                  className="w-full px-3 py-2 rounded-xl border border-stone-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-400 resize-none" placeholder="Write your WhatsApp message here... Use {tags} for personalization." />
                 <div className="flex justify-between mt-1">
                   <p className="text-xs text-zinc-400">{compose.message.length} characters</p>
-                  <button onClick={testSend} className="text-xs text-brand-600 hover:text-brand-700 font-medium inline-flex items-center gap-1"><Icons.Zap /> Send Test</button>
+                </div>
+                <div className="mt-2">
+                  <div className="text-xs font-medium text-zinc-500 mb-1.5">Merge tags — click to insert</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {['name', 'phone', 'brand_name', 'time', ...varRows.map(r => r.k.trim()).filter(k => /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(k))].filter((v, i, a) => a.indexOf(v) === i).map(tag => (
+                      <button key={tag} type="button" onClick={() => insertTag(tag)}
+                        className="px-2.5 py-1 rounded-full bg-brand-50 border border-brand-200 text-brand-700 text-xs font-mono font-medium hover:bg-brand-100 transition-colors">{`{${tag}}`}</button>
+                    ))}
+                  </div>
+                  <p className="text-[11px] text-zinc-400 mt-1">name/phone come from each contact · brand_name from Settings · time is now · rest from Variables below. Unknown tags stay as-is.</p>
                 </div>
               </div>
+              <div>
+                <label className="text-xs font-medium text-zinc-500 mb-1 block">Variables</label>
+                <div className="space-y-1.5">
+                  {varRows.map((row, i) => (
+                    <div key={i} className="flex gap-1.5 items-center">
+                      <input value={row.k} onChange={(e) => { const next = varRows.slice(); next[i] = { ...next[i], k: e.target.value }; setVarRows(next); }}
+                        placeholder="key" className="w-32 px-2.5 py-1.5 rounded-lg border border-stone-200 text-xs font-mono focus:outline-none focus:border-brand-400" />
+                      <input value={row.v} onChange={(e) => { const next = varRows.slice(); next[i] = { ...next[i], v: e.target.value }; setVarRows(next); }}
+                        placeholder="value" className="flex-1 px-2.5 py-1.5 rounded-lg border border-stone-200 text-xs focus:outline-none focus:border-brand-400" />
+                      <button type="button" onClick={() => setVarRows(varRows.filter((_, j) => j !== i))} className="p-1.5 rounded-lg hover:bg-red-50 text-zinc-400 hover:text-red-500"><Icons.X s={12} /></button>
+                    </div>
+                  ))}
+                  <button type="button" onClick={() => varRows.length < 20 && setVarRows([...varRows, { k: '', v: '' }])} className="text-xs text-brand-600 hover:text-brand-700 font-medium inline-flex items-center gap-1"><Icons.Plus s={12} /> Add variable</button>
+                </div>
+              </div>
+                <div className="flex gap-2 items-end mt-2 p-3 rounded-xl bg-stone-50 border border-stone-100">
+                  <Input label="Test number" value={testPhone} onChange={(e) => setTestPhone(e.target.value.replace(/\D/g, '').slice(0, 10))} placeholder="9876543210" className="!w-32" />
+                  <button onClick={testSend} className="px-3 py-2 rounded-xl bg-zinc-900 text-white text-xs font-medium hover:bg-black transition-colors whitespace-nowrap inline-flex items-center gap-1"><Icons.Zap s={12} /> Send Test</button>
+                </div>
+                {testResult && (
+                  <div className={`mt-2 text-xs px-3 py-2 rounded-xl ${testResult.ok ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'}`}>
+                    {testResult.ok ? 'Test sent successfully!' : `Failed: ${JSON.stringify(testResult.error || testResult.result)}`}
+                  </div>
+                )}
               <div>
                 <label className="text-xs font-medium text-zinc-500 mb-1 block">Image (optional)</label>
                 <div className="flex gap-2">
                   <input value={compose.imageUrl} onChange={(e) => setCompose({ ...compose, imageUrl: e.target.value })} readOnly
-                    className="flex-1 px-3 py-2 rounded-xl border border-stone-200 text-sm bg-stone-50" placeholder="Upload or paste URL" />
+                    className="flex-1 px-3 py-2 rounded-xl border border-stone-200 text-sm bg-stone-50" placeholder="Upload, paste URL, or pick from library below" />
                   <label className="px-3 py-2 rounded-xl border border-stone-200 bg-white text-sm font-medium cursor-pointer hover:bg-stone-50 inline-flex items-center gap-1">
                     <Icons.Upload /> Upload
                     <input type="file" accept="image/*" className="hidden" onChange={uploadImage} />
                   </label>
                 </div>
+                {media.length > 0 && (
+                  <div className="mt-2">
+                    <div className="text-xs text-zinc-500 mb-1.5">Or choose from Media Library ({media.length})</div>
+                    <div className="grid grid-cols-4 gap-2 max-h-44 overflow-y-auto border border-stone-100 rounded-xl p-1.5">
+                      {media.map(m => {
+                        const active = compose.imageUrl === m.url;
+                        return (
+                          <button key={m.id} type="button" onClick={() => setCompose({ ...compose, imageUrl: active ? '' : m.url })}
+                            title={m.originalName || m.filename}
+                            className={`relative rounded-lg overflow-hidden border-2 transition-all ${active ? 'border-brand-500 ring-2 ring-brand-500/20' : 'border-transparent hover:border-brand-300'}`}>
+                            <img src={m.url} alt={m.originalName || ''} className="h-16 w-full object-cover" />
+                            {active && <span className="absolute top-1 right-1 w-5 h-5 rounded-full bg-brand-600 text-white flex items-center justify-center"><Icons.Check s={12} /></span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
                 {compose.imageUrl && (
                   <div className="mt-2 relative inline-block">
                     <img src={compose.imageUrl.startsWith('http') ? compose.imageUrl : compose.imageUrl} alt="" className="h-32 rounded-xl object-cover border border-stone-200" />
@@ -974,36 +1133,96 @@ function CampaignsView() {
 
   // ── Recipients Step ──
   if (step === 2) {
+    const q = contactSearch.trim().toLowerCase();
+    const visibleCustomers = customers.filter(c =>
+      !q || c.phone.includes(q) || (c.name || '').toLowerCase().includes(q),
+    );
+    const sendableVisible = visibleCustomers.filter(c => isSendable(c.phone));
+    const allVisibleSelected = sendableVisible.length > 0 && sendableVisible.every(c => selectedPhones.includes(normPhone(c.phone)));
+    const togglePhone = (phone) => {
+      const p = normPhone(phone);
+      if (!isSendable(p)) return;
+      setSelectedPhones(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p]);
+    };
+    const toggleVisible = () => {
+      if (allVisibleSelected) {
+        const drop = new Set(sendableVisible.map(c => normPhone(c.phone)));
+        setSelectedPhones(prev => prev.filter(x => !drop.has(x)));
+      } else {
+        const add = sendableVisible.map(c => normPhone(c.phone));
+        setSelectedPhones(prev => [...new Set([...prev, ...add])]);
+      }
+    };
+    const modeCard = (mode, title, sub) => (
+      <label className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-colors ${recipientMode === mode ? 'border-brand-500 bg-brand-50/50' : 'border-stone-200 hover:border-brand-300'}`}>
+        <input type="radio" name="rmode" value={mode} checked={recipientMode === mode} onChange={() => setRecipientMode(mode)} className="accent-brand-600" />
+        <div>
+          <div className="text-sm font-medium text-zinc-900">{title}</div>
+          <div className="text-xs text-zinc-400">{sub}</div>
+        </div>
+      </label>
+    );
     return (
       <div className="space-y-4">
         <StepIndicator current={2} />
         <div className="grid grid-cols-[1fr_300px] gap-6">
           <div className="space-y-4">
-            <div className="bg-white rounded-2xl border border-stone-200 p-5 space-y-4">
+            <div className="bg-white rounded-2xl border border-stone-200 p-5 space-y-3">
               <h3 className="text-sm font-bold text-zinc-900">Who should receive this?</h3>
-              <div className="space-y-2">
-                <label className="flex items-center gap-3 p-3 rounded-xl border border-stone-200 hover:border-brand-300 cursor-pointer transition-colors">
-                  <input type="radio" name="tag" value="all" checked={recipientTag === 'all'} onChange={() => setRecipientTag('all')} className="accent-brand-600" />
-                  <div>
-                    <div className="text-sm font-medium text-zinc-900">All Customers</div>
-                    <div className="text-xs text-zinc-400">{customers.length} contacts</div>
-                  </div>
-                </label>
-                {tags.map(t => (
-                  <label key={t} className="flex items-center gap-3 p-3 rounded-xl border border-stone-200 hover:border-brand-300 cursor-pointer transition-colors">
-                    <input type="radio" name="tag" value={t} checked={recipientTag === t} onChange={() => setRecipientTag(t)} className="accent-brand-600" />
-                    <div>
-                      <div className="text-sm font-medium text-zinc-900">{t}</div>
-                      <div className="text-xs text-zinc-400">{customers.filter(c => c.tags?.includes(t)).length} contacts</div>
+              {modeCard('all', 'All Customers', `${customers.filter(c => isSendable(c.phone)).length} sendable of ${customers.length} contacts`)}
+              {modeCard('tag', 'By Tag', tags.length > 0 ? `${tags.length} tags available` : 'No tags yet — tag customers first')}
+              {modeCard('custom', 'Specific Contacts', selectedPhones.length > 0 ? `${selectedPhones.length} selected` : 'Pick individual contacts below')}
+              {recipientMode === 'tag' && (
+                <div className="space-y-2 pl-1">
+                  {tags.length === 0 && <p className="text-xs text-zinc-400">No tags exist yet. Add tags on the Customers page.</p>}
+                  {tags.map(t => (
+                    <label key={t} className="flex items-center gap-3 p-3 rounded-xl border border-stone-200 hover:border-brand-300 cursor-pointer transition-colors">
+                      <input type="radio" name="tag" value={t} checked={recipientTag === t} onChange={() => setRecipientTag(t)} className="accent-brand-600" />
+                      <div>
+                        <div className="text-sm font-medium text-zinc-900">{t}</div>
+                        <div className="text-xs text-zinc-400">{customers.filter(c => c.tags?.includes(t)).length} contacts</div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              )}
+              {recipientMode === 'custom' && (
+                <div className="space-y-2 pl-1">
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400"><Icons.Search s={14} /></span>
+                      <input value={contactSearch} onChange={(e) => setContactSearch(e.target.value)} placeholder="Search name or number..."
+                        className="w-full pl-9 pr-3 py-2 rounded-xl border border-stone-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-400" />
                     </div>
-                  </label>
-                ))}
-              </div>
+                    <button onClick={toggleVisible} className="px-3 py-2 rounded-xl border border-stone-200 text-xs font-medium hover:bg-stone-50 whitespace-nowrap">
+                      {allVisibleSelected ? 'Clear visible' : 'Select visible'}
+                    </button>
+                  </div>
+                  <div className="max-h-64 overflow-y-auto space-y-1 border border-stone-100 rounded-xl p-1">
+                    {visibleCustomers.length === 0 && <p className="text-xs text-zinc-400 text-center py-4">No contacts match.</p>}
+                    {visibleCustomers.map(c => {
+                      const ok = isSendable(c.phone);
+                      const checked = selectedPhones.includes(normPhone(c.phone));
+                      return (
+                        <label key={c.id || c.phone} className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${ok ? 'hover:bg-stone-50 cursor-pointer' : 'opacity-60 cursor-not-allowed bg-stone-50/50'}`}>
+                          <input type="checkbox" checked={checked} disabled={!ok} onChange={() => togglePhone(c.phone)} className="accent-brand-600" />
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-medium text-zinc-900 truncate">{c.name || <span className="text-zinc-400">Unnamed</span>}</div>
+                            <div className="text-xs text-zinc-400 font-mono">{c.phone}</div>
+                          </div>
+                          {!ok && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 whitespace-nowrap">INVALID NUMBER</span>}
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <p className="text-xs text-zinc-400">Invalid numbers (e.g. WhatsApp IDs) can't receive campaigns and can't be selected.</p>
+                </div>
+              )}
             </div>
             <div className="bg-white rounded-2xl border border-stone-200 p-5 space-y-3">
               <h3 className="text-sm font-bold text-zinc-900 inline-flex items-center gap-1.5"><Icons.Calendar /> Schedule (optional)</h3>
               <Input label="Send at" type="datetime-local" value={scheduledAt} onChange={(e) => setScheduledAt(e.target.value)} />
-              <p className="text-xs text-zinc-400">Leave empty to send immediately</p>
+              <p className="text-xs text-zinc-400">{scheduledAt ? 'Campaign will send automatically at this time.' : 'Leave empty to send immediately'}</p>
             </div>
           </div>
           <div>
@@ -1015,10 +1234,11 @@ function CampaignsView() {
               <div className="bg-brand-50 rounded-2xl border border-brand-200 p-4 text-center">
                 <div className="text-2xl font-bold text-brand-700">{recipientCount}</div>
                 <div className="text-xs text-brand-600">recipients will receive this</div>
+                {preview.skipped > 0 && <div className="text-xs text-amber-600 font-medium mt-1">{preview.skipped} invalid skipped</div>}
               </div>
               <div className="flex gap-2">
                 <button onClick={() => setStep(1)} className="flex-1 py-2 rounded-xl border border-stone-200 text-sm font-medium hover:bg-stone-50">Back</button>
-                <button onClick={() => setStep(3)} className="flex-1 py-2 rounded-xl bg-brand-600 text-white text-sm font-medium hover:bg-brand-700">Next: Review</button>
+                <button onClick={() => { if (recipientMode === 'custom' && selectedPhones.length === 0) return alert('Select at least one contact'); setStep(3); }} className="flex-1 py-2 rounded-xl bg-brand-600 text-white text-sm font-medium hover:bg-brand-700">Next: Review</button>
               </div>
             </div>
           </div>
@@ -1038,8 +1258,27 @@ function CampaignsView() {
               <h3 className="text-sm font-bold text-zinc-900">Review & Send</h3>
               <div className="space-y-3">
                 <div className="flex justify-between text-sm"><span className="text-zinc-500">Campaign</span><span className="font-medium text-zinc-900">{compose.name}</span></div>
-                <div className="flex justify-between text-sm"><span className="text-zinc-500">Recipients</span><span className="font-medium text-zinc-900">{recipientTag === 'all' ? 'All Customers' : recipientTag} ({recipientCount})</span></div>
-                {scheduledAt && <div className="flex justify-between text-sm"><span className="text-zinc-500">Scheduled</span><span className="font-medium text-zinc-900">{new Date(scheduledAt).toLocaleString()}</span></div>}
+                <div className="flex justify-between text-sm">
+                  <span className="text-zinc-500">Recipients</span>
+                  <span className="font-medium text-zinc-900 text-right">
+                    {recipientMode === 'custom'
+                      ? `${selectedPhones.length} selected contacts`
+                      : recipientMode === 'tag' ? `Tag: ${recipientTag}` : 'All Customers'}
+                    {` (${recipientCount})`}
+                  </span>
+                </div>
+                {preview.skipped > 0 && (
+                  <div className="text-xs px-3 py-2 rounded-xl bg-amber-50 text-amber-700 font-medium">
+                    {preview.skipped} contact{preview.skipped === 1 ? '' : 's'} will be skipped (invalid numbers).
+                  </div>
+                )}
+                {scheduledAt && <div className="flex justify-between text-sm"><span className="text-zinc-500">Sends</span><span className="font-medium text-zinc-900">{new Date(scheduledAt).toLocaleString()} (automatic)</span></div>}
+                {Object.keys(variablesObj()).length > 0 && (
+                  <div className="flex justify-between text-sm gap-4">
+                    <span className="text-zinc-500 shrink-0">Variables</span>
+                    <span className="font-mono text-xs text-zinc-700 text-right">{Object.entries(variablesObj()).map(([k, v]) => `${k}=${v || '∅'}`).join(' · ')}</span>
+                  </div>
+                )}
                 {compose.imageUrl && <div className="flex justify-between text-sm"><span className="text-zinc-500">Image</span><span className="font-medium text-emerald-600">Attached</span></div>}
                 <div className="border-t border-stone-200 pt-3">
                   <div className="text-xs text-zinc-500 mb-1">Message Preview:</div>
