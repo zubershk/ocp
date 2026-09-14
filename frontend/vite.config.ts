@@ -13,7 +13,9 @@ export default defineConfig({
   server: {
     host: true,
     port: 5173,
-    strictPort: false,
+    // strictPort: never drift to 5174 silently — the Control Panel,
+    // shortcuts and health checks all assume :5173. Fail loudly instead.
+    strictPort: true,
     hmr: {
       host: 'localhost',
       protocol: 'ws',
