@@ -419,6 +419,27 @@ app.delete('/api/campaigns/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+// Duplicate a campaign for reuse: fresh draft copy, stats reset,
+// schedule cleared so it never auto-fires on creation.
+app.post('/api/campaigns/:id/duplicate', (req, res) => {
+  const campaigns = load('campaigns');
+  const src = campaigns.find(c => c.id === req.params.id);
+  if (!src) return res.status(404).json({ error: 'not found' });
+  const c = {
+    id: uid(), name: `${src.name} (copy)`, message: src.message, imageUrl: src.imageUrl || '',
+    recipientMode: src.recipientMode || 'all',
+    recipientTag: src.recipientTag || 'all',
+    recipientPhones: [...(src.recipientPhones || [])],
+    variables: { ...(src.variables || {}) },
+    scheduledAt: null, status: 'draft',
+    sent: 0, failed: 0, skipped: 0, total: 0,
+    createdAt: new Date().toISOString(), results: [],
+  };
+  campaigns.push(c);
+  save('campaigns', campaigns);
+  res.json(c);
+});
+
 app.get('/api/campaigns/:id', (req, res) => {
   const c = load('campaigns').find(c => c.id === req.params.id);
   if (!c) return res.status(404).json({ error: 'not found' });
@@ -625,6 +646,17 @@ app.get('/api/dashboard', async (_req, res) => {
     recentCampaigns: campaigns.slice(-5).reverse(),
     last7, tagCounts,
   });
+});
+
+// Bot connectivity probe for the UI (same-origin, so no CORS;
+// honors the configured botApiUrl unlike a browser-side fetch).
+app.get('/api/bot-health', async (_req, res) => {
+  try {
+    await botApi('/health');
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(502).json({ ok: false, error: err.message });
+  }
 });
 
 // ═══════════════════════════════════════════
