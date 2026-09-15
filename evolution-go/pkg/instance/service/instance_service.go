@@ -566,7 +566,12 @@ func (i instances) GetAll() ([]*instance_model.Instance, error) {
 func (i instances) Info(instanceId string) (*instance_model.Instance, error) {
 	instance, err := i.instanceRepository.GetInstanceByID(instanceId)
 	if err != nil {
-		return nil, err
+		// Accept the human-readable name too ("OCP") — callers like the
+		// bot health check address instances by name, not UUID.
+		instance, err = i.instanceRepository.GetInstanceByName(instanceId)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Atualiza o status connected com base no estado real do cliente
