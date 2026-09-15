@@ -6,10 +6,15 @@ on:
   pull_request:
     branches: [master]
 
+permissions:
+  contents: read
+
 jobs:
   # ── Go bot ──
   bot:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     services:
       postgres:
         image: postgres:16-alpine
@@ -25,16 +30,21 @@ jobs:
           --health-timeout 3s
           --health-retries 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
         with:
-          go-version: "1.25"
+          go-version: "1.25.0"
       - name: Build bot
         working-directory: bot
         run: go build -v ./...
       - name: Vet bot
         working-directory: bot
         run: go vet ./...
+      - name: Go vulnerability check
+        working-directory: bot
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
       - name: Test bot (strict tenant isolation)
         working-directory: bot
         env:
@@ -57,36 +67,50 @@ jobs:
   # ── Frontend ──
   frontend:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
         with:
           node-version: "20"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - name: Install
         working-directory: frontend
-        run: npm ci
+        run: npm ci --ignore-scripts
+      - name: Audit
+        working-directory: frontend
+        run: npm audit --omit=dev --audit-level=high
       - name: Build
         working-directory: frontend
         run: npm run build
       - name: Lint
         working-directory: frontend
         run: npm run lint
+      - name: Secret scan (gitleaks)
+        uses: zricethezav/gitleaks-action@8d22c45a3e3ac9c4d006d3d45d05fda6964a1b0e # v2.3.1
 
   # ── Campaign runner ──
   campaign:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
         with:
           node-version: "20"
           cache: npm
           cache-dependency-path: campaign-runner/package-lock.json
       - name: Install
         working-directory: campaign-runner
-        run: npm ci
+        run: npm ci --ignore-scripts
+      - name: Audit
+        working-directory: campaign-runner
+        run: npm audit --omit=dev --audit-level=high
       - name: Build
         working-directory: campaign-runner
         run: npm run build
+      - name: Secret scan (gitleaks)
+        uses: zricethezav/gitleaks-action@8d22c45a3e3ac9c4d006d3d45d05fda6964a1b0e # v2.3.1
