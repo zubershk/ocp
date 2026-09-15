@@ -1,4 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { UsersIcon, MegaphoneIcon, SendIcon, TrendingDownIcon } from 'lucide-react';
+import { cn } from './lib/utils';
+import { Badge, Card, CardContent, CardDescription, CardHeader, CardTitle } from './components/ui';
+import StatisticsWithStatus from './components/statistics-with-status';
 
 const API = '';
 
@@ -22,12 +26,17 @@ const Icons = {
   Download: (p) => <svg xmlns="http://www.w3.org/2000/svg" width={p?.s||16} height={p?.s||16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>,
   Check: (p) => <svg xmlns="http://www.w3.org/2000/svg" width={p?.s||14} height={p?.s||14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>,
   X: (p) => <svg xmlns="http://www.w3.org/2000/svg" width={p?.s||14} height={p?.s||14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>,
+  Menu: (p) => <svg xmlns="http://www.w3.org/2000/svg" width={p?.s||18} height={p?.s||18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>,
+  ChevronsLeft: (p) => <svg xmlns="http://www.w3.org/2000/svg" width={p?.s||14} height={p?.s||14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m11 17-5-5 5-5"/><path d="m18 17-5-5 5-5"/></svg>,
+  ChevronsRight: (p) => <svg xmlns="http://www.w3.org/2000/svg" width={p?.s||14} height={p?.s||14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m13 17 5-5-5-5"/><path d="m6 17 5-5-5-5"/></svg>,
   Search: (p) => <svg xmlns="http://www.w3.org/2000/svg" width={p?.s||16} height={p?.s||16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>,
   Filter: (p) => <svg xmlns="http://www.w3.org/2000/svg" width={p?.s||16} height={p?.s||16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>,
   Clock: (p) => <svg xmlns="http://www.w3.org/2000/svg" width={p?.s||16} height={p?.s||16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
   Eye: (p) => <svg xmlns="http://www.w3.org/2000/svg" width={p?.s||16} height={p?.s||16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>,
   BarChart: (p) => <svg xmlns="http://www.w3.org/2000/svg" width={p?.s||20} height={p?.s||20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" x2="12" y1="20" y2="10"/><line x1="18" x2="18" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="14"/></svg>,
   ChevronDown: (p) => <svg xmlns="http://www.w3.org/2000/svg" width={p?.s||16} height={p?.s||16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>,
+  ChevronLeft: (p) => <svg xmlns="http://www.w3.org/2000/svg" width={p?.s||16} height={p?.s||16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>,
+  ChevronRight: (p) => <svg xmlns="http://www.w3.org/2000/svg" width={p?.s||16} height={p?.s||16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>,
   Edit: (p) => <svg xmlns="http://www.w3.org/2000/svg" width={p?.s||14} height={p?.s||14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>,
   Copy: (p) => <svg xmlns="http://www.w3.org/2000/svg" width={p?.s||14} height={p?.s||14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>,
   Calendar: (p) => <svg xmlns="http://www.w3.org/2000/svg" width={p?.s||16} height={p?.s||16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>,
@@ -37,30 +46,13 @@ const Icons = {
   MoreVert: (p) => <svg xmlns="http://www.w3.org/2000/svg" width={p?.s||16} height={p?.s||16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>,
 };
 
-// ── Stat Card ──
-function StatCard({ icon, label, value, sub, color = 'brand' }) {
-  const bg = { brand: 'bg-brand-50 text-brand-600', green: 'bg-emerald-50 text-emerald-600', red: 'bg-red-50 text-red-600', blue: 'bg-blue-50 text-blue-600', amber: 'bg-amber-50 text-amber-600' };
-  return (
-    <div className="bg-white rounded-2xl border border-stone-200 p-4">
-      <div className="flex items-center gap-3">
-        <div className={`w-10 h-10 rounded-xl ${bg[color]} flex items-center justify-center`}>{icon}</div>
-        <div>
-          <div className="text-2xl font-bold text-zinc-900">{value}</div>
-          <div className="text-xs text-zinc-500">{label}</div>
-        </div>
-      </div>
-      {sub && <div className="text-xs text-zinc-400 mt-2">{sub}</div>}
-    </div>
-  );
-}
-
 // ── Modal ──
 function Modal({ open, onClose, title, children, wide }) {
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
-      <div className={`bg-white rounded-2xl ${wide ? 'max-w-2xl' : 'max-w-lg'} w-full max-h-[90vh] overflow-y-auto`} onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 py-4 border-b border-stone-200">
+      <div className={cn('bg-white rounded-2xl w-full max-h-[90vh] overflow-y-auto', { 'max-w-2xl': wide, 'max-w-lg': !wide })} onClick={(e) => e.stopPropagation()}>
+        <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 border-b border-stone-200">
           <h3 className="font-bold text-zinc-900">{title}</h3>
           <button onClick={onClose} className="p-1 rounded-lg hover:bg-stone-100 text-zinc-400 hover:text-zinc-600"><Icons.X /></button>
         </div>
@@ -75,16 +67,135 @@ function Input({ label, error, ...props }) {
   return (
     <div>
       {label && <label className="text-xs font-medium text-zinc-500 mb-1 block">{label}</label>}
-      <input {...props} className={`w-full px-3 py-2 rounded-xl border ${error ? 'border-red-300 focus:ring-red-500/20 focus:border-red-400' : 'border-stone-200 focus:ring-brand-500/20 focus:border-brand-400'} text-sm focus:outline-none focus:ring-2 transition-colors ${props.className || ''}`} />
+      <input {...props} className={cn('w-full px-3 py-2 rounded-xl border text-sm focus:outline-none focus:ring-2 transition-colors', {
+        'border-red-300 focus:ring-red-500/20 focus:border-red-400': error,
+        'border-stone-200 focus:ring-brand-500/20 focus:border-brand-400': !error,
+      }, props.className)} />
       {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
     </div>
   );
 }
 
-// ── Badge ──
-function Badge({ children, color = 'stone' }) {
-  const colors = { stone: 'bg-stone-100 text-zinc-600', brand: 'bg-brand-50 text-brand-700', green: 'bg-emerald-100 text-emerald-700', red: 'bg-red-100 text-red-600', blue: 'bg-blue-100 text-blue-700', amber: 'bg-amber-100 text-amber-700' };
-  return <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${colors[color]}`}>{children}</span>;
+// ── Primitives live in ./components/ui (Badge, Card family) ──
+
+// ── Empty state ──
+function Empty({ icon, title, hint, action }) {
+  return (
+    <div className="p-8 text-center">
+      <div className="mx-auto size-11 rounded-2xl bg-stone-100 text-zinc-400 flex items-center justify-center">{icon}</div>
+      <p className="mt-2.5 text-sm font-bold text-zinc-900">{title}</p>
+      {hint && <p className="mt-1 text-xs text-zinc-400">{hint}</p>}
+      {action && <div className="mt-3">{action}</div>}
+    </div>
+  );
+}
+
+// ── DateTimePicker (calendar + inline time, datetime-local value) ──
+const pad2 = (n) => String(n).padStart(2, '0');
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const WDAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+function splitDateTime(v) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}))?/.exec(v || '');
+  if (!m) return null;
+  return { y: +m[1], mo: +m[2] - 1, d: +m[3], h: m[4] != null ? +m[4] : null, mi: m[5] != null ? +m[5] : null };
+}
+function toKey(y, mo, d, h, mi) {
+  return `${y}-${pad2(mo + 1)}-${pad2(d)}T${pad2(h)}:${pad2(mi)}`;
+}
+function DateTimePicker({ value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const parsed = splitDateTime(value);
+  const today = new Date();
+  const [viewY, setViewY] = useState(parsed ? parsed.y : today.getFullYear());
+  const [viewMo, setViewMo] = useState(parsed ? parsed.mo : today.getMonth());
+
+  const emit = (y, mo, d, h, mi) => onChange(toKey(y, mo, d, h, mi));
+  const curH = parsed && parsed.h != null ? parsed.h : 10;
+  const curMi = parsed && parsed.mi != null ? parsed.mi : 0;
+
+  const move = (delta) => {
+    let y = viewY, mo = viewMo + delta;
+    while (mo < 0) { mo += 12; y -= 1; }
+    while (mo > 11) { mo -= 12; y += 1; }
+    setViewY(y); setViewMo(mo);
+  };
+
+  // 42 cells, Sunday-first, like the shadcn calendar grid
+  const firstDow = new Date(viewY, viewMo, 1).getDay();
+  const dim = new Date(viewY, viewMo + 1, 0).getDate();
+  const prevDim = new Date(viewY, viewMo, 0).getDate();
+  const cells = [];
+  for (let i = firstDow - 1; i >= 0; i--) cells.push({ d: prevDim - i, outside: true, y: viewMo === 0 ? viewY - 1 : viewY, mo: (viewMo + 11) % 12 });
+  for (let d = 1; d <= dim; d++) cells.push({ d, outside: false, y: viewY, mo: viewMo });
+  let nextD = 1;
+  while (cells.length < 42) {
+    cells.push({ d: nextD++, outside: true, y: viewMo === 11 ? viewY + 1 : viewY, mo: (viewMo + 1) % 12 });
+  }
+  const todayKey = `${today.getFullYear()}-${pad2(today.getMonth() + 1)}-${pad2(today.getDate())}`;
+  const selKey = parsed ? `${parsed.y}-${pad2(parsed.mo + 1)}-${pad2(parsed.d)}` : null;
+
+  const label = parsed
+    ? new Date(parsed.y, parsed.mo, parsed.d, curH, curMi).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+    : 'Pick date and time';
+
+  return (
+    <div className="relative">
+      <button type="button" onClick={() => setOpen(o => !o)}
+        className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-white text-sm flex items-center gap-2 hover:border-brand-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-400">
+        <span className="text-zinc-400"><Icons.Calendar s={14} /></span>
+        <span className={parsed ? 'text-zinc-900 font-medium' : 'text-zinc-400'}>{label}</span>
+        {parsed && <span className="ml-auto text-zinc-300 hover:text-zinc-500" onClick={(e) => { e.stopPropagation(); onChange(''); }}><Icons.X s={13} /></span>}
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute z-20 mt-1.5 bg-white rounded-2xl border border-stone-200 shadow-xl p-3 w-[290px] max-w-[calc(100vw-2rem)]">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
+              <button type="button" onClick={() => move(-1)} className="p-1.5 rounded-lg hover:bg-stone-100 text-zinc-500"><Icons.ChevronLeft s={15} /></button>
+              <div className="text-sm font-bold text-zinc-900">{MONTHS[viewMo]} {viewY}</div>
+              <button type="button" onClick={() => move(1)} className="p-1.5 rounded-lg hover:bg-stone-100 text-zinc-500"><Icons.ChevronRight s={15} /></button>
+            </div>
+            <div className="grid grid-cols-7 gap-0.5 text-center">
+              {WDAYS.map(w => <div key={w} className="text-[10px] font-bold text-zinc-400 py-1">{w}</div>)}
+              {cells.map((c, i) => {
+                const key = `${c.y}-${pad2(c.mo + 1)}-${pad2(c.d)}`;
+                const isSel = !c.outside && key === selKey;
+                const isToday = key === todayKey;
+                const past = !c.outside && key < todayKey;
+                return (
+                  <button
+                    key={i} type="button" disabled={past}
+                    onClick={() => emit(c.y, c.mo, c.d, curH, curMi)}
+                    className={cn('h-8 rounded-lg text-xs transition-colors', {
+                      'bg-brand-600 text-white font-bold': isSel,
+                      'text-zinc-300 cursor-not-allowed': !isSel && past,
+                      'text-zinc-300 hover:bg-stone-50': !isSel && !past && c.outside,
+                      'font-bold text-brand-700 ring-1 ring-brand-400': !isSel && !past && !c.outside && isToday,
+                      'text-zinc-700 hover:bg-stone-100': !isSel && !past && !c.outside && !isToday,
+                    })}
+                  >{c.d}</button>
+                );
+              })}
+            </div>
+            <div className="flex items-center gap-1.5 mt-2.5 pt-2.5 border-t border-stone-100">
+              <span className="text-zinc-400"><Icons.Clock s={13} /></span>
+              <select aria-label="Hour" value={curH} onChange={(e) => { const p = splitDateTime(value) || { y: viewY, mo: viewMo, d: today.getDate() }; emit(p.y, p.mo, p.d, +e.target.value, p.mi ?? 0); }}
+                className="flex-1 px-2 py-1.5 rounded-lg border border-stone-200 text-xs font-medium focus:outline-none focus:border-brand-400 bg-white">
+                {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{pad2(h)}</option>)}
+              </select>
+              <span className="text-zinc-400 font-bold">:</span>
+              <select aria-label="Minute" value={curMi} onChange={(e) => { const p = splitDateTime(value) || { y: viewY, mo: viewMo, d: today.getDate() }; emit(p.y, p.mo, p.d, p.h ?? 10, +e.target.value); }}
+                className="flex-1 px-2 py-1.5 rounded-lg border border-stone-200 text-xs font-medium focus:outline-none focus:border-brand-400 bg-white">
+                {Array.from({ length: 12 }, (_, k) => k * 5).map(m => <option key={m} value={m}>{pad2(m)}</option>)}
+              </select>
+              <button type="button" onClick={() => { onChange(''); setOpen(false); }} className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-zinc-500 hover:bg-stone-100">Clear</button>
+              <button type="button" onClick={() => setOpen(false)} className="px-2.5 py-1.5 rounded-lg bg-brand-600 text-white text-xs font-bold hover:bg-brand-700">Done</button>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
 }
 
 // ═══════════════════════════════════════════
@@ -94,6 +205,10 @@ export default function App() {
   const [tab, setTab] = useState('dashboard');
   const [settings, setSettings] = useState({});
   const [botConnected, setBotConnected] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => {
+    try { return localStorage.getItem('ocp_nav_collapsed') === '1'; } catch { return false; }
+  });
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => { api('/api/settings').then(s => { setSettings(s); if (s.botAdminKey) checkBot(s); }); }, []);
   const checkBot = async (s) => {
@@ -111,45 +226,90 @@ export default function App() {
     { id: 'settings', label: 'Settings', icon: Icons.Settings },
   ];
 
-  return (
-    <div className="min-h-screen bg-stone-50 flex">
-      {/* Sidebar */}
-      <aside className="w-60 bg-zinc-900 text-white flex-shrink-0 flex flex-col">
-        <div className="px-5 py-5 border-b border-zinc-800">
-          <div className="flex items-center gap-2.5">
-            {settings.brandLogo ? (
-              <img src={settings.brandLogo} alt="" className="w-8 h-8 rounded-lg object-cover" />
-            ) : (
-              <div className="w-8 h-8 rounded-lg bg-brand-600 flex items-center justify-center"><Icons.Send s={16} /></div>
-            )}
-            <div>
-              <div className="text-sm font-bold">{settings.brandName || 'Campaign Runner'}</div>
+  const toggleCollapsed = () => {
+    setCollapsed(prev => {
+      try { localStorage.setItem('ocp_nav_collapsed', prev ? '0' : '1'); } catch { /* ignore */ }
+      return !prev;
+    });
+  };
+  const go = (id) => { setTab(id); setMobileOpen(false); };
+
+  const sidebarBody = (overlay) => (
+    <>
+      <div className={cn('px-5 py-5 border-b border-zinc-800', collapsed && !overlay && 'px-0 flex justify-center')}>
+        <div className={cn('flex items-center gap-2.5', collapsed && !overlay && 'justify-center')}>
+          {settings.brandLogo ? (
+            <img src={settings.brandLogo} alt="" className="size-8 rounded-lg object-cover shrink-0" />
+          ) : (
+            <div className="size-8 rounded-lg bg-brand-600 flex items-center justify-center shrink-0"><Icons.Send s={16} /></div>
+          )}
+          {(!collapsed || overlay) && (
+            <div className="min-w-0">
+              <div className="text-sm font-bold truncate">{settings.brandName || 'Campaign Runner'}</div>
               <div className="text-[10px] text-zinc-500 flex items-center gap-1">
-                <span className={`w-1.5 h-1.5 rounded-full ${botConnected ? 'bg-emerald-400' : 'bg-zinc-600'}`}></span>
+                <span className={cn('size-1.5 rounded-full shrink-0', { 'bg-emerald-400': botConnected, 'bg-zinc-600': !botConnected })}></span>
                 {botConnected ? 'Bot connected' : 'No bot connection'}
               </div>
             </div>
-          </div>
+          )}
         </div>
-        <nav className="flex-1 p-3 space-y-1">
-          {NAV.map((n) => {
-            const Icon = n.icon;
-            return (
-              <button key={n.id} onClick={() => setTab(n.id)}
-                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-medium transition-colors ${tab === n.id ? 'bg-brand-600 text-white' : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'}`}>
-                <Icon s={18} /> {n.label}
-              </button>
-            );
-          })}
-        </nav>
-        <div className="p-3 border-t border-zinc-800">
-          <div className="text-[10px] text-zinc-600 text-center">OCP Campaign Runner v2.0</div>
-        </div>
+      </div>
+      <nav className="flex-1 p-3 flex flex-col gap-1 overflow-y-auto" aria-label="Primary">
+        {NAV.map((n) => {
+          const Icon = n.icon;
+          const active = tab === n.id;
+          return (
+            <button key={n.id} onClick={() => go(n.id)} title={collapsed && !overlay ? n.label : undefined}
+              aria-current={active ? 'page' : undefined}
+              className={cn('w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-medium transition-colors', collapsed && !overlay && 'justify-center px-0', {
+                'bg-brand-600 text-white': active,
+                'text-zinc-400 hover:bg-zinc-800 hover:text-white': !active,
+              })}>
+              <Icon s={18} /> {(!collapsed || overlay) && n.label}
+            </button>
+          );
+        })}
+      </nav>
+      <div className="p-3 border-t border-zinc-800 flex items-center gap-2">
+        <button onClick={overlay ? () => setMobileOpen(false) : toggleCollapsed}
+          title={overlay ? 'Close menu' : collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          aria-label={overlay ? 'Close menu' : collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          className="flex-1 inline-flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl text-xs font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors">
+          {overlay ? <Icons.X s={14} /> : collapsed ? <Icons.ChevronsRight s={14} /> : <><Icons.ChevronsLeft s={14} /> Collapse</>}
+        </button>
+        {(!collapsed || overlay) && <div className="text-[10px] text-zinc-600 text-center">OCP v2.0</div>}
+      </div>
+    </>
+  );
+
+  return (
+    <div className="min-h-screen bg-stone-50 flex">
+      {/* Desktop sidebar */}
+      <aside className={cn('hidden md:flex bg-zinc-950 text-white flex-shrink-0 flex-col transition-[width] sticky top-0 h-screen', collapsed ? 'w-[68px]' : 'w-60')}>
+        {sidebarBody(false)}
       </aside>
 
+      {/* Mobile drawer */}
+      {mobileOpen && (
+        <div className="fixed inset-0 z-40 md:hidden">
+          <button aria-label="Close menu" onClick={() => setMobileOpen(false)} className="absolute inset-0 bg-black/50 cursor-default" />
+          <aside className="absolute left-0 top-0 bottom-0 w-64 bg-zinc-950 text-white flex flex-col">
+            {sidebarBody(true)}
+          </aside>
+        </div>
+      )}
+
       {/* Main */}
-      <main className="flex-1 overflow-y-auto">
-        <div className="max-w-6xl mx-auto px-6 py-6">
+      <main className="flex-1 min-w-0 overflow-y-auto">
+        {/* Mobile top bar */}
+        <div className="md:hidden sticky top-0 z-30 flex items-center gap-2 px-4 py-3 bg-stone-50/95 backdrop-blur border-b border-stone-200">
+          <button onClick={() => setMobileOpen(true)} aria-label="Open menu" className="p-2 rounded-xl border border-stone-200 bg-white text-zinc-700">
+            <Icons.Menu s={16} />
+          </button>
+          <span className="text-sm font-bold text-zinc-900 truncate">{settings.brandName || 'Campaign Runner'}</span>
+          <span className={cn('ml-auto size-2 rounded-full shrink-0', { 'bg-emerald-500': botConnected, 'bg-zinc-300': !botConnected })} title={botConnected ? 'Bot connected' : 'No bot connection'} />
+        </div>
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 sm:py-6">
           {tab === 'dashboard' && <DashboardView />}
           {tab === 'customers' && <CustomersView />}
           {tab === 'campaigns' && <CampaignsView />}
@@ -176,17 +336,17 @@ function DashboardView() {
   const maxSent = Math.max(...dash.last7.map(d => d.sent), 1);
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-xl font-bold text-zinc-900">Dashboard</h1>
         <p className="text-sm text-zinc-500">Overview of your WhatsApp marketing</p>
       </div>
 
-      <div className="grid grid-cols-4 gap-4">
-        <StatCard icon={<Icons.Users s={20} />} label="Total Customers" value={dash.totalCustomers} color="brand" />
-        <StatCard icon={<Icons.Campaign s={20} />} label="Total Campaigns" value={dash.totalCampaigns} color="blue" />
-        <StatCard icon={<Icons.Send s={20} />} label="Messages Sent" value={dash.totalSent} sub={`${dash.totalFailed} failed`} color="green" />
-        <StatCard icon={<Icons.Zap s={20} />} label="Delivery Rate" value={`${dash.deliveryRate}%`} color={dash.deliveryRate >= 90 ? 'green' : dash.deliveryRate >= 70 ? 'amber' : 'red'} />
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatisticsWithStatus title="Total Customers" value={dash.totalCustomers} status="within" range={`${dash.totalCustomers} contacts`} icon={<UsersIcon />} />
+        <StatisticsWithStatus title="Total Campaigns" value={dash.totalCampaigns} status="observe" range="All time" icon={<MegaphoneIcon />} />
+        <StatisticsWithStatus title="Messages Sent" value={dash.totalSent} status={dash.totalFailed > 0 ? 'observe' : 'within'} range={`${dash.totalFailed} failed`} icon={<SendIcon />} />
+        <StatisticsWithStatus title="Delivery Rate" value={`${dash.deliveryRate}%`} status={dash.deliveryRate >= 90 ? 'within' : dash.deliveryRate >= 70 ? 'observe' : 'exceed'} range="Target: 90%" icon={<TrendingDownIcon />} />
       </div>
 
       {/* Activity chart */}
@@ -204,16 +364,16 @@ function DashboardView() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid gap-4 md:grid-cols-2">
         {/* Recent campaigns */}
         <div className="bg-white rounded-2xl border border-stone-200 p-5">
           <h3 className="text-sm font-bold text-zinc-900 mb-3">Recent Campaigns</h3>
           {dash.recentCampaigns.length === 0 ? (
             <p className="text-xs text-zinc-400">No campaigns yet</p>
           ) : (
-            <div className="space-y-2">
+            <div className="flex flex-col gap-2">
               {dash.recentCampaigns.map(c => (
-                <div key={c.id} className="flex items-center justify-between py-2 border-b border-stone-100 last:border-0">
+                <div key={c.id} className="flex flex-wrap items-center justify-between gap-3 py-2 border-b border-stone-100 last:border-0">
                   <div>
                     <div className="text-sm font-medium text-zinc-900">{c.name}</div>
                     <div className="text-xs text-zinc-400">{c.sent} sent</div>
@@ -231,9 +391,9 @@ function DashboardView() {
           {Object.keys(dash.tagCounts).length === 0 ? (
             <p className="text-xs text-zinc-400">No tags yet</p>
           ) : (
-            <div className="space-y-2">
+            <div className="flex flex-col gap-2">
               {Object.entries(dash.tagCounts).sort((a, b) => b[1] - a[1]).map(([tag, count]) => (
-                <div key={tag} className="flex items-center justify-between">
+                <div key={tag} className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
                     <Icons.Tag s={12} />
                     <span className="text-sm text-zinc-700">{tag}</span>
@@ -264,6 +424,9 @@ function CustomersView() {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [dragOver, setDragOver] = useState(false);
+  const [selected, setSelected] = useState([]); // customer ids on this page
+  const [bulkTag, setBulkTag] = useState('');
+  const [bulkBusy, setBulkBusy] = useState(false);
   const fileRef = useRef();
 
   const load = useCallback(async () => {
@@ -295,6 +458,51 @@ function CustomersView() {
   const removeCustomer = async (id) => {
     if (!confirm('Delete this customer?')) return;
     await api(`/api/customers/${id}`, { method: 'DELETE' });
+    setSelected(prev => prev.filter(x => x !== id));
+    load();
+  };
+
+  const toggleSelect = (id) => {
+    setSelected(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+
+  const toggleSelectPage = () => {
+    const ids = customers.map(c => c.id);
+    const allIn = ids.length > 0 && ids.every(id => selected.includes(id));
+    setSelected(prev => allIn ? prev.filter(id => !ids.includes(id)) : [...new Set([...prev, ...ids])]);
+  };
+
+  // Bulk actions run per-item against existing endpoints (pages hold ≤50).
+  const bulkDelete = async () => {
+    if (selected.length === 0) return;
+    if (!confirm(`Delete ${selected.length} customers? This cannot be undone.`)) return;
+    setBulkBusy(true);
+    for (const id of selected) {
+      await api(`/api/customers/${id}`, { method: 'DELETE' });
+    }
+    setSelected([]);
+    setBulkBusy(false);
+    load();
+  };
+
+  const applyBulkTag = async () => {
+    const tag = bulkTag.trim();
+    if (selected.length === 0 || !tag) return;
+    setBulkBusy(true);
+    const byId = new Map(customers.map(c => [c.id, c]));
+    for (const id of selected) {
+      const c = byId.get(id);
+      if (!c) continue;
+      const tags = [...new Set([...(c.tags || []), tag])];
+      if (c.source === 'bot') {
+        await api(`/api/customers/${c.phone}/tags`, { method: 'POST', body: JSON.stringify({ tags }) });
+      } else {
+        await api(`/api/customers/${id}`, { method: 'PUT', body: JSON.stringify({ tags }) });
+      }
+    }
+    setBulkTag('');
+    setSelected([]);
+    setBulkBusy(false);
     load();
   };
 
@@ -331,8 +539,8 @@ function CustomersView() {
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-zinc-900">Customers</h1>
           <p className="text-sm text-zinc-500">{total} contacts</p>
@@ -346,7 +554,7 @@ function CustomersView() {
 
       {/* Import result */}
       {importResult && (
-        <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 flex items-center justify-between">
+        <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 flex flex-wrap items-center justify-between gap-3">
           <span className="text-sm text-emerald-700">Imported {importResult.imported} customers ({importResult.skipped} skipped). Total: {importResult.total}</span>
           <button onClick={() => setImportResult(null)}><Icons.X /></button>
         </div>
@@ -361,8 +569,8 @@ function CustomersView() {
 
       <div onDragOver={(e) => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)} onDrop={handleDrop}>
         {/* Search and filters */}
-        <div className="flex gap-3 mb-3">
-          <div className="relative flex-1">
+        <div className="flex flex-col gap-3 mb-3 sm:flex-row">
+          <div className="relative flex-1 min-w-0">
             <div className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400"><Icons.Search /></div>
             <input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }}
               className="w-full pl-9 pr-3 py-2 rounded-xl border border-stone-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-400" placeholder="Search by name or phone..." />
@@ -379,14 +587,17 @@ function CustomersView() {
 
         {/* Add/Edit form */}
         {showAdd && (
-          <div className="bg-white rounded-2xl border border-stone-200 p-4 mb-3 space-y-3">
-            <h3 className="text-sm font-bold">{editing ? 'Edit Customer' : 'Add Customer'}</h3>
-            <div className="grid grid-cols-3 gap-3">
+          <Card>
+            <CardHeader>
+              <CardTitle>{editing ? 'Edit Customer' : 'Add Customer'}</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <Input label="Phone (10 digits)" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value.replace(/\D/g, '').slice(0, 10) })} placeholder="9876543210" disabled={!!editing} />
               <Input label="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Customer name" />
               <Input label="Tags (comma-separated)" value={form.tags} onChange={(e) => setForm({ ...form, tags: e.target.value })} placeholder="regular, vip" />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-3 sm:grid-cols-2">
               <Input label="Email (optional)" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="email@example.com" />
               <Input label="Notes (optional)" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Any notes..." />
             </div>
@@ -394,20 +605,36 @@ function CustomersView() {
               <button onClick={saveCustomer} className="px-4 py-2 rounded-xl bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 transition-colors">{editing ? 'Update' : 'Add Customer'}</button>
               <button onClick={() => { setShowAdd(false); setEditing(null); }} className="px-4 py-2 rounded-xl border border-stone-200 text-sm font-medium hover:bg-stone-50 transition-colors">Cancel</button>
             </div>
-          </div>
+            </CardContent>
+          </Card>
         )}
 
         {/* Table */}
-        <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden">
-          {customers.length === 0 ? (
-            <div className="p-8 text-center text-zinc-400 text-sm">
-              <Icons.Users s={32} />
-              <p className="mt-2">No customers yet. Import a CSV or add manually.</p>
+        <div className="bg-white rounded-2xl border border-stone-200 overflow-x-auto">
+          {selected.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 px-4 py-2.5 bg-brand-50 border-b border-brand-200">
+              <span className="text-xs font-bold text-brand-700">{selected.length} selected</span>
+              <div className="flex gap-1.5 items-center ml-1">
+                <input value={bulkTag} onChange={(e) => setBulkTag(e.target.value)} placeholder="Add tag..."
+                  className="w-32 px-2.5 py-1.5 rounded-lg border border-brand-200 text-xs bg-white focus:outline-none focus:border-brand-400" />
+                <button onClick={applyBulkTag} disabled={bulkBusy} className="px-3 py-1.5 rounded-lg bg-brand-600 text-white text-xs font-bold hover:bg-brand-700 disabled:opacity-50 transition-colors">Tag</button>
+                <button onClick={bulkDelete} disabled={bulkBusy} className="px-3 py-1.5 rounded-lg border border-red-200 text-red-600 text-xs font-bold hover:bg-red-50 disabled:opacity-50 transition-colors">Delete</button>
+                <button onClick={() => setSelected([])} className="px-2 py-1.5 text-xs font-medium text-zinc-500 hover:text-zinc-700">Clear</button>
+              </div>
             </div>
+          )}
+          {customers.length === 0 ? (
+            <Empty icon={<Icons.Users s={20} />} title="No customers yet" hint="Import a CSV or add manually." />
           ) : (
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[680px] text-sm">
               <thead className="bg-stone-50 border-b border-stone-200">
                 <tr>
+                  <th className="pl-4 pr-1 py-2.5 w-10">
+                    <input type="checkbox" aria-label="Select all on page"
+                      checked={customers.length > 0 && customers.every(c => selected.includes(c.id))}
+                      ref={el => { if (el) el.indeterminate = customers.some(c => selected.includes(c.id)) && !customers.every(c => selected.includes(c.id)); }}
+                      onChange={toggleSelectPage} className="accent-brand-600 size-4 cursor-pointer" />
+                  </th>
                   <th className="text-left px-4 py-2.5 font-medium text-zinc-500 w-12">#</th>
                   <th className="text-left px-4 py-2.5 font-medium text-zinc-500">Phone</th>
                   <th className="text-left px-4 py-2.5 font-medium text-zinc-500">Name</th>
@@ -419,7 +646,10 @@ function CustomersView() {
               </thead>
               <tbody>
                 {customers.map((c, i) => (
-                  <tr key={c.id} className="border-b border-stone-100 last:border-0 hover:bg-stone-50 transition-colors">
+                  <tr key={c.id} className={cn('border-b border-stone-100 last:border-0 hover:bg-stone-50 transition-colors', selected.includes(c.id) && 'bg-brand-50/60')}>
+                    <td className="pl-4 pr-1 py-2.5">
+                      <input type="checkbox" aria-label={`Select ${c.phone}`} checked={selected.includes(c.id)} onChange={() => toggleSelect(c.id)} className="accent-brand-600 size-4 cursor-pointer" />
+                    </td>
                     <td className="px-4 py-2.5 text-xs text-zinc-400">{(page - 1) * 50 + i + 1}</td>
                     <td className="px-4 py-2.5 font-mono text-xs">{c.phone}</td>
                     <td className="px-4 py-2.5 font-medium">{c.name || '—'}</td>
@@ -438,7 +668,7 @@ function CustomersView() {
             </table>
           )}
           {total > 50 && (
-            <div className="flex items-center justify-between px-4 py-3 border-t border-stone-200">
+            <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-t border-stone-200">
               <span className="text-xs text-zinc-400">Showing {(page - 1) * 50 + 1}–{Math.min(page * 50, total)} of {total}</span>
               <div className="flex gap-2">
                 <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="px-3 py-1 rounded-lg border border-stone-200 text-xs font-medium disabled:opacity-40">Prev</button>
@@ -506,8 +736,8 @@ function TemplatesView() {
   const MERGE_TAGS = ['{name}', '{phone}', '{brand_name}', '{discount}', '{item}', '{description}', '{order_link}', '{order_id}', '{time}'];
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-zinc-900">Message Templates</h1>
           <p className="text-sm text-zinc-500">Reusable messages with merge tags</p>
@@ -526,9 +756,12 @@ function TemplatesView() {
       </div>
 
       {showCreate && (
-        <div className="bg-white rounded-2xl border border-stone-200 p-5 space-y-3">
-          <h3 className="text-sm font-bold">{editing ? 'Edit Template' : 'New Template'}</h3>
-          <div className="grid grid-cols-2 gap-3">
+        <Card>
+          <CardHeader>
+            <CardTitle>{editing ? 'Edit Template' : 'New Template'}</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+          <div className="grid gap-3 sm:grid-cols-2">
             <Input label="Template Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Weekend Offer" />
             <div>
               <label className="text-xs font-medium text-zinc-500 mb-1 block">Category</label>
@@ -553,19 +786,20 @@ function TemplatesView() {
             <button onClick={saveTemplate} className="px-4 py-2 rounded-xl bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 transition-colors">{editing ? 'Update' : 'Create Template'}</button>
             <button onClick={() => { setShowCreate(false); setEditing(null); }} className="px-4 py-2 rounded-xl border border-stone-200 text-sm font-medium hover:bg-stone-50 transition-colors">Cancel</button>
           </div>
-        </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Presets */}
       {!showCreate && (
         <div>
           <h3 className="text-sm font-bold text-zinc-900 mb-2">Quick Start Presets</h3>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {PRESETS.map((p, i) => (
               <button key={i} onClick={() => usePreset(p)}
-                className="text-left bg-white rounded-2xl border border-stone-200 p-4 hover:border-brand-300 hover:shadow-sm transition-all">
+                className="text-left bg-white rounded-2xl border border-stone-200 p-4 hover:border-brand-300 hover:shadow-sm transition-colors">
                 <Badge color="brand">{p.category}</Badge>
-                <div className="text-sm font-bold text-zinc-900 mt-2">{p.name}</div>
+                <div className="text-sm font-bold text-zinc-900 mt-2 truncate">{p.name}</div>
                 <div className="text-xs text-zinc-400 mt-1 line-clamp-2">{p.message.replace(/\{[^}]+\}/g, '___')}</div>
               </button>
             ))}
@@ -577,21 +811,23 @@ function TemplatesView() {
       {templates.length > 0 && !showCreate && (
         <div>
           <h3 className="text-sm font-bold text-zinc-900 mb-2">Saved Templates ({templates.length})</h3>
-          <div className="space-y-2">
+          <div className="flex flex-col gap-2">
             {templates.map(t => (
-              <div key={t.id} className="bg-white rounded-2xl border border-stone-200 p-4 flex items-start justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-zinc-900">{t.name}</span>
-                    <Badge>{t.category}</Badge>
+              <Card key={t.id}>
+                <CardContent className="flex items-start justify-between p-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-zinc-900 truncate">{t.name}</span>
+                      <Badge>{t.category}</Badge>
+                    </div>
+                    <p className="text-xs text-zinc-500 mt-1 whitespace-pre-line line-clamp-3">{t.message}</p>
                   </div>
-                  <p className="text-xs text-zinc-500 mt-1 whitespace-pre-line line-clamp-3">{t.message}</p>
-                </div>
-                <div className="flex gap-1 ml-3">
-                  <button onClick={() => startEdit(t)} className="p-1.5 rounded-lg hover:bg-stone-100 text-zinc-400 hover:text-zinc-600"><Icons.Edit /></button>
-                  <button onClick={() => removeTemplate(t.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-zinc-400 hover:text-red-500"><Icons.Trash /></button>
-                </div>
-              </div>
+                  <div className="flex gap-1 ml-3 shrink-0">
+                    <button onClick={() => startEdit(t)} className="p-1.5 rounded-lg hover:bg-stone-100 text-zinc-400 hover:text-zinc-600"><Icons.Edit /></button>
+                    <button onClick={() => removeTemplate(t.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-zinc-400 hover:text-red-500"><Icons.Trash /></button>
+                  </div>
+                </CardContent>
+              </Card>
             ))}
           </div>
         </div>
@@ -633,8 +869,8 @@ function MediaView() {
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-zinc-900">Media Library</h1>
           <p className="text-sm text-zinc-500">{media.length} items</p>
@@ -646,14 +882,11 @@ function MediaView() {
       </div>
 
       {media.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-stone-200 p-8 text-center text-zinc-400 text-sm">
-          <Icons.Image s={32} />
-          <p className="mt-2">No media yet. Upload images for your campaigns.</p>
-        </div>
+        <Card><Empty icon={<Icons.Image s={20} />} title="No media yet" hint="Upload images for your campaigns." /></Card>
       ) : (
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
           {media.map(m => (
-            <div key={m.id} className="bg-white rounded-2xl border border-stone-200 overflow-hidden group">
+            <Card key={m.id} className="overflow-hidden group">
               <div className="aspect-square bg-stone-100 relative">
                 <img src={m.url} alt={m.originalName} className="w-full h-full object-cover" />
                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
@@ -665,7 +898,7 @@ function MediaView() {
                 <div className="text-xs font-medium text-zinc-700 truncate">{m.originalName}</div>
                 <div className="text-[10px] text-zinc-400">{new Date(m.uploadedAt).toLocaleDateString()}</div>
               </div>
-            </div>
+            </Card>
           ))}
         </div>
       )}
@@ -906,8 +1139,8 @@ function CampaignsView() {
   // ── Campaign list ──
   if (step === 0) {
     return (
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-xl font-bold text-zinc-900">Campaigns</h1>
             <p className="text-sm text-zinc-500">{campaigns.length} campaigns</p>
@@ -931,28 +1164,28 @@ function CampaignsView() {
             <button onClick={testSend} className="px-4 py-2 rounded-xl bg-zinc-900 text-white text-sm font-medium hover:bg-black transition-colors whitespace-nowrap">Send Test</button>
           </div>
           {testResult && (
-            <div className={`mt-2 text-xs px-3 py-2 rounded-xl ${testResult.ok ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'}`}>
+            <div className={cn('mt-2 text-xs px-3 py-2 rounded-xl', { 'bg-emerald-50 text-emerald-700': testResult.ok, 'bg-red-50 text-red-600': !testResult.ok })}>
               {testResult.ok ? 'Test sent successfully!' : `Failed: ${JSON.stringify(testResult.error || testResult.result)}`}
             </div>
           )}
         </div>
 
         {/* Campaign list */}
-        <div className="space-y-3">
+        <div className="flex flex-col gap-3">
           {campaigns.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-stone-200 p-8 text-center text-zinc-400 text-sm">No campaigns yet. Create your first one!</div>
+            <Card><Empty icon={<Icons.Send s={20} />} title="No campaigns yet" hint="Create your first one!" /></Card>
           ) : campaigns.slice().reverse().map((c) => (
-            <div key={c.id} className="bg-white rounded-2xl border border-stone-200 p-4">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
+            <Card key={c.id}>
+              <CardContent className="flex items-start justify-between gap-3 p-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span className="text-sm font-bold text-zinc-900">{c.name}</span>
                     <Badge color={c.status === 'draft' ? 'stone' : c.status === 'sending' ? 'blue' : c.status === 'scheduled' ? 'amber' : c.status === 'cancelled' ? 'red' : 'green'}>{c.status}</Badge>
                     <Badge color="brand">{recipientLabel(c)}</Badge>
                     {c.skipped > 0 && <Badge color="amber">{c.skipped} skipped</Badge>}
                   </div>
                   <p className="text-xs text-zinc-500 mt-1 line-clamp-2">{c.message}</p>
-                  {c.imageUrl && <img src={c.imageUrl} onError={(e) => { e.currentTarget.style.display = 'none'; }} alt="" className="h-16 rounded-lg mt-2 object-cover border border-stone-200" />}
+                  {c.imageUrl && <img src={c.imageUrl} onError={(e) => { e.currentTarget.style.display = 'none'; }} alt={`${c.name} attachment`} className="h-16 rounded-lg mt-2 object-cover border border-stone-200" />}
                   {c.status !== 'draft' && (
                     <div className="flex gap-4 mt-2 text-xs">
                       <span className="text-emerald-600 font-bold">{c.sent} sent</span>
@@ -965,7 +1198,7 @@ function CampaignsView() {
                   {c.status === 'sending' && (
                     <div className="mt-2">
                       <div className="w-full bg-stone-100 rounded-full h-2">
-                        <div className="bg-brand-500 h-2 rounded-full transition-all" style={{ width: `${c.total ? ((c.sent + c.failed) / c.total) * 100 : 0}%` }} />
+                        <div className="bg-brand-500 h-2 rounded-full transition-[width]" style={{ width: `${c.total ? ((c.sent + c.failed) / c.total) * 100 : 0}%` }} />
                       </div>
                     </div>
                   )}
@@ -990,15 +1223,15 @@ function CampaignsView() {
                     </>
                   )}
                 </div>
-              </div>
-            </div>
+              </CardContent>
+            </Card>
           ))}
         </div>
 
         {/* Live progress modal */}
         {showProgress && liveCampaign && (
           <Modal open={true} onClose={() => { setShowProgress(null); setLiveCampaign(null); load(); }} title={`Sending: ${liveCampaign.name}`} wide>
-            <div className="space-y-4">
+            <div className="flex flex-col gap-4">
               <div>
                 <div className="w-full bg-stone-100 rounded-full h-3">
                   <div className="bg-brand-500 h-3 rounded-full transition-all" style={{ width: `${liveCampaign.total ? ((liveCampaign.sent + liveCampaign.failed) / liveCampaign.total) * 100 : 0}%` }} />
@@ -1008,9 +1241,9 @@ function CampaignsView() {
                   <span>{liveCampaign.sent} sent, {liveCampaign.failed} failed{liveCampaign.skipped > 0 && `, ${liveCampaign.skipped} skipped`}</span>
                 </div>
               </div>
-              <div className="space-y-1 max-h-60 overflow-y-auto">
+              <div className="flex flex-col gap-1 max-h-60 overflow-y-auto">
                 {(liveCampaign.results || []).map((r, i) => (
-                  <div key={i} className={`flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg ${r.ok ? 'bg-emerald-50' : 'bg-red-50'}`}>
+                  <div key={i} className={cn('flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg', { 'bg-emerald-50': r.ok, 'bg-red-50': !r.ok })}>
                     {r.ok ? <span className="text-emerald-600"><Icons.Check /></span> : <span className="text-red-500"><Icons.X /></span>}
                     <span className="font-mono text-zinc-700">{r.phone}</span>
                     <span className="text-zinc-500">{r.name}</span>
@@ -1031,11 +1264,11 @@ function CampaignsView() {
   // ── Compose Step ──
   if (step === 1) {
     return (
-      <div className="space-y-4">
+      <div className="flex flex-col gap-4">
         <StepIndicator current={1} />
-        <div className="grid grid-cols-[1fr_300px] gap-6">
-          <div className="space-y-4">
-            <div className="bg-white rounded-2xl border border-stone-200 p-5 space-y-4">
+        <div className="grid grid-cols-1 xl:grid-cols-[1fr_300px] gap-6">
+          <div className="flex flex-col gap-4">
+            <div className="bg-white rounded-2xl border border-stone-200 p-5 flex flex-col gap-4">
               <h3 className="text-sm font-bold text-zinc-900">Compose Message</h3>
               <Input label="Campaign Name" value={compose.name} onChange={(e) => setCompose({ ...compose, name: e.target.value })} placeholder="e.g. Weekend Special Offer" />
               <div>
@@ -1058,7 +1291,7 @@ function CampaignsView() {
               </div>
               <div>
                 <label className="text-xs font-medium text-zinc-500 mb-1 block">Variables</label>
-                <div className="space-y-1.5">
+                <div className="flex flex-col gap-1.5">
                   {varRows.map((row, i) => (
                     <div key={i} className="flex gap-1.5 items-center">
                       <input value={row.k} onChange={(e) => { const next = varRows.slice(); next[i] = { ...next[i], k: e.target.value }; setVarRows(next); }}
@@ -1076,19 +1309,20 @@ function CampaignsView() {
                   <button onClick={testSend} className="px-3 py-2 rounded-xl bg-zinc-900 text-white text-xs font-medium hover:bg-black transition-colors whitespace-nowrap inline-flex items-center gap-1"><Icons.Zap s={12} /> Send Test</button>
                 </div>
                 {testResult && (
-                  <div className={`mt-2 text-xs px-3 py-2 rounded-xl ${testResult.ok ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'}`}>
+                  <div className={cn('mt-2 text-xs px-3 py-2 rounded-xl', { 'bg-emerald-50 text-emerald-700': testResult.ok, 'bg-red-50 text-red-600': !testResult.ok })}>
                     {testResult.ok ? 'Test sent successfully!' : `Failed: ${JSON.stringify(testResult.error || testResult.result)}`}
                   </div>
                 )}
-              <div>
-                <label className="text-xs font-medium text-zinc-500 mb-1 block">Image (optional)</label>
-                <div className="flex gap-2">
-                  <input value={compose.imageUrl} onChange={(e) => setCompose({ ...compose, imageUrl: e.target.value })} readOnly
-                    className="flex-1 px-3 py-2 rounded-xl border border-stone-200 text-sm bg-stone-50" placeholder="Upload, paste URL, or pick from library below" />
-                  <label className="px-3 py-2 rounded-xl border border-stone-200 bg-white text-sm font-medium cursor-pointer hover:bg-stone-50 inline-flex items-center gap-1">
-                    <Icons.Upload /> Upload
-                    <input type="file" accept="image/*" className="hidden" onChange={uploadImage} />
-                  </label>
+                <div>
+                  <label className="text-xs font-medium text-zinc-500 mb-1 block">Image (optional)</label>
+                  <div className="flex gap-2">
+                    <input value={compose.imageUrl} onChange={(e) => setCompose({ ...compose, imageUrl: e.target.value })}
+                      className="flex-1 px-3 py-2 rounded-xl border border-stone-200 text-sm bg-stone-50" placeholder="Upload, paste URL, or pick from library below" />
+                    <label className="px-3 py-2 rounded-xl border border-stone-200 bg-white text-sm font-medium cursor-pointer hover:bg-stone-50 inline-flex items-center gap-1">
+                      <Icons.Upload /> Upload
+                      <input type="file" accept="image/*" className="hidden" onChange={uploadImage} />
+                    </label>
+                  </div>
                 </div>
                 {media.length > 0 && (
                   <div className="mt-2">
@@ -1099,9 +1333,12 @@ function CampaignsView() {
                         return (
                           <button key={m.id} type="button" onClick={() => setCompose({ ...compose, imageUrl: active ? '' : m.url })}
                             title={m.originalName || m.filename}
-                            className={`relative rounded-lg overflow-hidden border-2 transition-all ${active ? 'border-brand-500 ring-2 ring-brand-500/20' : 'border-transparent hover:border-brand-300'}`}>
+                            className={cn('relative rounded-lg overflow-hidden border-2 transition-all', {
+                              'border-brand-500 ring-2 ring-brand-500/20': active,
+                              'border-transparent hover:border-brand-300': !active,
+                            })}>
                             <img src={m.url} alt={m.originalName || ''} className="h-16 w-full object-cover" />
-                            {active && <span className="absolute top-1 right-1 w-5 h-5 rounded-full bg-brand-600 text-white flex items-center justify-center"><Icons.Check s={12} /></span>}
+                            {active && <span className="absolute top-1 right-1 size-5 rounded-full bg-brand-600 text-white flex items-center justify-center"><Icons.Check s={12} /></span>}
                           </button>
                         );
                       })}
@@ -1111,16 +1348,15 @@ function CampaignsView() {
                 {compose.imageUrl && (
                   <div className="mt-2 relative inline-block">
                     <img src={compose.imageUrl.startsWith('http') ? compose.imageUrl : compose.imageUrl} onError={(e) => { e.currentTarget.style.display = 'none'; }} alt="" className="h-32 rounded-xl object-cover border border-stone-200" />
-                    <button onClick={() => setCompose({ ...compose, imageUrl: '' })} className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center hover:bg-red-600"><Icons.X s={12} /></button>
+                    <button onClick={() => setCompose({ ...compose, imageUrl: '' })} className="absolute -top-2 -right-2 size-6 rounded-full bg-red-500 text-white flex items-center justify-center hover:bg-red-600"><Icons.X s={12} /></button>
                   </div>
                 )}
-              </div>
             </div>
             {/* Template picker */}
             {templates.length > 0 && (
               <div className="bg-white rounded-2xl border border-stone-200 p-5">
                 <h3 className="text-sm font-bold text-zinc-900 mb-3">Use a Template</h3>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid gap-2 sm:grid-cols-2">
                   {templates.map(t => (
                     <button key={t.id} onClick={() => applyTemplate(t)}
                       className="text-left px-3 py-2 rounded-xl border border-stone-200 hover:border-brand-300 hover:bg-brand-50 transition-all">
@@ -1134,7 +1370,7 @@ function CampaignsView() {
           </div>
           {/* Preview */}
           <div>
-            <div className="sticky top-6 space-y-4">
+            <div className="sticky top-6 flex flex-col gap-4">
               <div className="bg-white rounded-2xl border border-stone-200 p-4">
                 <h4 className="text-xs font-bold text-zinc-500 mb-2">WhatsApp Preview</h4>
                 {renderPreview(compose.message, compose.imageUrl)}
@@ -1173,7 +1409,10 @@ function CampaignsView() {
       }
     };
     const modeCard = (mode, title, sub) => (
-      <label className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-colors ${recipientMode === mode ? 'border-brand-500 bg-brand-50/50' : 'border-stone-200 hover:border-brand-300'}`}>
+      <label className={cn('flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-colors', {
+        'border-brand-500 bg-brand-50/50': recipientMode === mode,
+        'border-stone-200 hover:border-brand-300': recipientMode !== mode,
+      })}>
         <input type="radio" name="rmode" value={mode} checked={recipientMode === mode} onChange={() => setRecipientMode(mode)} className="accent-brand-600" />
         <div>
           <div className="text-sm font-medium text-zinc-900">{title}</div>
@@ -1182,17 +1421,17 @@ function CampaignsView() {
       </label>
     );
     return (
-      <div className="space-y-4">
+      <div className="flex flex-col gap-4">
         <StepIndicator current={2} />
-        <div className="grid grid-cols-[1fr_300px] gap-6">
-          <div className="space-y-4">
-            <div className="bg-white rounded-2xl border border-stone-200 p-5 space-y-3">
+        <div className="grid grid-cols-1 xl:grid-cols-[1fr_300px] gap-6">
+          <div className="flex flex-col gap-4">
+            <div className="bg-white rounded-2xl border border-stone-200 p-5 flex flex-col gap-3">
               <h3 className="text-sm font-bold text-zinc-900">Who should receive this?</h3>
               {modeCard('all', 'All Customers', `${customers.filter(c => isSendable(c.phone)).length} sendable of ${customers.length} contacts`)}
               {modeCard('tag', 'By Tag', tags.length > 0 ? `${tags.length} tags available` : 'No tags yet — tag customers first')}
               {modeCard('custom', 'Specific Contacts', selectedPhones.length > 0 ? `${selectedPhones.length} selected` : 'Pick individual contacts below')}
               {recipientMode === 'tag' && (
-                <div className="space-y-2 pl-1">
+                <div className="flex flex-col gap-2 pl-1">
                   {tags.length === 0 && <p className="text-xs text-zinc-400">No tags exist yet. Add tags on the Customers page.</p>}
                   {tags.map(t => (
                     <label key={t} className="flex items-center gap-3 p-3 rounded-xl border border-stone-200 hover:border-brand-300 cursor-pointer transition-colors">
@@ -1206,7 +1445,7 @@ function CampaignsView() {
                 </div>
               )}
               {recipientMode === 'custom' && (
-                <div className="space-y-2 pl-1">
+                <div className="flex flex-col gap-2 pl-1">
                   <div className="flex gap-2">
                     <div className="relative flex-1">
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400"><Icons.Search s={14} /></span>
@@ -1217,13 +1456,16 @@ function CampaignsView() {
                       {allVisibleSelected ? 'Clear visible' : 'Select visible'}
                     </button>
                   </div>
-                  <div className="max-h-64 overflow-y-auto space-y-1 border border-stone-100 rounded-xl p-1">
+                  <div className="max-h-64 overflow-y-auto flex flex-col gap-1 border border-stone-100 rounded-xl p-1">
                     {visibleCustomers.length === 0 && <p className="text-xs text-zinc-400 text-center py-4">No contacts match.</p>}
                     {visibleCustomers.map(c => {
                       const ok = isSendable(c.phone);
                       const checked = selectedPhones.includes(normPhone(c.phone));
                       return (
-                        <label key={c.id || c.phone} className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${ok ? 'hover:bg-stone-50 cursor-pointer' : 'opacity-60 cursor-not-allowed bg-stone-50/50'}`}>
+                        <label key={c.id || c.phone} className={cn('flex items-center gap-3 px-3 py-2 rounded-lg transition-colors', {
+                          'hover:bg-stone-50 cursor-pointer': ok,
+                          'opacity-60 cursor-not-allowed bg-stone-50/50': !ok,
+                        })}>
                           <input type="checkbox" checked={checked} disabled={!ok} onChange={() => togglePhone(c.phone)} className="accent-brand-600" />
                           <div className="flex-1 min-w-0">
                             <div className="text-sm font-medium text-zinc-900 truncate">{c.name || <span className="text-zinc-400">Unnamed</span>}</div>
@@ -1238,14 +1480,17 @@ function CampaignsView() {
                 </div>
               )}
             </div>
-            <div className="bg-white rounded-2xl border border-stone-200 p-5 space-y-3">
+            <div className="bg-white rounded-2xl border border-stone-200 p-5 flex flex-col gap-3">
               <h3 className="text-sm font-bold text-zinc-900 inline-flex items-center gap-1.5"><Icons.Calendar /> Schedule (optional)</h3>
-              <Input label="Send at" type="datetime-local" value={scheduledAt} onChange={(e) => setScheduledAt(e.target.value)} />
+              <div>
+                <label className="text-xs font-medium text-zinc-500 mb-1 block">Send at</label>
+                <DateTimePicker value={scheduledAt} onChange={setScheduledAt} />
+              </div>
               <p className="text-xs text-zinc-400">{scheduledAt ? 'Campaign will send automatically at this time.' : 'Leave empty to send immediately'}</p>
             </div>
           </div>
           <div>
-            <div className="sticky top-6 space-y-4">
+            <div className="sticky top-6 flex flex-col gap-4">
               <div className="bg-white rounded-2xl border border-stone-200 p-4">
                 <h4 className="text-xs font-bold text-zinc-500 mb-2">WhatsApp Preview</h4>
                 {renderPreview(compose.message, compose.imageUrl)}
@@ -1269,13 +1514,13 @@ function CampaignsView() {
   // ── Review Step ──
   if (step === 3) {
     return (
-      <div className="space-y-4">
+      <div className="flex flex-col gap-4">
         <StepIndicator current={3} />
-        <div className="grid grid-cols-[1fr_300px] gap-6">
-          <div className="space-y-4">
-            <div className="bg-white rounded-2xl border border-stone-200 p-5 space-y-4">
+        <div className="grid grid-cols-1 xl:grid-cols-[1fr_300px] gap-6">
+          <div className="flex flex-col gap-4">
+            <div className="bg-white rounded-2xl border border-stone-200 p-5 flex flex-col gap-4">
               <h3 className="text-sm font-bold text-zinc-900">Review & Send</h3>
-              <div className="space-y-3">
+              <div className="flex flex-col gap-3">
                 <div className="flex justify-between text-sm"><span className="text-zinc-500">Campaign</span><span className="font-medium text-zinc-900">{compose.name}</span></div>
                 <div className="flex justify-between text-sm">
                   <span className="text-zinc-500">Recipients</span>
@@ -1307,7 +1552,7 @@ function CampaignsView() {
             </div>
           </div>
           <div>
-            <div className="sticky top-6 space-y-4">
+            <div className="sticky top-6 flex flex-col gap-4">
               <div className="bg-white rounded-2xl border border-stone-200 p-4">
                 <h4 className="text-xs font-bold text-zinc-500 mb-2">WhatsApp Preview</h4>
                 {renderPreview(compose.message, compose.imageUrl)}
@@ -1334,14 +1579,18 @@ function CampaignsView() {
 function StepIndicator({ current }) {
   const steps = ['Compose', 'Recipients', 'Review'];
   return (
-    <div className="flex items-center gap-2 mb-4">
+    <div className="flex flex-wrap items-center gap-2 mb-4">
       {steps.map((s, i) => (
         <div key={i} className="flex items-center gap-2">
-          <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${i + 1 < current ? 'bg-emerald-500 text-white' : i + 1 === current ? 'bg-brand-600 text-white' : 'bg-stone-200 text-zinc-500'}`}>
+          <div className={cn('size-7 rounded-full flex items-center justify-center text-xs font-bold', {
+            'bg-emerald-500 text-white': i + 1 < current,
+            'bg-brand-600 text-white': i + 1 === current,
+            'bg-stone-200 text-zinc-500': i + 1 > current,
+          })}>
             {i + 1 < current ? <Icons.Check s={14} /> : i + 1}
           </div>
-          <span className={`text-sm font-medium ${i + 1 === current ? 'text-zinc-900' : 'text-zinc-400'}`}>{s}</span>
-          {i < steps.length - 1 && <div className={`w-8 h-0.5 ${i + 1 < current ? 'bg-emerald-500' : 'bg-stone-200'}`} />}
+          <span className={cn('text-sm font-medium', { 'text-zinc-900': i + 1 === current, 'text-zinc-400': i + 1 !== current })}>{s}</span>
+          {i < steps.length - 1 && <div className={cn('w-8 h-0.5', { 'bg-emerald-500': i + 1 < current, 'bg-stone-200': i + 1 >= current })} />}
         </div>
       ))}
     </div>
@@ -1376,21 +1625,25 @@ function SettingsView() {
   };
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="max-w-2xl flex flex-col gap-6">
       <div>
         <h1 className="text-xl font-bold text-zinc-900">Settings</h1>
         <p className="text-sm text-zinc-500">Configure your campaign runner</p>
       </div>
 
       {/* Brand */}
-      <div className="bg-white rounded-2xl border border-stone-200 p-5 space-y-4">
-        <h3 className="text-sm font-bold text-zinc-900">Brand Identity</h3>
-        <div className="grid grid-cols-2 gap-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>Brand Identity</CardTitle>
+          <CardDescription>Name, color, logo and footer used across messages</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+        <div className="grid gap-4 sm:grid-cols-2">
           <Input label="Brand Name" value={settings.brandName || ''} onChange={(e) => setSettings({ ...settings, brandName: e.target.value })} placeholder="Your Restaurant Name" />
           <div>
             <label className="text-xs font-medium text-zinc-500 mb-1 block">Brand Color</label>
             <div className="flex gap-2 items-center">
-              <input type="color" value={settings.brandColor || '#ea580c'} onChange={(e) => setSettings({ ...settings, brandColor: e.target.value })} className="w-10 h-10 rounded-lg border border-stone-200 cursor-pointer" />
+              <input type="color" value={settings.brandColor || '#ea580c'} onChange={(e) => setSettings({ ...settings, brandColor: e.target.value })} className="size-10 rounded-lg border border-stone-200 cursor-pointer" />
               <input value={settings.brandColor || '#ea580c'} onChange={(e) => setSettings({ ...settings, brandColor: e.target.value })}
                 className="flex-1 px-3 py-2 rounded-xl border border-stone-200 text-sm font-mono" />
             </div>
@@ -1403,21 +1656,26 @@ function SettingsView() {
               <Icons.Upload /> Upload Logo
               <input ref={logoRef} type="file" accept="image/*" className="hidden" onChange={uploadLogo} />
             </label>
-            {settings.brandLogo && <img src={settings.brandLogo} alt="Logo" className="w-10 h-10 rounded-lg object-cover border border-stone-200" />}
+            {settings.brandLogo && <img src={settings.brandLogo} alt="Logo" className="size-10 rounded-lg object-cover border border-stone-200" />}
           </div>
         </div>
         <Input label="Footer Text" value={settings.footerText || ''} onChange={(e) => setSettings({ ...settings, footerText: e.target.value })} placeholder="Sent via Your Brand" />
-      </div>
+        </CardContent>
+      </Card>
 
       {/* Bot Connection */}
-      <div className="bg-white rounded-2xl border border-stone-200 p-5 space-y-4">
-        <h3 className="text-sm font-bold text-zinc-900">Bot Connection</h3>
-        <p className="text-xs text-zinc-400">Connect to your OCP Go bot to sync customers and send messages.</p>
+      <Card>
+        <CardHeader>
+          <CardTitle>Bot Connection</CardTitle>
+          <CardDescription>Connect to your OCP Go bot to sync customers and send messages.</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
         <Input label="Bot API URL" value={settings.botApiUrl || ''} onChange={(e) => setSettings({ ...settings, botApiUrl: e.target.value })} placeholder="http://localhost:8090" />
         <Input label="Admin Key" type="password" value={settings.botAdminKey || ''} onChange={(e) => setSettings({ ...settings, botAdminKey: e.target.value })} placeholder="Your BOT_ADMIN_KEY from .env" />
         <Input label="Delay Between Batches (ms)" type="number" value={settings.delayMs || 3000} onChange={(e) => setSettings({ ...settings, delayMs: parseInt(e.target.value) || 3000 })} />
         <p className="text-xs text-zinc-400">Messages are sent through the bot's Evolution GO integration. Recommended: 3000ms.</p>
-      </div>
+        </CardContent>
+      </Card>
 
       <button onClick={save} className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 transition-colors">
         {saved ? <><Icons.Check /> Saved!</> : 'Save Settings'}
