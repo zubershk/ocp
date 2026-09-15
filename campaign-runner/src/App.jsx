@@ -97,7 +97,9 @@ export default function App() {
 
   useEffect(() => { api('/api/settings').then(s => { setSettings(s); if (s.botAdminKey) checkBot(s); }); }, []);
   const checkBot = async (s) => {
-    try { await fetch(`${s.botApiUrl || 'http://localhost:8090'}/health`); setBotConnected(true); } catch { setBotConnected(false); }
+    // Same-origin probe via the runner backend (a direct browser fetch to
+    // :8090 would be blocked by the bot's CORS allow-list).
+    try { const r = await api('/api/bot-health'); setBotConnected(!!r.ok); } catch { setBotConnected(false); }
   };
 
   const NAV = [
@@ -861,6 +863,20 @@ function CampaignsView() {
     load();
   };
 
+  // Reuse: duplicate into a fresh draft and open it in the composer.
+  const duplicateCampaign = async (id) => {
+    const c = await api(`/api/campaigns/${id}/duplicate`, { method: 'POST' });
+    if (c.error) return alert(c.error);
+    setCompose({ name: c.name, message: c.message, imageUrl: c.imageUrl });
+    setRecipientMode(modeOf(c));
+    setRecipientTag(c.recipientTag || 'all');
+    setSelectedPhones(c.recipientPhones || []);
+    restoreVarRows(c.variables);
+    setScheduledAt('');
+    setStep(1);
+    load();
+  };
+
   const testSend = async () => {
     if (!testPhone || !compose.message) return alert('Phone and message required');
     setTestResult(null);
@@ -874,7 +890,7 @@ function CampaignsView() {
     const hasTags = /{[a-zA-Z_][a-zA-Z0-9_]*}/.test(msg || '');
     return (
       <div className="bg-[#e5ddd5] rounded-2xl p-3 max-w-[280px] shadow-sm">
-        {img && <img src={img.startsWith('http') ? img : img} alt="" className="rounded-xl mb-1 w-full object-cover max-h-40" />}
+        {img && <img src={img.startsWith('http') ? img : img} onError={(e) => { e.currentTarget.style.display = 'none'; }} alt="" className="rounded-xl mb-1 w-full object-cover max-h-40" />}
         <div className="bg-white rounded-xl px-3 py-2 shadow-sm relative">
           <div className="text-sm text-zinc-900 whitespace-pre-line" style={{ lineHeight: 1.4 }}>{text || 'Your message here...'}</div>
           <div className="flex items-center justify-end gap-1 mt-1">
@@ -936,7 +952,7 @@ function CampaignsView() {
                     {c.skipped > 0 && <Badge color="amber">{c.skipped} skipped</Badge>}
                   </div>
                   <p className="text-xs text-zinc-500 mt-1 line-clamp-2">{c.message}</p>
-                  {c.imageUrl && <img src={c.imageUrl} alt="" className="h-16 rounded-lg mt-2 object-cover border border-stone-200" />}
+                  {c.imageUrl && <img src={c.imageUrl} onError={(e) => { e.currentTarget.style.display = 'none'; }} alt="" className="h-16 rounded-lg mt-2 object-cover border border-stone-200" />}
                   {c.status !== 'draft' && (
                     <div className="flex gap-4 mt-2 text-xs">
                       <span className="text-emerald-600 font-bold">{c.sent} sent</span>
@@ -968,7 +984,10 @@ function CampaignsView() {
                     <button onClick={() => cancelCampaign(c.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-zinc-400 hover:text-red-500"><Icons.X /></button>
                   )}
                   {(c.status === 'draft' || c.status === 'done' || c.status === 'cancelled') && (
-                    <button onClick={() => removeCampaign(c.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-zinc-400 hover:text-red-500"><Icons.Trash /></button>
+                    <>
+                      <button title="Reuse as new campaign" onClick={() => duplicateCampaign(c.id)} className="p-1.5 rounded-lg hover:bg-stone-100 text-zinc-400 hover:text-zinc-600"><Icons.Copy s={14} /></button>
+                      <button onClick={() => removeCampaign(c.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-zinc-400 hover:text-red-500"><Icons.Trash /></button>
+                    </>
                   )}
                 </div>
               </div>
@@ -1091,7 +1110,7 @@ function CampaignsView() {
                 )}
                 {compose.imageUrl && (
                   <div className="mt-2 relative inline-block">
-                    <img src={compose.imageUrl.startsWith('http') ? compose.imageUrl : compose.imageUrl} alt="" className="h-32 rounded-xl object-cover border border-stone-200" />
+                    <img src={compose.imageUrl.startsWith('http') ? compose.imageUrl : compose.imageUrl} onError={(e) => { e.currentTarget.style.display = 'none'; }} alt="" className="h-32 rounded-xl object-cover border border-stone-200" />
                     <button onClick={() => setCompose({ ...compose, imageUrl: '' })} className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center hover:bg-red-600"><Icons.X s={12} /></button>
                   </div>
                 )}
