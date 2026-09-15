@@ -707,5 +707,21 @@ setInterval(async () => {
   }
 }, 30000);
 
+// ── Production static hosting (vite build output) ──
+// Serves dist/ when present so :3001 alone is a complete app (API +
+// UI, no vite dev server needed). Dev flow is unchanged: browsers hit
+// vite :5174, which proxies /api + /uploads here.
+const DIST_DIR = join(ROOT, 'dist');
+if (existsSync(join(DIST_DIR, 'index.html'))) {
+  console.log('Serving production UI from dist/');
+  app.use(express.static(DIST_DIR));
+  app.use((req, res, next) => {
+    if (req.path.startsWith('/api/') || req.path.startsWith('/uploads/')) {
+      return res.status(404).json({ error: 'not found' });
+    }
+    res.sendFile(join(DIST_DIR, 'index.html'));
+  });
+}
+
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log(`Campaign Runner on http://localhost:${PORT} — connected to bot`));
