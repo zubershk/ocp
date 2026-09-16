@@ -45,7 +45,7 @@ func BroadcastRealtime(eventType string, data interface{}) {
 	BroadcastRealtimeFor(0, 0, 0, eventType, data)
 }
 
-// BroadcastRealtimeFor fans only to subscribers matching tenant (0 = global fallback).
+// BroadcastRealtimeFor fans only to subscribers matching tenant (0 = restaurant-wide, specific outletID filters).
 func BroadcastRealtimeFor(restaurantID, outletID, orgID int, eventType string, data interface{}) {
 	hub.mu.RLock()
 	defer hub.mu.RUnlock()
@@ -57,6 +57,10 @@ func BroadcastRealtimeFor(restaurantID, outletID, orgID int, eventType string, d
 		if sub.orgID != 0 && orgID != 0 && sub.orgID != orgID {
 			continue
 		}
+		if sub.outletID != 0 && outletID != 0 && sub.outletID != outletID {
+			continue
+		}
+		// outletID==0 means restaurant-wide event → all outlets in restaurant; don't filter
 		select {
 		case ch <- ev:
 		default:
