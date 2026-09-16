@@ -68,27 +68,27 @@ type WhatsAppOutcome struct {
 }
 
 type WebsiteOrderResult struct {
-	ID            int                `json:"id"`
-	OrderNumber   string             `json:"order_number"`
-	Status        string             `json:"status"`
-	CustomerName  string             `json:"customer_name"`
-	CustomerPhone string             `json:"customer_phone"`
-	Email         string             `json:"email,omitempty"`
-	DeliveryType  string             `json:"delivery_type"`
-	Address       string             `json:"address,omitempty"`
-	Landmark      string             `json:"landmark,omitempty"`
-	PaymentMethod string             `json:"payment_method"`
-	Items         []WebsiteOrderLine `json:"items"`
+	ID            int                 `json:"id"`
+	OrderNumber   string              `json:"order_number"`
+	Status        string              `json:"status"`
+	CustomerName  string              `json:"customer_name"`
+	CustomerPhone string              `json:"customer_phone"`
+	Email         string              `json:"email,omitempty"`
+	DeliveryType  string              `json:"delivery_type"`
+	Address       string              `json:"address,omitempty"`
+	Landmark      string              `json:"landmark,omitempty"`
+	PaymentMethod string              `json:"payment_method"`
+	Items         []WebsiteOrderLine  `json:"items"`
 	Events        []models.OrderEvent `json:"events,omitempty"`
-	Subtotal      float64            `json:"subtotal"`
-	DeliveryFee   float64            `json:"delivery_fee"`
-	Discount      float64            `json:"discount"`
-	Total         float64            `json:"total"`
-	CreatedAt     time.Time          `json:"created_at"`
-	Source        string             `json:"source,omitempty"`
-	AccessToken   string             `json:"access_token,omitempty"`
-	WhatsApp      WhatsAppOutcome    `json:"-"`
-	Replayed      bool               `json:"-"`
+	Subtotal      float64             `json:"subtotal"`
+	DeliveryFee   float64             `json:"delivery_fee"`
+	Discount      float64             `json:"discount"`
+	Total         float64             `json:"total"`
+	CreatedAt     time.Time           `json:"created_at"`
+	Source        string              `json:"source,omitempty"`
+	AccessToken   string              `json:"access_token,omitempty"`
+	WhatsApp      WhatsAppOutcome     `json:"-"`
+	Replayed      bool                `json:"-"`
 }
 
 // ValidationError maps cleanly to HTTP 400.

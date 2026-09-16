@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -106,10 +108,25 @@ func main() {
 	// Site settings handler
 	siteHandler := handlers.NewSiteSettingsHandler()
 	reviewHandler := handlers.NewReviewHandler()
+	provisionHandler := handlers.NewProvisioningHandler()
 
 	// Setup Gin router
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.Default()
+	// Trusted proxies from env (comma-separated CIDRs/hosts)
+	if cfg.TrustedProxies != "" {
+		_ = router.SetTrustedProxies(strings.Split(cfg.TrustedProxies, ","))
+	}
+	// X-Request-ID for observability
+	router.Use(func(c *gin.Context) {
+		rid := c.GetHeader("X-Request-ID")
+		if rid == "" {
+			rid = fmt.Sprintf("%d-%d", time.Now().UnixNano(), os.Getpid())
+		}
+		c.Set("requestID", rid)
+		c.Header("X-Request-ID", rid)
+		c.Next()
+	})
 	// Enforce max request body size to prevent OOM via large payloads.
 	// Image uploads get a higher cap; UploadImage enforces 5MB itself.
 	router.Use(func(c *gin.Context) {
@@ -124,7 +141,8 @@ func main() {
 		c.Next()
 	})
 	router.Use(handlers.SecurityHeaders())
-	// SaaS media — menu images live here, served to site + bot via /uploads/<file>
+	router.Use(services.TenantResolverMiddleware(cfg.BaseDomain))
+	// Open-source media — tenant-aware: ./uploads/<restaurant_id>/<file>
 	_ = os.MkdirAll("./uploads", 0755)
 	router.Static("/uploads", "./uploads")
 
@@ -164,6 +182,10 @@ func main() {
 	apiHandler := handlers.NewApiHandler(menuService, websiteOrderService)
 	authHandler := handlers.NewAuthHandler(evolutionClient)
 	router.Use(handlers.CORSMiddleware(cfg.CORSAllowedOrigins))
+	// Provisioning (open-source, no auth): create tenant
+	router.POST("/api/signup", provisionHandler.Signup)
+	router.POST("/api/orgs", provisionHandler.Signup)
+	// Domain-aware public routes need tenant resolver; already global above
 	apiGroup := router.Group("/api")
 	apiGroup.Use(handlers.RateLimit(120, time.Minute))
 	{
@@ -173,6 +195,10 @@ func main() {
 		apiGroup.GET("/config", apiHandler.GetConfig)
 		apiGroup.GET("/crusts", apiHandler.GetCrusts)
 		apiGroup.GET("/business-config", func(c *gin.Context) {
+			if rid, err := services.RequireRestaurant(c); err == nil {
+				c.JSON(200, services.GetBizConfigFor(rid))
+				return
+			}
 			c.JSON(200, services.GetBizConfig())
 		})
 		apiGroup.GET("/site-settings", siteHandler.GetSiteSettings)
@@ -317,12 +343,21 @@ func main() {
 	log.Printf("Starting Orange Cheese Pizza Bot on %s", addr)
 	log.Printf("Webhook endpoint: http://localhost%s/webhook/evolution", addr)
 
-	// Configure webhook in Evolution GO
+	// Configure webhook in Evolution GO — use Docker service hostname when running in compose
 	go func() {
-		// tiny delay so :8090 is listening before Evolution hits it
 		time.Sleep(800 * time.Millisecond)
-		if err := evolutionClient.ConfigureWebhook("http://localhost:" + cfg.BotPort + "/webhook/evolution"); err != nil {
-			log.Printf("Warning: Failed to configure webhook: %v", err)
+		webhookURL := "http://localhost:" + cfg.BotPort + "/webhook/evolution"
+		// In Docker, Evolution reaches bot via service name "bot", not localhost
+		if os.Getenv("EVOLUTION_API_URL") == "http://evolution:8080" || strings.Contains(cfg.EvolutionAPIURL, "evolution:") {
+			webhookURL = "http://bot:" + cfg.BotPort + "/webhook/evolution"
+		}
+		if cfg.PublicBaseURL != "" {
+			webhookURL = strings.TrimRight(cfg.PublicBaseURL, "/") + "/webhook/evolution"
+		}
+		if err := evolutionClient.ConfigureWebhook(webhookURL); err != nil {
+			log.Printf("Warning: Failed to configure webhook (%s): %v", webhookURL, err)
+		} else {
+			log.Printf("Webhook configured: %s", webhookURL)
 		}
 	}()
 

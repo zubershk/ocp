@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math/big"
+	"os"
 	"strings"
 	"time"
 
@@ -19,14 +20,18 @@ import (
 // between web and WhatsApp bot (customers.whatsapp_number).
 // OTP: 6-digit, 5m expiry, max 3 attempts, 30s resend cooldown.
 // Session: opaque 48-hex token, hashed at rest, 30d expiry. SaaS hardening.
- // ------------------------------------------------------------------
+// ------------------------------------------------------------------
 
 const otpExpiry = 5 * time.Minute
 const otpCooldown = 30 * time.Second
 const sessionExpiry = 30 * 24 * time.Hour
 
 func hashHex(s string) string {
-	h := sha256.Sum256([]byte(s))
+	pepper := os.Getenv("OTP_PEPPER")
+	if pepper == "" {
+		pepper = os.Getenv("BOT_ADMIN_KEY")
+	}
+	h := sha256.Sum256([]byte(pepper + s))
 	return hex.EncodeToString(h[:])
 }
 
@@ -72,7 +77,9 @@ func normalizeAuthPhone(raw string) (string, error) {
 // whatsappDest mirrors order_status_service.normalizeWhatsAppDest.
 func whatsappDest(phone string) string {
 	cleaned := strings.Map(func(r rune) rune {
-		if r >= '0' && r <= '9' { return r }
+		if r >= '0' && r <= '9' {
+			return r
+		}
 		return -1
 	}, phone)
 	switch {
@@ -116,6 +123,12 @@ func SendOTP(phone string, evolution *EvolutionClient) (string, error) {
 	}
 	if err != nil && err != sql.ErrNoRows {
 		return "", fmt.Errorf("otp lookup failed: %w", err)
+	}
+	// per-phone daily limit: 10 OTPs per 24h (prevents brute force + cost)
+	var dailyCount int
+	_ = database.DB.QueryRow(`SELECT COUNT(*) FROM customer_otps WHERE phone=$1 AND created_at > NOW() - INTERVAL '24 hours'`, normalized).Scan(&dailyCount)
+	if dailyCount >= 10 {
+		return "", &ValidationError{Msg: "too many codes sent today — try again tomorrow"}
 	}
 	code, err := randomOTP()
 	if err != nil {
@@ -232,10 +245,17 @@ func ValidateSession(token string) (string, *Customer, error) {
 	hashed := hashHex(token)
 	var phone string
 	var expiresAt time.Time
-	// Support both new hashed rows and legacy plaintext (48-char) during migration window
 	err := database.DB.QueryRow(`SELECT phone, expires_at FROM customer_sessions WHERE token=$1 LIMIT 1`, hashed).Scan(&phone, &expiresAt)
 	if err == sql.ErrNoRows {
-		return "", nil, fmt.Errorf("invalid token")
+		// fallback: pre-pepper hash (sha256 without pepper) for transition
+		old := func(s string) string {
+			h := sha256.Sum256([]byte(s))
+			return hex.EncodeToString(h[:])
+		}(token)
+		err = database.DB.QueryRow(`SELECT phone, expires_at FROM customer_sessions WHERE token=$1 LIMIT 1`, old).Scan(&phone, &expiresAt)
+		if err == sql.ErrNoRows {
+			return "", nil, fmt.Errorf("invalid token")
+		}
 	}
 	if err != nil {
 		return "", nil, err

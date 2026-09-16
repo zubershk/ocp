@@ -17,25 +17,46 @@ import (
 // ------------------------------------------------------------------
 
 type realtimeEvent struct {
-	Type string      `json:"type"`
-	At   time.Time   `json:"at"`
-	Data interface{} `json:"data,omitempty"`
+	Type         string      `json:"type"`
+	At           time.Time   `json:"at"`
+	Data         interface{} `json:"data,omitempty"`
+	RestaurantID int         `json:"restaurant_id,omitempty"`
+	OutletID     int         `json:"outlet_id,omitempty"`
+	OrgID        int         `json:"org_id,omitempty"`
+}
+
+type realtimeSub struct {
+	ch           chan realtimeEvent
+	restaurantID int
+	outletID     int
+	orgID        int
 }
 
 type realtimeHub struct {
 	mu   sync.RWMutex
-	subs map[chan realtimeEvent]struct{}
+	subs map[chan realtimeEvent]*realtimeSub
 }
 
-var hub = &realtimeHub{subs: make(map[chan realtimeEvent]struct{})}
+var hub = &realtimeHub{subs: make(map[chan realtimeEvent]*realtimeSub)}
 
 // BroadcastRealtime fans an event out to all connected dashboards.
 // Never blocks the caller; slow subscribers are skipped.
 func BroadcastRealtime(eventType string, data interface{}) {
+	BroadcastRealtimeFor(0, 0, 0, eventType, data)
+}
+
+// BroadcastRealtimeFor fans only to subscribers matching tenant (0 = global fallback).
+func BroadcastRealtimeFor(restaurantID, outletID, orgID int, eventType string, data interface{}) {
 	hub.mu.RLock()
 	defer hub.mu.RUnlock()
-	ev := realtimeEvent{Type: eventType, At: time.Now().UTC(), Data: data}
-	for ch := range hub.subs {
+	ev := realtimeEvent{Type: eventType, At: time.Now().UTC(), Data: data, RestaurantID: restaurantID, OutletID: outletID, OrgID: orgID}
+	for ch, sub := range hub.subs {
+		if sub.restaurantID != 0 && restaurantID != 0 && sub.restaurantID != restaurantID {
+			continue
+		}
+		if sub.orgID != 0 && orgID != 0 && sub.orgID != orgID {
+			continue
+		}
 		select {
 		case ch <- ev:
 		default:
@@ -56,8 +77,9 @@ func StreamEvents(c *gin.Context) {
 	c.Header("X-Accel-Buffering", "no")
 
 	ch := make(chan realtimeEvent, 32)
+	sub := &realtimeSub{ch: ch, restaurantID: c.GetInt("restaurantID"), outletID: c.GetInt("outletID"), orgID: c.GetInt("orgID")}
 	hub.mu.Lock()
-	hub.subs[ch] = struct{}{}
+	hub.subs[ch] = sub
 	hub.mu.Unlock()
 	defer func() {
 		hub.mu.Lock()

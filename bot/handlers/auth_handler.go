@@ -68,8 +68,8 @@ func (h *AuthHandler) VerifyOTP(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"token": token,
 		"customer": gin.H{
-			"phone":       cust.WhatsAppNumber,
-			"name":        cust.FirstName,
+			"phone":        cust.WhatsAppNumber,
+			"name":         cust.FirstName,
 			"total_orders": cust.TotalOrders,
 			"total_spent":  cust.TotalSpent,
 		},

@@ -53,7 +53,7 @@ func CORSMiddleware(allowedOriginsCSV string) gin.HandlerFunc {
 			c.Header("Access-Control-Allow-Origin", origin)
 			c.Header("Vary", "Origin")
 			c.Header("Access-Control-Allow-Methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS")
-			c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Admin-Key, X-Customer-Token")
+			c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Admin-Key, X-Customer-Token, X-Outlet-ID, Idempotency-Key, X-Order-Token, X-Request-ID")
 			c.Header("Access-Control-Max-Age", "86400")
 		}
 		if c.Request.Method == http.MethodOptions {
@@ -106,15 +106,26 @@ type menuResponse struct {
 	Items      []models.MenuItem     `json:"items"`
 }
 
-// GetMenu handles GET /api/menu (default restaurant; per-restaurant
-// storefront routing arrives in Phase 4).
+// GetMenu handles GET /api/menu — tenant-aware (domain or /r/slug, else single-tenant fallback).
 func (h *ApiHandler) GetMenu(c *gin.Context) {
-	categories, err := h.menu.GetCategoriesWithSlug(0)
+	rid, _ := services.RequireRestaurant(c)
+	if rid == 0 {
+		rid = c.GetInt("restaurantID")
+	}
+	categories, err := h.menu.GetCategoriesWithSlug(rid)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load categories"})
 		return
 	}
-	items, err := h.menu.GetAllActiveItems()
+	var items []models.MenuItem
+	// Prefer tenant-scoped fetch when MenuService supports it
+	if svc, ok := h.menu.(interface {
+		GetAllActiveItemsFor(int) ([]models.MenuItem, error)
+	}); ok && rid != 0 {
+		items, err = svc.GetAllActiveItemsFor(rid)
+	} else {
+		items, err = h.menu.GetAllActiveItems()
+	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load menu items"})
 		return
@@ -201,12 +212,15 @@ func (h *ApiHandler) GetOrder(c *gin.Context) {
 	c.JSON(http.StatusNotFound, gin.H{"error": "order not found"})
 }
 
-// GetOutlets handles GET /api/outlets — public SaaS settings.
+// GetOutlets handles GET /api/outlets — public, tenant-aware.
 func (h *ApiHandler) GetOutlets(c *gin.Context) {
-	// Public storefront serves the default restaurant until Phase 4 routing.
+	rid, _ := services.RequireRestaurant(c)
+	if rid == 0 {
+		rid = services.ResolveRestaurant(c.GetInt("restaurantID"))
+	}
 	rows, err := database.DB.Query(
 		`SELECT id, slug, name, address_lines, phones, delivery_hours, online_ordering, active, sort_order FROM outlets WHERE active=true AND restaurant_id=$1 ORDER BY sort_order, name`,
-		services.ResolveRestaurant(0))
+		rid)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load outlets"})
 		return
@@ -241,11 +255,20 @@ func (h *ApiHandler) GetOutlets(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"outlets": out})
 }
 
-// GetConfig handles GET /api/config — public restaurant config.
+// GetConfig handles GET /api/config — public restaurant config, tenant-aware.
 func (h *ApiHandler) GetConfig(c *gin.Context) {
+	rid, _ := services.RequireRestaurant(c)
+	if rid == 0 {
+		rid = services.ResolveRestaurant(c.GetInt("restaurantID"))
+	}
 	var id int
 	var name, phone, address, mapURL, opening, delivery, payment, support string
-	err := database.DB.QueryRow(`SELECT id, name, phone, address, map_url, opening_hours::text, delivery_area::text, payment_info::text, support_phone FROM restaurant_config LIMIT 1`).Scan(&id, &name, &phone, &address, &mapURL, &opening, &delivery, &payment, &support)
+	var err error
+	if rid != 0 {
+		err = database.DB.QueryRow(`SELECT id, name, phone, address, map_url, opening_hours::text, delivery_area::text, payment_info::text, support_phone FROM restaurant_config WHERE restaurant_id=$1 LIMIT 1`, rid).Scan(&id, &name, &phone, &address, &mapURL, &opening, &delivery, &payment, &support)
+	} else {
+		err = database.DB.QueryRow(`SELECT id, name, phone, address, map_url, opening_hours::text, delivery_area::text, payment_info::text, support_phone FROM restaurant_config LIMIT 1`).Scan(&id, &name, &phone, &address, &mapURL, &opening, &delivery, &payment, &support)
+	}
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"config": nil})
 		return

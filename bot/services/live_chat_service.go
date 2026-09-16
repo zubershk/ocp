@@ -4,27 +4,45 @@ import (
 	"orangecheesepizza/bot/database"
 )
 
-// SaveWhatsAppMessage persists a chat line for live board.
+// SaveWhatsAppMessage persists a chat line for live board (open-source wrapper).
 func SaveWhatsAppMessage(phone, direction, body, messageID string) error {
+	return SaveWhatsAppMessageFor(phone, direction, body, messageID, 0)
+}
+
+// SaveWhatsAppMessageFor is tenant-aware.
+func SaveWhatsAppMessageFor(phone, direction, body, messageID string, restaurantID int) error {
 	if phone == "" || body == "" {
+		return nil
+	}
+	if database.DB == nil {
 		return nil
 	}
 	if direction != "in" && direction != "out" {
 		direction = "in"
 	}
+	rid := ResolveRestaurant(restaurantID)
+	if rid == 0 {
+		rid = restaurantForPhone(phone)
+	}
 	_, err := database.DB.Exec(
-		`INSERT INTO whatsapp_messages (customer_phone, direction, body, message_id) VALUES ($1,$2,$3,$4)`,
-		phone, direction, body, messageID,
+		`INSERT INTO whatsapp_messages (customer_phone, direction, body, message_id, restaurant_id) VALUES ($1,$2,$3,$4,$5)`,
+		phone, direction, body, messageID, rid,
 	)
+	if err != nil {
+		_, err = database.DB.Exec(
+			`INSERT INTO whatsapp_messages (customer_phone, direction, body, message_id) VALUES ($1,$2,$3,$4)`,
+			phone, direction, body, messageID,
+		)
+	}
 	return err
 }
 
 type ConversationSummary struct {
-	Phone        string `json:"phone"`
-	Name         string `json:"name"`
-	State        string `json:"state"`
-	LastBody     string `json:"last_body"`
-	LastAt       string `json:"last_at"`
+	Phone         string `json:"phone"`
+	Name          string `json:"name"`
+	State         string `json:"state"`
+	LastBody      string `json:"last_body"`
+	LastAt        string `json:"last_at"`
 	LastDirection string `json:"last_direction"`
 	TotalMessages int    `json:"total_messages"`
 }
@@ -33,6 +51,9 @@ type ConversationSummary struct {
 // scoped to one restaurant. Message phones without a customer row
 // attach to the default restaurant (single-tenant behavior preserved).
 func ListConversations(limit, offset, restaurantID int) ([]ConversationSummary, error) {
+	if database.DB == nil {
+		return nil, nil
+	}
 	if limit <= 0 || limit > 100 {
 		limit = 30
 	}
@@ -83,6 +104,9 @@ type ChatMessage struct {
 }
 
 func ListMessages(phone string, limit, restaurantID int) ([]ChatMessage, error) {
+	if database.DB == nil {
+		return nil, nil
+	}
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}

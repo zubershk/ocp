@@ -44,6 +44,14 @@ func RunMigrations() error {
 	if err := ensureTracker(); err != nil {
 		return fmt.Errorf("failed to create %s: %w", migrationsTableName, err)
 	}
+	// advisory lock to prevent concurrent runners (k8s/Docker multiple replicas)
+	if _, err := DB.Exec(`SELECT pg_try_advisory_lock(87654321)`); err != nil {
+		log.Printf("warning: advisory lock failed: %v", err)
+	} else {
+		defer func() {
+			_, _ = DB.Exec(`SELECT pg_advisory_unlock(87654321)`)
+		}()
+	}
 
 	// Support both run styles: repo root (bot/migrations) and bot/ cwd.
 	candidates := []string{"migrations", "bot/migrations"}

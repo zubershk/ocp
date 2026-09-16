@@ -35,11 +35,11 @@ type PaymentRecord struct {
 
 // PaymentSummary is the derived view from the ledger.
 type PaymentSummary struct {
-	Paid         int64  // paise paid (positive amounts)
-	Refunded     int64  // paise refunded (absolute value of negative amounts)
-	Due          int64  // paise still due (order total - paid + refunded)
-	Total        int64  // order total paise
-	Overpaid     int64  // paise paid in excess of total (credit for next visit)
+	Paid     int64 // paise paid (positive amounts)
+	Refunded int64 // paise refunded (absolute value of negative amounts)
+	Due      int64 // paise still due (order total - paid + refunded)
+	Total    int64 // order total paise
+	Overpaid int64 // paise paid in excess of total (credit for next visit)
 }
 
 // paiseFromDecimal converts a DECIMAL ledger value that already holds
@@ -181,11 +181,11 @@ func ComputeSummaryFromLedger(orderID int) (PaymentSummary, error) {
 	}
 
 	return PaymentSummary{
-		Paid:       paid,
-		Refunded:   refunded,
-		Due:        due,
-		Total:      totalPaise,
-		Overpaid:   overpaid,
+		Paid:     paid,
+		Refunded: refunded,
+		Due:      due,
+		Total:    totalPaise,
+		Overpaid: overpaid,
 	}, nil
 }
 

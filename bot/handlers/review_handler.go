@@ -122,13 +122,16 @@ func (h *ReviewHandler) CreateReview(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{"saved": true})
 }
 
-// ListReviews handles GET /api/reviews — approved only.
+// ListReviews handles GET /api/reviews — approved only, tenant-aware.
 func (h *ReviewHandler) ListReviews(c *gin.Context) {
 	limit := 20
 	if n, err := strconv.Atoi(c.DefaultQuery("limit", "20")); err == nil && n > 0 && n <= 100 {
 		limit = n
 	}
-	rid := services.ResolveRestaurant(0)
+	rid, _ := services.RequireRestaurant(c)
+	if rid == 0 {
+		rid = services.ResolveRestaurant(c.GetInt("restaurantID"))
+	}
 	args := []interface{}{rid}
 	where := `WHERE approved = true AND restaurant_id = $1`
 	if slug := strings.TrimSpace(c.Query("item")); slug != "" {
@@ -158,9 +161,12 @@ func (h *ReviewHandler) ListReviews(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"reviews": out})
 }
 
-// ReviewSummary handles GET /api/reviews/summary — overall + per-item aggregates.
+// ReviewSummary handles GET /api/reviews/summary — overall + per-item aggregates, tenant-aware.
 func (h *ReviewHandler) ReviewSummary(c *gin.Context) {
-	rid := services.ResolveRestaurant(0)
+	rid, _ := services.RequireRestaurant(c)
+	if rid == 0 {
+		rid = services.ResolveRestaurant(c.GetInt("restaurantID"))
+	}
 	var avg sql.NullFloat64
 	var count int
 	_ = database.DB.QueryRow(`
