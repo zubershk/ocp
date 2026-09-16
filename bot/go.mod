@@ -35,4 +35,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/evolution-foundation/evolution-go => ../
+replace github.com/evolution-foundation/evolution-go => ../evolution-go
