@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { Search, Clock, Flame, Plus, ShieldCheck, MapPin, Star, ChevronRight, Phone, ArrowRight, Leaf, ChefHat, Truck, Settings2, ArrowUp } from 'lucide-react';
+import { Search, ShieldCheck, MapPin, Star, ChevronRight, Phone, ArrowRight, Leaf, ChefHat, Truck, Settings2, ArrowUp } from 'lucide-react';
 import { useMenuItems } from '../hooks/useMenu';
 import { pickPopular } from '../services/menuService';
 import { useRestaurantName, useDeliveryHours, useOutletsList, useRestaurantPhone } from '../context/RestaurantContext';
@@ -18,6 +18,7 @@ import FilterChips from '../components/ui/FilterChips';
 import BannerCarousel from '../components/ui/BannerCarousel';
 import { useGsapReveal } from '../hooks/useGsap';
 import type { MenuItem } from '../types';
+import { ProductCard } from '@/components/shadcn-space/blocks/product-listing-01/product-card';
 
 function quickAdd(item: MenuItem, addItem: ReturnType<typeof useCart>['addItem'], push: ReturnType<typeof useToast>['push'], crust: string) {
   addItem(item, 'regular', crust, 1);
@@ -119,7 +120,7 @@ export default function Home() {
 
   const sectionRef = useGsapReveal('.reveal-item', { stagger: 0.06, y: 20 });
   const filteredPopular = useMemo(() => {
-    if (activeFilter === 'all') return popular;
+    if (activeFilter === 'all') return [...popular, ...items.filter((i) => !popular.some((p) => p.id === i.id))].slice(0, 12);
     if (activeFilter === 'veg') return popular.filter((i) => i.dietary === 'veg');
     if (activeFilter === 'budget') return popular.filter((i) => i.price < 200);
     if (activeFilter === 'family') return items.filter((i) => i.category === 'family-packs').slice(0, 4);
@@ -175,65 +176,23 @@ export default function Home() {
             Full menu <ChevronRight size={14} />
           </Link>
         </div>
-
         <FilterChips filters={filters} active={activeFilter} onChange={setActiveFilter} />
-
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-5">
-          {filteredPopular.map((item, i) => (
-            <div key={item.id} className="reveal-item group bg-white rounded-2xl border border-stone-100 overflow-hidden card-lift" style={{ animationDelay: `${i * 50}ms` }}>
-              <Link to={`/r/menu/item/${item.id}`} className="block relative">
-                <div className="overflow-hidden">
-                  <img
-                    src={item.image}
-                    alt={item.name}
-                    width={400}
-                    height={300}
-                    loading="lazy"
-                    decoding="async"
-                    className="w-full h-40 object-cover group-hover:scale-105 transition-transform duration-500 ease-out bg-orange-50"
-                  />
-                </div>
-                <span className={`absolute bottom-2.5 left-2.5 w-5 h-5 rounded-sm border-2 flex items-center justify-center bg-white ${item.dietary === 'veg' ? 'border-emerald-600' : 'border-red-600'}`}>
-                  <span className={`w-2.5 h-2.5 rounded-full ${item.dietary === 'veg' ? 'bg-emerald-600' : 'bg-red-600'}`} />
-                </span>
-                {item.rating > 0 && (
-                  <span className="absolute bottom-2.5 right-2.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-600 text-white text-[11px] font-bold shadow-sm">
-                    <Star size={10} fill="white" /> {item.rating.toFixed(1)}
-                  </span>
-                )}
-                {item.isSpicy && (
-                  <span className="absolute top-2.5 right-2.5 bg-white rounded-full p-1 text-brand-600 shadow-sm" title="Spicy">
-                    <Flame size={12} />
-                  </span>
-                )}
-              </Link>
-              <div className="p-3.5">
-                <div className="flex items-center gap-2 text-xs text-zinc-500">
-                  <span className="inline-flex items-center gap-1">
-                    <Clock size={11} /> {item.preparationTime} min
-                  </span>
-                  {item.isPopular && (
-                    <span className="text-amber-600 font-semibold">Bestseller</span>
-                  )}
-                </div>
-                <h3 className="font-semibold text-sm leading-tight line-clamp-1 text-zinc-900 mt-1">{item.name}</h3>
-                {item.description && (
-                  <p className="text-xs text-zinc-400 line-clamp-1 mt-0.5">{item.description}</p>
-                )}
-                <div className="flex items-center justify-between mt-3">
-                  <span className="font-bold text-sm text-zinc-900">
-                    ₹{item.price}
-                    {item.priceBySize && <span className="text-xs text-zinc-400 font-medium">+</span>}
-                  </span>
-                  <button
-                    onClick={() => quickAdd(item, addItem, push, defaultCrust)}
-                    className="flex items-center gap-1 text-xs bg-brand-600 text-white px-3.5 py-2 rounded-lg font-semibold hover:bg-brand-700 active:scale-95 transition-all duration-150 cursor-pointer touch-target"
-                  >
-                    <Plus size={12} /> ADD
-                  </button>
-                </div>
-              </div>
-            </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 mt-5 justify-items-center">
+          {filteredPopular.map((item) => (
+            <ProductCard
+              key={item.id}
+              id={item.id}
+              image={item.image}
+              category={item.category}
+              name={item.name}
+              rating={item.rating || 4.5}
+              reviews={(item as unknown as { reviewCount?: number }).reviewCount ?? 105}
+              price={item.price}
+              originalPrice={item.priceBySize ? Math.round(item.price * 1.25) : undefined}
+              badge={item.isSpicy ? { text: "Hot" } : item.isPopular ? { text: "Hot" } : undefined}
+              onAddToCart={() => quickAdd(item, addItem, push, defaultCrust)}
+              className="w-[270px] h-[410px]"
+            />
           ))}
         </div>
       </div>
