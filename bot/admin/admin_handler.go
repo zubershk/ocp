@@ -768,17 +768,11 @@ func (h *AdminHandler) ListUploads(c *gin.Context) {
 	if rid == 0 {
 		rid = services.DefaultRestaurantID()
 	}
-	dir := "./uploads"
-	tenantDir := fmt.Sprintf("./uploads/%d", rid)
-	// try tenant dir first, fallback to root for legacy files
-	entries, err := os.ReadDir(tenantDir)
+	dir := fmt.Sprintf("./uploads/%d", rid)
+	entries, err := os.ReadDir(dir)
 	if err != nil {
-		entries, err = os.ReadDir(dir)
-		if err != nil {
-			c.JSON(http.StatusOK, gin.H{"files": []interface{}{}})
-			return
-		}
-		// for legacy flat storage, filter but still show (open-source compat)
+		c.JSON(http.StatusOK, gin.H{"files": []interface{}{}})
+		return
 	}
 	out := []map[string]interface{}{}
 	for _, e := range entries {

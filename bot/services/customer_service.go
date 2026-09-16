@@ -44,8 +44,7 @@ func canonicalForStorage(phone string) string {
 }
 
 // restaurantForPhone resolves the owning restaurant of a customer phone.
-// Unknown phones attach to the default restaurant (single-tenant fallback;
-// strict SaaS callers should use GetOrCreateCustomerFor with explicit restaurant).
+// Deprecated for SaaS: phone is not tenant identifier. Strict mode returns 0 for unknown phone.
 func restaurantForPhone(phone string) int {
 	if database.DB == nil {
 		return 0
@@ -57,7 +56,10 @@ func restaurantForPhone(phone string) int {
 	if rid.Valid && rid.Int64 > 0 {
 		return int(rid.Int64)
 	}
-	return ResolveRestaurant(0)
+	if IsSingleTenantMode() {
+		return ResolveRestaurant(0)
+	}
+	return 0
 }
 
 // GetOrCreateCustomer upserts by whatsapp_number and refreshes last_seen.
@@ -73,6 +75,9 @@ func GetOrCreateCustomerFor(phone string, restaurantID int) (*Customer, error) {
 		return &Customer{WhatsAppNumber: phone}, nil
 	}
 	rid := ResolveRestaurant(restaurantID)
+	if rid == 0 && !IsSingleTenantMode() {
+		return nil, ErrTenantRequired
+	}
 	_, err := database.DB.Exec(`
 		INSERT INTO customers (whatsapp_number, last_seen_at, restaurant_id)
 		VALUES ($1, CURRENT_TIMESTAMP, $2)
@@ -119,18 +124,21 @@ func getCustomerFor(phone string, restaurantID int) (*Customer, error) {
 	if database.DB == nil {
 		return &Customer{WhatsAppNumber: phone}, nil
 	}
+	rid := ResolveRestaurant(restaurantID)
+	if rid == 0 && !IsSingleTenantMode() {
+		return nil, ErrTenantRequired
+	}
 	row := database.DB.QueryRow(`
 		SELECT id, whatsapp_number, name, email, default_address, landmark,
 		       total_orders, total_spent
 		FROM customers WHERE whatsapp_number = $1 AND restaurant_id = $2
-	`, phone, ResolveRestaurant(restaurantID))
+	`, phone, rid)
 
 	var c Customer
 	err := row.Scan(&c.ID, &c.WhatsAppNumber, &c.Name, &c.Email,
 		&c.DefaultAddress, &c.Landmark, &c.TotalOrders, &c.TotalSpent)
 	if err != nil {
-		// fallback to global lookup for transition
-		return getCustomer(phone)
+		return nil, err
 	}
 	c.FirstName = c.displayName()
 	return &c, nil
@@ -147,6 +155,9 @@ func UpdateCustomerProfileFor(phone string, restaurantID int, fields map[string]
 	phone = canonicalForStorage(phone)
 	if database.DB == nil {
 		return nil
+	}
+	if restaurantID == 0 && !IsSingleTenantMode() {
+		return ErrTenantRequired
 	}
 	setClauses := []string{"updated_at = CURRENT_TIMESTAMP"}
 	args := []interface{}{}
@@ -197,12 +208,21 @@ func RecordCustomerOrder(phone string, total float64) error {
 	return err
 }
 
-// CustomerOrders returns recent orders belonging strictly to this number,
-// each with its line items for status views and history. Scoped to the
-// phone owner's restaurant so tenants never see each other's orders.
+// CustomerOrders returns recent orders (open-source wrapper uses phone→restaurant fallback).
 func CustomerOrders(phone string, limit int) ([]models.Order, error) {
+	return CustomerOrdersFor(phone, limit, 0)
+}
+
+// CustomerOrdersFor is tenant-aware (no phone→tenant inference when rid !=0).
+func CustomerOrdersFor(phone string, limit int, restaurantID int) ([]models.Order, error) {
 	phone = canonicalForStorage(phone)
-	rid := restaurantForPhone(phone)
+	rid := ResolveRestaurant(restaurantID)
+	if rid == 0 {
+		rid = restaurantForPhone(phone)
+		if rid == 0 && !IsSingleTenantMode() {
+			return nil, ErrTenantRequired
+		}
+	}
 	rows, err := database.DB.Query(`
 		SELECT id, order_number, customer_name, customer_phone, order_type,
 		       payment_method, subtotal, delivery_fee, discount, total, status,
