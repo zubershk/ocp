@@ -44,9 +44,12 @@ func canonicalForStorage(phone string) string {
 }
 
 // restaurantForPhone resolves the owning restaurant of a customer phone.
-// Unknown phones attach to the default restaurant (single-tenant behavior;
-// per-sender identity routing arrives in Phase 4).
+// Unknown phones attach to the default restaurant (single-tenant fallback;
+// strict SaaS callers should use GetOrCreateCustomerFor with explicit restaurant).
 func restaurantForPhone(phone string) int {
+	if database.DB == nil {
+		return 0
+	}
 	var rid sql.NullInt64
 	_ = database.DB.QueryRow(
 		`SELECT restaurant_id FROM customers WHERE whatsapp_number = $1 ORDER BY id LIMIT 1`,
@@ -58,23 +61,43 @@ func restaurantForPhone(phone string) int {
 }
 
 // GetOrCreateCustomer upserts by whatsapp_number and refreshes last_seen.
+// Wrapper for open-source single-tenant (uses default restaurant).
 func GetOrCreateCustomer(phone string) (*Customer, error) {
+	return GetOrCreateCustomerFor(phone, 0)
+}
+
+// GetOrCreateCustomerFor is tenant-aware (composite unique).
+func GetOrCreateCustomerFor(phone string, restaurantID int) (*Customer, error) {
 	phone = canonicalForStorage(phone)
+	if database.DB == nil {
+		return &Customer{WhatsAppNumber: phone}, nil
+	}
+	rid := ResolveRestaurant(restaurantID)
 	_, err := database.DB.Exec(`
 		INSERT INTO customers (whatsapp_number, last_seen_at, restaurant_id)
 		VALUES ($1, CURRENT_TIMESTAMP, $2)
-		ON CONFLICT (whatsapp_number) DO UPDATE SET
+		ON CONFLICT (whatsapp_number, restaurant_id) DO UPDATE SET
 			last_seen_at = CURRENT_TIMESTAMP,
 			updated_at = CURRENT_TIMESTAMP
-	`, phone, ResolveRestaurant(0))
+	`, phone, rid)
 	if err != nil {
-		return nil, err
+		// fallback for DBs still on old global unique (pre-027) during transition
+		_, _ = database.DB.Exec(`
+			INSERT INTO customers (whatsapp_number, last_seen_at, restaurant_id)
+			VALUES ($1, CURRENT_TIMESTAMP, $2)
+			ON CONFLICT (whatsapp_number) DO UPDATE SET
+				last_seen_at = CURRENT_TIMESTAMP,
+				updated_at = CURRENT_TIMESTAMP
+		`, phone, rid)
 	}
-	return getCustomer(phone)
+	return getCustomerFor(phone, rid)
 }
 
 func getCustomer(phone string) (*Customer, error) {
 	phone = canonicalForStorage(phone)
+	if database.DB == nil {
+		return &Customer{WhatsAppNumber: phone}, nil
+	}
 	row := database.DB.QueryRow(`
 		SELECT id, whatsapp_number, name, email, default_address, landmark,
 		       total_orders, total_spent
@@ -91,9 +114,40 @@ func getCustomer(phone string) (*Customer, error) {
 	return &c, nil
 }
 
-// UpdateCustomerProfile applies only the non-empty fields provided.
-func UpdateCustomerProfile(phone string, fields map[string]string) error {
+func getCustomerFor(phone string, restaurantID int) (*Customer, error) {
 	phone = canonicalForStorage(phone)
+	if database.DB == nil {
+		return &Customer{WhatsAppNumber: phone}, nil
+	}
+	row := database.DB.QueryRow(`
+		SELECT id, whatsapp_number, name, email, default_address, landmark,
+		       total_orders, total_spent
+		FROM customers WHERE whatsapp_number = $1 AND restaurant_id = $2
+	`, phone, ResolveRestaurant(restaurantID))
+
+	var c Customer
+	err := row.Scan(&c.ID, &c.WhatsAppNumber, &c.Name, &c.Email,
+		&c.DefaultAddress, &c.Landmark, &c.TotalOrders, &c.TotalSpent)
+	if err != nil {
+		// fallback to global lookup for transition
+		return getCustomer(phone)
+	}
+	c.FirstName = c.displayName()
+	return &c, nil
+}
+
+// UpdateCustomerProfile applies only the non-empty fields provided.
+// Deprecated: use UpdateCustomerProfileFor with explicit restaurantID for tenant isolation.
+func UpdateCustomerProfile(phone string, fields map[string]string) error {
+	return UpdateCustomerProfileFor(phone, 0, fields)
+}
+
+// UpdateCustomerProfileFor is tenant-aware: WHERE whatsapp_number=$1 AND restaurant_id=$2 when restaurantID !=0.
+func UpdateCustomerProfileFor(phone string, restaurantID int, fields map[string]string) error {
+	phone = canonicalForStorage(phone)
+	if database.DB == nil {
+		return nil
+	}
 	setClauses := []string{"updated_at = CURRENT_TIMESTAMP"}
 	args := []interface{}{}
 	n := 1
@@ -110,6 +164,15 @@ func UpdateCustomerProfile(phone string, fields map[string]string) error {
 	}
 	if len(args) == 0 {
 		return nil
+	}
+	rid := ResolveRestaurant(restaurantID)
+	if rid != 0 {
+		args = append(args, phone, rid)
+		_, err := database.DB.Exec(
+			`UPDATE customers SET `+strings.Join(setClauses, ", ")+` WHERE whatsapp_number = $`+itoa(n)+` AND restaurant_id = $`+itoa(n+1),
+			args...,
+		)
+		return err
 	}
 	args = append(args, phone)
 	_, err := database.DB.Exec(

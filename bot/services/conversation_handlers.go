@@ -1054,7 +1054,7 @@ func (e *ConversationEngine) orderDetailByName(conv *conversation, phone, number
 			e.msg("status_view_title", map[string]interface{}{"OrderNumber": number}),
 			e.msg("status_order_detail", map[string]interface{}{
 				"Emoji": statusEmoji[o.Status], "Status": pretty(o.Status),
-				"Date": o.CreatedAt.Format("02 Jan, 3:04 PM"),
+				"Date":  o.CreatedAt.Format("02 Jan, 3:04 PM"),
 				"Items": items.String(), "Total": int(o.Total),
 			}),
 			[]Button{

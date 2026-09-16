@@ -19,8 +19,13 @@ services:
 
   # ── Evolution GO (WhatsApp API) ──
   evolution:
-    image: atendai/evolution-go:latest
+    image: atendai/evolution-go:latest # pin to digest for prod: atendai/evolution-go:2.2.1
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
     environment:
       - SERVER_URL=http://localhost:8080
       - AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY:-}
@@ -61,6 +66,11 @@ services:
       - RESTAURANT_WHATSAPP_NUMBER=${RESTAURANT_WHATSAPP_NUMBER:-}
       - RESTAURANT_NAME=${RESTAURANT_NAME:-Orange Cheese Pizza}
       - DELIVERY_FEE=${DELIVERY_FEE:-0}
+      - SINGLE_TENANT_MODE=${SINGLE_TENANT_MODE:-true}
+      - BILLING_ENABLED=${BILLING_ENABLED:-false}
+      - BASE_DOMAIN=${BASE_DOMAIN:-ocp.app}
+      - TRUSTED_PROXIES=${TRUSTED_PROXIES:-}
+      - OTP_PEPPER=${OTP_PEPPER:-}
     ports:
       - "8090:8090"
     volumes:
@@ -68,6 +78,12 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8090/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   # ── Frontend (React + nginx) ──
   frontend:
@@ -80,7 +96,13 @@ services:
     ports:
       - "3000:80"
     depends_on:
-      - bot
+      bot:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:80/ || exit 1"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
 
   # ── Campaign Runner ──
   campaign:
@@ -96,7 +118,13 @@ services:
       - campaign_data:/app/data
       - campaign_uploads:/app/uploads
     depends_on:
-      - bot
+      bot:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3001/api/settings || exit 1"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
 
 volumes:
   pgdata:

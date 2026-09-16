@@ -552,15 +552,23 @@ func (s *MenuService) GetCategoriesWithSlug(restaurantID int) ([]models.MenuCate
 }
 
 // GetAllActiveItems returns every active menu item for the website catalog.
-// Bot runtime and public API resolve the default restaurant internally;
-// multi-restaurant storefront routing arrives in Phase 4.
+// Kept for backward compat (open-source single-tenant). Delegates to For().
 func (s *MenuService) GetAllActiveItems() ([]models.MenuItem, error) {
+	return s.GetAllActiveItemsFor(0)
+}
+
+// GetAllActiveItemsFor returns items for a specific restaurant (tenant-aware).
+func (s *MenuService) GetAllActiveItemsFor(restaurantID int) ([]models.MenuItem, error) {
+	if database.DB == nil {
+		return nil, nil
+	}
+	rid := ResolveRestaurant(restaurantID)
 	rows, err := database.DB.Query(`
-		SELECT ` + websiteItemColumns + `
+		SELECT `+websiteItemColumns+`
 		FROM menu_items
 		WHERE active = true AND available = true AND restaurant_id = $1
 		ORDER BY category_id, sort_order, name
-	`, ResolveRestaurant(0))
+	`, rid)
 	if err != nil {
 		return nil, err
 	}
@@ -577,11 +585,17 @@ func (s *MenuService) GetAllActiveItems() ([]models.MenuItem, error) {
 	return items, rows.Err()
 }
 
-// GetItemByIdentifier resolves an item by numeric ID or by slug.
-// Bot runtime and public API resolve the default restaurant internally;
-// multi-restaurant storefront routing arrives in Phase 4.
+// GetItemByIdentifier resolves an item by numeric ID or by slug (single-tenant wrapper).
 func (s *MenuService) GetItemByIdentifier(identifier string) (*models.MenuItem, error) {
-	rid := ResolveRestaurant(0)
+	return s.GetItemByIdentifierFor(identifier, 0)
+}
+
+// GetItemByIdentifierFor resolves with explicit restaurant (tenant-aware).
+func (s *MenuService) GetItemByIdentifierFor(identifier string, restaurantID int) (*models.MenuItem, error) {
+	if database.DB == nil {
+		return nil, nil
+	}
+	rid := ResolveRestaurant(restaurantID)
 	query := `SELECT ` + websiteItemColumns + ` FROM menu_items WHERE active = true AND restaurant_id = $2 AND `
 	var arg string
 	if isNumericID(identifier) {
@@ -625,14 +639,22 @@ type CrustInfo struct {
 	Large       float64 `json:"large"`
 }
 
-// GetActiveCrusts returns the backend-owned crust catalog (Phase 3).
-// Bot runtime and public API resolve the default restaurant internally.
+// GetActiveCrusts returns the backend-owned crust catalog (single-tenant wrapper).
 func (s *MenuService) GetActiveCrusts() ([]CrustInfo, error) {
+	return s.GetActiveCrustsFor(0)
+}
+
+// GetActiveCrustsFor returns crusts for a specific restaurant.
+func (s *MenuService) GetActiveCrustsFor(restaurantID int) ([]CrustInfo, error) {
+	if database.DB == nil {
+		return nil, nil
+	}
+	rid := ResolveRestaurant(restaurantID)
 	rows, err := database.DB.Query(`
 		SELECT slug, name, COALESCE(description,''),
 		       COALESCE(price_regular,0), COALESCE(price_medium,0), COALESCE(price_large,0)
 		FROM menu_crusts WHERE active = true AND restaurant_id = $1 ORDER BY sort_order
-	`, ResolveRestaurant(0))
+	`, rid)
 	if err != nil {
 		return nil, err
 	}

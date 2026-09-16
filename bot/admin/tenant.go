@@ -29,7 +29,7 @@ type tenantUser struct {
 	OrgID        int
 	RestaurantID int
 	OutletID     int
-	 ViaEnvOwner bool
+	ViaEnvOwner  bool
 }
 
 // defaultOrgID returns the bootstrap organization (first by id).
@@ -92,6 +92,7 @@ func resolveTenant(au *adminUserCtx) (*tenantUser, error) {
 }
 
 // resolveOutlet validates an explicit outlet request against the restaurant.
+// Also enforces user_outlets when the user has explicit assignments.
 func resolveOutlet(tu *tenantUser, raw string) error {
 	id, err := strconv.Atoi(raw)
 	if err != nil || id <= 0 {
@@ -105,6 +106,16 @@ func resolveOutlet(tu *tenantUser, raw string) error {
 	}
 	if rid != tu.RestaurantID {
 		return errInvalidOutlet()
+	}
+	if tu.UserID != 0 {
+		var assignedCount int
+		if err := database.DB.QueryRow(`SELECT COUNT(*) FROM user_outlets WHERE user_id=$1`, tu.UserID).Scan(&assignedCount); err == nil && assignedCount > 0 {
+			var has int
+			_ = database.DB.QueryRow(`SELECT COUNT(*) FROM user_outlets WHERE user_id=$1 AND outlet_id=$2`, tu.UserID, id).Scan(&has)
+			if has == 0 {
+				return errInvalidOutlet()
+			}
+		}
 	}
 	tu.OutletID = id
 	return nil

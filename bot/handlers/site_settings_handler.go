@@ -25,15 +25,31 @@ var publicKeys = []string{"brand", "seo", "social", "footer"}
 
 // --- Public endpoints ---
 
+func publicRestaurantID(c *gin.Context) (int, error) {
+	if rid := c.GetInt("restaurantID"); rid != 0 {
+		return rid, nil
+	}
+	if services.IsSingleTenantMode() {
+		if rid := services.DefaultRestaurantID(); rid != 0 {
+			return rid, nil
+		}
+	}
+	return 0, services.ErrTenantRequired
+}
+
 func (h *SiteSettingsHandler) GetSiteSettings(c *gin.Context) {
+	rid, err := publicRestaurantID(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "tenant context required: missing domain or restaurant slug"})
+		return
+	}
 	placeholders := make([]string, len(publicKeys))
 	args := make([]interface{}, len(publicKeys))
 	for i, k := range publicKeys {
 		placeholders[i] = "$" + strconv.Itoa(i+1)
 		args[i] = k
 	}
-	// Public storefront serves the default restaurant until Phase 4 routing.
-	args = append(args, services.ResolveRestaurant(0))
+	args = append(args, rid)
 	rows, err := database.DB.Query(`SELECT key, value FROM site_settings WHERE key IN (`+strings.Join(placeholders, ",")+`) AND restaurant_id = $`+strconv.Itoa(len(args)), args...)
 	if err != nil {
 		// table may not exist yet — return empty defaults
@@ -55,13 +71,18 @@ func (h *SiteSettingsHandler) GetSiteSettings(c *gin.Context) {
 
 func (h *SiteSettingsHandler) GetPage(c *gin.Context) {
 	slug := c.Param("slug")
+	rid, terr := publicRestaurantID(c)
+	if terr != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "tenant context required"})
+		return
+	}
 	var id int
 	var title, content, metaTitle, metaDesc string
 	var updatedAt string
 	err := database.DB.QueryRow(
 		`SELECT id, title, content, meta_title, meta_desc, updated_at::text
 		 FROM site_pages WHERE slug=$1 AND published=true AND restaurant_id=$2`, slug,
-		services.ResolveRestaurant(0),
+		rid,
 	).Scan(&id, &title, &content, &metaTitle, &metaDesc, &updatedAt)
 	if err == sql.ErrNoRows {
 		c.JSON(http.StatusNotFound, gin.H{"error": "page not found"})
@@ -78,10 +99,15 @@ func (h *SiteSettingsHandler) GetPage(c *gin.Context) {
 }
 
 func (h *SiteSettingsHandler) GetMenuCategories(c *gin.Context) {
+	rid, terr := publicRestaurantID(c)
+	if terr != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "tenant context required"})
+		return
+	}
 	rows, err := database.DB.Query(
 		`SELECT id, slug, name, description, image_url, sort_order
 		 FROM menu_categories WHERE active=true AND restaurant_id=$1 ORDER BY sort_order, name`,
-		services.ResolveRestaurant(0))
+		rid)
 	if err != nil {
 		// table may not exist yet — return empty
 		c.JSON(http.StatusOK, gin.H{"categories": []map[string]interface{}{}})
@@ -252,11 +278,10 @@ func (h *SiteSettingsHandler) UpsertPage(c *gin.Context) {
 	err := database.DB.QueryRow(
 		`INSERT INTO site_pages (slug, title, content, meta_title, meta_desc, published, restaurant_id)
 		 VALUES ($1,$2,$3,$4,$5,$6,$7)
-		 ON CONFLICT (slug) DO UPDATE SET
+		 ON CONFLICT (slug, restaurant_id) DO UPDATE SET
 		   title=EXCLUDED.title, content=EXCLUDED.content,
 		   meta_title=EXCLUDED.meta_title, meta_desc=EXCLUDED.meta_desc,
 		   published=EXCLUDED.published, updated_at=NOW()
-		 WHERE site_pages.restaurant_id=$7
 		 RETURNING id`,
 		slug, req.Title, req.Content, req.MetaTitle, req.MetaDesc, published, rid,
 	).Scan(&id)
@@ -450,7 +475,6 @@ func (h *SiteSettingsHandler) DeleteCategory(c *gin.Context) {
 }
 
 // settingValue reads one site_settings key for a restaurant.
-// restaurantID 0 resolves to the default (public storefront behavior).
 func settingValue(key string, restaurantID int) ([]byte, error) {
 	var value []byte
 	err := database.DB.QueryRow(
@@ -459,15 +483,21 @@ func settingValue(key string, restaurantID int) ([]byte, error) {
 	return value, err
 }
 
+// settingValueForPublic reads via resolved tenant or single-tenant fallback.
+func settingValuePublic(c *gin.Context, key string) ([]byte, error) {
+	rid, err := publicRestaurantID(c)
+	if err != nil {
+		return nil, err
+	}
+	return settingValue(key, rid)
+}
+
 // upsertSetting writes one site_settings key for a restaurant.
 // Returns rows affected (0 = key owned by another tenant).
 func upsertSetting(key string, raw []byte, restaurantID int) (int64, error) {
-	// NOTE: UNIQUE(key) becomes UNIQUE(key, restaurant_id) in migration 022.
-	// Until then the guarded conflict target below prevents cross-tenant writes.
 	res, err := database.DB.Exec(
 		`INSERT INTO site_settings (key, value, restaurant_id) VALUES ($1, $2::jsonb, $3)
-		 ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=NOW()
-		 WHERE site_settings.restaurant_id = $3`,
+		 ON CONFLICT (key, restaurant_id) DO UPDATE SET value=EXCLUDED.value, updated_at=NOW()`,
 		key, raw, services.ResolveRestaurant(restaurantID),
 	)
 	if err != nil {
@@ -540,7 +570,7 @@ func (h *SiteSettingsHandler) UpdateBanners(c *gin.Context) {
 // --- Public endpoints for customer-facing pages ---
 
 func (h *SiteSettingsHandler) GetOffersPublic(c *gin.Context) {
-	value, err := settingValue("offers", 0)
+	value, err := settingValuePublic(c, "offers")
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"offers": []interface{}{}})
 		return
@@ -560,7 +590,7 @@ func (h *SiteSettingsHandler) GetOffersPublic(c *gin.Context) {
 }
 
 func (h *SiteSettingsHandler) GetBannersPublic(c *gin.Context) {
-	value, err := settingValue("banners", 0)
+	value, err := settingValuePublic(c, "banners")
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"banners": []interface{}{}})
 		return
@@ -612,7 +642,7 @@ func (h *SiteSettingsHandler) UpdateFamilyPacks(c *gin.Context) {
 }
 
 func (h *SiteSettingsHandler) GetFamilyPacksPublic(c *gin.Context) {
-	value, err := settingValue("family_packs", 0)
+	value, err := settingValuePublic(c, "family_packs")
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"family_packs": defaultFamilyPacks()})
 		return

@@ -39,30 +39,60 @@ func scanWALine(scanner interface{ Scan(...interface{}) error }) (WACartLine, in
 	return l, itemID, err
 }
 
-// AddToWACart inserts or merges a variant line.
+// AddToWACart inserts or merges a variant line (single-tenant wrapper).
 func AddToWACart(phone string, itemID int, size, crust string, qty int, unitPrice float64) error {
+	return AddToWACartFor(phone, itemID, size, crust, qty, unitPrice, 0)
+}
+
+// AddToWACartFor is tenant-aware.
+func AddToWACartFor(phone string, itemID int, size, crust string, qty int, unitPrice float64, restaurantID int) error {
+	if database.DB == nil {
+		return nil
+	}
+	rid := ResolveRestaurant(restaurantID)
 	_, err := database.DB.Exec(`
 		INSERT INTO whatsapp_cart_items
-			(customer_phone, menu_item_id, size, crust, quantity, unit_price)
-		VALUES ($1,$2,$3,$4,$5,$6)
-		ON CONFLICT (customer_phone, menu_item_id, size, crust) DO UPDATE SET
+			(customer_phone, menu_item_id, size, crust, quantity, unit_price, restaurant_id)
+		VALUES ($1,$2,$3,$4,$5,$6,$7)
+		ON CONFLICT (customer_phone, restaurant_id, menu_item_id, size, crust) DO UPDATE SET
 			quantity = LEAST(whatsapp_cart_items.quantity + $5, 20),
 			unit_price = EXCLUDED.unit_price,
 			updated_at = CURRENT_TIMESTAMP
-	`, phone, itemID, size, crust, qty, unitPrice)
+	`, phone, itemID, size, crust, qty, unitPrice, rid)
+	if err != nil {
+		// fallback to legacy constraint during migration window
+		_, err = database.DB.Exec(`
+			INSERT INTO whatsapp_cart_items
+				(customer_phone, menu_item_id, size, crust, quantity, unit_price)
+			VALUES ($1,$2,$3,$4,$5,$6)
+			ON CONFLICT (customer_phone, menu_item_id, size, crust) DO UPDATE SET
+				quantity = LEAST(whatsapp_cart_items.quantity + $5, 20),
+				unit_price = EXCLUDED.unit_price,
+				updated_at = CURRENT_TIMESTAMP
+		`, phone, itemID, size, crust, qty, unitPrice)
+	}
 	return err
 }
 
-// GetWACart returns all lines for a customer.
+// GetWACart returns all lines for a customer (single-tenant wrapper).
 func GetWACart(phone string) ([]WACartLine, error) {
+	return GetWACartFor(phone, 0)
+}
+
+// GetWACartFor is tenant-aware.
+func GetWACartFor(phone string, restaurantID int) ([]WACartLine, error) {
+	if database.DB == nil {
+		return nil, nil
+	}
+	rid := ResolveRestaurant(restaurantID)
 	rows, err := database.DB.Query(`
 		SELECT `+waCartColumns+`
 		FROM whatsapp_cart_items wc
 		JOIN menu_items mi ON mi.id = wc.menu_item_id AND mi.restaurant_id = $2
 		LEFT JOIN menu_crusts mc ON mc.slug = wc.crust AND mc.restaurant_id = $2
-		WHERE wc.customer_phone = $1
+		WHERE wc.customer_phone = $1 AND wc.restaurant_id = $2
 		ORDER BY wc.id
-	`, phone, ResolveRestaurant(0))
+	`, phone, rid)
 	if err != nil {
 		return nil, err
 	}
@@ -81,6 +111,9 @@ func GetWACart(phone string) ([]WACartLine, error) {
 
 // RemoveFromWACart deletes one line by id, scoped to the owner.
 func RemoveFromWACart(phone string, lineID int) error {
+	if database.DB == nil {
+		return nil
+	}
 	_, err := database.DB.Exec(
 		`DELETE FROM whatsapp_cart_items WHERE id = $1 AND customer_phone = $2`,
 		lineID, phone)
@@ -89,12 +122,18 @@ func RemoveFromWACart(phone string, lineID int) error {
 
 // ClearWACart empties the customer's cart.
 func ClearWACart(phone string) error {
+	if database.DB == nil {
+		return nil
+	}
 	_, err := database.DB.Exec(`DELETE FROM whatsapp_cart_items WHERE customer_phone = $1`, phone)
 	return err
 }
 
 // WACartCount returns total quantity across lines.
 func WACartCount(phone string) (int, error) {
+	if database.DB == nil {
+		return 0, nil
+	}
 	var n int
 	err := database.DB.QueryRow(
 		`SELECT COALESCE(SUM(quantity),0) FROM whatsapp_cart_items WHERE customer_phone = $1`,

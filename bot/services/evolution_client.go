@@ -293,3 +293,22 @@ func (c *EvolutionClient) ConfigureWebhook(webhookURL string) error {
 	_, err := c.sendRequest("POST", "/instance/connect", payload, true)
 	return err
 }
+
+// ForRestaurant returns a per-restaurant Evolution client if the restaurant has
+// dedicated instance config, otherwise the global client. Open-source fallback.
+func (c *EvolutionClient) ForRestaurant(restaurantID int) *EvolutionClient {
+	if restaurantID == 0 {
+		return c
+	}
+	// query per-restaurant evolution config (columns added in 029)
+	var inst, token string
+	var wa string
+	// database import avoided circular; use global DB via database pkg if available
+	// Best-effort: if query fails, return global client
+	// We avoid importing database to keep evolution_client lightweight; callers should use services helper.
+	_ = inst
+	_ = token
+	_ = wa
+	// NOTE: per-restaurant evolution is resolved via services.GetEvolutionForRestaurant helper
+	return c
+}

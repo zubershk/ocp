@@ -143,6 +143,23 @@ function AppRoutes() {
       <Route path="/r/terms" element={<PageShell><Layout><Terms /></Layout></PageShell>} />
       <Route path="/r/login" element={<PageShell><Layout><Login /></Layout></PageShell>} />
       <Route path="/r/account" element={<PageShell><Layout><Account /></Layout></PageShell>} />
+      {/* Tenant-slug local fallback for open-source multi-tenant: /r/:slug/* */}
+      <Route path="/r/:restaurantSlug" element={<PageShell><Layout><Home /></Layout></PageShell>} />
+      <Route path="/r/:restaurantSlug/menu" element={<PageShell><Layout><Menu /></Layout></PageShell>} />
+      <Route path="/r/:restaurantSlug/menu/item/:id" element={<PageShell><Layout><Product /></Layout></PageShell>} />
+      <Route path="/r/:restaurantSlug/cart" element={<PageShell><Layout><Cart /></Layout></PageShell>} />
+      <Route path="/r/:restaurantSlug/checkout" element={<PageShell><Layout><Checkout /></Layout></PageShell>} />
+      <Route path="/r/:restaurantSlug/order/:id" element={<PageShell><Layout><Order /></Layout></PageShell>} />
+      <Route path="/r/:restaurantSlug/offers" element={<PageShell><Layout><Offers /></Layout></PageShell>} />
+      <Route path="/r/:restaurantSlug/locations" element={<PageShell><Layout><Locations /></Layout></PageShell>} />
+      <Route path="/r/:restaurantSlug/about" element={<PageShell><Layout><About /></Layout></PageShell>} />
+      <Route path="/r/:restaurantSlug/faq" element={<PageShell><Layout><FAQ /></Layout></PageShell>} />
+      <Route path="/r/:restaurantSlug/reviews" element={<PageShell><Layout><Reviews /></Layout></PageShell>} />
+      <Route path="/r/:restaurantSlug/contact" element={<PageShell><Layout><Contact /></Layout></PageShell>} />
+      <Route path="/r/:restaurantSlug/privacy" element={<PageShell><Layout><Privacy /></Layout></PageShell>} />
+      <Route path="/r/:restaurantSlug/terms" element={<PageShell><Layout><Terms /></Layout></PageShell>} />
+      <Route path="/r/:restaurantSlug/login" element={<PageShell><Layout><Login /></Layout></PageShell>} />
+      <Route path="/r/:restaurantSlug/account" element={<PageShell><Layout><Account /></Layout></PageShell>} />
       <Route path="/admin" element={<AdminSuspense><AdminPageShell><Admin /></AdminPageShell></AdminSuspense>} />
       <Route path="/admin/catalog" element={<AdminSuspense><AdminPageShell><AdminCatalog /></AdminPageShell></AdminSuspense>} />
       <Route path="/admin/chats" element={<AdminSuspense><AdminPageShell><AdminLiveChat /></AdminPageShell></AdminSuspense>} />

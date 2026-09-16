@@ -118,7 +118,7 @@ func TestStagingCashierFlow(t *testing.T) {
 	// 1. Create: 2x medium (500) + crust (50) => 2 x 550 = 1100.
 	order, err := svc.CreateOrder(st.restID, st.outID, []DraftItem{
 		{MenuItemID: st.itemID, Size: "medium", Crust: st.crust, Quantity: 2},
-		}, 0, SourcePOS, "dine_in")
+	}, 0, SourcePOS, "dine_in")
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -201,7 +201,10 @@ func TestStagingCashierFlow(t *testing.T) {
 	}
 	for name, fn := range map[string]func() error{
 		"complete again": func() error { return svc.CompleteOrder(order.ID, st.restID, st.outID) },
-		"pay completed":  func() error { _, _, _, err := svc.TakePayment(order.ID, st.restID, st.outID, "cash", 100, 100, "", st.userID, ""); return err },
+		"pay completed": func() error {
+			_, _, _, err := svc.TakePayment(order.ID, st.restID, st.outID, "cash", 100, 100, "", st.userID, "")
+			return err
+		},
 		"hold completed": func() error { _, err := svc.HoldOrder(order.ID, st.restID, st.outID, st.userID, "x"); return err },
 		"discount done":  func() error { return RemoveDiscountFromOrder(order.ID, st.restID, st.outID) },
 	} {
@@ -236,7 +239,7 @@ func TestStagingPaymentIdempotency(t *testing.T) {
 
 	order, err := svc.CreateOrder(st.restID, st.outID, []DraftItem{
 		{MenuItemID: st.itemID, Quantity: 1},
-		}, 0, SourcePOS, "dine_in")
+	}, 0, SourcePOS, "dine_in")
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -275,7 +278,7 @@ func TestStagingTenantIsolation(t *testing.T) {
 
 	order, err := svc.CreateOrder(a.restID, a.outID, []DraftItem{
 		{MenuItemID: a.itemID, Quantity: 1},
-		}, 0, SourcePOS, "dine_in")
+	}, 0, SourcePOS, "dine_in")
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -418,7 +421,7 @@ func TestStagingStateMachine(t *testing.T) {
 
 	order, err := svc.CreateOrder(st.restID, st.outID, []DraftItem{
 		{MenuItemID: st.itemID, Quantity: 1},
-		}, 0, SourcePOS, "dine_in")
+	}, 0, SourcePOS, "dine_in")
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}

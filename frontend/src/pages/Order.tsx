@@ -24,6 +24,13 @@ export default function Order() {
   const titleRef = useGsapFadeIn({ y: 16 });
   const restaurantPhone = useRestaurantPhone();
   const deliveryHours = useDeliveryHours();
+  const [rating, setRating] = useState(0);
+  const [hoverRating, setHoverRating] = useState(0);
+  const [reviewTitle, setReviewTitle] = useState('');
+  const [reviewBody, setReviewBody] = useState('');
+  const [itemRatings, setItemRatings] = useState<Record<string, number>>({});
+  const [reviewState, setReviewState] = useState<'idle' | 'sending' | 'done' | 'error'>('idle');
+  const [reviewError, setReviewError] = useState('');
 
   // Real-time polling: refetch every 10s if order is still active
   useEffect(() => {
@@ -68,14 +75,6 @@ export default function Order() {
   }
   const fmtTime = (iso?: string) =>
     iso ? new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : undefined;
-
-  const [rating, setRating] = useState(0);
-  const [hoverRating, setHoverRating] = useState(0);
-  const [reviewTitle, setReviewTitle] = useState('');
-  const [reviewBody, setReviewBody] = useState('');
-  const [itemRatings, setItemRatings] = useState<Record<string, number>>({});
-  const [reviewState, setReviewState] = useState<'idle' | 'sending' | 'done' | 'error'>('idle');
-  const [reviewError, setReviewError] = useState('');
 
   const submitReview = async () => {
     if (rating < 1) { setReviewError('Please tap a star rating first.'); return; }

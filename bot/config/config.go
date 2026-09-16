@@ -25,6 +25,16 @@ type Config struct {
 	CORSAllowedOrigins       string
 	WebhookSecret            string
 	PublicBaseURL            string
+	// SaaS
+	TrustedProxies  string
+	SingleTenant    bool
+	BillingEnabled  bool
+	RedisURL        string
+	OTPPepper       string
+	RazorpayKeyID   string
+	RazorpaySecret  string
+	RazorpayWebhook string
+	BaseDomain      string
 }
 
 func Load() *Config {
@@ -50,6 +60,15 @@ func Load() *Config {
 		CORSAllowedOrigins:       getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173"),
 		WebhookSecret:            getEnv("EVOLUTION_WEBHOOK_SECRET", ""),
 		PublicBaseURL:            strings.TrimRight(getEnv("PUBLIC_BASE_URL", ""), "/"),
+		TrustedProxies:           getEnv("TRUSTED_PROXIES", ""),
+		SingleTenant:             strings.EqualFold(getEnv("SINGLE_TENANT_MODE", "true"), "true") || getEnv("SINGLE_TENANT_MODE", "true") == "1",
+		BillingEnabled:           false, // open-source only; SaaS billing disabled (enable via code change)
+		RedisURL:                 getEnv("REDIS_URL", ""),
+		OTPPepper:                getEnv("OTP_PEPPER", getEnv("BOT_ADMIN_KEY", "")),
+		RazorpayKeyID:            getEnv("RAZORPAY_KEY_ID", ""),
+		RazorpaySecret:           getEnv("RAZORPAY_KEY_SECRET", ""),
+		RazorpayWebhook:          getEnv("RAZORPAY_WEBHOOK_SECRET", ""),
+		BaseDomain:               strings.TrimSpace(getEnv("BASE_DOMAIN", "ocp.app")),
 	}
 }
 
