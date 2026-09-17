@@ -84,10 +84,10 @@ func TestTenantIsolationMatrix(t *testing.T) {
 	_ = database.DB.QueryRow(`INSERT INTO menu_items (category_id, name, slug, price, available, active, restaurant_id) VALUES ($1,'Item','item-a',100,true,true,$2) RETURNING id`, catA, restA).Scan(&itemA)
 	_ = database.DB.QueryRow(`INSERT INTO menu_items (category_id, name, slug, price, available, active, restaurant_id) VALUES ($1,'Item','item-b',100,true,true,$2) RETURNING id`, catB, restB).Scan(&itemB)
 	if itemA != 0 && itemB != 0 {
-		if _, err := database.DB.Exec(`INSERT INTO whatsapp_cart_items (customer_phone, menu_item_id, size, crust, quantity, unit_price, restaurant_id) VALUES ($1,$2,'','','',1,100,$3)`, phone, itemA, restA); err != nil {
+		if _, err := database.DB.Exec(`INSERT INTO whatsapp_cart_items (customer_phone, menu_item_id, size, crust, quantity, unit_price, restaurant_id) VALUES ($1,$2,'','',1,100,$3)`, phone, itemA, restA); err != nil {
 			t.Fatalf("wa cart A: %v", err)
 		}
-		if _, err := database.DB.Exec(`INSERT INTO whatsapp_cart_items (customer_phone, menu_item_id, size, crust, quantity, unit_price, restaurant_id) VALUES ($1,$2,'','','',1,100,$3)`, phone, itemB, restB); err != nil {
+		if _, err := database.DB.Exec(`INSERT INTO whatsapp_cart_items (customer_phone, menu_item_id, size, crust, quantity, unit_price, restaurant_id) VALUES ($1,$2,'','',1,100,$3)`, phone, itemB, restB); err != nil {
 			t.Fatalf("wa cart B same phone should be independent per tenant but got: %v", err)
 		}
 		var ca, cb int
