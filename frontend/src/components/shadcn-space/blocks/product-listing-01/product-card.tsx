@@ -138,11 +138,11 @@ export function ProductCard({
           </div>
           <div className="flex items-center gap-2">
             <small className="text-lg font-medium text-foreground">
-              ${price}
+              ₹{price}
             </small>
             {originalPrice && (
               <small className="text-lg font-medium text-muted-foreground line-through">
-                ${originalPrice}
+                ₹{originalPrice}
               </small>
             )}
           </div>
