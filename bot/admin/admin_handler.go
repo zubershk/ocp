@@ -670,14 +670,12 @@ func (h *AdminHandler) CreateCategory(c *gin.Context) {
 	c.JSON(http.StatusCreated, cat)
 }
 
-// UploadImage handles POST /admin/upload (multipart, admin only) — tenant-aware media.
+// UploadImage handles POST /admin/upload — strict tenant-only.
 func (h *AdminHandler) UploadImage(c *gin.Context) {
-	rid, _ := services.RequireRestaurant(c)
-	if rid == 0 {
-		rid = services.ResolveRestaurant(c.GetInt("restaurantID"))
-	}
-	if rid == 0 {
-		rid = services.DefaultRestaurantID()
+	rid, _, errStrict := services.RequireTenant(c)
+	if errStrict != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "tenant required"})
+		return
 	}
 	file, header, err := c.Request.FormFile("image")
 	if err != nil {
