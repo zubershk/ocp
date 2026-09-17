@@ -118,7 +118,7 @@ func (h *ReviewHandler) CreateReview(c *gin.Context) {
 				rating=EXCLUDED.rating, approved=false, created_at=CURRENT_TIMESTAMP
 		`, req.OrderID, strings.TrimSpace(ir.ItemSlug), ord.Name, ord.Phone, ir.Rating, ord.RestaurantID)
 	}
-	services.BroadcastRealtime("review.created", map[string]interface{}{"order_id": req.OrderID})
+	services.BroadcastRealtimeFor(ord.RestaurantID, 0, 0, "review.created", map[string]interface{}{"order_id": req.OrderID, "restaurant_id": ord.RestaurantID})
 	c.JSON(http.StatusCreated, gin.H{"saved": true})
 }
 

@@ -314,8 +314,8 @@ func (s *OrderService) CreateOrder(order *models.Order) error {
 	if err := tx.Commit(); err != nil {
 		return err
 	}
-	BroadcastRealtime("order.created", map[string]interface{}{
-		"order_id": order.ID, "order_number": order.OrderNumber, "total": order.Total,
+	BroadcastRealtimeFor(order.RestaurantID, order.OutletID, 0, "order.created", map[string]interface{}{
+		"order_id": order.ID, "order_number": order.OrderNumber, "total": order.Total, "restaurant_id": order.RestaurantID, "outlet_id": order.OutletID,
 	})
 	return nil
 }

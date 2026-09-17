@@ -1404,24 +1404,28 @@ func (h *AdminHandler) SendChatMessage(c *gin.Context) {
 		return
 	}
 	body := strings.TrimSpace(req.Body)
-	// Ensure customer exists and put conversation in human mode
-	cust, err := services.GetOrCreateCustomer(phone)
+	rid, _, _ := services.RequireTenant(c)
+	if rid == 0 {
+		rid = services.ResolveRestaurant(c.GetInt("restaurantID"))
+	}
+	cust, err := services.GetOrCreateCustomerFor(phone, rid)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
 	}
-	// Send via Evolution (human) — ensure 91 prefix for India
+	// Send via Evolution per-restaurant
 	dest := phone
 	if len(phone) == 10 {
 		dest = "91" + phone
 	}
-	if err := h.evolutionClient.SendText(dest, body); err != nil {
+	evClient := h.evolutionClient.ForRestaurant(rid)
+	if err := evClient.SendText(dest, body); err != nil {
 		log.Printf("[admin] WhatsApp send failed: %v", err)
 		c.JSON(http.StatusBadGateway, gin.H{"error": "failed to send message"})
 		return
 	}
-	_ = services.SaveWhatsAppMessage(phone, "out", body, "")
-	services.BroadcastRealtime("chat.message", map[string]interface{}{"phone": phone, "dir": "out"})
+	_ = services.SaveWhatsAppMessageFor(phone, "out", body, "", rid)
+	services.BroadcastRealtimeFor(rid, 0, c.GetInt("orgID"), "chat.message", map[string]interface{}{"phone": phone, "dir": "out", "restaurant_id": rid})
 	// Mark takeover so bot pauses
 	if cust != nil {
 		_ = services.SetConversationState(phone, "HUMAN_SUPPORT")
