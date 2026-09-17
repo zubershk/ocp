@@ -101,7 +101,7 @@ func TestTenantIsolationMatrix(t *testing.T) {
 			t.Fatalf("cross-tenant cart leak")
 		}
 	}
-	// 6. realtime outlet isolation (restaurant+outlet filter)
+	// 6. realtime outlet isolation (restaurant+outlet filter) — cross-restaurant
 	chA := make(chan realtimeEvent, 2)
 	chB := make(chan realtimeEvent, 2)
 	hub.mu.Lock()
@@ -125,6 +125,61 @@ func TestTenantIsolationMatrix(t *testing.T) {
 	close(chA)
 	close(chB)
 	hub.mu.Unlock()
+	// 6b. same-restaurant outlet isolation
+	var outA2 int
+	_ = database.DB.QueryRow(`INSERT INTO outlets (restaurant_id, name, slug, active, sort_order) VALUES ($1,'Second Outlet','second',true,1) RETURNING id`, restA).Scan(&outA2)
+	if outA2 != 0 {
+		chA1 := make(chan realtimeEvent, 2)
+		chA2 := make(chan realtimeEvent, 2)
+		chBRest := make(chan realtimeEvent, 2)
+		hub.mu.Lock()
+		hub.subs[chA1] = &realtimeSub{ch: chA1, restaurantID: restA, outletID: outA, orgID: orgA}
+		hub.subs[chA2] = &realtimeSub{ch: chA2, restaurantID: restA, outletID: outA2, orgID: orgA}
+		hub.subs[chBRest] = &realtimeSub{ch: chBRest, restaurantID: restB, outletID: outB, orgID: orgB}
+		hub.mu.Unlock()
+		BroadcastRealtimeFor(restA, outA, orgA, "test.outlet", map[string]interface{}{"x": 1})
+		select {
+		case <-chA1:
+		default:
+			t.Fatalf("A/outA should receive own outlet event")
+		}
+		select {
+		case ev := <-chA2:
+			t.Fatalf("A/outB must NOT receive A/outA event, got %+v", ev)
+		default:
+		}
+		select {
+		case ev := <-chBRest:
+			t.Fatalf("B must not receive A event, got %+v", ev)
+		default:
+		}
+		// restaurant-wide (outlet 0) should fan to both outlets in same restaurant
+		BroadcastRealtimeFor(restA, 0, orgA, "test.restaurant", map[string]interface{}{"x": 1})
+		select {
+		case <-chA1:
+		default:
+			t.Fatalf("A/outA should receive restaurant-wide")
+		}
+		select {
+		case <-chA2:
+		default:
+			t.Fatalf("A/outB should receive restaurant-wide")
+		}
+		select {
+		case ev := <-chBRest:
+			t.Fatalf("B must not receive A restaurant-wide, got %+v", ev)
+		default:
+		}
+		hub.mu.Lock()
+		delete(hub.subs, chA1)
+		delete(hub.subs, chA2)
+		delete(hub.subs, chBRest)
+		close(chA1)
+		close(chA2)
+		close(chBRest)
+		hub.mu.Unlock()
+		_, _ = database.DB.Exec(`DELETE FROM outlets WHERE id=$1`, outA2)
+	}
 	// 7. domain isolation: same slug+domain per tenant already proven via provision, verify lookup
 	var domCnt int
 	_ = database.DB.QueryRow(`SELECT COUNT(*) FROM domains WHERE domain=$1 AND restaurant_id=$2`, fmt.Sprintf("iso-a-%d.ocp.app", 1000000000000), restA).Scan(&domCnt)
