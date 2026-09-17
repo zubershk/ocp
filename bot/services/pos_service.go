@@ -30,12 +30,12 @@ type PriceBreakdown struct {
 
 // CanonicalPriceResult is returned by the shared pricing resolver.
 type CanonicalPriceResult struct {
-	Subtotal      int64
-	Discount      int64
-	Tax           int64
-	Total         int64
-	ItemCount     int
-	DiscountType  string // "percent", "flat", or "none"
+	Subtotal     int64
+	Discount     int64
+	Tax          int64
+	Total        int64
+	ItemCount    int
+	DiscountType string // "percent", "flat", or "none"
 }
 
 // rounding rounds a float64 price (in rupees) to the nearest paise.
@@ -123,7 +123,7 @@ func Discount(subtotalPaise int64, discountType string, discountValue int64) (ne
 			return 0, 0, false
 		}
 		// percent of subtotal
-		 DiscAmount := (subtotalPaise * discountValue) / 10000
+		DiscAmount := (subtotalPaise * discountValue) / 10000
 		newSubtotal := subtotalPaise - DiscAmount
 		if newSubtotal < 0 {
 			newSubtotal = 0
@@ -172,7 +172,7 @@ func ResolvePriceBreakdown(item *models.MenuItem, size string, crustSlug string,
 	total := subtotalAfterDiscount + taxAmount
 
 	return PriceBreakdown{
-		Subtotal:       base,             // original base before discount (paise)
+		Subtotal:       base,           // original base before discount (paise)
 		DiscountAmount: discountAmount, // discount subtracted (paise)
 		TaxAmount:      taxAmount,      // tax added (paise)
 		Total:          total,          // final total (paise)
@@ -385,20 +385,20 @@ type DraftItem struct {
 
 // PriceSummary is the summary shown to the cashier before payment.
 type PriceSummary struct {
-	Subtotal      int64 // paise
-	Discount      int64 // paise (negative = discount)
-	Tax           int64 // paise
-	Total         int64 // paise
-	ItemCount     int
+	Subtotal  int64 // paise
+	Discount  int64 // paise (negative = discount)
+	Tax       int64 // paise
+	Total     int64 // paise
+	ItemCount int
 }
 
 // OrderHoldInfo records why an order is held and by whom.
 type OrderHoldInfo struct {
-	OrderID     int
-	HoldReason  string // "manual", "kitchen", "pending_payment", etc.
-	HoldedBy    int    // user ID
-	HoldedAt    time.Time
-	Version     int // optimistic concurrency version
+	OrderID    int
+	HoldReason string // "manual", "kitchen", "pending_payment", etc.
+	HoldedBy   int    // user ID
+	HoldedAt   time.Time
+	Version    int // optimistic concurrency version
 }
 
 // loadOrderForMutation loads an order's status after verifying it

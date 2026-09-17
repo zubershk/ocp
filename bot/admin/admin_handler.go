@@ -220,14 +220,14 @@ func (h *AdminHandler) ListCustomers(c *gin.Context) {
 	defer rows.Close()
 
 	type custResp struct {
-		ID             int     `json:"id"`
-		Phone          string  `json:"phone"`
-		Name           string  `json:"name"`
-		Email          string  `json:"email"`
-		TotalOrders    int     `json:"total_orders"`
-		TotalSpent     float64 `json:"total_spent"`
-		CreatedAt      string  `json:"created_at"`
-		LastSeenAt     *string `json:"last_seen_at"`
+		ID          int     `json:"id"`
+		Phone       string  `json:"phone"`
+		Name        string  `json:"name"`
+		Email       string  `json:"email"`
+		TotalOrders int     `json:"total_orders"`
+		TotalSpent  float64 `json:"total_spent"`
+		CreatedAt   string  `json:"created_at"`
+		LastSeenAt  *string `json:"last_seen_at"`
 	}
 	var list []custResp
 	for rows.Next() {
@@ -670,8 +670,13 @@ func (h *AdminHandler) CreateCategory(c *gin.Context) {
 	c.JSON(http.StatusCreated, cat)
 }
 
-// UploadImage handles POST /admin/upload (multipart, admin only) — SaaS media for menu images.
+// UploadImage handles POST /admin/upload — strict tenant-only.
 func (h *AdminHandler) UploadImage(c *gin.Context) {
+	rid, _, errStrict := services.RequireTenant(c)
+	if errStrict != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "tenant required"})
+		return
+	}
 	file, header, err := c.Request.FormFile("image")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "image file required (field 'image')"})
@@ -692,32 +697,42 @@ func (h *AdminHandler) UploadImage(c *gin.Context) {
 	ct := http.DetectContentType(buf[:n])
 	allowed := map[string]string{
 		"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp",
-		"image/gif": ".gif", "image/bmp": ".bmp", "image/svg+xml": ".svg",
+		"image/gif": ".gif", "image/bmp": ".bmp",
 		"image/x-icon": ".ico", "image/vnd.microsoft.icon": ".ico",
 		"image/avif": ".avif", "image/heic": ".heic", "image/heif": ".heif",
 		"image/tiff": ".tiff",
 	}
+	// block SVG (stored XSS) for open-source hardening
+	if ct == "image/svg+xml" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "SVG uploads are not allowed"})
+		return
+	}
 	ext, ok := allowed[ct]
 	if !ok {
-		// fall back to the client-provided extension for any other image/* type
 		if len(ct) > 6 && ct[:6] == "image/" {
 			feo := filepath.Ext(header.Filename)
 			if feo == "" {
 				feo = ".jpg"
 			}
-			ext = feo
+			ext = strings.ToLower(feo)
+			if ext == ".svg" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "SVG uploads are not allowed"})
+				return
+			}
 		} else {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "file is not an image"})
 			return
 		}
 	}
-	// ensure dir
+	// tenant-aware dir: ./uploads/<restaurant_id>/
 	dir := "./uploads"
+	if rid != 0 {
+		dir = fmt.Sprintf("./uploads/%d", rid)
+	}
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot create upload dir"})
 		return
 	}
-	// random name
 	rnd := make([]byte, 8)
 	if _, err := rand.Read(rnd); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot generate filename"})
@@ -735,14 +750,30 @@ func (h *AdminHandler) UploadImage(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save image"})
 		return
 	}
-	// return path usable via GET /uploads/<name> (proxied + static)
-	auditLog(c, "upload_image", name, map[string]interface{}{"url": "/uploads/" + name})
-	c.JSON(http.StatusOK, gin.H{"url": "/uploads/" + name, "filename": name})
+	// return path usable via GET /uploads/<restaurant_id>/<name> — also support legacy /uploads/<name>
+	url := fmt.Sprintf("/uploads/%d/%s", rid, name)
+	// also symlink/copy fallback? keep legacy compat: also ensure global lookup works via static
+	auditLog(c, "upload_image", name, map[string]interface{}{"url": url, "restaurant_id": rid})
+	c.JSON(http.StatusOK, gin.H{"url": url, "filename": name})
 }
 
-// ListUploads returns the media library (files in ./uploads).
+// tenantUploadDir is the only way to build an upload path (fail-closed).
+func tenantUploadDir(rid int) (string, error) {
+	if rid <= 0 {
+		return "", fmt.Errorf("tenant required")
+	}
+	return fmt.Sprintf("./uploads/%d", rid), nil
+}
+
+// ListUploads returns the media library (files in ./uploads/<restaurant_id>).
 func (h *AdminHandler) ListUploads(c *gin.Context) {
-	entries, err := os.ReadDir("./uploads")
+	rid, _, err := services.RequireTenant(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "tenant required"})
+		return
+	}
+	dir, _ := tenantUploadDir(rid)
+	entries, err := os.ReadDir(dir)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"files": []interface{}{}})
 		return
@@ -756,11 +787,19 @@ func (h *AdminHandler) ListUploads(c *gin.Context) {
 		if err != nil {
 			continue
 		}
+		// tenant-aware URL
+		url := fmt.Sprintf("/uploads/%d/%s", rid, e.Name())
+		// legacy files are at /uploads/<name> — keep both reachable but list as legacy url
+		if entries != nil {
+			if _, statErr := os.Stat(fmt.Sprintf("./uploads/%d/%s", rid, e.Name())); statErr != nil {
+				url = "/uploads/" + e.Name()
+			}
+		}
 		out = append(out, map[string]interface{}{
 			"name": e.Name(), "size": info.Size(),
-			"modified":    info.ModTime().UTC().Format(time.RFC3339),
-			"url":         "/uploads/" + e.Name(),
-			"referenced":  h.uploadReferenced(e.Name(), services.ResolveRestaurant(c.GetInt("restaurantID"))),
+			"modified":   info.ModTime().UTC().Format(time.RFC3339),
+			"url":        url,
+			"referenced": h.uploadReferenced(e.Name(), rid),
 		})
 	}
 	c.JSON(http.StatusOK, gin.H{"files": out})
@@ -782,11 +821,17 @@ func (h *AdminHandler) uploadReferenced(name string, restaurantID int) bool {
 // DeleteUpload removes an uploaded file (DB references left for admin to fix).
 func (h *AdminHandler) DeleteUpload(c *gin.Context) {
 	name := c.Param("name")
-	if name == "" || name != filepath.Base(name) || strings.Contains(name, "..") {
+	if name == "" || filepath.Base(name) != name || strings.Contains(name, "..") {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid filename"})
 		return
 	}
-	p := filepath.Join("./uploads", name)
+	rid, _, errStrict := services.RequireTenant(c)
+	if errStrict != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "tenant required"})
+		return
+	}
+	p, _ := tenantUploadDir(rid)
+	p = filepath.Join(p, name)
 	if _, err := os.Stat(p); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
 		return
@@ -795,7 +840,7 @@ func (h *AdminHandler) DeleteUpload(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete file"})
 		return
 	}
-	auditLog(c, "delete_upload", name, nil)
+	auditLog(c, "delete_upload", name, map[string]interface{}{"restaurant_id": rid})
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
@@ -1359,24 +1404,28 @@ func (h *AdminHandler) SendChatMessage(c *gin.Context) {
 		return
 	}
 	body := strings.TrimSpace(req.Body)
-	// Ensure customer exists and put conversation in human mode
-	cust, err := services.GetOrCreateCustomer(phone)
+	rid, _, _ := services.RequireTenant(c)
+	if rid == 0 {
+		rid = services.ResolveRestaurant(c.GetInt("restaurantID"))
+	}
+	cust, err := services.GetOrCreateCustomerFor(phone, rid)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
 	}
-	// Send via Evolution (human) — ensure 91 prefix for India
+	// Send via Evolution per-restaurant
 	dest := phone
 	if len(phone) == 10 {
 		dest = "91" + phone
 	}
-	if err := h.evolutionClient.SendText(dest, body); err != nil {
+	evClient := h.evolutionClient.ForRestaurant(rid)
+	if err := evClient.SendText(dest, body); err != nil {
 		log.Printf("[admin] WhatsApp send failed: %v", err)
 		c.JSON(http.StatusBadGateway, gin.H{"error": "failed to send message"})
 		return
 	}
-	_ = services.SaveWhatsAppMessage(phone, "out", body, "")
-	services.BroadcastRealtime("chat.message", map[string]interface{}{"phone": phone, "dir": "out"})
+	_ = services.SaveWhatsAppMessageFor(phone, "out", body, "", rid)
+	services.BroadcastRealtimeFor(rid, 0, c.GetInt("orgID"), "chat.message", map[string]interface{}{"phone": phone, "dir": "out", "restaurant_id": rid})
 	// Mark takeover so bot pauses
 	if cust != nil {
 		_ = services.SetConversationState(phone, "HUMAN_SUPPORT")
@@ -1628,12 +1677,12 @@ func (h *AdminHandler) GetAnalytics(c *gin.Context) {
 		}
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"today": gin.H{"revenue": todayRevenue, "orders": todayCount},
-		"week":  gin.H{"revenue": weekRevenue, "orders": weekCount},
+		"today":     gin.H{"revenue": todayRevenue, "orders": todayCount},
+		"week":      gin.H{"revenue": weekRevenue, "orders": weekCount},
 		"by_status": statusMap,
 		"top_items": top,
-		"by_day": byDay,
-		"by_hour": byHour,
+		"by_day":    byDay,
+		"by_hour":   byHour,
 	})
 }
 
@@ -2228,10 +2277,10 @@ func (h *AdminHandler) GetCrustsAdmin(c *gin.Context) {
 	defer rows.Close()
 
 	type Crust struct {
-		ID          int     `json:"id"`
-		Slug        string  `json:"slug"`
-		Name        string  `json:"name"`
-		Description string  `json:"description"`
+		ID           int     `json:"id"`
+		Slug         string  `json:"slug"`
+		Name         string  `json:"name"`
+		Description  string  `json:"description"`
 		PriceRegular float64 `json:"price_regular"`
 		PriceMedium  float64 `json:"price_medium"`
 		PriceLarge   float64 `json:"price_large"`

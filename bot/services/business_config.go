@@ -2,7 +2,6 @@ package services
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -32,17 +31,17 @@ type PaymentMethod struct {
 }
 
 type BusinessConfig struct {
-	OrderPrefix     string            `json:"order_prefix"`
-	DeliveryFee     float64           `json:"delivery_fee"`
-	MinOrderAmount  float64           `json:"min_order_amount"`
-	Sizes           []SizeOption      `json:"sizes"`
-	PaymentMethods  []PaymentMethod   `json:"payment_methods"`
-	CategoryIcons   map[string]string `json:"category_icons"`
-	KitchenHours    string            `json:"kitchen_hours"`
-	DeliveryHours   string            `json:"delivery_hours"`
-	BusinessType    string            `json:"business_type"`
-	CurrencySymbol  string            `json:"currency_symbol"`
-	TaxLabel        string            `json:"tax_label"`
+	OrderPrefix    string            `json:"order_prefix"`
+	DeliveryFee    float64           `json:"delivery_fee"`
+	MinOrderAmount float64           `json:"min_order_amount"`
+	Sizes          []SizeOption      `json:"sizes"`
+	PaymentMethods []PaymentMethod   `json:"payment_methods"`
+	CategoryIcons  map[string]string `json:"category_icons"`
+	KitchenHours   string            `json:"kitchen_hours"`
+	DeliveryHours  string            `json:"delivery_hours"`
+	BusinessType   string            `json:"business_type"`
+	CurrencySymbol string            `json:"currency_symbol"`
+	TaxLabel       string            `json:"tax_label"`
 	// WhatsApp browsing experience ( pointers: nil = default ).
 	WhatsappLists  *bool  `json:"whatsapp_lists,omitempty"`
 	WhatsappPhotos *bool  `json:"whatsapp_photos,omitempty"`
@@ -76,18 +75,29 @@ func (c *BusinessConfig) GetPublicBaseURL() string {
 
 var globalBizCfg *BusinessConfig
 var bizCfgMu sync.RWMutex
+var bizCfgCache = map[int]*BusinessConfig{}
+var bizCacheMu sync.RWMutex
 
 func LoadBusinessConfig() *BusinessConfig {
 	return LoadBusinessConfigFor(0)
 }
 
 // LoadBusinessConfigFor loads one restaurant's config (0 = default).
-// The process-wide cache always tracks the default restaurant used by
-// the bot runtime; admin reads go through GetBusinessConfig below.
+// Per-tenant LRU-style map cache (bounded by restaurant count, not unbounded).
 func LoadBusinessConfigFor(restaurantID int) *BusinessConfig {
+	if database.DB == nil {
+		return defaultBusinessConfig()
+	}
 	rid := ResolveRestaurant(restaurantID)
-	bizCfgMu.Lock()
-	defer bizCfgMu.Unlock()
+	// fast path cache
+	bizCacheMu.RLock()
+	if cached, ok := bizCfgCache[rid]; ok {
+		bizCacheMu.RUnlock()
+		// still return copy to prevent mutation
+		out := *cached
+		return &out
+	}
+	bizCacheMu.RUnlock()
 
 	var raw []byte
 	err := database.DB.QueryRow(
@@ -96,15 +106,31 @@ func LoadBusinessConfigFor(restaurantID int) *BusinessConfig {
 	).Scan(&raw)
 	if err != nil {
 		log.Printf("[BusinessConfig] failed to load from DB: %v (using defaults)", err)
-		globalBizCfg = defaultBusinessConfig()
-		return globalBizCfg
+		cfg := defaultBusinessConfig()
+		bizCacheMu.Lock()
+		bizCfgCache[rid] = cfg
+		bizCacheMu.Unlock()
+		if rid == ResolveRestaurant(0) {
+			bizCfgMu.Lock()
+			globalBizCfg = cfg
+			bizCfgMu.Unlock()
+		}
+		return cfg
 	}
 
 	var cfg BusinessConfig
 	if err := json.Unmarshal(raw, &cfg); err != nil {
 		log.Printf("[BusinessConfig] JSON parse error: %v (using defaults)", err)
-		globalBizCfg = defaultBusinessConfig()
-		return globalBizCfg
+		cfg2 := defaultBusinessConfig()
+		bizCacheMu.Lock()
+		bizCfgCache[rid] = cfg2
+		bizCacheMu.Unlock()
+		if rid == ResolveRestaurant(0) {
+			bizCfgMu.Lock()
+			globalBizCfg = cfg2
+			bizCfgMu.Unlock()
+		}
+		return cfg2
 	}
 
 	// Apply defaults for empty fields
@@ -136,9 +162,13 @@ func LoadBusinessConfigFor(restaurantID int) *BusinessConfig {
 		cfg.CategoryIcons = defaultBusinessConfig().CategoryIcons
 	}
 
+	bizCacheMu.Lock()
+	bizCfgCache[rid] = &cfg
+	bizCacheMu.Unlock()
 	if rid == ResolveRestaurant(0) {
+		bizCfgMu.Lock()
 		globalBizCfg = &cfg
-		return globalBizCfg
+		bizCfgMu.Unlock()
 	}
 	out := cfg
 	return &out
@@ -159,9 +189,30 @@ func GetBizConfig() *BusinessConfig {
 	return globalBizCfg
 }
 
+func GetBizConfigFor(restaurantID int) *BusinessConfig {
+	if restaurantID == 0 {
+		return GetBizConfig()
+	}
+	bizCacheMu.RLock()
+	if c, ok := bizCfgCache[restaurantID]; ok {
+		bizCacheMu.RUnlock()
+		out := *c
+		return &out
+	}
+	bizCacheMu.RUnlock()
+	return LoadBusinessConfigFor(restaurantID)
+}
+
 // ReloadBizConfig refreshes the in-memory config from DB.
 func ReloadBizConfig() {
 	LoadBusinessConfig()
+}
+
+// InvalidateBizCache clears per-tenant cache (for tests).
+func InvalidateBizCache(restaurantID int) {
+	bizCacheMu.Lock()
+	delete(bizCfgCache, restaurantID)
+	bizCacheMu.Unlock()
 }
 
 // SaveBusinessConfig persists the config to DB and refreshes cache.
@@ -171,16 +222,18 @@ func SaveBusinessConfig(cfg *BusinessConfig, restaurantID int) error {
 	if err != nil {
 		return err
 	}
-	res, err := database.DB.Exec(
-		`UPDATE site_settings SET value = $1::jsonb, updated_at = NOW() WHERE key = 'bot_config' AND restaurant_id = $2`,
+	// upsert rather than pure UPDATE so fresh tenant bootstraps don't 404
+	_, err = database.DB.Exec(
+		`INSERT INTO site_settings (key, value, restaurant_id) VALUES ('bot_config', $1::jsonb, $2)
+		 ON CONFLICT (key, restaurant_id) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
 		string(raw), rid,
 	)
 	if err != nil {
 		return err
 	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		return fmt.Errorf("business config not found")
-	}
+	bizCacheMu.Lock()
+	bizCfgCache[rid] = cfg
+	bizCacheMu.Unlock()
 	if rid == ResolveRestaurant(0) {
 		bizCfgMu.Lock()
 		globalBizCfg = cfg

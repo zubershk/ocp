@@ -10,17 +10,49 @@ jobs:
   # ── Go bot ──
   bot:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: ocp
+          POSTGRES_USER: ocp
+          POSTGRES_PASSWORD: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.21"
+          go-version: "1.25"
       - name: Build bot
         working-directory: bot
         run: go build -v ./...
       - name: Vet bot
         working-directory: bot
         run: go vet ./...
+      - name: Test bot (strict tenant isolation)
+        working-directory: bot
+        env:
+          SINGLE_TENANT_MODE: "0"
+          OCP_TEST_DATABASE_URL: postgresql://ocp:test@localhost:5432/ocp?sslmode=disable
+          BOT_DATABASE_URL: postgresql://ocp:test@localhost:5432/ocp?sslmode=disable
+        run: go test -p 1 ./... -count=1
+      - name: Guard no implicit tenant fallback on request paths
+        working-directory: bot
+        run: |
+          echo "Checking for ResolveRestaurant(0) on SaaS handlers..."
+          if grep -R "ResolveRestaurant(0)" --include="*.go" handlers | grep -q "ResolveRestaurant(0)"; then
+            echo "Found disallowed ResolveRestaurant(0) on request path handler"
+            grep -R "ResolveRestaurant(0)" --include="*.go" handlers
+            exit 1
+          fi
+          echo "Handler guard passed"
+          echo "Service wrapper fallbacks (tenant.go, bot_message, business_config) are allowlisted for open-source single-tenant compat"
 
   # ── Frontend ──
   frontend:
@@ -38,6 +70,9 @@ jobs:
       - name: Build
         working-directory: frontend
         run: npm run build
+      - name: Lint
+        working-directory: frontend
+        run: npm run lint
 
   # ── Campaign runner ──
   campaign:

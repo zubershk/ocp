@@ -94,8 +94,8 @@ func (c *conversation) reset(state string) {
 // per-customer locks serialize rapid taps; different customers stay independent.
 var custLocks = struct {
 	sync.Mutex
-	m     map[string]*sync.Mutex
-	ages  map[string]time.Time
+	m    map[string]*sync.Mutex
+	ages map[string]time.Time
 }{m: map[string]*sync.Mutex{}, ages: map[string]time.Time{}}
 
 func lockFor(phone string) *sync.Mutex {
@@ -258,9 +258,9 @@ func (e *ConversationEngine) route(cust *Customer, conv *conversation, phone, in
 			rowID := ids[n-1]
 			delete(conv.Context, "pending_ids")
 			_ = conv.save()
-		if !e.handleSelection(cust, conv, phone, rowID) {
-			return e.msg("unknown_input", map[string]interface{}{"Options": "That option is no longer available. Type 'menu'."})
-		}
+			if !e.handleSelection(cust, conv, phone, rowID) {
+				return e.msg("unknown_input", map[string]interface{}{"Options": "That option is no longer available. Type 'menu'."})
+			}
 			return ""
 		}
 	}

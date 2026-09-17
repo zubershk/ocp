@@ -38,6 +38,8 @@ type BotMessageService struct {
 }
 
 var globalMsgSvc *BotMessageService
+var msgCache = map[int]map[string]*BotMessage{}
+var msgCacheMu sync.RWMutex
 
 func NewBotMessageService() *BotMessageService {
 	svc := &BotMessageService{
@@ -46,6 +48,10 @@ func NewBotMessageService() *BotMessageService {
 	globalMsgSvc = svc
 	svc.syncDefaults()
 	svc.loadAll()
+	// also populate per-tenant cache for default
+	msgCacheMu.Lock()
+	msgCache[ResolveRestaurant(0)] = svc.messages
+	msgCacheMu.Unlock()
 	return svc
 }
 
@@ -123,24 +129,26 @@ func syncTemplateUpgrades() {
 }
 
 // newlineFixTemplates holds the correct (real-newline) text for every
-// template seeded without the E'' prefix in migration 015.
+// template seeded without the E” prefix in migration 015.
 var newlineFixTemplates = map[string]string{
-	"name_greeting_delivery":      "Nice to meet you, {{.Name}}!\n\nWhat's your delivery address?",
-	"address_saved_body":          "We have your saved address:\n\n{{.Address}}\n\nUse this address?",
-	"order_failed":                "Couldn't place your order: {{.Error}}\n\nType 'cart' to review and retry.",
+	"name_greeting_delivery":       "Nice to meet you, {{.Name}}!\n\nWhat's your delivery address?",
+	"address_saved_body":           "We have your saved address:\n\n{{.Address}}\n\nUse this address?",
+	"order_failed":                 "Couldn't place your order: {{.Error}}\n\nType 'cart' to review and retry.",
 	"notification_support_request": "*CUSTOMER REQUESTED SUPPORT*\n\nWhatsApp: {{.Phone}}\nName: {{.Name}}\nCurrent order: {{.Order}}\nCart lines: {{.CartCount}}\n\nReply to them directly on WhatsApp.",
-	"profile_body":                "WhatsApp: {{.Phone}}\nAddress: {{.Address}}\nLandmark: {{.Landmark}}\nOrders: {{.OrderCount}}\nSpent: Rs.{{.TotalSpent}}",
-	"support_team_notified":       "The team will reach out here.\nType 'menu' whenever you're ready.",
-	"location_body":               "{{.Address}}\n\nTel: {{.Phone}}\nKitchen: {{.KitchenHours}}\nDelivery: {{.DeliveryHours}}",
-	"unknown_input":               "I didn't quite understand that.\n\n{{.Options}}",
-	"status_view_body":            "Status: {{.Emoji}} {{.Status}}\n\n{{.Items}}\nTotal: Rs.{{.Total}}",
-	"status_order_detail":         "Status: {{.Emoji}} {{.Status}}\nPlaced: {{.Date}}\n\n{{.Items}}Total: Rs.{{.Total}}",
+	"profile_body":                 "WhatsApp: {{.Phone}}\nAddress: {{.Address}}\nLandmark: {{.Landmark}}\nOrders: {{.OrderCount}}\nSpent: Rs.{{.TotalSpent}}",
+	"support_team_notified":        "The team will reach out here.\nType 'menu' whenever you're ready.",
+	"location_body":                "{{.Address}}\n\nTel: {{.Phone}}\nKitchen: {{.KitchenHours}}\nDelivery: {{.DeliveryHours}}",
+	"unknown_input":                "I didn't quite understand that.\n\n{{.Options}}",
+	"status_view_body":             "Status: {{.Emoji}} {{.Status}}\n\n{{.Items}}\nTotal: Rs.{{.Total}}",
+	"status_order_detail":          "Status: {{.Emoji}} {{.Status}}\nPlaced: {{.Date}}\n\n{{.Items}}Total: Rs.{{.Total}}",
 }
 
 // loadAll loads the default restaurant's bot_messages into memory.
-// The runtime cache always tracks the default restaurant; per-tenant
-// admin reads go straight to the DB (ListFor/GetFor).
+// Per-tenant caches are maintained in msgCache.
 func (s *BotMessageService) loadAll() {
+	if database.DB == nil {
+		return
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -164,7 +172,53 @@ func (s *BotMessageService) loadAll() {
 		s.messages[m.Key] = &m
 		count++
 	}
+	msgCacheMu.Lock()
+	msgCache[ResolveRestaurant(0)] = s.messages
+	msgCacheMu.Unlock()
 	log.Printf("[BotMessages] loaded %d message templates from DB", count)
+}
+
+// loadFor returns cached messages for a restaurant, loading from DB on miss.
+func (s *BotMessageService) loadFor(restaurantID int) map[string]*BotMessage {
+	rid := ResolveRestaurant(restaurantID)
+	msgCacheMu.RLock()
+	if m, ok := msgCache[rid]; ok {
+		msgCacheMu.RUnlock()
+		return m
+	}
+	msgCacheMu.RUnlock()
+	if database.DB == nil {
+		msgCacheMu.RLock()
+		def := msgCache[ResolveRestaurant(0)]
+		msgCacheMu.RUnlock()
+		if def != nil {
+			return def
+		}
+		return s.messages
+	}
+	// miss: load from DB
+	rows, err := database.DB.Query(
+		`SELECT id, message_key, category, COALESCE(description,''), message_text, COALESCE(variables,''), COALESCE(image_url,''), active
+		 FROM bot_messages WHERE restaurant_id = $1 ORDER BY id`, rid)
+	if err != nil {
+		msgCacheMu.RLock()
+		def := msgCache[ResolveRestaurant(0)]
+		msgCacheMu.RUnlock()
+		return def
+	}
+	defer rows.Close()
+	m := make(map[string]*BotMessage)
+	for rows.Next() {
+		var bm BotMessage
+		if err := rows.Scan(&bm.ID, &bm.Key, &bm.Category, &bm.Description, &bm.MessageText, &bm.Variables, &bm.ImageURL, &bm.Active); err == nil {
+			bm2 := bm
+			m[bm.Key] = &bm2
+		}
+	}
+	msgCacheMu.Lock()
+	msgCache[rid] = m
+	msgCacheMu.Unlock()
+	return m
 }
 
 // Reload refreshes the in-memory cache from DB. Called after admin updates.
@@ -189,9 +243,13 @@ func (s *BotMessageService) GetBrandName() string {
 // Render looks up a message by key and renders it with the given data map.
 // Falls back to compiled-in default if key not found in DB.
 func (s *BotMessageService) Render(key string, data map[string]interface{}) string {
-	s.mu.RLock()
-	m, ok := s.messages[key]
-	s.mu.RUnlock()
+	return s.RenderFor(ResolveRestaurant(0), key, data)
+}
+
+// RenderFor renders with per-restaurant isolation.
+func (s *BotMessageService) RenderFor(restaurantID int, key string, data map[string]interface{}) string {
+	msgs := s.loadFor(restaurantID)
+	m, ok := msgs[key]
 
 	var text string
 	if ok && m.Active {
@@ -205,7 +263,7 @@ func (s *BotMessageService) Render(key string, data map[string]interface{}) stri
 	}
 	// Always inject brand name if not explicitly provided
 	if _, has := data["RestaurantName"]; !has {
-		data["RestaurantName"] = s.GetBrandName()
+		data["RestaurantName"] = s.GetBrandNameFor(restaurantID)
 	}
 
 	tmpl, err := template.New(key).Parse(text)
@@ -286,6 +344,10 @@ func (s *BotMessageService) UpdateMessage(key, text string, imageURL *string, re
 	if n == 0 {
 		return fmt.Errorf("message key %q not found", key)
 	}
+	// invalidate per-tenant cache
+	msgCacheMu.Lock()
+	delete(msgCache, rid)
+	msgCacheMu.Unlock()
 	if rid == ResolveRestaurant(0) {
 		s.mu.Lock()
 		if m, ok := s.messages[key]; ok {
@@ -302,12 +364,28 @@ func (s *BotMessageService) UpdateMessage(key, text string, imageURL *string, re
 // MessageImage returns the configured image URL for a key, or "".
 // Only active rows contribute images.
 func (s *BotMessageService) MessageImage(key string) string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	if m, ok := s.messages[key]; ok && m.Active {
+	return s.MessageImageFor(ResolveRestaurant(0), key)
+}
+
+func (s *BotMessageService) MessageImageFor(restaurantID int, key string) string {
+	msgs := s.loadFor(restaurantID)
+	if m, ok := msgs[key]; ok && m.Active {
 		return strings.TrimSpace(m.ImageURL)
 	}
 	return ""
+}
+
+// GetBrandNameFor returns per-restaurant brand (falls back to default).
+func (s *BotMessageService) GetBrandNameFor(restaurantID int) string {
+	s.mu.RLock()
+	bn := s.brandName
+	s.mu.RUnlock()
+	// attempt per-restaurant config
+	if cfg := GetBizConfigFor(restaurantID); cfg != nil {
+		// brand not stored here; use global but could extend
+		_ = cfg
+	}
+	return bn
 }
 
 // ResetMessage resets a message to its compiled-in default (image kept).

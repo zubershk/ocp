@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 
 	"orangecheesepizza/bot/config"
+	"orangecheesepizza/bot/database"
 )
 
 type EvolutionClient struct {
@@ -292,4 +294,38 @@ func (c *EvolutionClient) ConfigureWebhook(webhookURL string) error {
 	// Use instance token for /instance/connect endpoint
 	_, err := c.sendRequest("POST", "/instance/connect", payload, true)
 	return err
+}
+
+var evoCache sync.Map // map[int]*EvolutionClient
+
+// ForRestaurant returns a per-restaurant Evolution client if the restaurant has
+// dedicated instance config, otherwise the global client. Cache per restaurant.
+func (c *EvolutionClient) ForRestaurant(restaurantID int) *EvolutionClient {
+	if restaurantID == 0 || database.DB == nil {
+		return c
+	}
+	if cached, ok := evoCache.Load(restaurantID); ok {
+		if ec, ok := cached.(*EvolutionClient); ok {
+			return ec
+		}
+	}
+	var inst, token string
+	err := database.DB.QueryRow(`SELECT COALESCE(evolution_instance,''), COALESCE(evolution_instance_token,'') FROM restaurants WHERE id=$1`, restaurantID).Scan(&inst, &token)
+	if err != nil || (inst == "" && token == "") {
+		return c
+	}
+	clone := *c
+	if inst != "" {
+		clone.instance = inst
+	}
+	if token != "" {
+		clone.instanceToken = token
+	}
+	evoCache.Store(restaurantID, &clone)
+	return &clone
+}
+
+// InvalidateEvolutionCache clears per-restaurant client on config change.
+func InvalidateEvolutionCache(restaurantID int) {
+	evoCache.Delete(restaurantID)
 }

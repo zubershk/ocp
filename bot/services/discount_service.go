@@ -18,12 +18,12 @@ import (
 
 // DiscountRule is the business-rule container for a discount.
 type DiscountRule struct {
-	ID          int
+	ID           int
 	RestaurantID int
 	Name         string
 	Code         string // "" = manual/open; non-empty = code-based
 	Type         string // "percent" or "flat"
-	Value        int64 // paise: 0–10000 for percent, absolute for flat
+	Value        int64  // paise: 0–10000 for percent, absolute for flat
 	Active       bool
 	MinSubtotal  int64 // paise; 0 = no minimum
 	StartsAt     time.Time

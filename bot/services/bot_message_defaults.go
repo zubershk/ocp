@@ -8,12 +8,12 @@ package services
 func defaultMessages() map[string]string {
 	return map[string]string{
 		// GREETING
-		"welcome":              emPizza + " {{.RestaurantName}}\n\nWelcome! What would you like to do?",
-		"welcome_back":         emPizza + " Welcome back, {{.Name}}! " + emWave + "\n\nWhat would you like to do?",
+		"welcome":                emPizza + " {{.RestaurantName}}\n\nWelcome! What would you like to do?",
+		"welcome_back":           emPizza + " Welcome back, {{.Name}}! " + emWave + "\n\nWhat would you like to do?",
 		"welcome_back_with_cart": emWave + " Welcome back!\n\nYou have {{.ItemCount}} item(s) in your cart.\n",
-		"welcome_back_in_flow": emWave + " Welcome back!\n\nYou were in the middle of: {{.State}}\n\nContinue below, or type 'cancel'.",
-		"help":                 emRobot + " I can help you with:\n\n" + emPizza + " Ordering\n" + emCart + " Cart\n" + emPackage + " Order tracking\n" + emUser + " Profile\n" + emPin + " Restaurant location\n" + emTel + " Human support\n\nTap a button above, or type: menu - cart - status - orders",
-		"welcome_footer":       "We're ready when you are.",
+		"welcome_back_in_flow":   emWave + " Welcome back!\n\nYou were in the middle of: {{.State}}\n\nContinue below, or type 'cancel'.",
+		"help":                   emRobot + " I can help you with:\n\n" + emPizza + " Ordering\n" + emCart + " Cart\n" + emPackage + " Order tracking\n" + emUser + " Profile\n" + emPin + " Restaurant location\n" + emTel + " Human support\n\nTap a button above, or type: menu - cart - status - orders",
+		"welcome_footer":         "We're ready when you are.",
 
 		// ORDERING
 		"category_title":          emPizza + " What would you like to order?",
@@ -91,38 +91,38 @@ func defaultMessages() map[string]string {
 		"notification_support_request":   "*CUSTOMER REQUESTED SUPPORT*\n\nWhatsApp: {{.Phone}}\nName: {{.Name}}\nCurrent order: {{.Order}}\nCart lines: {{.CartCount}}\n\nReply to them directly on WhatsApp.",
 
 		// PROFILE
-		"profile_title":      emUser + " {{.Name}}",
-		"profile_body":       "WhatsApp: {{.Phone}}\nAddress: {{.Address}}\nLandmark: {{.Landmark}}\nOrders: {{.OrderCount}}\nSpent: Rs.{{.TotalSpent}}",
-		"profile_edit_name":  "Send the new name you'd like to use.",
-		"profile_edit_addr":  "Send your new default delivery address.",
+		"profile_title":     emUser + " {{.Name}}",
+		"profile_body":      "WhatsApp: {{.Phone}}\nAddress: {{.Address}}\nLandmark: {{.Landmark}}\nOrders: {{.OrderCount}}\nSpent: Rs.{{.TotalSpent}}",
+		"profile_edit_name": "Send the new name you'd like to use.",
+		"profile_edit_addr": "Send your new default delivery address.",
 
 		// SUPPORT
-		"support_customer":         emWave + " I'll connect you with the restaurant team.\nSomeone from {{.RestaurantName}} will respond shortly.",
-		"support_team_notified":    "The team will reach out here.\nType 'menu' whenever you're ready.",
+		"support_customer":           emWave + " I'll connect you with the restaurant team.\nSomeone from {{.RestaurantName}} will respond shortly.",
+		"support_team_notified":      "The team will reach out here.\nType 'menu' whenever you're ready.",
 		"support_team_notified_menu": "The team has been notified. Type 'menu' when ready.",
 
 		// LOCATION
-		"location_title":      emPin + " {{.RestaurantName}}",
-		"location_body":       "{{.Address}}\n\nTel: {{.Phone}}\nKitchen: {{.KitchenHours}}\nDelivery: {{.DeliveryHours}}",
-		"location_maps_hint":  "{{.RestaurantName}} Mira Road",
+		"location_title":     emPin + " {{.RestaurantName}}",
+		"location_body":      "{{.Address}}\n\nTel: {{.Phone}}\nKitchen: {{.KitchenHours}}\nDelivery: {{.DeliveryHours}}",
+		"location_maps_hint": "{{.RestaurantName}} Mira Road",
 
 		// ERRORS
-		"unknown_input":     "I didn't quite understand that.\n\n{{.Options}}",
-		"menu_unavailable":  "Menu is temporarily unavailable. Please try again shortly.",
-		"session_expired":   "Session expired for that list - type 'menu' to browse again.",
-		"nothing_to_show":   "Nothing to show. Type 'menu'.",
-		"order_not_found":   "That order was not found on this account.",
+		"unknown_input":      "I didn't quite understand that.\n\n{{.Options}}",
+		"menu_unavailable":   "Menu is temporarily unavailable. Please try again shortly.",
+		"session_expired":    "Session expired for that list - type 'menu' to browse again.",
+		"nothing_to_show":    "Nothing to show. Type 'menu'.",
+		"order_not_found":    "That order was not found on this account.",
 		"cart_update_failed": "Couldn't update the cart. Please try again.",
 
 		// GLOBAL COMMANDS
-		"cancel_message":       emBroom + " Current flow cancelled. Your cart was kept - type 'cart' or 'menu'.",
-		"restart_message":      emArrows + " Fresh start! Cart cleared.\n\n",
-		"state_name":           "Please type your name, or 'cancel' to abort.",
-		"state_address":        "Please type your full delivery address, or 'cancel'.",
-		"state_landmark":       "Type a landmark or 'skip'.",
-		"state_payment":        "Choose Cash, UPI or Online using the buttons above.",
-		"state_confirmation":   "Tap 'Place Order' or 'Cancel' above, or 'cancel' to exit.",
-		"state_human_support":  "The team has been notified. Type 'menu' when ready.",
+		"cancel_message":      emBroom + " Current flow cancelled. Your cart was kept - type 'cart' or 'menu'.",
+		"restart_message":     emArrows + " Fresh start! Cart cleared.\n\n",
+		"state_name":          "Please type your name, or 'cancel' to abort.",
+		"state_address":       "Please type your full delivery address, or 'cancel'.",
+		"state_landmark":      "Type a landmark or 'skip'.",
+		"state_payment":       "Choose Cash, UPI or Online using the buttons above.",
+		"state_confirmation":  "Tap 'Place Order' or 'Cancel' above, or 'cancel' to exit.",
+		"state_human_support": "The team has been notified. Type 'menu' when ready.",
 
 		// REORDER
 		"reorder_added":       emCheck + " Added {{.Count}} item(s) from {{.OrderNumber}} to your cart.",
@@ -133,9 +133,9 @@ func defaultMessages() map[string]string {
 		"history_title": emPackage + " Your recent orders",
 
 		// STATUS VIEW
-		"status_view_title":    emPackage + " {{.OrderNumber}}",
-		"status_view_body":     "Status: {{.Emoji}} {{.Status}}\n\n{{.Items}}\nTotal: Rs.{{.Total}}",
-		"status_order_detail":  "Status: {{.Emoji}} {{.Status}}\nPlaced: {{.Date}}\n\n{{.Items}}Total: Rs.{{.Total}}",
+		"status_view_title":   emPackage + " {{.OrderNumber}}",
+		"status_view_body":    "Status: {{.Emoji}} {{.Status}}\n\n{{.Items}}\nTotal: Rs.{{.Total}}",
+		"status_order_detail": "Status: {{.Emoji}} {{.Status}}\nPlaced: {{.Date}}\n\n{{.Items}}Total: Rs.{{.Total}}",
 
 		// PAGER (buttonPages chrome)
 		"pager_tap":  "Tap a button below:",

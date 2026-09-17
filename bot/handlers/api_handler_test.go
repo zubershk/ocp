@@ -34,7 +34,24 @@ func (s *stubMenuReader) GetAllActiveItems() ([]models.MenuItem, error) {
 	return s.items, nil
 }
 
+func (s *stubMenuReader) GetAllActiveItemsFor(_ int) ([]models.MenuItem, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	return s.items, nil
+}
+
 func (s *stubMenuReader) GetItemByIdentifier(identifier string) (*models.MenuItem, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	if item, ok := s.itemById[identifier]; ok {
+		return item, nil
+	}
+	return nil, nil
+}
+
+func (s *stubMenuReader) GetItemByIdentifierFor(identifier string, _ int) (*models.MenuItem, error) {
 	if s.err != nil {
 		return nil, s.err
 	}
@@ -48,10 +65,20 @@ func (s *stubMenuReader) GetActiveCrusts() ([]services.CrustInfo, error) {
 	return nil, nil
 }
 
+func (s *stubMenuReader) GetActiveCrustsFor(_ int) ([]services.CrustInfo, error) {
+	return nil, nil
+}
+
 func newTestRouter(reader MenuReader) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	router.Use(CORSMiddleware("http://localhost:5173,http://127.0.0.1:5173"))
+	// test tenant (open-source compat + strict mode)
+	router.Use(func(c *gin.Context) {
+		c.Set("restaurantID", 1)
+		c.Set("orgID", 1)
+		c.Next()
+	})
 	api := router.Group("/api")
 	{
 		api.GET("/menu", NewApiHandler(reader, nil).GetMenu)

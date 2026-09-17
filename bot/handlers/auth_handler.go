@@ -35,7 +35,8 @@ func (h *AuthHandler) SendOTP(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "phone is required"})
 		return
 	}
-	_, err := services.SendOTP(req.Phone, h.evolution)
+	rid, _ := services.RequireRestaurant(c)
+	_, err := services.SendOTPFor(req.Phone, rid, h.evolution)
 	if err != nil {
 		if ve, ok := err.(*services.ValidationError); ok {
 			c.JSON(http.StatusBadRequest, gin.H{"error": ve.Msg})
@@ -56,7 +57,8 @@ func (h *AuthHandler) VerifyOTP(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "phone and code are required"})
 		return
 	}
-	token, cust, err := services.VerifyOTP(req.Phone, req.Code, req.Name)
+	rid, _ := services.RequireRestaurant(c)
+	token, cust, err := services.VerifyOTPFor(req.Phone, req.Code, req.Name, rid)
 	if err != nil {
 		if ve, ok := err.(*services.ValidationError); ok {
 			c.JSON(http.StatusBadRequest, gin.H{"error": ve.Msg})
@@ -68,8 +70,8 @@ func (h *AuthHandler) VerifyOTP(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"token": token,
 		"customer": gin.H{
-			"phone":       cust.WhatsAppNumber,
-			"name":        cust.FirstName,
+			"phone":        cust.WhatsAppNumber,
+			"name":         cust.FirstName,
 			"total_orders": cust.TotalOrders,
 			"total_spent":  cust.TotalSpent,
 		},
@@ -110,7 +112,8 @@ func (h *AuthHandler) Orders(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
-	orders, err := services.CustomerOrders(phone, 50)
+	rid, _ := services.RequireRestaurant(c)
+	orders, err := services.CustomerOrdersFor(phone, 50, rid)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load orders"})
 		return
@@ -131,9 +134,21 @@ func customerFromHeader(c *gin.Context) (string, *services.Customer, bool) {
 	if token == "" {
 		return "", nil, false
 	}
-	phone, cust, err := services.ValidateSession(token)
+	rid, _ := services.RequireRestaurant(c)
+	phone, cust, err := services.ValidateSessionFor(token, rid)
 	if err != nil {
-		return "", nil, false
+		// fallback to global for open-source single-tenant transition
+		phone, cust, err = services.ValidateSession(token)
+		if err != nil {
+			return "", nil, false
+		}
+		// in strict mode, if session has tenant but request is missing, still allow when single-tenant
+		if rid != 0 {
+			// verify tenant matches if session has it (already checked in For); if fallback got here, treat as invalid
+			if !services.IsSingleTenantMode() {
+				return "", nil, false
+			}
+		}
 	}
 	return phone, cust, true
 }
