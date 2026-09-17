@@ -759,16 +759,22 @@ func (h *AdminHandler) UploadImage(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"url": url, "filename": name})
 }
 
+// tenantUploadDir is the only way to build an upload path (fail-closed).
+func tenantUploadDir(rid int) (string, error) {
+	if rid <= 0 {
+		return "", fmt.Errorf("tenant required")
+	}
+	return fmt.Sprintf("./uploads/%d", rid), nil
+}
+
 // ListUploads returns the media library (files in ./uploads/<restaurant_id>).
 func (h *AdminHandler) ListUploads(c *gin.Context) {
-	rid, _ := services.RequireRestaurant(c)
-	if rid == 0 {
-		rid = services.ResolveRestaurant(c.GetInt("restaurantID"))
+	rid, _, err := services.RequireTenant(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "tenant required"})
+		return
 	}
-	if rid == 0 {
-		rid = services.DefaultRestaurantID()
-	}
-	dir := fmt.Sprintf("./uploads/%d", rid)
+	dir, _ := tenantUploadDir(rid)
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"files": []interface{}{}})
@@ -817,22 +823,17 @@ func (h *AdminHandler) uploadReferenced(name string, restaurantID int) bool {
 // DeleteUpload removes an uploaded file (DB references left for admin to fix).
 func (h *AdminHandler) DeleteUpload(c *gin.Context) {
 	name := c.Param("name")
-	if name == "" || name != filepath.Base(name) || strings.Contains(name, "..") {
+	if name == "" || filepath.Base(name) != name || strings.Contains(name, "..") {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid filename"})
 		return
 	}
-	rid, _ := services.RequireRestaurant(c)
-	if rid == 0 {
-		rid = services.ResolveRestaurant(c.GetInt("restaurantID"))
+	rid, _, errStrict := services.RequireTenant(c)
+	if errStrict != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "tenant required"})
+		return
 	}
-	if rid == 0 {
-		rid = services.DefaultRestaurantID()
-	}
-	// prefer tenant dir, fallback to legacy flat
-	p := filepath.Join(fmt.Sprintf("./uploads/%d", rid), name)
-	if _, err := os.Stat(p); err != nil {
-		p = filepath.Join("./uploads", name)
-	}
+	p, _ := tenantUploadDir(rid)
+	p = filepath.Join(p, name)
 	if _, err := os.Stat(p); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
 		return

@@ -9,35 +9,121 @@ import (
 	"orangecheesepizza/bot/database"
 )
 
+func parseTrustedProxies(csv string) map[string]bool {
+	m := map[string]bool{}
+	for _, p := range strings.Split(csv, ",") {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		if h, _, err := net.SplitHostPort(p); err == nil {
+			p = h
+		}
+		m[strings.ToLower(p)] = true
+		m[p] = true
+	}
+	return m
+}
+
+func isTrustedClient(c *gin.Context, trusted map[string]bool) bool {
+	if len(trusted) == 0 {
+		return false
+	}
+	ip := c.ClientIP()
+	if ip == "" {
+		return false
+	}
+	if trusted[ip] || trusted[strings.ToLower(ip)] {
+		return true
+	}
+	// loopback always trusted when trusted set is non-empty
+	if pip := net.ParseIP(ip); pip != nil && pip.IsLoopback() {
+		return true
+	}
+	// CIDR check simplified: prefix match
+	for k := range trusted {
+		if strings.Contains(k, "/") {
+			if _, n, err := net.ParseCIDR(k); err == nil && n.Contains(net.ParseIP(ip)) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func normalizeHost(raw string) (string, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", false
+	}
+	// first value of comma-separated
+	if idx := strings.Index(raw, ","); idx >= 0 {
+		raw = raw[:idx]
+	}
+	raw = strings.TrimSpace(raw)
+	if h, _, err := net.SplitHostPort(raw); err == nil {
+		raw = h
+	}
+	raw = strings.ToLower(strings.TrimSpace(raw))
+	raw = strings.TrimSuffix(raw, ".")
+	if raw == "" || strings.Contains(raw, " ") || strings.Contains(raw, "/") || strings.Contains(raw, ":") {
+		return "", false
+	}
+	// basic hostname validation
+	if len(raw) > 253 {
+		return "", false
+	}
+	return raw, true
+}
+
 // TenantResolverMiddleware resolves restaurant_id from Host/domain or /r/:slug fallback.
 // Priority: 1) verified custom domain, 2) subdomain of BaseDomain, 3) /r/:slug path param.
 // It does not auth — just attaches tenant. RequireTenant enforces presence later.
-func TenantResolverMiddleware(baseDomain string) gin.HandlerFunc {
+func TenantResolverMiddleware(baseDomain string, trustedProxiesCSV string) gin.HandlerFunc {
 	baseDomain = strings.ToLower(strings.TrimSpace(baseDomain))
 	if baseDomain == "" {
 		baseDomain = "ocp.app"
 	}
+	trusted := parseTrustedProxies(trustedProxiesCSV)
 	return func(c *gin.Context) {
 		if database.DB == nil {
 			c.Next()
 			return
 		}
-		// already resolved by admin auth:
 		if c.GetInt("restaurantID") != 0 {
 			c.Next()
 			return
 		}
-		host := c.GetHeader("X-Forwarded-Host")
-		// only trust X-Forwarded-Host when we have trusted proxies configured and request is from loopback/proxy
-		// for now, prefer Host and fall back to XFH only if present
-		if host == "" {
-			host = c.Request.Host
+		// Trusted proxy: use X-Forwarded-Host else Host
+		hostRaw := c.Request.Host
+		if xfh := c.GetHeader("X-Forwarded-Host"); xfh != "" && isTrustedClient(c, trusted) {
+			if norm, ok := normalizeHost(xfh); ok {
+				hostRaw = norm
+			} else {
+				c.AbortWithStatusJSON(400, gin.H{"error": "invalid forwarded host"})
+				return
+			}
+		} else if xfh := c.GetHeader("X-Forwarded-Host"); xfh != "" {
+			// untrusted client sent XFH -> ignore (use Host)
+			hostRaw = c.Request.Host
 		}
-		if h, _, err := net.SplitHostPort(host); err == nil {
+		host, ok := normalizeHost(hostRaw)
+		if !ok {
+			host = strings.ToLower(strings.TrimSpace(hostRaw))
+			host = strings.TrimSuffix(host, ".")
+			if h, _, err := net.SplitHostPort(host); err == nil {
+				host = h
+			}
+		} else {
+			// already normalized via above; keep as is
+		}
+		// ensure final host is normalized
+		if h, valid := normalizeHost(host); valid {
 			host = h
+		} else {
+			host = strings.ToLower(strings.TrimSpace(host))
+			host = strings.TrimSuffix(host, ".")
 		}
-		host = strings.ToLower(strings.TrimSpace(host))
-		host = strings.TrimSuffix(host, ".")
 
 		var rid, oid int
 		if host != "" && host != "localhost" && !strings.HasPrefix(host, "127.0.0.1") {

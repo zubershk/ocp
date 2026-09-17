@@ -34,6 +34,13 @@ func (s *stubMenuReader) GetAllActiveItems() ([]models.MenuItem, error) {
 	return s.items, nil
 }
 
+func (s *stubMenuReader) GetAllActiveItemsFor(_ int) ([]models.MenuItem, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	return s.items, nil
+}
+
 func (s *stubMenuReader) GetItemByIdentifier(identifier string) (*models.MenuItem, error) {
 	if s.err != nil {
 		return nil, s.err
@@ -44,7 +51,21 @@ func (s *stubMenuReader) GetItemByIdentifier(identifier string) (*models.MenuIte
 	return nil, nil
 }
 
+func (s *stubMenuReader) GetItemByIdentifierFor(identifier string, _ int) (*models.MenuItem, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	if item, ok := s.itemById[identifier]; ok {
+		return item, nil
+	}
+	return nil, nil
+}
+
 func (s *stubMenuReader) GetActiveCrusts() ([]services.CrustInfo, error) {
+	return nil, nil
+}
+
+func (s *stubMenuReader) GetActiveCrustsFor(_ int) ([]services.CrustInfo, error) {
 	return nil, nil
 }
 

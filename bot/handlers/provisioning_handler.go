@@ -46,6 +46,10 @@ func (h *ProvisioningHandler) Signup(c *gin.Context) {
 	}
 	orgID, restID, outletID, userID, err := services.ProvisionRestaurant(req.OrgName, req.RestName, slug, req.OwnerName, keyHash)
 	if err != nil {
+		if err == services.ErrSlugTaken {
+			c.JSON(http.StatusConflict, gin.H{"error": "slug already taken"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "provision failed"})
 		return
 	}
