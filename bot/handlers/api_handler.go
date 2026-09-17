@@ -134,9 +134,17 @@ func (h *ApiHandler) GetMenu(c *gin.Context) {
 	c.JSON(http.StatusOK, menuResponse{Categories: categories, Items: items})
 }
 
-// GetItem handles GET /api/menu/:id (numeric ID or slug)
+// GetItem handles GET /api/menu/:id (numeric ID or slug) — tenant-aware.
 func (h *ApiHandler) GetItem(c *gin.Context) {
-	item, err := h.menu.GetItemByIdentifier(c.Param("id"))
+	rid, errReq := services.RequireRestaurant(c)
+	if errReq != nil {
+		if database.DB != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "tenant required"})
+			return
+		}
+		rid = 0
+	}
+	item, err := h.menu.GetItemByIdentifierFor(c.Param("id"), rid)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load menu item"})
 		return
@@ -148,9 +156,17 @@ func (h *ApiHandler) GetItem(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"item": item})
 }
 
-// GetCrusts handles GET /api/crusts — public crust catalog.
+// GetCrusts handles GET /api/crusts — tenant-aware.
 func (h *ApiHandler) GetCrusts(c *gin.Context) {
-	crusts, err := h.menu.GetActiveCrusts()
+	rid, errReq := services.RequireRestaurant(c)
+	if errReq != nil {
+		if database.DB != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "tenant required"})
+			return
+		}
+		rid = 0
+	}
+	crusts, err := h.menu.GetActiveCrustsFor(rid)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load crusts"})
 		return
@@ -158,16 +174,19 @@ func (h *ApiHandler) GetCrusts(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"crusts": crusts})
 }
 
-// CreateOrder handles POST /api/orders.
-// Prices are always recalculated from PostgreSQL; client totals ignored.
+// CreateOrder handles POST /api/orders — tenant-aware.
 func (h *ApiHandler) CreateOrder(c *gin.Context) {
 	var req services.WebsiteOrderRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
-
-	result, err := h.orders.Create(&req, c.GetHeader("Idempotency-Key"))
+	rid, errReq := services.RequireRestaurant(c)
+	if errReq != nil && database.DB != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "tenant required"})
+		return
+	}
+	result, err := h.orders.CreateFor(&req, c.GetHeader("Idempotency-Key"), rid)
 	if err != nil {
 		var validationErr *services.ValidationError
 		if errors.As(err, &validationErr) {

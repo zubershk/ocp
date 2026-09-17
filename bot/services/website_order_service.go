@@ -191,8 +191,16 @@ func normalizePhone(phone string) (string, error) {
 // A nil error with Replay=false and HTTP layer mapping gives 201;
 // replayed idempotent hits return the stored order with Replay=true.
 func (s *WebsiteOrderService) Create(req *WebsiteOrderRequest, idempotencyKey string) (*WebsiteOrderResult, error) {
+	return s.CreateFor(req, idempotencyKey, 0)
+}
+
+func (s *WebsiteOrderService) CreateFor(req *WebsiteOrderRequest, idempotencyKey string, restaurantID int) (*WebsiteOrderResult, error) {
+	if restaurantID == 0 && !IsSingleTenantMode() {
+		return nil, ErrTenantRequired
+	}
+	ridForScope := ResolveRestaurant(restaurantID)
 	if idempotencyKey != "" {
-		if existing, err := s.getByIdepotencyKey(idempotencyKey); err == nil && existing != nil {
+		if existing, err := s.getByIdepotencyKeyFor(idempotencyKey, ridForScope); err == nil && existing != nil {
 			existing.Replayed = true
 			return existing, nil
 		}
@@ -215,7 +223,7 @@ func (s *WebsiteOrderService) Create(req *WebsiteOrderRequest, idempotencyKey st
 	if req.DeliveryType == OrderTypeDelivery && address == "" {
 		return nil, badRequest("address is required for delivery")
 	}
-	biz := GetBizConfig()
+	biz := GetBizConfigFor(ridForScope)
 	validPayments := biz.GetValidPaymentMethods()
 	validSizes := biz.GetValidSizes()
 
@@ -236,7 +244,7 @@ func (s *WebsiteOrderService) Create(req *WebsiteOrderRequest, idempotencyKey st
 	lines := make([]WebsiteOrderLine, 0, len(req.Items))
 	var subtotal float64
 	for _, requested := range req.Items {
-		item, err := s.menu.GetItemByIdentifier(requested.ID)
+		item, err := s.menu.GetItemByIdentifierFor(requested.ID, ridForScope)
 		if err != nil || item == nil {
 			return nil, badRequest("unknown or unavailable menu item: %s", requested.ID)
 		}
@@ -264,7 +272,7 @@ func (s *WebsiteOrderService) Create(req *WebsiteOrderRequest, idempotencyKey st
 			row := database.DB.QueryRow(`
 				SELECT name, price_regular, price_medium, price_large
 				FROM menu_crusts WHERE slug = $1 AND active = true AND restaurant_id = $2
-			`, crustSlug, ResolveRestaurant(0))
+			`, crustSlug, ridForScope)
 			var cName string
 			var pr, pm, pl sql.NullFloat64
 			if err := row.Scan(&cName, &pr, &pm, &pl); err != nil {
@@ -323,8 +331,8 @@ func (s *WebsiteOrderService) Create(req *WebsiteOrderRequest, idempotencyKey st
 		createdAt   time.Time
 		accessToken string
 	)
-	// Public storefront serves the default restaurant until Phase 4 routing.
-	rid := ResolveRestaurant(0)
+	rid := ridForScope
+	outletID := DefaultOutletID(rid)
 	err = tx.QueryRow(`
 		INSERT INTO orders
 			(order_number, customer_name, customer_phone, email, order_type,
@@ -335,12 +343,11 @@ func (s *WebsiteOrderService) Create(req *WebsiteOrderRequest, idempotencyKey st
 	`, orderNumber, name, phone, strings.TrimSpace(req.Customer.Email), req.DeliveryType,
 		address, strings.TrimSpace(req.Landmark), req.PaymentMethod,
 		subtotal, deliveryFee, discount, total, nullIfEmpty(idempotencyKey), source,
-		orderAccessToken(), rid, DefaultOutletID(rid),
+		orderAccessToken(), rid, outletID,
 	).Scan(&orderID, &createdAt, &accessToken)
 	if err != nil {
-		if strings.Contains(err.Error(), "uq_orders_idempotency_key") && idempotencyKey != "" {
-			// Concurrent duplicate: return the winner instead of erroring.
-			if existing, getErr := s.getByIdepotencyKey(idempotencyKey); getErr == nil && existing != nil {
+		if strings.Contains(err.Error(), "uq_orders") && idempotencyKey != "" {
+			if existing, getErr := s.getByIdepotencyKeyFor(idempotencyKey, rid); getErr == nil && existing != nil {
 				existing.Replayed = true
 				return existing, nil
 			}
@@ -386,12 +393,10 @@ func (s *WebsiteOrderService) Create(req *WebsiteOrderRequest, idempotencyKey st
 	}
 
 	// ---- lifetime stats (post-commit, best effort) ----
-	// Keeps customers.total_orders/total_spent (profile + account) in sync
-	// for website orders, mirroring the WhatsApp path.
-	_ = RecordCustomerOrder(phone, total)
+	_ = RecordCustomerOrderFor(phone, rid, total)
 
-	BroadcastRealtime("order.created", map[string]interface{}{
-		"order_id": orderID, "order_number": orderNumber, "total": total,
+	BroadcastRealtimeFor(rid, outletID, 0, "order.created", map[string]interface{}{
+		"order_id": orderID, "order_number": orderNumber, "total": total, "restaurant_id": rid, "outlet_id": outletID,
 	})
 
 	// ---- notification (post-commit, best effort) ----
@@ -519,10 +524,22 @@ func (s *WebsiteOrderService) getByID(orderID int) (*WebsiteOrderResult, error) 
 }
 
 func (s *WebsiteOrderService) getByIdepotencyKey(key string) (*WebsiteOrderResult, error) {
+	return s.getByIdepotencyKeyFor(key, 0)
+}
+
+func (s *WebsiteOrderService) getByIdepotencyKeyFor(key string, restaurantID int) (*WebsiteOrderResult, error) {
+	if restaurantID != 0 {
+		var orderID int
+		err := database.DB.QueryRow(`SELECT id FROM orders WHERE idempotency_key = $1 AND restaurant_id = $2`, key, ResolveRestaurant(restaurantID)).Scan(&orderID)
+		if err == nil {
+			return s.getByID(orderID)
+		}
+		if err != sql.ErrNoRows {
+			return nil, err
+		}
+	}
 	var orderID int
-	err := database.DB.QueryRow(
-		`SELECT id FROM orders WHERE idempotency_key = $1`, key,
-	).Scan(&orderID)
+	err := database.DB.QueryRow(`SELECT id FROM orders WHERE idempotency_key = $1`, key).Scan(&orderID)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}

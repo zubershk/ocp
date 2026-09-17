@@ -73,6 +73,12 @@ func newTestRouter(reader MenuReader) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	router.Use(CORSMiddleware("http://localhost:5173,http://127.0.0.1:5173"))
+	// test tenant (open-source compat + strict mode)
+	router.Use(func(c *gin.Context) {
+		c.Set("restaurantID", 1)
+		c.Set("orgID", 1)
+		c.Next()
+	})
 	api := router.Group("/api")
 	{
 		api.GET("/menu", NewApiHandler(reader, nil).GetMenu)

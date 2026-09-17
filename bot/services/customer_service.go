@@ -193,9 +193,33 @@ func UpdateCustomerProfileFor(phone string, restaurantID int, fields map[string]
 	return err
 }
 
-// RecordCustomerOrder bumps lifetime stats after a successful order.
+// RecordCustomerOrder bumps lifetime stats (open-source wrapper, single-tenant).
 func RecordCustomerOrder(phone string, total float64) error {
+	return RecordCustomerOrderFor(phone, 0, total)
+}
+
+// RecordCustomerOrderFor is tenant-aware.
+func RecordCustomerOrderFor(phone string, restaurantID int, total float64) error {
 	phone = canonicalForStorage(phone)
+	if database.DB == nil {
+		return nil
+	}
+	if restaurantID == 0 && !IsSingleTenantMode() {
+		return ErrTenantRequired
+	}
+	rid := ResolveRestaurant(restaurantID)
+	if rid != 0 {
+		_, err := database.DB.Exec(`
+			UPDATE customers SET
+				total_orders = total_orders + 1,
+				total_spent = total_spent + $1,
+				first_order_at = COALESCE(first_order_at, CURRENT_TIMESTAMP),
+				last_order_at = CURRENT_TIMESTAMP,
+				updated_at = CURRENT_TIMESTAMP
+			WHERE whatsapp_number = $2 AND restaurant_id = $3
+		`, total, phone, rid)
+		return err
+	}
 	_, err := database.DB.Exec(`
 		UPDATE customers SET
 			total_orders = total_orders + 1,
