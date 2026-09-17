@@ -1,0 +1,43 @@
+# Git
+.git
+.gitignore
+
+# Build artifacts
+evolution-go
+evolution-go.err
+evolution-go.log
+*.exe
+
+# Runtime data
+manager.backup/
+logs/
+passkey-helper/
+bot/
+
+# Dependencies
+evolution-go-manager/node_modules/
+evolution-go-manager/dist/
+evolution-go-manager/tsconfig.tsbuildinfo
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Misc
+*.tmp
+*.temp
+.cache/
