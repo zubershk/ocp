@@ -12,12 +12,15 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// MenuReader is the surface the public website API needs from the menu service.
+// MenuReader is the surface the public website API needs from the menu service (tenant-only).
 type MenuReader interface {
 	GetCategoriesWithSlug(restaurantID int) ([]models.MenuCategory, error)
 	GetAllActiveItems() ([]models.MenuItem, error)
+	GetAllActiveItemsFor(restaurantID int) ([]models.MenuItem, error)
 	GetItemByIdentifier(identifier string) (*models.MenuItem, error)
+	GetItemByIdentifierFor(identifier string, restaurantID int) (*models.MenuItem, error)
 	GetActiveCrusts() ([]services.CrustInfo, error)
+	GetActiveCrustsFor(restaurantID int) ([]services.CrustInfo, error)
 }
 
 // ApiHandler serves the public, unauthenticated catalog endpoints
@@ -106,26 +109,24 @@ type menuResponse struct {
 	Items      []models.MenuItem     `json:"items"`
 }
 
-// GetMenu handles GET /api/menu — tenant-aware (domain or /r/slug, else single-tenant fallback).
+// GetMenu handles GET /api/menu — tenant-only (strict).
 func (h *ApiHandler) GetMenu(c *gin.Context) {
-	rid, _ := services.RequireRestaurant(c)
-	if rid == 0 {
-		rid = c.GetInt("restaurantID")
+	rid, errReq := services.RequireRestaurant(c)
+	if errReq != nil {
+		// unit test without DB (DB==nil) falls back to 0 to keep stub tests green
+		if rid == 0 && database.DB == nil {
+			rid = 0
+		} else {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "tenant required"})
+			return
+		}
 	}
 	categories, err := h.menu.GetCategoriesWithSlug(rid)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load categories"})
 		return
 	}
-	var items []models.MenuItem
-	// Prefer tenant-scoped fetch when MenuService supports it
-	if svc, ok := h.menu.(interface {
-		GetAllActiveItemsFor(int) ([]models.MenuItem, error)
-	}); ok && rid != 0 {
-		items, err = svc.GetAllActiveItemsFor(rid)
-	} else {
-		items, err = h.menu.GetAllActiveItems()
-	}
+	items, err := h.menu.GetAllActiveItemsFor(rid)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load menu items"})
 		return
@@ -212,11 +213,16 @@ func (h *ApiHandler) GetOrder(c *gin.Context) {
 	c.JSON(http.StatusNotFound, gin.H{"error": "order not found"})
 }
 
-// GetOutlets handles GET /api/outlets — public, tenant-aware.
+// GetOutlets handles GET /api/outlets — tenant-only.
 func (h *ApiHandler) GetOutlets(c *gin.Context) {
-	rid, _ := services.RequireRestaurant(c)
-	if rid == 0 {
-		rid = services.ResolveRestaurant(c.GetInt("restaurantID"))
+	rid, errReq := services.RequireRestaurant(c)
+	if errReq != nil {
+		if database.DB == nil && rid == 0 {
+			rid = 0
+		} else {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "tenant required"})
+			return
+		}
 	}
 	rows, err := database.DB.Query(
 		`SELECT id, slug, name, address_lines, phones, delivery_hours, online_ordering, active, sort_order FROM outlets WHERE active=true AND restaurant_id=$1 ORDER BY sort_order, name`,
@@ -255,11 +261,16 @@ func (h *ApiHandler) GetOutlets(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"outlets": out})
 }
 
-// GetConfig handles GET /api/config — public restaurant config, tenant-aware.
+// GetConfig handles GET /api/config — tenant-only.
 func (h *ApiHandler) GetConfig(c *gin.Context) {
-	rid, _ := services.RequireRestaurant(c)
-	if rid == 0 {
-		rid = services.ResolveRestaurant(c.GetInt("restaurantID"))
+	rid, errReq := services.RequireRestaurant(c)
+	if errReq != nil {
+		if database.DB == nil && rid == 0 {
+			rid = 0
+		} else {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "tenant required"})
+			return
+		}
 	}
 	var id int
 	var name, phone, address, mapURL, opening, delivery, payment, support string

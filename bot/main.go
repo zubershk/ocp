@@ -141,7 +141,7 @@ func main() {
 		c.Next()
 	})
 	router.Use(handlers.SecurityHeaders())
-	router.Use(services.TenantResolverMiddleware(cfg.BaseDomain))
+	router.Use(services.TenantResolverMiddleware(cfg.BaseDomain, cfg.TrustedProxies))
 	// Open-source media — tenant-aware: ./uploads/<restaurant_id>/<file>
 	_ = os.MkdirAll("./uploads", 0755)
 	router.Static("/uploads", "./uploads")
