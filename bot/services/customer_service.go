@@ -46,6 +46,11 @@ func canonicalForStorage(phone string) string {
 // restaurantForPhone resolves the owning restaurant of a customer phone.
 // Deprecated for SaaS: phone is not tenant identifier. Strict mode returns 0 for unknown phone.
 func restaurantForPhone(phone string) int {
+	return RestaurantForPhoneStrict(phone)
+}
+
+// RestaurantForPhoneStrict is exported strict version (0 means unknown, no fallback in strict mode).
+func RestaurantForPhoneStrict(phone string) int {
 	if database.DB == nil {
 		return 0
 	}
