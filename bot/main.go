@@ -47,6 +47,12 @@ func main() {
 		log.Println("WARNING: CORS_ALLOWED_ORIGINS not set — using localhost defaults for development only")
 	}
 
+	// Security: webhooks must always be authenticated. Fail fast instead of
+	// rejecting per-request — an unset secret is a deploy misconfiguration.
+	if cfg.WebhookSecret == "" {
+		log.Fatal("SECURITY: EVOLUTION_WEBHOOK_SECRET must be set — refusing to start with unauthenticated webhooks")
+	}
+
 	// Initialize database
 	if err := database.Init(cfg); err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
@@ -158,18 +164,16 @@ func main() {
 	router.Static("/uploads", "./uploads")
 
 	// Webhook endpoints — the bundled Evolution GO fork sends no auth
-	// headers, so loopback senders (local Evolution) are trusted by
-	// source IP while remote senders must present the secret.
+	// headers, so local Evolution instances in dev are trusted by source IP
+	// while every other sender must present the secret. In production
+	// (GIN_MODE=release) loopback callers must authenticate too — shared-host
+	// adjacency is not a trust boundary.
 	webhookAuth := func(c *gin.Context) {
-		if ip := net.ParseIP(c.ClientIP()); ip != nil && ip.IsLoopback() {
-			c.Next()
-			return
-		}
-		if cfg.WebhookSecret == "" {
-			log.Println("SECURITY: EVOLUTION_WEBHOOK_SECRET not set — rejecting webhook")
-			c.JSON(500, gin.H{"error": "webhook not configured"})
-			c.Abort()
-			return
+		if os.Getenv("GIN_MODE") != "release" {
+			if ip := net.ParseIP(c.ClientIP()); ip != nil && ip.IsLoopback() {
+				c.Next()
+				return
+			}
 		}
 		// Verify via X-Webhook-Secret, X-Api-Key, or apikey header
 		provided := c.GetHeader("X-Webhook-Secret")
