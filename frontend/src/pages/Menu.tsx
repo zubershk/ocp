@@ -1,14 +1,14 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Flame, Plus, Pizza, SlidersHorizontal, X, ChevronDown, Search, ArrowRight } from 'lucide-react';
+import { Pizza, SlidersHorizontal, X, ChevronDown, Search, ArrowRight } from 'lucide-react';
 import { useMenuItems } from '../hooks/useMenu';
 import { useCart } from '../context/CartContext';
 import { useCrusts } from '../context/CrustContext';
 import { useToast } from '../context/ToastContext';
 import { useGsapReveal } from '../hooks/useGsap';
 import SearchAutocomplete from '../components/ui/SearchAutocomplete';
-import StarRating from '../components/ui/StarRating';
 import { useDeliveryHours } from '../context/RestaurantContext';
+import { ProductCard } from '@/components/shadcn-space/blocks/product-listing-01/product-card';
 
 const categories: { id: string; label: string; filter: (m: any) => boolean }[] = [
   { id: 'all', label: 'All', filter: () => true },
@@ -213,95 +213,22 @@ export default function Menu() {
           </div>
         </div>
       ) : (
-        /* Menu grid */
-        <div ref={menuGridRef} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-5 mt-6">
+        <div ref={menuGridRef} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 mt-6 justify-items-center">
           {filtered.map((item) => (
-            <div
+            <ProductCard
               key={item.id}
-              className="menu-card group bg-white rounded-2xl border border-stone-100 overflow-hidden card-lift flex flex-col"
-            >
-                <Link to={`/r/menu/item/${item.id}`} className="relative block" aria-label={`View details for ${item.name}`}>
-                <div className="overflow-hidden">
-                  <img
-                    src={item.image}
-                    alt={item.name}
-                    width={400}
-                    height={300}
-                    loading="lazy"
-                    decoding="async"
-                    className="w-full h-44 object-cover group-hover:scale-105 transition-transform duration-500 ease-out bg-orange-50"
-                  />
-                </div>
-                {/* Badges */}
-                <span
-                  className={`absolute top-3 left-3 text-[10px] font-bold px-2.5 py-1 rounded-full backdrop-blur-sm ${
-                    item.dietary === 'veg' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'
-                  }`}
-                >
-                  {item.dietary === 'veg' ? 'VEG' : 'NON-VEG'}
-                </span>
-                {item.isPopular && (
-                  <span className="absolute bottom-3 left-3 text-[10px] font-bold px-2.5 py-1 rounded-full bg-amber-400 text-amber-950">
-                    MOST LOVED
-                  </span>
-                )}
-                {item.isSpicy && (
-                  <span className="absolute top-3 right-3 inline-flex items-center gap-0.5 text-[10px] font-bold px-2.5 py-1 rounded-full bg-brand-600 text-white">
-                    <Flame size={10} /> SPICY
-                  </span>
-                )}
-              </Link>
-
-              <div className="p-4 flex flex-col flex-1">
-                <div className="flex items-center gap-2 text-xs">
-                  <span className="capitalize px-2 py-0.5 rounded-full bg-stone-100 text-zinc-600 font-medium">
-                    {item.category.replace('-', ' ')}
-                  </span>
-                  {item.pizzaSubcategory && (
-                    <span className="text-zinc-400 capitalize">{item.pizzaSubcategory}</span>
-                  )}
-                  <span className="ml-auto flex items-center gap-1 text-zinc-400 font-medium">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-                      <circle cx="12" cy="12" r="9" />
-                      <path d="M12 7v5l3 2" />
-                    </svg>
-                    {item.preparationTime} min
-                  </span>
-                </div>
-
-                <h3 className="font-semibold mt-2 leading-tight line-clamp-1 text-zinc-900">{item.name}</h3>
-                <p className="text-xs text-zinc-500 line-clamp-2 mt-1 leading-relaxed">{item.description}</p>
-
-                {/* Rating */}
-                {item.rating && item.rating > 0 && (
-                  <div className="mt-2">
-                    <StarRating rating={item.rating} count={item.reviewCount} size={12} />
-                  </div>
-                )}
-
-                <div className="mt-auto pt-3 flex items-center justify-between gap-2">
-                  <span className="text-sm font-bold text-zinc-900">
-                    ₹{item.price}
-                    {item.priceBySize && <span className="text-xs text-zinc-400 font-medium"> onwards</span>}
-                  </span>
-                  {item.priceBySize ? (
-                    <Link
-                      to={`/r/menu/item/${item.id}`}
-                      className="px-3.5 py-2 rounded-xl text-xs font-semibold transition-all duration-200 bg-zinc-900 text-white group-hover:bg-brand-600 touch-target"
-                    >
-                      Choose size
-                    </Link>
-                  ) : (
-                    <button
-                      onClick={() => quickAdd(item)}
-                      className="inline-flex items-center gap-1 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all duration-200 bg-brand-600 text-white hover:bg-brand-700 active:scale-95 cursor-pointer touch-target"
-                    >
-                      <Plus size={12} /> Add
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
+              id={item.id}
+              image={item.image}
+              category={item.category}
+              name={item.name}
+              rating={item.rating || 4.5}
+              reviews={(item as unknown as { reviewCount?: number }).reviewCount ?? 99}
+              price={item.price}
+              originalPrice={item.priceBySize ? Math.round(item.price * 1.2) : undefined}
+              badge={item.isSpicy ? { text: "Hot" } : item.isPopular ? { text: "Hot" } : undefined}
+              onAddToCart={() => quickAdd(item)}
+              className="w-[270px] h-[410px]"
+            />
           ))}
         </div>
       )}
