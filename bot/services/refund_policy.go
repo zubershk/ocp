@@ -35,12 +35,12 @@ var (
 
 // RefundCheck carries the ledger-derived facts about one payment.
 type RefundCheck struct {
-	OriginalAmountPaise int64 // positive amount of the original payment
+	OriginalAmountPaise  int64 // positive amount of the original payment
 	AlreadyRefundedPaise int64 // abs sum of prior refunds against it
-	OriginalRefundOf    int   // nonzero when the "original" is itself a refund
-	OriginalOrderID     int
+	OriginalRefundOf     int   // nonzero when the "original" is itself a refund
+	OriginalOrderID      int
 	OriginalRestaurantID int
-	OriginalOutletID    int
+	OriginalOutletID     int
 }
 
 // RemainingRefundable is the ledger-derived balance for this payment.

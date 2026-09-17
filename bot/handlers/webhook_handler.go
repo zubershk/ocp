@@ -182,8 +182,19 @@ func (h *WebhookHandler) HandleWebhook(c *gin.Context) {
 		body = actionTitle
 	}
 	if body != "" {
-		_ = services.SaveWhatsAppMessage(phone, "in", body, messageID)
-		services.BroadcastRealtime("chat.message", map[string]interface{}{"phone": phone, "dir": "in"})
+		rid := services.RestaurantForPhoneStrict(phone)
+		if rid == 0 && services.IsSingleTenantMode() {
+			_ = services.SaveWhatsAppMessage(phone, "in", body, messageID)
+		} else if rid != 0 {
+			_ = services.SaveWhatsAppMessageFor(phone, "in", body, messageID, rid)
+		} else {
+			_ = services.SaveWhatsAppMessage(phone, "in", body, messageID)
+		}
+		if rid != 0 {
+			services.BroadcastRealtimeFor(rid, 0, 0, "chat.message", map[string]interface{}{"phone": phone, "dir": "in", "restaurant_id": rid})
+		} else {
+			services.BroadcastRealtime("chat.message", map[string]interface{}{"phone": phone, "dir": "in"})
+		}
 	}
 
 	// If human has taken over, don't let bot auto-reply — keep in HUMAN_SUPPORT for live board

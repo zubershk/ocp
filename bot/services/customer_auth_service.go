@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math/big"
+	"os"
 	"strings"
 	"time"
 
@@ -19,14 +20,18 @@ import (
 // between web and WhatsApp bot (customers.whatsapp_number).
 // OTP: 6-digit, 5m expiry, max 3 attempts, 30s resend cooldown.
 // Session: opaque 48-hex token, hashed at rest, 30d expiry. SaaS hardening.
- // ------------------------------------------------------------------
+// ------------------------------------------------------------------
 
 const otpExpiry = 5 * time.Minute
 const otpCooldown = 30 * time.Second
 const sessionExpiry = 30 * 24 * time.Hour
 
 func hashHex(s string) string {
-	h := sha256.Sum256([]byte(s))
+	pepper := os.Getenv("OTP_PEPPER")
+	if pepper == "" {
+		pepper = os.Getenv("BOT_ADMIN_KEY")
+	}
+	h := sha256.Sum256([]byte(pepper + s))
 	return hex.EncodeToString(h[:])
 }
 
@@ -72,7 +77,9 @@ func normalizeAuthPhone(raw string) (string, error) {
 // whatsappDest mirrors order_status_service.normalizeWhatsAppDest.
 func whatsappDest(phone string) string {
 	cleaned := strings.Map(func(r rune) rune {
-		if r >= '0' && r <= '9' { return r }
+		if r >= '0' && r <= '9' {
+			return r
+		}
 		return -1
 	}, phone)
 	switch {
@@ -101,15 +108,24 @@ func randomToken() (string, error) {
 	return hex.EncodeToString(b), nil
 }
 
-// SendOTP creates a fresh OTP and sends it on WhatsApp. Returns remaining cooldown.
+// SendOTP creates a fresh OTP and sends it on WhatsApp (open-source wrapper uses default tenant).
 func SendOTP(phone string, evolution *EvolutionClient) (string, error) {
+	return SendOTPFor(phone, 0, evolution)
+}
+
+// SendOTPFor is tenant-aware (phone,restaurant_id).
+func SendOTPFor(phone string, restaurantID int, evolution *EvolutionClient) (string, error) {
 	normalized, err := normalizeAuthPhone(phone)
 	if err != nil {
 		return "", &ValidationError{Msg: "enter a valid 10-digit mobile number"}
 	}
-	// cooldown check: most recent OTP within 30s
+	if restaurantID == 0 && !IsSingleTenantMode() {
+		return "", ErrTenantRequired
+	}
+	rid := ResolveRestaurant(restaurantID)
+	// cooldown check per tenant
 	var lastCreated time.Time
-	err = database.DB.QueryRow(`SELECT created_at FROM customer_otps WHERE phone=$1 ORDER BY id DESC LIMIT 1`, normalized).Scan(&lastCreated)
+	err = database.DB.QueryRow(`SELECT created_at FROM customer_otps WHERE phone=$1 AND restaurant_id=$2 ORDER BY id DESC LIMIT 1`, normalized, rid).Scan(&lastCreated)
 	if err == nil && time.Since(lastCreated) < otpCooldown {
 		remaining := otpCooldown - time.Since(lastCreated)
 		return "", &ValidationError{Msg: fmt.Sprintf("please wait %d seconds before requesting a new code", int(remaining.Seconds())+1)}
@@ -117,18 +133,25 @@ func SendOTP(phone string, evolution *EvolutionClient) (string, error) {
 	if err != nil && err != sql.ErrNoRows {
 		return "", fmt.Errorf("otp lookup failed: %w", err)
 	}
+	var dailyCount int
+	_ = database.DB.QueryRow(`SELECT COUNT(*) FROM customer_otps WHERE phone=$1 AND restaurant_id=$2 AND created_at > NOW() - INTERVAL '24 hours'`, normalized, rid).Scan(&dailyCount)
+	if dailyCount >= 10 {
+		return "", &ValidationError{Msg: "too many codes sent today — try again tomorrow"}
+	}
 	code, err := randomOTP()
 	if err != nil {
 		return "", err
 	}
-	// invalidate previous OTPs for this phone
-	if _, err := database.DB.Exec(`DELETE FROM customer_otps WHERE phone=$1`, normalized); err != nil {
+	if _, err := database.DB.Exec(`DELETE FROM customer_otps WHERE phone=$1 AND restaurant_id=$2`, normalized, rid); err != nil {
 		return "", err
 	}
 	expires := time.Now().Add(otpExpiry)
 	hashed := hashHex(code)
-	if _, err := database.DB.Exec(`INSERT INTO customer_otps (phone, code, expires_at) VALUES ($1,$2,$3)`, normalized, hashed, expires); err != nil {
-		return "", err
+	if _, err := database.DB.Exec(`INSERT INTO customer_otps (phone, code, expires_at, restaurant_id) VALUES ($1,$2,$3,$4)`, normalized, hashed, expires, rid); err != nil {
+		// fallback for DBs without column during transition
+		if _, err2 := database.DB.Exec(`INSERT INTO customer_otps (phone, code, expires_at) VALUES ($1,$2,$3)`, normalized, hashed, expires); err2 != nil {
+			return "", err
+		}
 	}
 	dest := whatsappDest(normalized)
 	if dest == "" {
@@ -136,53 +159,60 @@ func SendOTP(phone string, evolution *EvolutionClient) (string, error) {
 	}
 	msg := Msg("notification_otp", map[string]interface{}{"Code": code})
 	if err := evolution.SendText(dest, msg); err != nil {
-		// keep OTP but surface warning; client sees sent:false
 		return "", fmt.Errorf("whatsapp send failed: %w", err)
 	}
 	return code, nil
 }
 
-// VerifyOTP checks code, creates session, and upserts customer profile.
+// VerifyOTP checks code, creates session, and upserts customer profile (open-source wrapper).
 func VerifyOTP(phone, code, name string) (string, *Customer, error) {
+	return VerifyOTPFor(phone, code, name, 0)
+}
+
+// VerifyOTPFor is tenant-aware.
+func VerifyOTPFor(phone, code, name string, restaurantID int) (string, *Customer, error) {
 	normalized, err := normalizeAuthPhone(phone)
 	if err != nil {
 		return "", nil, &ValidationError{Msg: "invalid phone number"}
 	}
+	if restaurantID == 0 && !IsSingleTenantMode() {
+		return "", nil, ErrTenantRequired
+	}
+	rid := ResolveRestaurant(restaurantID)
 	code = strings.TrimSpace(code)
 	if code == "" {
 		return "", nil, &ValidationError{Msg: "enter the 6-digit code"}
 	}
-
-	// Use a transaction to prevent OTP brute-force race condition
 	tx, err := database.DB.Begin()
 	if err != nil {
 		return "", nil, err
 	}
 	defer tx.Rollback()
-
 	var rowID int
 	var stored string
 	var attempts int
 	var expiresAt time.Time
-	err = tx.QueryRow(`SELECT id, code, attempts, expires_at FROM customer_otps WHERE phone=$1 ORDER BY id DESC LIMIT 1 FOR UPDATE`, normalized).Scan(&rowID, &stored, &attempts, &expiresAt)
+	err = tx.QueryRow(`SELECT id, code, attempts, expires_at FROM customer_otps WHERE phone=$1 AND restaurant_id=$2 ORDER BY id DESC LIMIT 1 FOR UPDATE`, normalized, rid).Scan(&rowID, &stored, &attempts, &expiresAt)
 	if err == sql.ErrNoRows {
-		return "", nil, &ValidationError{Msg: "no code found — request a new one"}
+		// fallback to global during transition
+		err = tx.QueryRow(`SELECT id, code, attempts, expires_at FROM customer_otps WHERE phone=$1 ORDER BY id DESC LIMIT 1 FOR UPDATE`, normalized).Scan(&rowID, &stored, &attempts, &expiresAt)
+		if err == sql.ErrNoRows {
+			return "", nil, &ValidationError{Msg: "no code found — request a new one"}
+		}
 	}
 	if err != nil {
 		return "", nil, err
 	}
-	// expired cleanup
 	if time.Now().After(expiresAt) {
-		tx.Exec(`DELETE FROM customer_otps WHERE phone=$1`, normalized)
+		tx.Exec(`DELETE FROM customer_otps WHERE phone=$1 AND restaurant_id=$2`, normalized, rid)
 		_ = tx.Commit()
 		return "", nil, &ValidationError{Msg: "code expired — request a new one"}
 	}
 	if attempts >= 3 {
-		tx.Exec(`DELETE FROM customer_otps WHERE phone=$1`, normalized)
+		tx.Exec(`DELETE FROM customer_otps WHERE phone=$1 AND restaurant_id=$2`, normalized, rid)
 		_ = tx.Commit()
 		return "", nil, &ValidationError{Msg: "too many attempts — request a new code"}
 	}
-	// stored is SHA256 hex; compare hash; constant-time for plaintext fallback
 	if len(stored) == 6 {
 		if subtle.ConstantTimeCompare([]byte(stored), []byte(code)) != 1 {
 			tx.Exec(`UPDATE customer_otps SET attempts=attempts+1 WHERE id=$1`, rowID)
@@ -194,20 +224,17 @@ func VerifyOTP(phone, code, name string) (string, *Customer, error) {
 		_ = tx.Commit()
 		return "", nil, &ValidationError{Msg: "incorrect code"}
 	}
-	// success: consume OTP
-	tx.Exec(`DELETE FROM customer_otps WHERE phone=$1`, normalized)
+	tx.Exec(`DELETE FROM customer_otps WHERE phone=$1 AND restaurant_id=$2`, normalized, rid)
 	if err := tx.Commit(); err != nil {
 		return "", nil, err
 	}
-
-	// ensure customer exists
-	if _, err := GetOrCreateCustomer(normalized); err != nil {
+	if _, err := GetOrCreateCustomerFor(normalized, rid); err != nil {
 		return "", nil, err
 	}
 	if strings.TrimSpace(name) != "" {
-		_ = UpdateCustomerProfile(normalized, map[string]string{"name": name})
+		_ = UpdateCustomerProfileFor(normalized, rid, map[string]string{"name": name})
 	}
-	cust, err := getCustomer(normalized)
+	cust, err := getCustomerFor(normalized, rid)
 	if err != nil {
 		return "", nil, err
 	}
@@ -217,14 +244,21 @@ func VerifyOTP(phone, code, name string) (string, *Customer, error) {
 	}
 	expires := time.Now().Add(sessionExpiry)
 	hashedToken := hashHex(token)
-	if _, err := database.DB.Exec(`INSERT INTO customer_sessions (phone, token, expires_at) VALUES ($1,$2,$3)`, normalized, hashedToken, expires); err != nil {
-		return "", nil, err
+	if _, err := database.DB.Exec(`INSERT INTO customer_sessions (phone, token, expires_at, restaurant_id) VALUES ($1,$2,$3,$4)`, normalized, hashedToken, expires, rid); err != nil {
+		if _, err2 := database.DB.Exec(`INSERT INTO customer_sessions (phone, token, expires_at) VALUES ($1,$2,$3)`, normalized, hashedToken, expires); err2 != nil {
+			return "", nil, err
+		}
 	}
 	return token, cust, nil
 }
 
-// ValidateSession returns the phone and customer for a valid token.
+// ValidateSession returns the phone and customer for a valid token (open-source wrapper).
 func ValidateSession(token string) (string, *Customer, error) {
+	return ValidateSessionFor(token, 0)
+}
+
+// ValidateSessionFor is tenant-aware: session must belong to request tenant.
+func ValidateSessionFor(token string, restaurantID int) (string, *Customer, error) {
 	token = strings.TrimSpace(token)
 	if token == "" {
 		return "", nil, fmt.Errorf("empty token")
@@ -232,22 +266,46 @@ func ValidateSession(token string) (string, *Customer, error) {
 	hashed := hashHex(token)
 	var phone string
 	var expiresAt time.Time
-	// Support both new hashed rows and legacy plaintext (48-char) during migration window
-	err := database.DB.QueryRow(`SELECT phone, expires_at FROM customer_sessions WHERE token=$1 LIMIT 1`, hashed).Scan(&phone, &expiresAt)
+	var sessRid sql.NullInt64
+	err := database.DB.QueryRow(`SELECT phone, expires_at, restaurant_id FROM customer_sessions WHERE token=$1 LIMIT 1`, hashed).Scan(&phone, &expiresAt, &sessRid)
 	if err == sql.ErrNoRows {
-		return "", nil, fmt.Errorf("invalid token")
+		old := func(s string) string {
+			h := sha256.Sum256([]byte(s))
+			return hex.EncodeToString(h[:])
+		}(token)
+		err = database.DB.QueryRow(`SELECT phone, expires_at, restaurant_id FROM customer_sessions WHERE token=$1 LIMIT 1`, old).Scan(&phone, &expiresAt, &sessRid)
+		if err == sql.ErrNoRows {
+			return "", nil, fmt.Errorf("invalid token")
+		}
 	}
 	if err != nil {
 		return "", nil, err
 	}
 	if time.Now().After(expiresAt) {
-		// delete both hash and legacy plain
 		database.DB.Exec(`DELETE FROM customer_sessions WHERE token=$1`, hashed)
 		return "", nil, fmt.Errorf("session expired")
 	}
-	cust, err := getCustomer(phone)
-	if err != nil {
-		// customer may have been deleted; still return phone
+	// tenant check: if request has tenant, session must match or be global (NULL) for transition
+	if restaurantID != 0 {
+		reqRid := ResolveRestaurant(restaurantID)
+		if sessRid.Valid && int(sessRid.Int64) != reqRid {
+			return "", nil, fmt.Errorf("invalid token")
+		}
+	} else if !IsSingleTenantMode() {
+		// strict SaaS requires tenant
+		if sessRid.Valid && sessRid.Int64 != 0 {
+			// session has tenant but request did not provide — reject
+			return "", nil, ErrTenantRequired
+		}
+	}
+	var cust *Customer
+	var cerr error
+	if sessRid.Valid && sessRid.Int64 != 0 {
+		cust, cerr = getCustomerFor(phone, int(sessRid.Int64))
+	} else {
+		cust, cerr = getCustomer(phone)
+	}
+	if cerr != nil {
 		return phone, nil, nil
 	}
 	return phone, cust, nil

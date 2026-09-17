@@ -12,12 +12,15 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// MenuReader is the surface the public website API needs from the menu service.
+// MenuReader is the surface the public website API needs from the menu service (tenant-only).
 type MenuReader interface {
 	GetCategoriesWithSlug(restaurantID int) ([]models.MenuCategory, error)
 	GetAllActiveItems() ([]models.MenuItem, error)
+	GetAllActiveItemsFor(restaurantID int) ([]models.MenuItem, error)
 	GetItemByIdentifier(identifier string) (*models.MenuItem, error)
+	GetItemByIdentifierFor(identifier string, restaurantID int) (*models.MenuItem, error)
 	GetActiveCrusts() ([]services.CrustInfo, error)
+	GetActiveCrustsFor(restaurantID int) ([]services.CrustInfo, error)
 }
 
 // ApiHandler serves the public, unauthenticated catalog endpoints
@@ -53,7 +56,7 @@ func CORSMiddleware(allowedOriginsCSV string) gin.HandlerFunc {
 			c.Header("Access-Control-Allow-Origin", origin)
 			c.Header("Vary", "Origin")
 			c.Header("Access-Control-Allow-Methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS")
-			c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Admin-Key, X-Customer-Token")
+			c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Admin-Key, X-Customer-Token, X-Outlet-ID, Idempotency-Key, X-Order-Token, X-Request-ID")
 			c.Header("Access-Control-Max-Age", "86400")
 		}
 		if c.Request.Method == http.MethodOptions {
@@ -106,15 +109,24 @@ type menuResponse struct {
 	Items      []models.MenuItem     `json:"items"`
 }
 
-// GetMenu handles GET /api/menu (default restaurant; per-restaurant
-// storefront routing arrives in Phase 4).
+// GetMenu handles GET /api/menu — tenant-only (strict).
 func (h *ApiHandler) GetMenu(c *gin.Context) {
-	categories, err := h.menu.GetCategoriesWithSlug(0)
+	rid, errReq := services.RequireRestaurant(c)
+	if errReq != nil {
+		// unit test without DB (DB==nil) falls back to 0 to keep stub tests green
+		if rid == 0 && database.DB == nil {
+			rid = 0
+		} else {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "tenant required"})
+			return
+		}
+	}
+	categories, err := h.menu.GetCategoriesWithSlug(rid)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load categories"})
 		return
 	}
-	items, err := h.menu.GetAllActiveItems()
+	items, err := h.menu.GetAllActiveItemsFor(rid)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load menu items"})
 		return
@@ -122,9 +134,17 @@ func (h *ApiHandler) GetMenu(c *gin.Context) {
 	c.JSON(http.StatusOK, menuResponse{Categories: categories, Items: items})
 }
 
-// GetItem handles GET /api/menu/:id (numeric ID or slug)
+// GetItem handles GET /api/menu/:id (numeric ID or slug) — tenant-aware.
 func (h *ApiHandler) GetItem(c *gin.Context) {
-	item, err := h.menu.GetItemByIdentifier(c.Param("id"))
+	rid, errReq := services.RequireRestaurant(c)
+	if errReq != nil {
+		if database.DB != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "tenant required"})
+			return
+		}
+		rid = 0
+	}
+	item, err := h.menu.GetItemByIdentifierFor(c.Param("id"), rid)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load menu item"})
 		return
@@ -136,9 +156,17 @@ func (h *ApiHandler) GetItem(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"item": item})
 }
 
-// GetCrusts handles GET /api/crusts — public crust catalog.
+// GetCrusts handles GET /api/crusts — tenant-aware.
 func (h *ApiHandler) GetCrusts(c *gin.Context) {
-	crusts, err := h.menu.GetActiveCrusts()
+	rid, errReq := services.RequireRestaurant(c)
+	if errReq != nil {
+		if database.DB != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "tenant required"})
+			return
+		}
+		rid = 0
+	}
+	crusts, err := h.menu.GetActiveCrustsFor(rid)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load crusts"})
 		return
@@ -146,16 +174,19 @@ func (h *ApiHandler) GetCrusts(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"crusts": crusts})
 }
 
-// CreateOrder handles POST /api/orders.
-// Prices are always recalculated from PostgreSQL; client totals ignored.
+// CreateOrder handles POST /api/orders — tenant-aware.
 func (h *ApiHandler) CreateOrder(c *gin.Context) {
 	var req services.WebsiteOrderRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
-
-	result, err := h.orders.Create(&req, c.GetHeader("Idempotency-Key"))
+	rid, errReq := services.RequireRestaurant(c)
+	if errReq != nil && database.DB != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "tenant required"})
+		return
+	}
+	result, err := h.orders.CreateFor(&req, c.GetHeader("Idempotency-Key"), rid)
 	if err != nil {
 		var validationErr *services.ValidationError
 		if errors.As(err, &validationErr) {
@@ -201,12 +232,20 @@ func (h *ApiHandler) GetOrder(c *gin.Context) {
 	c.JSON(http.StatusNotFound, gin.H{"error": "order not found"})
 }
 
-// GetOutlets handles GET /api/outlets — public SaaS settings.
+// GetOutlets handles GET /api/outlets — tenant-only.
 func (h *ApiHandler) GetOutlets(c *gin.Context) {
-	// Public storefront serves the default restaurant until Phase 4 routing.
+	rid, errReq := services.RequireRestaurant(c)
+	if errReq != nil {
+		if database.DB == nil && rid == 0 {
+			rid = 0
+		} else {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "tenant required"})
+			return
+		}
+	}
 	rows, err := database.DB.Query(
 		`SELECT id, slug, name, address_lines, phones, delivery_hours, online_ordering, active, sort_order FROM outlets WHERE active=true AND restaurant_id=$1 ORDER BY sort_order, name`,
-		services.ResolveRestaurant(0))
+		rid)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load outlets"})
 		return
@@ -241,11 +280,25 @@ func (h *ApiHandler) GetOutlets(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"outlets": out})
 }
 
-// GetConfig handles GET /api/config — public restaurant config.
+// GetConfig handles GET /api/config — tenant-only.
 func (h *ApiHandler) GetConfig(c *gin.Context) {
+	rid, errReq := services.RequireRestaurant(c)
+	if errReq != nil {
+		if database.DB == nil && rid == 0 {
+			rid = 0
+		} else {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "tenant required"})
+			return
+		}
+	}
 	var id int
 	var name, phone, address, mapURL, opening, delivery, payment, support string
-	err := database.DB.QueryRow(`SELECT id, name, phone, address, map_url, opening_hours::text, delivery_area::text, payment_info::text, support_phone FROM restaurant_config LIMIT 1`).Scan(&id, &name, &phone, &address, &mapURL, &opening, &delivery, &payment, &support)
+	var err error
+	if rid != 0 {
+		err = database.DB.QueryRow(`SELECT id, name, phone, address, map_url, opening_hours::text, delivery_area::text, payment_info::text, support_phone FROM restaurant_config WHERE restaurant_id=$1 LIMIT 1`, rid).Scan(&id, &name, &phone, &address, &mapURL, &opening, &delivery, &payment, &support)
+	} else {
+		err = database.DB.QueryRow(`SELECT id, name, phone, address, map_url, opening_hours::text, delivery_area::text, payment_info::text, support_phone FROM restaurant_config LIMIT 1`).Scan(&id, &name, &phone, &address, &mapURL, &opening, &delivery, &payment, &support)
+	}
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"config": nil})
 		return

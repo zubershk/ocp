@@ -2,8 +2,26 @@ const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL ?? 'http://localh
 
 export const apiBaseUrl = API_BASE_URL;
 
+// Tenant slug from URL for local multi-tenant fallback: /r/:slug/*
+function getTenantSlug(): string | null {
+  if (typeof window === 'undefined') return null;
+  const m = window.location.pathname.match(/^\/r\/([^/]+)/);
+  if (!m) return null;
+  const slug = m[1];
+  const reserved = new Set(['menu', 'cart', 'checkout', 'order', 'offers', 'locations', 'about', 'faq', 'reviews', 'contact', 'privacy', 'terms', 'login', 'account']);
+  if (reserved.has(slug)) return null;
+  return slug;
+}
+
+function withTenant(path: string): string {
+  const slug = getTenantSlug();
+  if (!slug) return path;
+  const sep = path.includes('?') ? '&' : '?';
+  return `${path}${sep}restaurant=${encodeURIComponent(slug)}`;
+}
+
 export async function apiGet<T>(path: string, headers: Record<string, string> = {}): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await fetch(`${API_BASE_URL}${withTenant(path)}`, {
     headers: { Accept: 'application/json', ...headers },
   });
   if (!response.ok) {
@@ -13,7 +31,7 @@ export async function apiGet<T>(path: string, headers: Record<string, string> = 
 }
 
 export async function apiPost<T>(path: string, body: unknown): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await fetch(`${API_BASE_URL}${withTenant(path)}`, {
     method: 'POST',
     headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
