@@ -35,7 +35,9 @@ func NewApiHandler(menu MenuReader, orders *services.WebsiteOrderService) *ApiHa
 }
 
 // CORSMiddleware — origins from CORS_ALLOWED_ORIGINS (comma-separated).
-// Defaults cover Vite dev (5173) for local SaaS development.
+// Fail-closed: when no origins are configured, no Origin is echoed back.
+// main.go supplies localhost defaults for local dev; production (GIN_MODE=release)
+// refuses to start without explicit origins.
 func CORSMiddleware(allowedOriginsCSV string) gin.HandlerFunc {
 	allowed := map[string]bool{}
 	for _, o := range splitCSV(allowedOriginsCSV) {
@@ -43,12 +45,8 @@ func CORSMiddleware(allowedOriginsCSV string) gin.HandlerFunc {
 			allowed[o] = true
 		}
 	}
-	// Ensure dev defaults if env omitted
 	if len(allowed) == 0 {
-		// Production: no CORS defaults — must be explicitly configured
-		allowed["http://localhost:5173"] = true
-		allowed["http://127.0.0.1:5173"] = true
-		log.Println("WARNING: CORS_ALLOWED_ORIGINS not set — using localhost defaults for development only")
+		log.Println("WARNING: no CORS origins configured — cross-origin requests will be rejected")
 	}
 	return func(c *gin.Context) {
 		origin := c.GetHeader("Origin")

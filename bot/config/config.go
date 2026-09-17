@@ -23,6 +23,7 @@ type Config struct {
 	MinOrderAmount           float64
 	LogLevel                 string
 	CORSAllowedOrigins       string
+	CORSAllowedOriginsSet    bool // true when CORS_ALLOWED_ORIGINS was explicitly provided
 	WebhookSecret            string
 	PublicBaseURL            string
 	// SaaS
@@ -57,7 +58,8 @@ func Load() *Config {
 		DeliveryFee:              deliveryFee,
 		MinOrderAmount:           minOrderAmount,
 		LogLevel:                 getEnv("LOG_LEVEL", "info"),
-		CORSAllowedOrigins:       getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173"),
+		CORSAllowedOrigins:       getEnv("CORS_ALLOWED_ORIGINS", ""),
+		CORSAllowedOriginsSet:    os.Getenv("CORS_ALLOWED_ORIGINS") != "",
 		WebhookSecret:            getEnv("EVOLUTION_WEBHOOK_SECRET", ""),
 		PublicBaseURL:            strings.TrimRight(getEnv("PUBLIC_BASE_URL", ""), "/"),
 		TrustedProxies:           getEnv("TRUSTED_PROXIES", ""),

@@ -36,6 +36,17 @@ func main() {
 	// Load configuration
 	cfg := config.Load()
 
+	// Security: CORS origins must be explicit in production. GIN_MODE=release
+	// (baked into the Docker image) refuses to start without CORS_ALLOWED_ORIGINS;
+	// local dev falls back to the Vite localhost defaults.
+	if !cfg.CORSAllowedOriginsSet {
+		if os.Getenv("GIN_MODE") == "release" {
+			log.Fatal("SECURITY: CORS_ALLOWED_ORIGINS must be set explicitly when GIN_MODE=release")
+		}
+		cfg.CORSAllowedOrigins = "http://localhost:5173,http://127.0.0.1:5173"
+		log.Println("WARNING: CORS_ALLOWED_ORIGINS not set — using localhost defaults for development only")
+	}
+
 	// Initialize database
 	if err := database.Init(cfg); err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
