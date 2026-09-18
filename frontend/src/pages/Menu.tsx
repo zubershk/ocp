@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
-import { Pizza, SlidersHorizontal, X, ChevronDown, Search, ArrowRight } from 'lucide-react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Pizza, SlidersHorizontal, ChevronDown, ArrowRight } from 'lucide-react';
 import { useMenuItems } from '../hooks/useMenu';
 import { useCart } from '../context/CartContext';
 import { useCrusts } from '../context/CrustContext';
@@ -36,6 +36,7 @@ export default function Menu() {
   const { addItem } = useCart();
   const { defaultCrust } = useCrusts();
   const { push } = useToast();
+  const navigate = useNavigate();
   const deliveryHours = useDeliveryHours();
   const categoryBarRef = useRef<HTMLDivElement>(null);
   const [isCategoryBarSticky, setIsCategoryBarSticky] = useState(false);
@@ -214,22 +215,31 @@ export default function Menu() {
         </div>
       ) : (
         <div ref={menuGridRef} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 mt-6 justify-items-center">
-          {filtered.map((item) => (
-            <ProductCard
-              key={item.id}
-              id={item.id}
-              image={item.image}
-              category={item.category}
-              name={item.name}
-              rating={item.rating || 4.5}
-              reviews={(item as unknown as { reviewCount?: number }).reviewCount ?? 99}
-              price={item.price}
-              originalPrice={item.priceBySize ? Math.round(item.price * 1.2) : undefined}
-              badge={item.isSpicy ? { text: "Hot" } : item.isPopular ? { text: "Hot" } : undefined}
-              onAddToCart={() => quickAdd(item)}
-              className="w-[270px] h-[410px]"
-            />
-          ))}
+          {filtered.map((item) => {
+            // Sized items need a size choice — send the user to the detail page
+            // instead of silently adding a default size.
+            const needsSize = !!item.priceBySize;
+            return (
+              <ProductCard
+                key={item.id}
+                id={item.id}
+                image={item.image}
+                category={item.category}
+                name={item.name}
+                description={item.description}
+                dietary={item.dietary}
+                preparationTime={item.preparationTime}
+                rating={item.rating}
+                reviews={item.reviewCount}
+                price={item.price}
+                originalPrice={item.originalPrice}
+                badge={item.isSpicy ? { text: "Spicy" } : item.isPopular ? { text: "Bestseller" } : undefined}
+                actionLabel={needsSize ? "Choose size" : undefined}
+                onAddToCart={needsSize ? () => navigate(`/r/menu/item/${item.id}`) : () => quickAdd(item)}
+                className="menu-card w-[270px] h-[410px]"
+              />
+            );
+          })}
         </div>
       )}
 
