@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { Search, ShieldCheck, MapPin, Star, ChevronRight, Phone, ArrowRight, Leaf, ChefHat, Truck, Settings2, ArrowUp } from 'lucide-react';
+import { ShieldCheck, MapPin, Star, ChevronRight, Phone, ArrowRight, Leaf, ChefHat, Truck, Settings2, ArrowUp } from 'lucide-react';
 import { useMenuItems } from '../hooks/useMenu';
 import { pickPopular } from '../services/menuService';
 import { useRestaurantName, useDeliveryHours, useOutletsList, useRestaurantPhone } from '../context/RestaurantContext';
@@ -119,14 +119,19 @@ export default function Home() {
   }, []);
 
   const sectionRef = useGsapReveal('.reveal-item', { stagger: 0.06, y: 20 });
+  // Single base pool (popular first) so every filter tab draws from the same items.
+  const baseList = useMemo(() => {
+    const rest = items.filter((i) => !popular.some((p) => p.id === i.id));
+    return [...popular, ...rest];
+  }, [popular, items]);
   const filteredPopular = useMemo(() => {
-    if (activeFilter === 'all') return [...popular, ...items.filter((i) => !popular.some((p) => p.id === i.id))].slice(0, 12);
-    if (activeFilter === 'veg') return popular.filter((i) => i.dietary === 'veg');
-    if (activeFilter === 'budget') return popular.filter((i) => i.price < 200);
-    if (activeFilter === 'family') return items.filter((i) => i.category === 'family-packs').slice(0, 4);
-    if (activeFilter === 'spicy') return popular.filter((i) => i.isSpicy);
-    return popular;
-  }, [activeFilter, popular, items]);
+    if (activeFilter === 'all') return baseList.slice(0, 12);
+    if (activeFilter === 'veg') return baseList.filter((i) => i.dietary === 'veg');
+    if (activeFilter === 'budget') return baseList.filter((i) => i.price < 200);
+    if (activeFilter === 'family') return baseList.filter((i) => i.category === 'family-packs').slice(0, 4);
+    if (activeFilter === 'spicy') return baseList.filter((i) => i.isSpicy);
+    return baseList.slice(0, 12);
+  }, [activeFilter, baseList]);
 
   const packCount = items.filter((i) => i.category === ('family-packs' as MenuItem['category'])).length;
 
@@ -185,13 +190,16 @@ export default function Home() {
               image={item.image}
               category={item.category}
               name={item.name}
-              rating={item.rating || 4.5}
-              reviews={(item as unknown as { reviewCount?: number }).reviewCount ?? 105}
+              description={item.description}
+              dietary={item.dietary}
+              preparationTime={item.preparationTime}
+              rating={item.rating}
+              reviews={item.reviewCount}
               price={item.price}
-              originalPrice={item.priceBySize ? Math.round(item.price * 1.25) : undefined}
-              badge={item.isSpicy ? { text: "Hot" } : item.isPopular ? { text: "Hot" } : undefined}
+              originalPrice={item.originalPrice}
+              badge={item.isSpicy ? { text: "Spicy" } : item.isPopular ? { text: "Bestseller" } : undefined}
               onAddToCart={() => quickAdd(item, addItem, push, defaultCrust)}
-              className="w-[270px] h-[410px]"
+              className="reveal-item w-[270px] h-[410px]"
             />
           ))}
         </div>

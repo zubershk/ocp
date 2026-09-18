@@ -1,5 +1,3 @@
-"use client";
-
 import { ArrowRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import {
@@ -7,58 +5,12 @@ import {
   type ProductCardProps,
 } from "@/components/shadcn-space/blocks/product-listing-01/product-card";
 
-export const PRODUCTS: ProductCardProps[] = [
-  {
-    image:
-      "https://images.shadcnspace.com/assets/ecommerce/product-category/product-category-03-1.webp",
-    category: "Electronics",
-    name: "Apple Watch S9",
-    rating: 4.5,
-    reviews: 105,
-    price: 684,
-    originalPrice: 855,
-  },
-  {
-    image:
-      "https://images.shadcnspace.com/assets/ecommerce/product-category/product-category-02-2.webp",
-    category: "Fashion",
-    name: "Beige Jacket",
-    rating: 4.3,
-    reviews: 105,
-    price: 479,
-    originalPrice: 599,
-    badge: { text: "-15%" },
-  },
-  {
-    image:
-      "https://images.shadcnspace.com/assets/ecommerce/product-category/product-category-03-3.webp",
-    category: "Beauty",
-    name: "Glow Serum",
-    rating: 4.5,
-    reviews: 105,
-    price: 46,
-    originalPrice: 55,
-    badge: { text: "New" },
-  },
-  {
-    image:
-      "https://images.shadcnspace.com/assets/ecommerce/product-category/product-category-03-4.webp",
-    category: "Electronics",
-    name: "Space WH-1000XM5",
-    rating: 4.5,
-    reviews: 105,
-    price: 279,
-    originalPrice: 349,
-    badge: { text: "Hot" },
-  },
-];
-
 export interface ProductListingProps {
-  products?: ProductCardProps[];
+  products: ProductCardProps[];
 }
 
 export default function ProductListing({
-  products = PRODUCTS,
+  products,
 }: ProductListingProps) {
   return (
     <section className="py-12 md:py-16 lg:py-20">
@@ -83,8 +35,8 @@ export default function ProductListing({
 
         <div className="w-full overflow-x-auto xl:[scrollbar-width:none] xl:[-ms-overflow-style:none] xl:[&::-webkit-scrollbar]:hidden">
           <div className="flex gap-6">
-            {products.map((product, index) => (
-              <div key={index} className="inline-block min-w-[270px] max-w-[270px] w-full whitespace-normal shrink-0">
+            {products.map((product) => (
+              <div key={product.id ?? product.name} className="inline-block min-w-[270px] max-w-[270px] w-full whitespace-normal shrink-0">
                 <ProductCard {...product} className="w-full" />
               </div>
             ))}
