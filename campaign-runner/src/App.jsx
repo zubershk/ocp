@@ -6,9 +6,27 @@ import StatisticsWithStatus from './components/statistics-with-status';
 
 const API = '';
 
+function getAdminKey() {
+  try { return localStorage.getItem('ocp_campaign_admin_key') || ''; } catch { return ''; }
+}
+
 async function api(path, opts = {}) {
-  const res = await fetch(`${API}${path}`, { headers: { 'Content-Type': 'application/json', ...opts.headers }, ...opts });
-  return res.json();
+  const headers = { 'Content-Type': 'application/json', ...opts.headers };
+  // bot-health and health are public; all other /api/* require X-Admin-Key
+  if (!path.includes('/api/bot-health') && !path.includes('/health')) {
+    const k = getAdminKey();
+    if (k) headers['X-Admin-Key'] = k;
+  }
+  const res = await fetch(`${API}${path}`, { headers, ...opts });
+  let data = null;
+  try { data = await res.json(); } catch { data = null; }
+  if (!res.ok) {
+    const err = new Error(data?.error || `request failed (${res.status})`);
+    err.status = res.status;
+    err.data = data;
+    throw err;
+  }
+  return data;
 }
 
 // ── SVG Icons ──
@@ -946,7 +964,14 @@ function CampaignsView() {
   useEffect(() => { load(); }, []);
 
   // Helpers: 10-digit sendable numbers only (longer = WhatsApp LID, not dialable)
-  const normPhone = (p) => String(p || '').replace(/\D/g, '').slice(-10);
+  // Matches server normPhone: 10 as-is, 12 starting 91 -> strip, 11 starting 0 -> strip, else invalid (no slice truncation)
+  const normPhone = (p) => {
+    const d = String(p || '').replace(/\D/g, '');
+    if (d.length === 10) return d;
+    if (d.length === 12 && d.startsWith('91')) return d.slice(2);
+    if (d.length === 11 && d.startsWith('0')) return d.slice(1);
+    return d;
+  };
   const isSendable = (p) => /^[0-9]{10}$/.test(normPhone(p));
   const modeOf = (c) => c.recipientMode || (c.recipientTag && c.recipientTag !== 'all' ? 'tag' : 'all');
   const recipientLabel = (c) => {
@@ -973,14 +998,19 @@ function CampaignsView() {
 
   const recipientCount = preview.sendable;
 
-  // Poll live campaigns
+  // Poll live campaigns (cleanup on done/cancelled/failed/unmount/change)
   useEffect(() => {
+    if (!showProgress) return;
+    let stopped = false;
     const interval = setInterval(() => {
-      if (showProgress) {
-        api(`/api/campaigns/${showProgress}`).then(c => { setLiveCampaign(c); if (c.status === 'done' || c.status === 'cancelled') { load(); } });
-      }
+      if (stopped) return;
+      api(`/api/campaigns/${showProgress}`).then(c => {
+        if (stopped) return;
+        setLiveCampaign(c);
+        if (c.status === 'done' || c.status === 'completed' || c.status === 'cancelled' || c.status === 'failed') { load(); }
+      }).catch(() => {});
     }, 2000);
-    return () => clearInterval(interval);
+    return () => { stopped = true; clearInterval(interval); };
   }, [showProgress]);
 
   const applyTemplate = (t) => {
@@ -990,12 +1020,23 @@ function CampaignsView() {
   const uploadImage = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    if (!/^image\/(jpeg|png|webp|gif)$/.test(file.type)) { alert('Only JPEG/PNG/WebP/GIF allowed'); e.target.value = ''; return; }
+    if (file.size > 5 * 1024 * 1024) { alert('Image too large (max 5MB)'); e.target.value = ''; return; }
     const fd = new FormData();
     fd.append('file', file);
-    const res = await fetch(`${API}/api/media/upload`, { method: 'POST', body: fd });
-    const data = await res.json();
-    setCompose({ ...compose, imageUrl: data.url });
-    e.target.value = '';
+    try {
+      const headers = {};
+      const k = getAdminKey();
+      if (k) headers['X-Admin-Key'] = k;
+      const res = await fetch(`${API}/api/media/upload`, { method: 'POST', headers, body: fd });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) { alert(data?.error || `upload failed (${res.status})`); return; }
+      setCompose({ ...compose, imageUrl: data.url });
+    } catch {
+      alert('upload failed');
+    } finally {
+      e.target.value = '';
+    }
   };
 
   const resetWizard = () => {
@@ -1074,20 +1115,33 @@ function CampaignsView() {
     load();
   };
 
+  const [sendingIds, setSendingIds] = useState(new Set());
   const sendCampaign = async (id) => {
+    if (sendingIds.has(id)) return;
     const c = campaigns.find(x => x.id === id);
     const label = c ? recipientLabel(c) : 'all recipients';
     if (!confirm(`Send this campaign to ${label}?`)) return;
-    const res = await api(`/api/campaigns/${id}/send`, { method: 'POST' });
-    if (res.error) return alert(res.error);
-    setShowProgress(id);
-    load();
+    setSendingIds(prev => new Set(prev).add(id));
+    try {
+      const res = await api(`/api/campaigns/${id}/send`, { method: 'POST' });
+      setShowProgress(id);
+      load();
+    } catch (e) {
+      alert(e.message || 'send failed');
+    } finally {
+      setSendingIds(prev => { const n = new Set(prev); n.delete(id); return n; });
+    }
   };
 
   const cancelCampaign = async (id) => {
     if (!confirm('Cancel this campaign?')) return;
-    await api(`/api/campaigns/${id}/cancel`, { method: 'POST' });
-    load();
+    try {
+      await api(`/api/campaigns/${id}/cancel`, { method: 'POST' });
+    } catch (e) {
+      alert(e.message || 'cancel failed');
+    } finally {
+      load();
+    }
   };
 
   const removeCampaign = async (id) => {
@@ -1204,9 +1258,9 @@ function CampaignsView() {
                   )}
                 </div>
                 <div className="flex gap-1 ml-4">
-                  {c.status === 'draft' && (
+                  {(c.status === 'draft' || c.status === 'failed') && (
                     <>
-                      <button onClick={() => sendCampaign(c.id)} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-brand-600 text-white text-xs font-medium hover:bg-brand-700 transition-colors"><Icons.Send s={12} /> Send</button>
+                      <button disabled={sendingIds.has(c.id)} onClick={() => sendCampaign(c.id)} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-brand-600 text-white text-xs font-medium hover:bg-brand-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"><Icons.Send s={12} /> {sendingIds.has(c.id) ? 'Sending…' : 'Send'}</button>
                       <button onClick={() => { setCompose({ name: c.name, message: c.message, imageUrl: c.imageUrl }); setRecipientMode(modeOf(c)); setRecipientTag(c.recipientTag || 'all'); setSelectedPhones(c.recipientPhones || []); restoreVarRows(c.variables); setScheduledAt(c.scheduledAt || ''); setStep(1); }} className="p-1.5 rounded-lg hover:bg-stone-100 text-zinc-400 hover:text-zinc-600"><Icons.Edit /></button>
                     </>
                   )}
@@ -1603,25 +1657,45 @@ function StepIndicator({ current }) {
 function SettingsView() {
   const [settings, setSettings] = useState({});
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const [adminKey, setAdminKey] = useState(() => { try { return localStorage.getItem('ocp_campaign_admin_key') || ''; } catch { return ''; } });
   const logoRef = useRef();
 
-  useEffect(() => { api('/api/settings').then(setSettings); }, []);
+  useEffect(() => { api('/api/settings').then(setSettings).catch(() => {}); }, []);
 
   const save = async () => {
-    await api('/api/settings', { method: 'PUT', body: JSON.stringify(settings) });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    setSaveError('');
+    try {
+      try { localStorage.setItem('ocp_campaign_admin_key', adminKey); } catch {}
+      const { delayMs, brandName, brandLogo, brandColor, footerText, defaultCountryCode } = settings;
+      await api('/api/settings', { method: 'PUT', body: JSON.stringify({ delayMs, brandName, brandLogo, brandColor, footerText, defaultCountryCode }) });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (e) {
+      setSaveError(e.message || 'save failed');
+    }
   };
 
   const uploadLogo = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    if (!/^image\/(jpeg|png|webp|gif)$/.test(file.type)) { alert('Only JPEG/PNG/WebP/GIF allowed'); e.target.value = ''; return; }
+    if (file.size > 5 * 1024 * 1024) { alert('Image too large (max 5MB)'); e.target.value = ''; return; }
     const fd = new FormData();
     fd.append('file', file);
-    const res = await fetch(`${API}/api/media/upload`, { method: 'POST', body: fd });
-    const data = await res.json();
-    setSettings({ ...settings, brandLogo: data.url });
-    e.target.value = '';
+    try {
+      const headers = {};
+      const k = getAdminKey();
+      if (k) headers['X-Admin-Key'] = k;
+      const res = await fetch(`${API}/api/media/upload`, { method: 'POST', headers, body: fd });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) { alert(data?.error || `upload failed (${res.status})`); return; }
+      setSettings({ ...settings, brandLogo: data.url });
+    } catch {
+      alert('upload failed');
+    } finally {
+      e.target.value = '';
+    }
   };
 
   return (
@@ -1670,13 +1744,14 @@ function SettingsView() {
           <CardDescription>Connect to your OCP Go bot to sync customers and send messages.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-        <Input label="Bot API URL" value={settings.botApiUrl || ''} onChange={(e) => setSettings({ ...settings, botApiUrl: e.target.value })} placeholder="http://localhost:8090" />
-        <Input label="Admin Key" type="password" value={settings.botAdminKey || ''} onChange={(e) => setSettings({ ...settings, botAdminKey: e.target.value })} placeholder="Your BOT_ADMIN_KEY from .env" />
-        <Input label="Delay Between Batches (ms)" type="number" value={settings.delayMs || 3000} onChange={(e) => setSettings({ ...settings, delayMs: parseInt(e.target.value) || 3000 })} />
+        <Input label="Admin Key (stored locally, never sent to server except as auth header)" type="password" value={adminKey} onChange={(e) => setAdminKey(e.target.value)} placeholder="Your BOT_ADMIN_KEY from .env" />
+        <div className="text-xs text-zinc-500">Bot URL: <span className="font-mono">{settings.botApiUrl || 'http://bot:8090'}</span> (environment-only) · {settings.configured ? 'configured' : 'not configured'}</div>
+        <Input label="Delay Between Batches (ms, 500-10000)" type="number" value={settings.delayMs || 3000} onChange={(e) => setSettings({ ...settings, delayMs: parseInt(e.target.value) || 3000 })} />
         <p className="text-xs text-zinc-400">Messages are sent through the bot's Evolution GO integration. Recommended: 3000ms.</p>
         </CardContent>
       </Card>
 
+      {saveError && <p className="text-xs text-red-500">{saveError}</p>}
       <button onClick={save} className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 transition-colors">
         {saved ? <><Icons.Check /> Saved!</> : 'Save Settings'}
       </button>
