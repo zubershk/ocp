@@ -359,8 +359,8 @@ func (s *POSOrderService) UpdateOrder(id, restaurantID, outletID int, orderType 
 		return err
 	}
 	_, err = database.DB.Exec(
-		`UPDATE orders SET order_type = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
-		id, normalized)
+		`UPDATE orders SET order_type = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND restaurant_id = $3 AND outlet_id = $4`,
+		id, normalized, restaurantID, outletID)
 	return err
 }
 
@@ -436,8 +436,8 @@ func (s *POSOrderService) HoldOrder(orderID, restaurantID, outletID int, heldBy 
 	}
 	res, err := database.DB.Exec(`
 		UPDATE orders SET status = 'held', updated_at = CURRENT_TIMESTAMP
-		WHERE id = $1 AND status = $2
-	`, orderID, status)
+		WHERE id = $1 AND status = $2 AND restaurant_id = $3 AND outlet_id = $4
+	`, orderID, status, restaurantID, outletID)
 	if err != nil {
 		return false, err
 	}
@@ -463,8 +463,8 @@ func (s *POSOrderService) ResumeOrder(orderID, restaurantID, outletID int) error
 	}
 	res, err := database.DB.Exec(`
 		UPDATE orders SET status = 'confirmed', updated_at = CURRENT_TIMESTAMP
-		WHERE id = $1 AND status = 'held'
-	`, orderID)
+		WHERE id = $1 AND status = 'held' AND restaurant_id = $2 AND outlet_id = $3
+	`, orderID, restaurantID, outletID)
 	if err != nil {
 		return err
 	}
@@ -495,8 +495,8 @@ func (s *POSOrderService) CompleteOrder(orderID, restaurantID, outletID int) err
 	}
 	res, err := database.DB.Exec(`
 		UPDATE orders SET status = 'completed', updated_at = CURRENT_TIMESTAMP
-		WHERE id = $1 AND status = $2
-	`, orderID, status)
+		WHERE id = $1 AND status = $2 AND restaurant_id = $3 AND outlet_id = $4
+	`, orderID, status, restaurantID, outletID)
 	if err != nil {
 		return err
 	}
@@ -522,8 +522,8 @@ func (s *POSOrderService) CancelOrder(orderID, restaurantID, outletID int) error
 	}
 	res, err := database.DB.Exec(`
 		UPDATE orders SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP
-		WHERE id = $1 AND status = $2
-	`, orderID, status)
+		WHERE id = $1 AND status = $2 AND restaurant_id = $3 AND outlet_id = $4
+	`, orderID, status, restaurantID, outletID)
 	if err != nil {
 		return err
 	}
@@ -629,8 +629,8 @@ func (s *POSOrderService) ApplyDiscount(orderID, restaurantID, outletID, discoun
 	// Validate the discount belongs to the order's restaurant and is active.
 	// We simply link the discount via orders.discount_id.
 	_, err = database.DB.Exec(`
-		UPDATE orders SET discount_id = $2 WHERE id = $1
-	`, orderID, discountID)
+		UPDATE orders SET discount_id = $2 WHERE id = $1 AND restaurant_id = $3
+	`, orderID, discountID, orderRestaurantID)
 	if err != nil {
 		return err
 	}

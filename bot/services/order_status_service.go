@@ -131,8 +131,8 @@ func ApplyStatusChange(orderID int, newStatus string, evolution *EvolutionClient
 	defer tx.Rollback()
 
 	if _, err := tx.Exec(`
-		UPDATE orders SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2
-	`, newStatus, orderID); err != nil {
+		UPDATE orders SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 AND restaurant_id = $3
+	`, newStatus, orderID, restaurantID); err != nil {
 		return nil, WhatsAppOutcome{}, err
 	}
 	desc := "Status changed to " + newStatus

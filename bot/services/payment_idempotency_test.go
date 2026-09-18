@@ -55,6 +55,12 @@ func TestIsUniqueViolation(t *testing.T) {
 	if !IsUniqueViolation(dup, "uq_order_payments_idempotency_key") {
 		t.Fatal("expected unique-violation detection")
 	}
+	// 027 renamed the constraint per-restaurant; prod matches on the
+	// shared prefix so both pre- and post-027 databases replay.
+	dupNew := errors.New(`pq: duplicate key value violates unique constraint "uq_order_payments_idempotency_restaurant"`)
+	if !IsUniqueViolation(dupNew, "uq_order_payments_idempotency") {
+		t.Fatal("expected unique-violation detection for per-restaurant constraint")
+	}
 	other := errors.New(`pq: duplicate key value violates unique constraint "uq_orders_idempotency_key"`)
 	if IsUniqueViolation(other, "uq_order_payments_idempotency_key") {
 		t.Fatal("wrong constraint must not match")
