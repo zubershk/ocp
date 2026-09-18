@@ -112,6 +112,9 @@ services:
     restart: unless-stopped
     environment:
       - PORT=3001
+      - BOT_API_URL=http://bot:8090
+      - BOT_ADMIN_KEY=${BOT_ADMIN_KEY:?Set BOT_ADMIN_KEY in .env}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost,http://localhost:3000}
     ports:
       - "3001:3001"
     volumes:
@@ -121,7 +124,7 @@ services:
       bot:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3001/api/settings || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3001/health || exit 1"]
       interval: 30s
       timeout: 3s
       retries: 3
