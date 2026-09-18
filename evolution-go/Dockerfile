@@ -29,6 +29,7 @@ COPY --from=build /build/manager/dist ./manager/dist
 COPY --from=build /build/VERSION ./VERSION
 
 ENV TZ=America/Sao_Paulo
+ENV GIN_MODE=release
 
 USER nobody
 ENTRYPOINT ["/app/server"]
