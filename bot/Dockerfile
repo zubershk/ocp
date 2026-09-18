@@ -11,6 +11,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o bot-ocp .
 FROM alpine:3.20.3@sha256:5e5f5e5f5e5f5e5f5e5f5e5f5e5f5e5f5e5f5e5f5e5f5e5f5e5f5e5f5e5f5e5f5
 RUN apk add --no-cache ca-certificates tzdata
 WORKDIR /app
+ENV GIN_MODE=release
 COPY --from=builder /app/bot-ocp .
 COPY bot/migrations/ ./migrations/
 RUN mkdir -p uploads data && chown -R nobody:nobody /app
