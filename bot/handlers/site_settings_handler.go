@@ -176,11 +176,14 @@ func (h *SiteSettingsHandler) UpdateSiteSetting(c *gin.Context) {
 		return
 	}
 	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
+	// Update-only (404 when the key does not exist for this tenant).
+	// NOTE: ON CONFLICT (key) must not be used here: since 022 the
+	// unique constraint is (key, restaurant_id), so the old arbiter
+	// matched nothing and every update failed with 500.
 	res, err := database.DB.Exec(
-		`INSERT INTO site_settings (key, value, restaurant_id) VALUES ($1, $2::jsonb, $3)
-		 ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=NOW()
-		 WHERE site_settings.restaurant_id = $3`,
-		key, []byte(*req.Value), rid,
+		`UPDATE site_settings SET value = $1::jsonb, updated_at = NOW()
+		 WHERE key = $2 AND restaurant_id = $3`,
+		[]byte(*req.Value), key, rid,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update setting"})
