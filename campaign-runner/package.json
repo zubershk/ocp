@@ -10,7 +10,8 @@
     "build": "vite build",
     "start": "node server/index.js",
     "preview": "vite preview",
-    "test": "node --test server/hardening.test.mjs"
+    "test": "node --test server/hardening.test.mjs",
+    "test:integration": "node --test server/routes.integration.test.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",

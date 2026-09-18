@@ -196,7 +196,8 @@ app.get('/api/settings', (_req, res) => {
 });
 app.put('/api/settings', (req, res) => {
   const b = req.body || {};
-  if ('botApiUrl' in b || 'botAdminKey' in b || '__proto__' in b || 'constructor' in b) {
+  const has = (k) => Object.prototype.hasOwnProperty.call(b, k);
+  if (has('botApiUrl') || has('botAdminKey') || has('__proto__') || has('constructor') || has('prototype')) {
     return res.status(400).json({ error: 'botApiUrl/botAdminKey not configurable via API' });
   }
   const out = {};
