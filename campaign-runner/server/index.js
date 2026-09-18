@@ -165,6 +165,23 @@ function save(name, data) {
 }
 function uid() { return crypto.randomUUID(); }
 
+// Startup: strip legacy secrets from data/settings.json (never persist keys at rest).
+// Single-replica assumption: data/*.json is owned by one process; two containers
+// sharing the volume can lost-update (documented limitation, no Postgres per scope).
+try {
+  const sp = join(DATA_DIR, 'settings.json');
+  if (existsSync(sp)) {
+    try {
+      const raw = safeParse(readFileSync(sp, 'utf-8'), null);
+      if (raw && typeof raw === 'object' && !Array.isArray(raw) && ('botAdminKey' in raw || 'botApiUrl' in raw)) {
+        const { botAdminKey: _k, botApiUrl: _u, ...rest } = raw;
+        save('settings', rest);
+        clog(null, 'settings-secrets-scrubbed', {});
+      }
+    } catch {}
+  }
+} catch {}
+
 // ═══════════════════════════════════════════
 // SETTINGS (safe, env-only secrets)
 // ═══════════════════════════════════════════
