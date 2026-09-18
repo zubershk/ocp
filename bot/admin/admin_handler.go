@@ -1328,25 +1328,6 @@ func (h *AdminHandler) CalculatePOSPrice(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"price_breakdown": br, "advisory_only": true})
 }
 
-// DebugWhatsApp returns live conversation internals for support/diagnosis.
-func (h *AdminHandler) DebugWhatsApp(c *gin.Context) {
-	phone := cleanPhoneParam(c.Param("phone"))
-	state, ctx, err := services.LoadConversationForPhone(phone)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
-		return
-	}
-	cart, _ := h.menuService.GetCartDebug(phone)
-	orders, _ := h.orderService.GetOrdersByPhone(phone, services.ResolveRestaurant(c.GetInt("restaurantID")))
-	c.JSON(http.StatusOK, gin.H{
-		"phone":         phone,
-		"state":         state,
-		"context":       json.RawMessage(ctx),
-		"cart":          cart,
-		"recent_orders": orders,
-	})
-}
-
 // Live chat — SaaS bot dashboard
 
 func (h *AdminHandler) ListConversations(c *gin.Context) {
