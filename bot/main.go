@@ -272,7 +272,6 @@ func main() {
 		adminGroup.GET("/orders", adminHandler.RequirePermission("orders.view"), adminHandler.GetOrders)
 		adminGroup.GET("/orders/:id", adminHandler.RequirePermission("orders.view"), adminHandler.GetOrder)
 		adminGroup.PATCH("/orders/:id/status", adminHandler.RequireRole("owner", "manager", "kitchen"), adminHandler.RequirePermission("orders.update"), adminHandler.UpdateOrderStatus)
-		adminGroup.GET("/debug/whatsapp/:phone", adminHandler.DebugWhatsApp)
 		// Campaign runner integration
 		adminGroup.GET("/customers", adminHandler.RequireRole("owner", "manager"), adminHandler.ListCustomers)
 		adminGroup.POST("/broadcast/send", adminHandler.RequireRole("owner", "manager"), adminHandler.BroadcastSend)
