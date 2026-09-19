@@ -219,7 +219,7 @@ func VerifyOTPFor(phone, code, name string, restaurantID int) (string, *Customer
 			_ = tx.Commit()
 			return "", nil, &ValidationError{Msg: "incorrect code"}
 		}
-	} else if stored != hashHex(code) {
+	} else if subtle.ConstantTimeCompare([]byte(stored), []byte(hashHex(code))) != 1 {
 		tx.Exec(`UPDATE customer_otps SET attempts=attempts+1 WHERE id=$1`, rowID)
 		_ = tx.Commit()
 		return "", nil, &ValidationError{Msg: "incorrect code"}

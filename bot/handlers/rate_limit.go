@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -74,6 +75,8 @@ func RateLimit(limit int, window time.Duration) gin.HandlerFunc {
 			ip = "unknown"
 		}
 		if !lim.allow(ip) {
+			// Fixed window: worst case the client waits out a full window.
+			c.Header("Retry-After", strconv.Itoa(int(window.Seconds())))
 			c.JSON(http.StatusTooManyRequests, gin.H{"error": "too many requests — please slow down"})
 			c.Abort()
 			return
