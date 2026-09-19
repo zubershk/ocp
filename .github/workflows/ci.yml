@@ -83,7 +83,20 @@ jobs:
         run: npm ci --ignore-scripts
       - name: Audit
         working-directory: frontend
-        run: npm audit --omit=dev --audit-level=high
+        # Retry on registry outages; fail open only when the endpoint itself
+        # is down (real findings still fail). Advisories are also covered
+        # by Dependabot PRs, so a down endpoint must not block the repo.
+        run: |
+          for i in 1 2 3; do
+            out=$(npm audit --omit=dev --audit-level=high 2>&1) && { echo "$out"; break; }
+            if echo "$out" | grep -q "audit endpoint returned an error"; then
+              echo "WARNING: npm audit endpoint unavailable (attempt $i/3)"
+              [ "$i" = "3" ] && { echo "$out"; echo "Failing open with warning"; break; }
+              sleep 15
+            else
+              echo "$out"; exit 1
+            fi
+          done
       - name: Build
         working-directory: frontend
         run: npm run build
@@ -114,7 +127,20 @@ jobs:
         run: npm ci --ignore-scripts
       - name: Audit
         working-directory: campaign-runner
-        run: npm audit --omit=dev --audit-level=high
+        # Retry on registry outages; fail open only when the endpoint itself
+        # is down (real findings still fail). Advisories are also covered
+        # by Dependabot PRs, so a down endpoint must not block the repo.
+        run: |
+          for i in 1 2 3; do
+            out=$(npm audit --omit=dev --audit-level=high 2>&1) && { echo "$out"; break; }
+            if echo "$out" | grep -q "audit endpoint returned an error"; then
+              echo "WARNING: npm audit endpoint unavailable (attempt $i/3)"
+              [ "$i" = "3" ] && { echo "$out"; echo "Failing open with warning"; break; }
+              sleep 15
+            else
+              echo "$out"; exit 1
+            fi
+          done
       - name: Build
         working-directory: campaign-runner
         run: npm run build
