@@ -43,7 +43,7 @@ jobs:
       - name: Go vulnerability check
         working-directory: bot
         run: |
-          go install golang.org/x/vuln/cmd/govulncheck@latest
+          go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
           govulncheck ./...
       - name: Test bot (strict tenant isolation)
         working-directory: bot
@@ -89,7 +89,7 @@ jobs:
         working-directory: frontend
         run: npm run lint
       - name: Secret scan (gitleaks)
-        uses: zricethezav/gitleaks-action@8d22c45a3e3ac9c4d006d3d45d05fda6964a1b0e # v2.3.1
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.9
 
   # ── Campaign runner ──
   campaign:
@@ -113,4 +113,4 @@ jobs:
         working-directory: campaign-runner
         run: npm run build
       - name: Secret scan (gitleaks)
-        uses: zricethezav/gitleaks-action@8d22c45a3e3ac9c4d006d3d45d05fda6964a1b0e # v2.3.1
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.9
