@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/subtle"
 	"fmt"
 	"log"
 	"net"
@@ -183,7 +184,7 @@ func main() {
 		if provided == "" {
 			provided = c.GetHeader("apikey")
 		}
-		if provided != cfg.WebhookSecret {
+		if subtle.ConstantTimeCompare([]byte(provided), []byte(cfg.WebhookSecret)) != 1 {
 			c.JSON(401, gin.H{"error": "unauthorized"})
 			c.Abort()
 			return
