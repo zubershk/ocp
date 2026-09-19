@@ -7,7 +7,7 @@ require (
 	github.com/chai2010/webp v1.1.2-0.20250406010349-76805d5a8860
 	github.com/gabriel-vasile/mimetype v1.4.5
 	github.com/gin-gonic/gin v1.10.0
-	github.com/gomessguii/logger v0.0.3
+	github.com/gomessguii/logger v1.0.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/joho/godotenv v1.5.1
