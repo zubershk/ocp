@@ -1,0 +1,37 @@
+# Git
+.git
+.gitignore
+
+# Build artifacts
+bot-ocp
+*.exe
+
+# Vendor (if used)
+vendor/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Runtime data
+uploads/
+data/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Misc
+*.tmp
+*.temp
+.cache/
