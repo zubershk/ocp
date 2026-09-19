@@ -1,7 +1,7 @@
 services:
   # ── PostgreSQL ──
   postgres:
-    image: postgres:16.4-alpine3.20@sha256:5e5f5e5f5e5f5e5f5e5f5e5f5e5f5e5f5e5f5e5f5e5f5e5f5e5f5e5f5e5f5e5f5
+    image: postgres:16.4-alpine3.20@sha256:5660c2cbfea50c7a9127d17dc4e48543eedd3d7a41a595a2dfa572471e37e64c
     restart: unless-stopped
     environment:
       POSTGRES_DB: ocp
@@ -19,7 +19,7 @@ services:
 
   # ── Evolution GO (WhatsApp API) ──
   evolution:
-    image: atendai/evolution-go@sha256:5e5f5e5f5e5f5e5f5e5f5e5f5e5f5e5f5e5f5e5f5e5f5e5f5e5f5e5f5e5f5e5f5 # pin to digest for prod
+    image: atendai/evolution-go@sha256:b1ab38aed60dc02296e3ef4a859d52f8f0f246d137ce2f9d92a4936dc8c6acb9 # digest-pinned (was :latest)
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
@@ -39,6 +39,7 @@ services:
       - DATABASE_SAVE_DATA_CONTACTS=true
       - DATABASE_SAVE_DATA_CHATS=true
       - CORS_ORIGIN=http://localhost:5173,http://localhost:3000,http://localhost:8090
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:3000,http://localhost:8090}
       - DELIVERY_RETRIES=5
       - WEBHOOK_GLOBAL_ENABLED=false
     ports:

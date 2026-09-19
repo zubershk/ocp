@@ -202,10 +202,27 @@ func setupRouter(db *gorm.DB, authDB *sql.DB, sqliteDB *sql.DB, config *config.C
 
 	r := gin.Default()
 
-	// CORS middleware — must be before everything else
+	// CORS middleware — explicit allowlist from CORS_ALLOWED_ORIGINS
+	// (comma-separated), mirroring the bot. The /passkey-ceremony/* routes keep
+	// a narrow wildcard exception: they are polled by the browser extension from
+	// the web.whatsapp.com origin and are gated by an opaque short-lived ceremony
+	// token instead of CORS. Note: wildcard responses must not carry
+	// Allow-Credentials (browsers ignore that combination).
+	corsAllowed := map[string]bool{}
+	for _, o := range strings.Split(os.Getenv("CORS_ALLOWED_ORIGINS"), ",") {
+		if o = strings.TrimSpace(o); o != "" {
+			corsAllowed[o] = true
+		}
+	}
 	r.Use(func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		origin := c.GetHeader("Origin")
+		if strings.HasPrefix(c.Request.URL.Path, "/passkey-ceremony/") {
+			c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		} else if origin != "" && corsAllowed[origin] {
+			c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
+			c.Writer.Header().Set("Vary", "Origin")
+			c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		}
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Origin, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, Accept, Cache-Control, X-Requested-With, apikey, ApiKey")
 		c.Writer.Header().Set("Access-Control-Expose-Headers", "Content-Length")

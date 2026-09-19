@@ -1,5 +1,5 @@
 # Stage 1: Build
-FROM node:20.19.0-alpine3.20@sha256:6e6c8c8f5d5f5e5f5e5f5e5f5e5f5e5f5e5f5e5f5e5f5e5f5e5f5e5f5e5f5e5f5 AS builder
+FROM node:20.19.0-alpine3.20@sha256:9a9c00587bcb88209b164b2dba1f59c7389ac3a2cec2cfe490fc43cd947ed531 AS builder
 WORKDIR /app
 COPY campaign-runner/package.json campaign-runner/package-lock.json ./
 RUN npm ci --ignore-scripts
@@ -7,7 +7,7 @@ COPY campaign-runner/ .
 RUN npm run build
 
 # Stage 2: Runtime
-FROM node:20.19.0-alpine3.20@sha256:6e6c8c8f5d5f5e5f5e5f5e5f5e5f5e5f5e5f5e5f5e5f5e5f5e5f5e5f5e5f5e5f5
+FROM node:20.19.0-alpine3.20@sha256:9a9c00587bcb88209b164b2dba1f59c7389ac3a2cec2cfe490fc43cd947ed531
 WORKDIR /app
 ENV NODE_ENV=production
 COPY campaign-runner/package.json campaign-runner/package-lock.json ./
