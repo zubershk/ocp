@@ -39,6 +39,7 @@ services:
       - DATABASE_SAVE_DATA_CONTACTS=true
       - DATABASE_SAVE_DATA_CHATS=true
       - CORS_ORIGIN=http://localhost:5173,http://localhost:3000,http://localhost:8090
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:3000,http://localhost:8090}
       - DELIVERY_RETRIES=5
       - WEBHOOK_GLOBAL_ENABLED=false
     ports:
