@@ -139,7 +139,7 @@ func (h *WebhookHandler) HandleWebhook(c *gin.Context) {
 	// remoteJidAlt, ...).
 	phone := resolveSenderPhone(data, info, keyMap, sender)
 	if phone == "" {
-		log.Printf("[wa-debug] bail: no phone. body=%.700s", string(raw))
+		log.Printf("[wa-debug] bail: no phone (bytes=%d)", len(raw))
 		c.JSON(http.StatusOK, gin.H{"status": "no phone"})
 		return
 	}
@@ -168,7 +168,7 @@ func (h *WebhookHandler) HandleWebhook(c *gin.Context) {
 		actionID = actionTitle
 	}
 	if actionID == "" {
-		log.Printf("[wa-debug] bail: no text. sender=%q msgData=%.700s", sender, mustJSON(messageData))
+		log.Printf("[wa-debug] bail: no text. sender=%q", sender)
 		c.JSON(http.StatusOK, gin.H{"status": "no text content"})
 		return
 	}
