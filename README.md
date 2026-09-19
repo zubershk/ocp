@@ -766,11 +766,11 @@ When the API is unavailable (offline, slow network), the frontend falls back to 
 
 | Service | Base Image | Build | Port |
 |---------|-----------|-------|------|
-| Bot | golang:1.21-alpine → alpine:3.19 | `CGO_ENABLED=0` static build | :8090 |
-| Frontend | node:20-alpine → nginx:alpine | `npm ci` + Vite build | :3000 |
-| Campaign Runner | node:20-alpine | `npm ci` + build | :3001 |
-| Evolution GO | golang:1.25.0-alpine → alpine:3.19.1 | `CGO_ENABLED=1` with image libs | :8080 |
-| PostgreSQL | postgres:14 | — | :5432 |
+| Bot | golang:1.25.0-alpine → alpine:3.20 | `CGO_ENABLED=0` static build | :8090 |
+| Frontend | node:20.19.0-alpine → nginx:1.27.1-alpine | `npm ci` + Vite build | :3000 |
+| Campaign Runner | node:20.19.0-alpine | `npm ci` + build | :3001 |
+| Evolution GO | golang:1.25.0-alpine → alpine:3.20 | `CGO_ENABLED=1` with image libs | :8080 |
+| PostgreSQL | postgres:16.4-alpine | — | :5432 |
 
 ### Docker Compose
 

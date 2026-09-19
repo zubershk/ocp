@@ -6,6 +6,15 @@ bot/.env.local
 frontend/.env
 frontend/.env.local
 evolution-go/.env
+evolution-go/.env.local
+campaign-runner/.env
+campaign-runner/.env.local
+*.pem
+*.key
+*.p12
+id_rsa
+secrets/
+*.tfvars
 
 # Build artifacts
 bot/bot-ocp
