@@ -36,6 +36,23 @@ func main() {
 	// Load configuration
 	cfg := config.Load()
 
+	// Security: CORS origins must be explicit in production. GIN_MODE=release
+	// (baked into the Docker image) refuses to start without CORS_ALLOWED_ORIGINS;
+	// local dev falls back to the Vite localhost defaults.
+	if !cfg.CORSAllowedOriginsSet {
+		if os.Getenv("GIN_MODE") == "release" {
+			log.Fatal("SECURITY: CORS_ALLOWED_ORIGINS must be set explicitly when GIN_MODE=release")
+		}
+		cfg.CORSAllowedOrigins = "http://localhost:5173,http://127.0.0.1:5173"
+		log.Println("WARNING: CORS_ALLOWED_ORIGINS not set — using localhost defaults for development only")
+	}
+
+	// Security: webhooks must always be authenticated. Fail fast instead of
+	// rejecting per-request — an unset secret is a deploy misconfiguration.
+	if cfg.WebhookSecret == "" {
+		log.Fatal("SECURITY: EVOLUTION_WEBHOOK_SECRET must be set — refusing to start with unauthenticated webhooks")
+	}
+
 	// Initialize database
 	if err := database.Init(cfg); err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
@@ -147,18 +164,16 @@ func main() {
 	router.Static("/uploads", "./uploads")
 
 	// Webhook endpoints — the bundled Evolution GO fork sends no auth
-	// headers, so loopback senders (local Evolution) are trusted by
-	// source IP while remote senders must present the secret.
+	// headers, so local Evolution instances in dev are trusted by source IP
+	// while every other sender must present the secret. In production
+	// (GIN_MODE=release) loopback callers must authenticate too — shared-host
+	// adjacency is not a trust boundary.
 	webhookAuth := func(c *gin.Context) {
-		if ip := net.ParseIP(c.ClientIP()); ip != nil && ip.IsLoopback() {
-			c.Next()
-			return
-		}
-		if cfg.WebhookSecret == "" {
-			log.Println("SECURITY: EVOLUTION_WEBHOOK_SECRET not set — rejecting webhook")
-			c.JSON(500, gin.H{"error": "webhook not configured"})
-			c.Abort()
-			return
+		if os.Getenv("GIN_MODE") != "release" {
+			if ip := net.ParseIP(c.ClientIP()); ip != nil && ip.IsLoopback() {
+				c.Next()
+				return
+			}
 		}
 		// Verify via X-Webhook-Secret, X-Api-Key, or apikey header
 		provided := c.GetHeader("X-Webhook-Secret")
@@ -257,7 +272,6 @@ func main() {
 		adminGroup.GET("/orders", adminHandler.RequirePermission("orders.view"), adminHandler.GetOrders)
 		adminGroup.GET("/orders/:id", adminHandler.RequirePermission("orders.view"), adminHandler.GetOrder)
 		adminGroup.PATCH("/orders/:id/status", adminHandler.RequireRole("owner", "manager", "kitchen"), adminHandler.RequirePermission("orders.update"), adminHandler.UpdateOrderStatus)
-		adminGroup.GET("/debug/whatsapp/:phone", adminHandler.DebugWhatsApp)
 		// Campaign runner integration
 		adminGroup.GET("/customers", adminHandler.RequireRole("owner", "manager"), adminHandler.ListCustomers)
 		adminGroup.POST("/broadcast/send", adminHandler.RequireRole("owner", "manager"), adminHandler.BroadcastSend)
