@@ -174,9 +174,10 @@ func ApplyDiscountToOrder(orderID, restaurantID, outletID, discountID int) error
 	if rule.RestaurantID != orderRestaurantID {
 		return errors.New("discount does not belong to current restaurant")
 	}
-	// Link discount to order.
+	// Link discount to order. Tenant predicate re-asserts the
+	// loadOrderForMutation check above in SQL (fail closed on race).
 	if _, err := database.DB.Exec(`
-		UPDATE orders SET discount_id = $2 WHERE id = $1`, orderID, discountID); err != nil {
+		UPDATE orders SET discount_id = $2 WHERE id = $1 AND restaurant_id = $3`, orderID, discountID, orderRestaurantID); err != nil {
 		return err
 	}
 	_, err = RecalculateOrderTotals(orderID, orderRestaurantID)
@@ -192,7 +193,7 @@ func RemoveDiscountFromOrder(orderID, restaurantID, outletID int) error {
 		return err
 	}
 	if _, err := database.DB.Exec(`
-		UPDATE orders SET discount_id = NULL WHERE id = $1`, orderID); err != nil {
+		UPDATE orders SET discount_id = NULL WHERE id = $1 AND restaurant_id = $2`, orderID, orderRestaurantID); err != nil {
 		return err
 	}
 	_, err = RecalculateOrderTotals(orderID, orderRestaurantID)

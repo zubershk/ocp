@@ -243,13 +243,13 @@ func AssignTableToOrder(orderID, tableID, restaurantID, outletID int) error {
 	}
 
 	if _, err := tx.Exec(
-		`UPDATE tables SET status = 'occupied', updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
-		tableID); err != nil {
+		`UPDATE tables SET status = 'occupied', updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND restaurant_id = $2 AND outlet_id = $3`,
+		tableID, restaurantID, outletID); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(
-		`UPDATE orders SET table_id = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
-		orderID, tableID); err != nil {
+		`UPDATE orders SET table_id = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND restaurant_id = $3 AND outlet_id = $4`,
+		orderID, tableID, restaurantID, outletID); err != nil {
 		return err
 	}
 	if err := tx.Commit(); err != nil {

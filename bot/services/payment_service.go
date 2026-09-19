@@ -106,7 +106,9 @@ func RecordPayment(orderID, restaurantID, outletID int, method string,
 		orderID, restaurantID, outletID, method, amountPaise, tenderedPaise, 0, reference, nullReceiver(receivedBy), nullIfEmpty(key)).Scan(&paymentID)
 	if err != nil {
 		// Concurrent duplicate won the INSERT race: return the winner.
-		if key != "" && IsUniqueViolation(err, "uq_order_payments_idempotency_key") {
+		// Prefix matches both the pre-027 name (_key) and the current
+		// per-restaurant name (_restaurant); 027 dropped the former.
+		if key != "" && IsUniqueViolation(err, "uq_order_payments_idempotency") {
 			if existing, findErr := GetPaymentIDByIdempotencyKey(key, orderID); findErr == nil && existing > 0 {
 				return existing, true, nil
 			}
@@ -138,7 +140,7 @@ func RecordRefund(orderID, refundOf, restaurantID, outletID int, amountPaise int
 		RETURNING id`,
 		orderID, restaurantID, outletID, "refund", -amountPaise, 0, 0, reference, nullReceiver(receivedBy), refundOf, nullIfEmpty(key)).Scan(&paymentID)
 	if err != nil {
-		if key != "" && IsUniqueViolation(err, "uq_order_payments_idempotency_key") {
+		if key != "" && IsUniqueViolation(err, "uq_order_payments_idempotency") {
 			if existing, findErr := GetPaymentIDByIdempotencyKey(key, orderID); findErr == nil && existing > 0 {
 				return existing, true, nil
 			}
@@ -271,7 +273,7 @@ func RefundPayment(paymentID, orderID, restaurantID, outletID int, amountPaise i
 		// A failed statement poisons the transaction, so roll back
 		// before looking up the concurrent winner on a fresh query.
 		_ = tx.Rollback()
-		if key != "" && IsUniqueViolation(err, "uq_order_payments_idempotency_key") {
+		if key != "" && IsUniqueViolation(err, "uq_order_payments_idempotency") {
 			if existing, findErr := GetPaymentIDByIdempotencyKey(key, orderID); findErr == nil && existing > 0 {
 				return existing, true, nil
 			}

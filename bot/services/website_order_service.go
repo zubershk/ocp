@@ -529,6 +529,8 @@ func (s *WebsiteOrderService) getByIdepotencyKey(key string) (*WebsiteOrderResul
 
 func (s *WebsiteOrderService) getByIdepotencyKeyFor(key string, restaurantID int) (*WebsiteOrderResult, error) {
 	if restaurantID != 0 {
+		// Scoped lookup only: falling back to the global query on a
+		// miss would replay another tenant's order as our own.
 		var orderID int
 		err := database.DB.QueryRow(`SELECT id FROM orders WHERE idempotency_key = $1 AND restaurant_id = $2`, key, ResolveRestaurant(restaurantID)).Scan(&orderID)
 		if err == nil {
@@ -537,6 +539,7 @@ func (s *WebsiteOrderService) getByIdepotencyKeyFor(key string, restaurantID int
 		if err != sql.ErrNoRows {
 			return nil, err
 		}
+		return nil, nil
 	}
 	var orderID int
 	err := database.DB.QueryRow(`SELECT id FROM orders WHERE idempotency_key = $1`, key).Scan(&orderID)
