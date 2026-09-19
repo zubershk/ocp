@@ -203,6 +203,17 @@ func setupRouter(db *gorm.DB, authDB *sql.DB, sqliteDB *sql.DB, config *config.C
 
 	r := gin.Default()
 
+	// Security headers — no CSP here: the bundled manager SPA has inline
+	// script/style needs this static server cannot nonce. Revisit if the
+	// manager UI is ever served with hashed inline assets.
+	r.Use(func(c *gin.Context) {
+		c.Writer.Header().Set("X-Content-Type-Options", "nosniff")
+		c.Writer.Header().Set("X-Frame-Options", "DENY")
+		c.Writer.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		c.Writer.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+		c.Writer.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		c.Next()
+	})
 	// CORS middleware — explicit allowlist from CORS_ALLOWED_ORIGINS
 	// (comma-separated), mirroring the bot. The /passkey-ceremony/* routes keep
 	// a narrow wildcard exception: they are polled by the browser extension from
