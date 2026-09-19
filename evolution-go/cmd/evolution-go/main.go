@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/subtle"
 	"database/sql"
 	"flag"
 	"fmt"
@@ -263,11 +264,15 @@ func setupRouter(db *gorm.DB, authDB *sql.DB, sqliteDB *sql.DB, config *config.C
 	}
 
 	r.GET("/ws", func(c *gin.Context) {
-		token := c.Query("token")
+		// Prefer header auth; ?token= kept for existing clients (deprecated).
+		token := c.GetHeader("apikey")
+		if token == "" {
+			token = c.Query("token")
+		}
 		instanceId := c.Query("instanceId")
 
-		if token != config.GlobalApiKey {
-			logger.LogError("Token inválido: %s", token)
+		if subtle.ConstantTimeCompare([]byte(token), []byte(config.GlobalApiKey)) != 1 {
+			logger.LogError("Token inválido")
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Token inválido"})
 			return
 		}
