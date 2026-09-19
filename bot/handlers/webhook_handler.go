@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"orangecheesepizza/bot/config"
@@ -35,6 +37,80 @@ type WebhookPayload struct {
 	Instance   string                 `json:"instance"`
 	InstanceID string                 `json:"instanceId"`
 	Data       map[string]interface{} `json:"data"`
+}
+
+// minSaneMessageTime rejects zero/unset timestamps (e.g. 1970-01-01 from a
+// missing field). Without this floor, a live message with no timestamp
+// would look infinitely old and be wrongly silenced.
+var minSaneMessageTime = time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+
+// messageSendTime extracts the original WhatsApp send time from a webhook
+// payload. Evolution GO forwards whatsmeow's Info.Timestamp (RFC3339 string
+// after JSON remarshal); synthetic shapes (ButtonClick) carry a unix
+// "timestamp". Returns ok=false when absent, malformed, or implausible —
+// callers must treat that as LIVE (fail open toward replying).
+func messageSendTime(data, info map[string]interface{}) (time.Time, bool) {
+	candidates := []interface{}{nil, nil, nil, nil}
+	if info != nil {
+		candidates[0] = info["Timestamp"]
+		candidates[1] = info["timestamp"]
+	}
+	if data != nil {
+		candidates[2] = data["timestamp"]
+		candidates[3] = data["Timestamp"]
+	}
+	for _, raw := range candidates {
+		ts, ok := parseMessageTime(raw)
+		if !ok {
+			continue
+		}
+		if ts.Before(minSaneMessageTime) {
+			continue
+		}
+		return ts, true
+	}
+	return time.Time{}, false
+}
+
+func parseMessageTime(raw interface{}) (time.Time, bool) {
+	switch v := raw.(type) {
+	case string:
+		if s := strings.TrimSpace(v); s != "" {
+			// RFC3339 first ("2026-09-19T14:00:00Z"), then unix digits.
+			if ts, err := time.Parse(time.RFC3339, s); err == nil {
+				return ts, true
+			}
+			if secs, err := strconv.ParseInt(s, 10, 64); err == nil {
+				return time.Unix(secs, 0), true
+			}
+		}
+	case float64:
+		return time.Unix(int64(v), 0), true
+	case int64:
+		return time.Unix(v, 0), true
+	case int:
+		return time.Unix(int64(v), 0), true
+	case json.Number:
+		if secs, err := v.Int64(); err == nil {
+			return time.Unix(secs, 0), true
+		}
+	}
+	return time.Time{}, false
+}
+
+// staleTTL returns the configured staleness threshold (default 120s).
+func (h *WebhookHandler) staleTTL() time.Duration {
+	secs := 120
+	if h.config != nil && h.config.StaleMessageTTLSecs > 0 {
+		secs = h.config.StaleMessageTTLSecs
+	}
+	return time.Duration(secs) * time.Second
+}
+
+// isStaleMessage reports whether ts is older than the TTL. Future timestamps
+// (clock skew) are never stale.
+func isStaleMessage(ts time.Time, ttl time.Duration) bool {
+	return time.Since(ts) > ttl
 }
 
 func (h *WebhookHandler) HandleWebhook(c *gin.Context) {
@@ -162,6 +238,23 @@ func (h *WebhookHandler) HandleWebhook(c *gin.Context) {
 		}
 	}
 
+	// Stale-message gate: WhatsApp replays its server-side offline queue as
+	// ordinary Message events when Evolution (re)connects. Without this,
+	// everything texted while the bot was down gets a live reply on boot.
+	// Redelivered stale IDs skip everything (incl. history save, which has
+	// no dedup); first-seen stale IDs fall through to history save below,
+	// then stay silent before the human-support/engine reply paths.
+	stale := false
+	var staleAge time.Duration
+	if ts, ok := messageSendTime(data, info); ok && isStaleMessage(ts, h.staleTTL()) {
+		stale = true
+		staleAge = time.Since(ts).Round(time.Second)
+		if messageID != "" && services.IsMessageProcessed(messageID) {
+			c.JSON(http.StatusOK, gin.H{"status": "duplicate stale — ignored"})
+			return
+		}
+	}
+
 	// Extract message content -> normalized (Type, ActionID, Title)
 	actionType, actionID, actionTitle := extractInbound(messageData)
 	if actionID == "" && actionTitle != "" {
@@ -195,6 +288,18 @@ func (h *WebhookHandler) HandleWebhook(c *gin.Context) {
 		} else {
 			services.BroadcastRealtime("chat.message", map[string]interface{}{"phone": phone, "dir": "in"})
 		}
+	}
+
+	// Stale messages were persisted above for dashboard truthfulness —
+	// now stay silent instead of triggering a live reply, and mark the ID
+	// so late redelivery stays silent too.
+	if stale {
+		if messageID != "" {
+			services.MarkMessageProcessed(messageID)
+		}
+		log.Printf("[wa-debug] stale message held silently (id=%s age=%s)", shortID(messageID), staleAge)
+		c.JSON(http.StatusOK, gin.H{"status": "stale — held silently"})
+		return
 	}
 
 	// If human has taken over, don't let bot auto-reply — keep in HUMAN_SUPPORT for live board
@@ -265,6 +370,26 @@ func (h *WebhookHandler) HandleButtonClick(c *gin.Context) {
 	messageID := ""
 	if id, ok := data["messageId"].(string); ok {
 		messageID = id
+	}
+
+	// Same stale-message gate as HandleWebhook: offline backlog replays
+	// carry stale button taps too. Button taps are never persisted to
+	// history, so a stale tap is simply acknowledged silently.
+	if ts, ok := messageSendTime(data, nil); ok && isStaleMessage(ts, h.staleTTL()) {
+		key := messageID
+		if h.engine == nil {
+			key = messageID + "_btn" // legacy path dedupes on the suffixed key
+		}
+		if key != "" {
+			if services.IsMessageProcessed(key) {
+				c.JSON(http.StatusOK, gin.H{"status": "duplicate stale — ignored"})
+				return
+			}
+			services.MarkMessageProcessed(key)
+		}
+		log.Printf("[wa-debug] stale button tap held silently (id=%s age=%s)", shortID(messageID), time.Since(ts).Round(time.Second))
+		c.JSON(http.StatusOK, gin.H{"status": "stale — held silently"})
+		return
 	}
 
 	// Phase 3: route button/list responses through the engine too.

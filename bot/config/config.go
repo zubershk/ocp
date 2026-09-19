@@ -25,6 +25,7 @@ type Config struct {
 	CORSAllowedOrigins       string
 	CORSAllowedOriginsSet    bool // true when CORS_ALLOWED_ORIGINS was explicitly provided
 	WebhookSecret            string
+	StaleMessageTTLSecs      int // max age of an inbound WhatsApp message before it is held silently
 	PublicBaseURL            string
 	// SaaS
 	TrustedProxies  string
@@ -61,6 +62,7 @@ func Load() *Config {
 		CORSAllowedOrigins:       getEnv("CORS_ALLOWED_ORIGINS", ""),
 		CORSAllowedOriginsSet:    os.Getenv("CORS_ALLOWED_ORIGINS") != "",
 		WebhookSecret:            getEnv("EVOLUTION_WEBHOOK_SECRET", ""),
+		StaleMessageTTLSecs:      getEnvInt("STALE_MESSAGE_TTL_SECONDS", 120),
 		PublicBaseURL:            strings.TrimRight(getEnv("PUBLIC_BASE_URL", ""), "/"),
 		TrustedProxies:           getEnv("TRUSTED_PROXIES", ""),
 		SingleTenant:             strings.EqualFold(getEnv("SINGLE_TENANT_MODE", "true"), "true") || getEnv("SINGLE_TENANT_MODE", "true") == "1",
@@ -77,6 +79,17 @@ func Load() *Config {
 func getEnv(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
+	}
+	return defaultValue
+}
+
+// getEnvInt reads an int env var; invalid or non-positive values fall back
+// to the default (fail toward current behavior, never toward silence).
+func getEnvInt(key string, defaultValue int) int {
+	if raw := os.Getenv(key); raw != "" {
+		if v, err := strconv.Atoi(strings.TrimSpace(raw)); err == nil && v > 0 {
+			return v
+		}
 	}
 	return defaultValue
 }
