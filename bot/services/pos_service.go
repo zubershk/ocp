@@ -209,6 +209,14 @@ func (s *POSOrderService) CreateOrder(restaurantID int, outletID int, items []Dr
 	if len(items) == 0 {
 		return nil, fmt.Errorf("order must contain at least one item")
 	}
+	if len(items) > 50 {
+		return nil, fmt.Errorf("too many items (max 50)")
+	}
+	for i, it := range items {
+		if it.Quantity < 1 || it.Quantity > 20 {
+			return nil, fmt.Errorf("item %d: quantity must be 1..20", i+1)
+		}
+	}
 	if !ValidOrderSource(source) {
 		source = SourcePOS // authoritative default; never trust client values blindly
 	}
