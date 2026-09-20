@@ -93,9 +93,8 @@ User adds items to cart (localStorage)
 ```
 Admin logs in at /admin
     → Enters admin key (X-Admin-Key header)
-    → Bot verifies key (constant-time comparison)
-    → Returns JWT session token
-    → All subsequent requests use Authorization header
+    → Bot verifies key (SHA-256 hashed at rest, constant-time comparison)
+    → Key sent as X-Admin-Key on every request (no JWT)
     → Every action logged to audit_log table
 ```
 
@@ -107,7 +106,7 @@ Admin creates campaign in Campaign Runner
     → Admin selects recipients, writes message
     → POST /admin/broadcast/send (bot API)
     → Bot normalizes phone numbers (10-digit → 91+ prefix)
-    → Bot sends messages via Evolution GO (parallel, 50ms delay)
+    → Bot sends messages via Evolution GO (parallel, 3000ms default delay, 500–10000 configurable, 20/batch)
     → Each message persisted to live_chat_messages
     → Results returned to Campaign Runner
 ```
@@ -131,6 +130,6 @@ Admin creates campaign in Campaign Runner
 - **Admin auth**: SHA-256 hashed keys, constant-time comparison
 - **OTP**: SHA-256 hashed, `SELECT ... FOR UPDATE` to prevent race conditions
 - **Rate limiting**: IP-based window counters (separate limits per endpoint group)
-- **Sessions**: 24-hour expiry, validated on every request
-- **Input validation**: Body size limits (1MB), broadcast caps (200 recipients)
+- **Sessions**: 30d sliding TTL (half-life renewal, validates every request, `CUSTOMER_SESSION_TTL_SECONDS` configurable)
+- **Input validation**: Body size limits (1MB global, 6MB upload, 8MB broadcast), broadcast caps (200 recipients), POS quantities 1..20, payments 1..10M paise
 - **Headers**: HSTS, CSP, X-Content-Type-Options, X-Frame-Options
