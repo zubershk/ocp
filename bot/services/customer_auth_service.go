@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"math/big"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -24,7 +25,19 @@ import (
 
 const otpExpiry = 5 * time.Minute
 const otpCooldown = 30 * time.Second
-const sessionExpiry = 30 * 24 * time.Hour
+const defaultSessionExpiry = 30 * 24 * time.Hour
+
+// sessionTTL returns the configured customer session lifetime.
+// Env CUSTOMER_SESSION_TTL_SECONDS overrides the 30d default; invalid values fall back to default.
+func sessionTTL() time.Duration {
+	raw := strings.TrimSpace(os.Getenv("CUSTOMER_SESSION_TTL_SECONDS"))
+	if raw != "" {
+		if secs, err := strconv.Atoi(raw); err == nil && secs > 0 {
+			return time.Duration(secs) * time.Second
+		}
+	}
+	return defaultSessionExpiry
+}
 
 func hashHex(s string) string {
 	pepper := os.Getenv("OTP_PEPPER")
@@ -245,7 +258,7 @@ func VerifyOTPFor(phone, code, name string, restaurantID int) (string, *Customer
 	if err != nil {
 		return "", nil, err
 	}
-	expires := time.Now().Add(sessionExpiry)
+	expires := time.Now().Add(sessionTTL())
 	hashedToken := hashHex(token)
 	if _, err := database.DB.Exec(`INSERT INTO customer_sessions (phone, token, expires_at, restaurant_id) VALUES ($1,$2,$3,$4)`, normalized, hashedToken, expires, rid); err != nil {
 		if _, err2 := database.DB.Exec(`INSERT INTO customer_sessions (phone, token, expires_at) VALUES ($1,$2,$3)`, normalized, hashedToken, expires); err2 != nil {
@@ -271,22 +284,41 @@ func ValidateSessionFor(token string, restaurantID int) (string, *Customer, erro
 	var expiresAt time.Time
 	var sessRid sql.NullInt64
 	err := database.DB.QueryRow(`SELECT phone, expires_at, restaurant_id FROM customer_sessions WHERE token=$1 LIMIT 1`, hashed).Scan(&phone, &expiresAt, &sessRid)
+	legacyHit := false
+	var legacyHash string
 	if err == sql.ErrNoRows {
-		old := func(s string) string {
+		legacyHash = func(s string) string {
 			h := sha256.Sum256([]byte(s))
 			return hex.EncodeToString(h[:])
 		}(token)
-		err = database.DB.QueryRow(`SELECT phone, expires_at, restaurant_id FROM customer_sessions WHERE token=$1 LIMIT 1`, old).Scan(&phone, &expiresAt, &sessRid)
+		err = database.DB.QueryRow(`SELECT phone, expires_at, restaurant_id FROM customer_sessions WHERE token=$1 LIMIT 1`, legacyHash).Scan(&phone, &expiresAt, &sessRid)
 		if err == sql.ErrNoRows {
 			return "", nil, fmt.Errorf("invalid token")
 		}
+		legacyHit = true
 	}
 	if err != nil {
 		return "", nil, err
 	}
 	if time.Now().After(expiresAt) {
+		// Delete whichever hash was matched; legacy path also cleans peppered variant defensively.
 		database.DB.Exec(`DELETE FROM customer_sessions WHERE token=$1`, hashed)
+		if legacyHit {
+			database.DB.Exec(`DELETE FROM customer_sessions WHERE token=$1`, legacyHash)
+		}
 		return "", nil, fmt.Errorf("session expired")
+	}
+	// Legacy migration: upgrade unpeppered hash to peppered hash so future lookups are peppered-only.
+	if legacyHit {
+		_, _ = database.DB.Exec(`UPDATE customer_sessions SET token=$1 WHERE token=$2`, hashed, legacyHash)
+	}
+	// Sliding rotation: if more than half the TTL has elapsed, extend expiry to now+TTL.
+	// This keeps active users logged in without extending idle sessions indefinitely.
+	ttl := sessionTTL()
+	if time.Until(expiresAt) < ttl/2 {
+		newExp := time.Now().Add(ttl)
+		_, _ = database.DB.Exec(`UPDATE customer_sessions SET expires_at=$1 WHERE token=$2`, newExp, hashed)
+		expiresAt = newExp
 	}
 	// tenant check: if request has tenant, session must match or be global (NULL) for transition
 	if restaurantID != 0 {
@@ -314,10 +346,25 @@ func ValidateSessionFor(token string, restaurantID int) (string, *Customer, erro
 	return phone, cust, nil
 }
 
-// DeleteSession removes a token (logout).
+// DeleteSession removes a token (logout). Deletes both peppered and legacy hashes so revocation is complete.
 func DeleteSession(token string) error {
-	hashed := hashHex(strings.TrimSpace(token))
-	_, err := database.DB.Exec(`DELETE FROM customer_sessions WHERE token=$1`, hashed)
+	raw := strings.TrimSpace(token)
+	if raw == "" {
+		return nil
+	}
+	hashed := hashHex(raw)
+	legacy := func(s string) string {
+		h := sha256.Sum256([]byte(s))
+		return hex.EncodeToString(h[:])
+	}(raw)
+	_, err := database.DB.Exec(`DELETE FROM customer_sessions WHERE token IN ($1,$2)`, hashed, legacy)
+	if err != nil {
+		// Fallback for drivers that dislike IN with two params edge case: try single delete.
+		_, err = database.DB.Exec(`DELETE FROM customer_sessions WHERE token=$1`, hashed)
+		if err == nil {
+			_, _ = database.DB.Exec(`DELETE FROM customer_sessions WHERE token=$1`, legacy)
+		}
+	}
 	return err
 }
 
