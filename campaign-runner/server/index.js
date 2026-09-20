@@ -2,9 +2,10 @@ import express from 'express';
 import cors from 'cors';
 import multer from 'multer';
 import crypto from 'crypto';
-import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync, unlinkSync, openSync, closeSync, fsyncSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync, unlinkSync, openSync, closeSync, fsyncSync, realpathSync } from 'fs';
 import { join, dirname, resolve, extname, basename, sep } from 'path';
 import { fileURLToPath } from 'url';
+import { validateExternalImageUrlSync } from './imagePolicy.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -315,13 +316,28 @@ async function resolvePhonesAsync(campaign) {
   return { phones: [...seen], skipped };
 }
 
-// ── Image resolver (tenant-safe) ──
+// ── Image resolver (centralized SSRF policy) ──
 function resolveImagePayload(imageUrl) {
   if (!imageUrl) return '';
-  if (/^https?:\/\//i.test(imageUrl)) return imageUrl;
+  if (/^https?:\/\//i.test(imageUrl)) {
+    // Centralized external URL validation (allowlist + private IP).
+    // When IMAGE_ALLOWLIST is empty, this rejects all http(s) (uploads-only mode).
+    validateExternalImageUrlSync(imageUrl);
+    return imageUrl;
+  }
   const dm = /^data:image\/(jpeg|png|webp|gif);base64,(.*)$/i.exec(imageUrl);
   if (dm) {
     if (dm[2].length > 7 * 1024 * 1024) throw new Error('image too large (max 5MB)');
+    // Validate decoded payload, not just MIME declaration
+    let buf;
+    try {
+      buf = Buffer.from(dm[2], 'base64');
+    } catch {
+      throw new Error('invalid image data');
+    }
+    if (buf.length > 5 * 1024 * 1024) throw new Error('image too large (max 5MB)');
+    const sniff = sniffImageType(buf);
+    if (!sniff) throw new Error('invalid image content');
     return dm[2];
   }
   // accept /uploads/<file> and /uploads/<rid>/<file>
@@ -335,6 +351,18 @@ function resolveImagePayload(imageUrl) {
   // tenant uploads live on bot; runner only serves its own library
   if (fp !== join(resolvedUploads, filename)) throw new Error('invalid image path');
   if (!existsSync(fp)) throw new Error('image file not found on server');
+  // Symlink escape check: realpath must stay inside UPLOADS_DIR
+  try {
+    const real = realpathSync(fp);
+    const realUploads = realpathSync(resolvedUploads);
+    if (real !== join(realUploads, filename) && !real.startsWith(realUploads + sep)) {
+      throw new Error('invalid image path');
+    }
+  } catch (e) {
+    if (e.message === 'invalid image path') throw e;
+    // realpathSync throws on missing file, but existsSync already checked; treat as not found
+    throw new Error('image file not found on server');
+  }
   const buf = readFileSync(fp);
   if (buf.length > 5 * 1024 * 1024) throw new Error('image too large (max 5MB)');
   const sniff = sniffImageType(buf);
