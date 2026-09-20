@@ -2298,6 +2298,24 @@ func (h *AdminHandler) CreateCrust(c *gin.Context) {
 		c.JSON(400, gin.H{"error": "slug and name required"})
 		return
 	}
+	if len(req.Slug) > 60 || len(req.Name) > 100 {
+		c.JSON(400, gin.H{"error": "slug max 60, name max 100"})
+		return
+	}
+	if len(req.Description) > 1000 {
+		c.JSON(400, gin.H{"error": "description too long (max 1000)"})
+		return
+	}
+	for _, p := range []float64{req.PriceRegular, req.PriceMedium, req.PriceLarge} {
+		if p < 0 || p > 100000 {
+			c.JSON(400, gin.H{"error": "crust price must be 0..100000"})
+			return
+		}
+	}
+	if req.SortOrder < -10000 || req.SortOrder > 10000 {
+		c.JSON(400, gin.H{"error": "sort order out of range"})
+		return
+	}
 	var id int
 	err := database.DB.QueryRow(`
 		INSERT INTO menu_crusts (slug, name, description, price_regular, price_medium, price_large, sort_order, restaurant_id)
@@ -2330,6 +2348,24 @@ func (h *AdminHandler) UpdateCrust(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(400, gin.H{"error": "invalid JSON"})
+		return
+	}
+	if len(req.Slug) > 60 || len(req.Name) > 100 {
+		c.JSON(400, gin.H{"error": "slug max 60, name max 100"})
+		return
+	}
+	if len(req.Description) > 1000 {
+		c.JSON(400, gin.H{"error": "description too long (max 1000)"})
+		return
+	}
+	for _, p := range []float64{req.PriceRegular, req.PriceMedium, req.PriceLarge} {
+		if p < 0 || p > 100000 {
+			c.JSON(400, gin.H{"error": "crust price must be 0..100000"})
+			return
+		}
+	}
+	if req.SortOrder < -10000 || req.SortOrder > 10000 {
+		c.JSON(400, gin.H{"error": "sort order out of range"})
 		return
 	}
 	res, err := database.DB.Exec(`
