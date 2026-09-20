@@ -43,10 +43,19 @@ type Config struct {
 func Load() *Config {
 	deliveryFee, _ := strconv.ParseFloat(getEnv("DELIVERY_FEE", "0"), 64)
 	minOrderAmount, _ := strconv.ParseFloat(getEnv("MIN_ORDER_AMOUNT", "0"), 64)
+	botDatabaseURL := getEnv("BOT_DATABASE_URL", "postgresql://postgres:root@localhost:5432/orange_cheese_pizza_bot?sslmode=disable")
+	if !strings.Contains(botDatabaseURL, "sslmode=") {
+		sslMode := getEnv("PGSSLMODE", getEnv("POSTGRES_SSLMODE", "disable"))
+		if strings.Contains(botDatabaseURL, "?") {
+			botDatabaseURL += "&sslmode=" + sslMode
+		} else {
+			botDatabaseURL += "?sslmode=" + sslMode
+		}
+	}
 
 	return &Config{
 		BotPort:                  getEnv("BOT_PORT", "8090"),
-		BotDatabaseURL:           getEnv("BOT_DATABASE_URL", "postgresql://postgres:root@localhost:5432/orange_cheese_pizza_bot?sslmode=disable"),
+		BotDatabaseURL:           botDatabaseURL,
 		EvolutionAPIURL:          getEnv("EVOLUTION_API_URL", "http://localhost:8080"),
 		EvolutionAPIKey:          getEnv("EVOLUTION_API_KEY", ""),
 		EvolutionInstance:        getEnv("EVOLUTION_INSTANCE", "OCP"),
