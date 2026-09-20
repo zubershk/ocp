@@ -81,6 +81,16 @@ func (h *ReviewHandler) CreateReview(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "rating must be 1-5"})
 		return
 	}
+	if len(req.ItemRatings) > 20 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "too many item ratings (max 20)"})
+		return
+	}
+	for _, ir := range req.ItemRatings {
+		if len(strings.TrimSpace(ir.ItemSlug)) > 100 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "item slug too long (max 100)"})
+			return
+		}
+	}
 	ord := h.resolveOrder(c, req.OrderID)
 	if ord == nil {
 		c.JSON(http.StatusForbidden, gin.H{"error": "only delivered orders can be reviewed"})
