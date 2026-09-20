@@ -232,7 +232,10 @@ func VerifyOTPFor(phone, code, name string, restaurantID int) (string, *Customer
 		return "", nil, err
 	}
 	if strings.TrimSpace(name) != "" {
-		_ = UpdateCustomerProfileFor(normalized, rid, map[string]string{"name": name})
+		if len(strings.TrimSpace(name)) > 100 {
+			name = strings.TrimSpace(name)[:100]
+		}
+		_ = UpdateCustomerProfileFor(normalized, rid, map[string]string{"name": strings.TrimSpace(name)})
 	}
 	cust, err := getCustomerFor(normalized, rid)
 	if err != nil {

@@ -73,5 +73,16 @@ func ValidatePaymentInput(method string, amountPaise int64) error {
 	if amountPaise <= 0 {
 		return errors.New("payment amount must be positive")
 	}
+	if amountPaise > 10_000_000_00 { // 1 crore paise = 1 lakh rupees
+		return errors.New("payment amount too large")
+	}
+	return nil
+}
+
+// ValidatePaymentReference rejects oversized references stored in the ledger.
+func ValidatePaymentReference(ref string) error {
+	if len(ref) > 500 {
+		return errors.New("payment reference too long (max 500)")
+	}
 	return nil
 }

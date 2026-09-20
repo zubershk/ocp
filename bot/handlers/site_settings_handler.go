@@ -253,6 +253,14 @@ func (h *SiteSettingsHandler) GetPageAdmin(c *gin.Context) {
 
 func (h *SiteSettingsHandler) UpsertPage(c *gin.Context) {
 	slug := c.Param("slug")
+	if len(slug) == 0 || len(slug) > 100 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "slug must be 1..100 characters"})
+		return
+	}
+	if err := services.ValidateSlug(slug); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid slug format (a-z, 0-9, hyphen, 2..60)"})
+		return
+	}
 	var req struct {
 		Title     string `json:"title" binding:"required"`
 		Content   string `json:"content"`
@@ -270,6 +278,14 @@ func (h *SiteSettingsHandler) UpsertPage(c *gin.Context) {
 	}
 	if len(req.Content) > 50000 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "content too long (max 50000 characters)"})
+		return
+	}
+	if len(req.MetaTitle) > 200 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "meta title too long (max 200)"})
+		return
+	}
+	if len(req.MetaDesc) > 500 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "meta description too long (max 500)"})
 		return
 	}
 	published := true
