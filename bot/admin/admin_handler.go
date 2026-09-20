@@ -1385,6 +1385,10 @@ func (h *AdminHandler) SendChatMessage(c *gin.Context) {
 		return
 	}
 	body := strings.TrimSpace(req.Body)
+	if len(body) > 4000 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "message too long (max 4000)"})
+		return
+	}
 	rid, _, _ := services.RequireTenant(c)
 	if rid == 0 {
 		rid = services.ResolveRestaurant(c.GetInt("restaurantID"))
@@ -1489,6 +1493,10 @@ func (h *AdminHandler) CreateAdminUser(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
+		return
+	}
+	if len(req.Name) > 100 || len(strings.TrimSpace(req.Name)) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "name must be 1..100 characters"})
 		return
 	}
 	if req.Role != "owner" && req.Role != "manager" && req.Role != "kitchen" && req.Role != "cashier" && req.Role != "viewer" {
@@ -1733,6 +1741,34 @@ func (h *AdminHandler) CreateOutlet(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "name too long (max 200 characters)"})
 		return
 	}
+	if len(req.AddressLines) > 10 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "too many address lines (max 10)"})
+		return
+	}
+	for _, s := range req.AddressLines {
+		if len(s) > 500 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "address line too long (max 500)"})
+			return
+		}
+	}
+	if len(req.Phones) > 10 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "too many phones (max 10)"})
+		return
+	}
+	for _, p := range req.Phones {
+		if len(p) > 20 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "phone too long (max 20)"})
+			return
+		}
+	}
+	if len(req.DeliveryHours) > 200 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "delivery hours too long (max 200)"})
+		return
+	}
+	if req.SortOrder < -10000 || req.SortOrder > 10000 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "sort order out of range"})
+		return
+	}
 	online := true
 	if req.OnlineOrdering != nil {
 		online = *req.OnlineOrdering
@@ -1769,6 +1805,42 @@ func (h *AdminHandler) UpdateOutlet(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
+		return
+	}
+	if req.Name != nil && len(*req.Name) > 200 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "name too long (max 200)"})
+		return
+	}
+	if req.AddressLines != nil {
+		if len(req.AddressLines) > 10 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "too many address lines (max 10)"})
+			return
+		}
+		for _, s := range req.AddressLines {
+			if len(s) > 500 {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "address line too long (max 500)"})
+				return
+			}
+		}
+	}
+	if req.Phones != nil {
+		if len(req.Phones) > 10 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "too many phones (max 10)"})
+			return
+		}
+		for _, p := range req.Phones {
+			if len(p) > 20 {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "phone too long (max 20)"})
+				return
+			}
+		}
+	}
+	if req.DeliveryHours != nil && len(*req.DeliveryHours) > 200 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "delivery hours too long (max 200)"})
+		return
+	}
+	if req.SortOrder != nil && (*req.SortOrder < -10000 || *req.SortOrder > 10000) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "sort order out of range"})
 		return
 	}
 	// build dynamic update
@@ -2118,6 +2190,14 @@ func (h *AdminHandler) UpdateBotMessage(c *gin.Context) {
 		c.JSON(400, gin.H{"error": "message_text is required"})
 		return
 	}
+	if len(req.MessageText) > 4000 {
+		c.JSON(400, gin.H{"error": "message_text too long (max 4000)"})
+		return
+	}
+	if req.ImageURL != nil && len(*req.ImageURL) > 2048 {
+		c.JSON(400, gin.H{"error": "image_url too long (max 2048)"})
+		return
+	}
 	if err := botMsgSvc.UpdateMessage(key, req.MessageText, req.ImageURL, services.ResolveRestaurant(c.GetInt("restaurantID"))); err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
@@ -2298,6 +2378,24 @@ func (h *AdminHandler) CreateCrust(c *gin.Context) {
 		c.JSON(400, gin.H{"error": "slug and name required"})
 		return
 	}
+	if len(req.Slug) > 60 || len(req.Name) > 100 {
+		c.JSON(400, gin.H{"error": "slug max 60, name max 100"})
+		return
+	}
+	if len(req.Description) > 1000 {
+		c.JSON(400, gin.H{"error": "description too long (max 1000)"})
+		return
+	}
+	for _, p := range []float64{req.PriceRegular, req.PriceMedium, req.PriceLarge} {
+		if p < 0 || p > 100000 {
+			c.JSON(400, gin.H{"error": "crust price must be 0..100000"})
+			return
+		}
+	}
+	if req.SortOrder < -10000 || req.SortOrder > 10000 {
+		c.JSON(400, gin.H{"error": "sort order out of range"})
+		return
+	}
 	var id int
 	err := database.DB.QueryRow(`
 		INSERT INTO menu_crusts (slug, name, description, price_regular, price_medium, price_large, sort_order, restaurant_id)
@@ -2330,6 +2428,24 @@ func (h *AdminHandler) UpdateCrust(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(400, gin.H{"error": "invalid JSON"})
+		return
+	}
+	if len(req.Slug) > 60 || len(req.Name) > 100 {
+		c.JSON(400, gin.H{"error": "slug max 60, name max 100"})
+		return
+	}
+	if len(req.Description) > 1000 {
+		c.JSON(400, gin.H{"error": "description too long (max 1000)"})
+		return
+	}
+	for _, p := range []float64{req.PriceRegular, req.PriceMedium, req.PriceLarge} {
+		if p < 0 || p > 100000 {
+			c.JSON(400, gin.H{"error": "crust price must be 0..100000"})
+			return
+		}
+	}
+	if req.SortOrder < -10000 || req.SortOrder > 10000 {
+		c.JSON(400, gin.H{"error": "sort order out of range"})
 		return
 	}
 	res, err := database.DB.Exec(`

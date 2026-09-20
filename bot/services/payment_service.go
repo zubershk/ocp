@@ -2,6 +2,7 @@ package services
 
 import (
 	"database/sql"
+	"fmt"
 	"math"
 	"time"
 
@@ -97,6 +98,15 @@ func RecordPayment(orderID, restaurantID, outletID int, method string,
 	if err := ValidatePaymentInput(method, amountPaise); err != nil {
 		return 0, false, err
 	}
+	if err := ValidatePaymentReference(reference); err != nil {
+		return 0, false, err
+	}
+	if tenderedPaise < 0 {
+		return 0, false, fmt.Errorf("tendered amount cannot be negative")
+	}
+	if tenderedPaise > 10_000_000_00 {
+		return 0, false, fmt.Errorf("tendered amount too large")
+	}
 
 	err = database.DB.QueryRow(`
 		INSERT INTO order_payments (order_id, restaurant_id, outlet_id,
@@ -132,6 +142,12 @@ func RecordRefund(orderID, refundOf, restaurantID, outletID int, amountPaise int
 		if existing, findErr := GetPaymentIDByIdempotencyKey(key, orderID); findErr == nil && existing > 0 {
 			return existing, true, nil
 		}
+	}
+	if amountPaise <= 0 || amountPaise > 10_000_000_00 {
+		return 0, false, fmt.Errorf("refund amount must be 1..10000000 paise")
+	}
+	if err := ValidatePaymentReference(reference); err != nil {
+		return 0, false, err
 	}
 	err = database.DB.QueryRow(`
 		INSERT INTO order_payments (order_id, restaurant_id, outlet_id,
@@ -213,6 +229,13 @@ func RefundPayment(paymentID, orderID, restaurantID, outletID int, amountPaise i
 		return 0, false, err
 	}
 	defer tx.Rollback()
+
+	if amountPaise <= 0 || amountPaise > 10_000_000_00 {
+		return 0, false, fmt.Errorf("refund amount must be 1..10000000 paise")
+	}
+	if err := ValidatePaymentReference(reference); err != nil {
+		return 0, false, err
+	}
 
 	if key != "" {
 		var existing int
