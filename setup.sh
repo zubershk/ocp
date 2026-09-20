@@ -81,6 +81,13 @@ read -p "  Select mode [1]: " DEPLOY_MODE
 DEPLOY_MODE=${DEPLOY_MODE:-"1"}
 echo ""
 
+# ── Preserve existing .env ──
+if [ -f "$ENV_FILE" ]; then
+    BACKUP="${ENV_FILE}.bak.$(date +%s)"
+    cp "$ENV_FILE" "$BACKUP"
+    echo -e "  ${YELLOW}⚠${NC} Existing ${BOLD}.env${NC} backed up to ${BACKUP}"
+fi
+
 # ── Write .env ──
 cat > "$ENV_FILE" << EOF
 # ═══════════════════════════════════════════════════════════
@@ -99,13 +106,14 @@ EVOLUTION_INSTANCE_TOKEN=${EVOLUTION_INSTANCE_TOKEN}
 RESTAURANT_NAME=${RESTAURANT_NAME}
 RESTAURANT_WHATSAPP_NUMBER=${RESTAURANT_WHATSAPP_NUMBER}
 DELIVERY_FEE=${DELIVERY_FEE}
-CORS_ALLOWED_ORIGINS=http://localhost,http://localhost:3000
+CORS_ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://localhost:3001,http://localhost:3000,http://localhost
 
 # ── Frontend ──
 VITE_API_BASE_URL=
 EOF
+chmod 600 "$ENV_FILE"
 
-echo -e "  ${GREEN}✓${NC} ${BOLD}.env${NC} created"
+echo -e "  ${GREEN}✓${NC} ${BOLD}.env${NC} created (600)"
 echo ""
 
 # ── Show summary ──
@@ -131,7 +139,13 @@ if [ "$DEPLOY_MODE" = "1" ]; then
     echo -e "  ${CYAN}docker compose logs -f${NC}"
     echo ""
     echo -e "${BOLD}Stop everything:${NC}"
-    echo -e "  ${CYAN}docker compose down${NC}"
+    echo -e "  ${CYAN}docker compose down${NC}  ${YELLOW}(keeps data)${NC}"
+    echo -e "  ${CYAN}docker compose down -v${NC}  ${RED}⚠ destroys all data — backup pgdata/bot_uploads/campaign volumes first!${NC}"
+    echo ""
+    echo -e "${BOLD}Backup:${NC}"
+    echo -e "  ${CYAN}docker compose exec postgres pg_dump -U ocp ocp | gzip > backup-\$(date +%F).sql.gz${NC}"
+    echo ""
+    echo -e "${YELLOW}Campaign Runner is single-replica only — do not scale beyond 1 replica.${NC}"
 else
     echo -e "${BOLD}Start manually:${NC}"
     echo -e "  Terminal 1:  ${CYAN}cd bot && go run .${NC}"
