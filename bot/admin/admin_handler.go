@@ -265,6 +265,12 @@ func (h *AdminHandler) BroadcastSend(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "message too long (max 4096 chars)"})
 		return
 	}
+	if req.ImageURL != "" {
+		if err := services.ValidateExternalImageURL(req.ImageURL); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+	}
 
 	type result struct {
 		Phone string `json:"phone"`
