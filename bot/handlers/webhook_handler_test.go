@@ -1,6 +1,10 @@
 package handlers
 
-import "testing"
+import (
+	"strconv"
+	"testing"
+	"time"
+)
 
 func TestResolveSenderPhone(t *testing.T) {
 	tests := []struct {
@@ -94,5 +98,93 @@ func TestCleanPhoneStrict(t *testing.T) {
 		if got := cleanPhoneStrict(tt.in); got != tt.want {
 			t.Fatalf("cleanPhoneStrict(%q) = %q, want %q", tt.in, got, tt.want)
 		}
+	}
+}
+
+func TestMessageSendTime(t *testing.T) {
+	now := time.Now().UTC()
+	tests := []struct {
+		name  string
+		data  map[string]interface{}
+		info  map[string]interface{}
+		want  time.Time
+		wantOK bool
+	}{
+		{
+			name:   "RFC3339 in Info.Timestamp",
+			info:   map[string]interface{}{"Timestamp": now.Add(-time.Hour).Format(time.RFC3339)},
+			want:   now.Add(-time.Hour).Truncate(time.Second),
+			wantOK: true,
+		},
+		{
+			name:   "unix float in data.timestamp (ButtonClick shape)",
+			data:   map[string]interface{}{"timestamp": float64(now.Add(-time.Hour).Unix())},
+			want:   now.Add(-time.Hour).Truncate(time.Second),
+			wantOK: true,
+		},
+		{
+			name:   "unix string digits",
+			info:   map[string]interface{}{"Timestamp": strconv.FormatInt(now.Add(-time.Hour).Unix(), 10)},
+			want:   now.Add(-time.Hour).Truncate(time.Second),
+			wantOK: true,
+		},
+		{
+			name:   "lowercase info key",
+			info:   map[string]interface{}{"timestamp": now.Add(-time.Hour).Format(time.RFC3339)},
+			want:   now.Add(-time.Hour).Truncate(time.Second),
+			wantOK: true,
+		},
+		{
+			name:   "missing everywhere fails open",
+			wantOK: false,
+		},
+		{
+			name:   "garbage string fails open",
+			info:   map[string]interface{}{"Timestamp": "not-a-time"},
+			wantOK: false,
+		},
+		{
+			name:   "zero/unset timestamp fails open (never silently drop live)",
+			info:   map[string]interface{}{"Timestamp": "1970-01-01T00:00:00Z"},
+			wantOK: false,
+		},
+		{
+			name:   "future timestamp parses (never stale)",
+			info:   map[string]interface{}{"Timestamp": now.Add(time.Hour).Format(time.RFC3339)},
+			want:   now.Add(time.Hour).Truncate(time.Second),
+			wantOK: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := messageSendTime(tt.data, tt.info)
+			if ok != tt.wantOK {
+				t.Fatalf("messageSendTime() ok = %v, want %v", ok, tt.wantOK)
+			}
+			if ok && !got.Equal(tt.want) {
+				t.Fatalf("messageSendTime() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsStaleMessage(t *testing.T) {
+	ttl := 120 * time.Second
+	tests := []struct {
+		name string
+		ts   time.Time
+		want bool
+	}{
+		{"offline backlog (3h old) is stale", time.Now().Add(-3 * time.Hour), true},
+		{"just over TTL is stale", time.Now().Add(-121 * time.Second), true},
+		{"fresh message is live", time.Now().Add(-5 * time.Second), false},
+		{"future (clock skew) is never stale", time.Now().Add(time.Hour), false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isStaleMessage(tt.ts, ttl); got != tt.want {
+				t.Fatalf("isStaleMessage(%v) = %v, want %v", tt.ts, got, tt.want)
+			}
+		})
 	}
 }
