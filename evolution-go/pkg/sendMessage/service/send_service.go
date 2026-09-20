@@ -1238,20 +1238,11 @@ func (s *sendService) sendMediaUrlWithRetry(data *MediaStruct, instance *instanc
 
 		s.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Iniciando download da URL: %s", instance.Id, data.Url)
 
-		resp, err := http.Get(data.Url)
+		fileData, _, err := utils.FetchImageValidated(data.Url)
 		if err != nil {
 			return nil, err
 		}
-		defer resp.Body.Close()
-
-		s.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Download concluído em %v. Lendo dados...", instance.Id, time.Since(startTime))
-
-		downloadStart := time.Now()
-		fileData, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return nil, err
-		}
-		s.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Leitura dos dados concluída em %v. Tamanho: %d bytes", instance.Id, time.Since(downloadStart), len(fileData))
+		s.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Download validado e concluído em %v. Tamanho: %d bytes", instance.Id, time.Since(startTime), len(fileData))
 
 		mime, _ := mimetype.DetectReader(bytes.NewReader(fileData))
 		mimeType := mime.String()
