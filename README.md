@@ -88,8 +88,8 @@ curl -fsSL https://raw.githubusercontent.com/zubershk/ocp/master/install.sh | ba
 
 | Layer | Technology |
 |-------|-----------|
-| Backend | Go 1.21 + Gin web framework |
-| Database | PostgreSQL 14+ |
+| Backend | Go 1.25 + Gin web framework |
+| Database | PostgreSQL 16.4 (alpine, compose) — requires 16+ |
 | Frontend | React 19 + TypeScript + Vite |
 | Styling | Tailwind CSS + shadcn/ui (admin dashboard) |
 | State | React Context + TanStack Query |
@@ -143,7 +143,7 @@ Tech-OCP/
 │   │   ├── live_chat_service.go  # WhatsApp message persistence
 │   │   ├── evolution_client.go   # Evolution GO HTTP client
 │   │   └── whatsapp_cart_service.go  # Persistent WhatsApp cart
-│   ├── migrations/               # 19 SQL migration files
+│   ├── migrations/               # 32 SQL migration files (001→032)
 │   ├── uploads/                  # Menu item product photos
 │   ├── .env.example              # Environment template
 │   └── go.mod / go.sum
@@ -261,7 +261,7 @@ createdb ocp
 # Migrations run automatically when the bot starts
 ```
 
-The bot runs 16 migrations on startup covering:
+The bot runs 32 migrations (001→032) on startup covering:
 
 | Migration | What it creates |
 |-----------|----------------|
@@ -283,6 +283,7 @@ The bot runs 16 migrations on startup covering:
 | 016 | Business config (sizes, payments, fees) |
 | 017 | Family packs page config (promo card + pack list) |
 | 018 | Item `no_crust` flag (hide crust selector for bundles) |
+| 019→032 | Reviews, crusts, tenant foundation/enforcement, POS schema/permissions, whatsapp cart tenant, onboarding, indexes (see `bot/migrations/`) |
 | 019 | Verified-purchase reviews table |
 
 ### 3. Backend
@@ -307,7 +308,7 @@ npm run dev      # Development server on :5173
 ```bash
 cd campaign-runner
 npm install
-npm run dev      # Server on :3001 + frontend on :5173
+npm run dev      # Server on :3001 + frontend on :5174
 ```
 
 ---
@@ -403,8 +404,8 @@ The codebase has been audited and hardened for production use:
 - **Input validation** — all fields length-bounded, numeric ranges checked, enums enforced
 - **SQL injection** — 100% parameterized queries across all handlers
 - **XSS prevention** — no `dangerouslySetInnerHTML`, React auto-escaping, CSP `script-src 'self'`
-- **File uploads** — content-type sniffing, any image type, 10MB limit, random filenames (no path traversal)
-- **Session tokens** — 192-bit entropy, SHA-256 hashed at rest, 24-hour expiry, server-side invalidation on logout
+- **File uploads** — content-type sniffing, any image type, 5MB limit (6MB body cap), random filenames (no path traversal)
+- **Session tokens** — 192-bit entropy, SHA-256 hashed at rest, 30d sliding TTL (half-life renewal), server-side invalidation on logout
 - **IDOR protection** — order access requires access token or Bearer ownership (no sequential IDs exposed)
 - **Idempotency** — unique key per order creation request prevents duplicate orders
 - **Memory management** — conversation locks cleaned up every 30 minutes
@@ -462,7 +463,7 @@ The codebase has been audited and hardened for production use:
 | `POST` | `/admin/menu` | Create menu item |
 | `PUT` | `/admin/menu/:id` | Update menu item |
 | `DELETE` | `/admin/menu/:id` | Delete menu item |
-| `POST` | `/admin/upload` | Upload product photo (any image type, 10MB max, content-type validated) |
+| `POST` | `/admin/upload` | Upload product photo (any image type, 5MB max, content-type validated, 6MB body cap) |
 | `GET` | `/admin/analytics` | Sales/order analytics (daily/weekly/monthly) |
 | `GET` | `/admin/users` | List admin users |
 | `POST` | `/admin/users` | Create admin user |
@@ -674,8 +675,8 @@ cp .env.example .env
 go build -o evolution-go ./cmd/evolution-go
 ./evolution-go
 
-# Or use Docker
-docker compose -f docker/examples/docker-compose.yml up -d
+# Or use Docker (from evolution-go subdir)
+docker compose -f evolution-go/docker/docker-compose.yml up -d
 ```
 
 Evolution GO features:
@@ -688,7 +689,7 @@ Evolution GO features:
 - Swagger API documentation included
 
 **Connecting to OCP:**
-1. Open the Evolution GO manager at `http://localhost:8081`
+1. Open the Evolution GO manager at `http://localhost:8080/manager`
 2. Create an instance named `OCP`
 3. Scan the QR code with the restaurant's WhatsApp number
 4. Set the webhook URL to `http://YOUR_SERVER:8090/webhook/evolution`
