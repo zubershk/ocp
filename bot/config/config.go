@@ -26,6 +26,7 @@ type Config struct {
 	CORSAllowedOriginsSet    bool // true when CORS_ALLOWED_ORIGINS was explicitly provided
 	WebhookSecret            string
 	StaleMessageTTLSecs      int // max age of an inbound WhatsApp message before it is held silently
+	CustomerSessionTTLSecs   int // customer session lifetime in seconds (default 30d)
 	PublicBaseURL            string
 	// SaaS
 	TrustedProxies  string
@@ -63,6 +64,7 @@ func Load() *Config {
 		CORSAllowedOriginsSet:    os.Getenv("CORS_ALLOWED_ORIGINS") != "",
 		WebhookSecret:            getEnv("EVOLUTION_WEBHOOK_SECRET", ""),
 		StaleMessageTTLSecs:      getEnvInt("STALE_MESSAGE_TTL_SECONDS", 120),
+		CustomerSessionTTLSecs:   getEnvInt("CUSTOMER_SESSION_TTL_SECONDS", 30*24*3600),
 		PublicBaseURL:            strings.TrimRight(getEnv("PUBLIC_BASE_URL", ""), "/"),
 		TrustedProxies:           getEnv("TRUSTED_PROXIES", ""),
 		SingleTenant:             strings.EqualFold(getEnv("SINGLE_TENANT_MODE", "true"), "true") || getEnv("SINGLE_TENANT_MODE", "true") == "1",
