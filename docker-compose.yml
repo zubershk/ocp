@@ -3,6 +3,11 @@ services:
   postgres:
     image: postgres:16.4-alpine3.20@sha256:5660c2cbfea50c7a9127d17dc4e48543eedd3d7a41a595a2dfa572471e37e64c
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     environment:
       POSTGRES_DB: ocp
       POSTGRES_USER: ocp
@@ -21,11 +26,17 @@ services:
   evolution:
     image: atendai/evolution-go@sha256:b1ab38aed60dc02296e3ef4a859d52f8f0f246d137ce2f9d92a4936dc8c6acb9 # digest-pinned (was :latest)
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
       interval: 15s
       timeout: 3s
       retries: 5
+      start_period: 10s
     environment:
       - SERVER_PORT=8080
       - SERVER_URL=http://localhost:8080
@@ -58,6 +69,11 @@ services:
       context: .
       dockerfile: bot/Dockerfile
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     environment:
       - BOT_PORT=8090
       - BOT_DATABASE_URL=postgresql://ocp:${DB_PASSWORD:?Set DB_PASSWORD in .env}@postgres:5432/ocp?sslmode=${PGSSLMODE:-disable}
@@ -98,16 +114,22 @@ services:
       args:
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     ports:
       - "3000:80"
     depends_on:
       bot:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:80/ || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:80/health || exit 1"]
       interval: 30s
       timeout: 3s
       retries: 3
+      start_period: 10s
 
   # ── Campaign Runner ──
   campaign:
@@ -115,6 +137,13 @@ services:
       context: .
       dockerfile: campaign-runner/Dockerfile
     restart: unless-stopped
+    deploy:
+      replicas: 1
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     environment:
       - PORT=3001
       - BOT_API_URL=http://bot:8090
@@ -133,6 +162,7 @@ services:
       interval: 30s
       timeout: 3s
       retries: 3
+      start_period: 10s
 
 volumes:
   pgdata:
