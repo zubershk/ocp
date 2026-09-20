@@ -2,6 +2,7 @@ package services
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -217,6 +218,32 @@ func InvalidateBizCache(restaurantID int) {
 
 // SaveBusinessConfig persists the config to DB and refreshes cache.
 func SaveBusinessConfig(cfg *BusinessConfig, restaurantID int) error {
+	if cfg.DeliveryFee < 0 || cfg.DeliveryFee > 100000 {
+		return fmt.Errorf("delivery fee must be 0..100000")
+	}
+	if cfg.MinOrderAmount < 0 || cfg.MinOrderAmount > 100000 {
+		return fmt.Errorf("min order amount must be 0..100000")
+	}
+	if len(cfg.OrderPrefix) > 20 {
+		return fmt.Errorf("order prefix too long (max 20)")
+	}
+	if len(cfg.PublicBaseURL) > 500 {
+		return fmt.Errorf("public base URL too long (max 500)")
+	}
+	if len(cfg.CategoryIcons) > 100 {
+		return fmt.Errorf("too many category icons (max 100)")
+	}
+	for k, v := range cfg.CategoryIcons {
+		if len(k) > 100 || len(v) > 500 {
+			return fmt.Errorf("category icon key/value too long")
+		}
+	}
+	if len(cfg.Sizes) > 20 {
+		return fmt.Errorf("too many sizes (max 20)")
+	}
+	if len(cfg.PaymentMethods) > 20 {
+		return fmt.Errorf("too many payment methods (max 20)")
+	}
 	rid := ResolveRestaurant(restaurantID)
 	raw, err := json.Marshal(cfg)
 	if err != nil {
