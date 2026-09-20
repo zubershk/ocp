@@ -446,8 +446,12 @@ func main() {
 
 	core.StartHeartbeat(heartbeatCtx, runtimeCtx, startTime)
 
+	port := os.Getenv("SERVER_PORT")
+	if port == "" {
+		port = "8080"
+	}
 	srv := &http.Server{
-		Addr:    ":" + os.Getenv("SERVER_PORT"),
+		Addr:    ":" + port,
 		Handler: r,
 	}
 
@@ -455,7 +459,7 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
 	go func() {
-		logger.LogInfo("Iniciando servidor na porta %s", os.Getenv("SERVER_PORT"))
+		logger.LogInfo("Iniciando servidor na porta %s", port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("server error: %v", err)
 		}
