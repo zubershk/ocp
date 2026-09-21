@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -30,6 +31,12 @@ func NewWebhookHandler(botHandler *services.BotHandler, cfg *config.Config) *Web
 // conversation engine instead of the legacy flow.
 func (h *WebhookHandler) AttachEngine(engine *services.ConversationEngine) {
 	h.engine = engine
+}
+
+func (h *WebhookHandler) logDebug(format string, args ...interface{}) {
+	if h.config != nil && strings.EqualFold(h.config.LogLevel, "debug") {
+		log.Printf(format, args...)
+	}
 }
 
 type WebhookPayload struct {
@@ -121,16 +128,16 @@ func (h *WebhookHandler) HandleWebhook(c *gin.Context) {
 	}
 	var payload WebhookPayload
 	if err := json.Unmarshal(raw, &payload); err != nil {
-		log.Printf("[wa-debug] unparsable body (%d bytes)", len(raw))
+		h.logDebug("[wa-debug] unparsable body (%d bytes)", len(raw))
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid payload"})
 		return
 	}
-	log.Printf("[wa-debug] event=%q instance=%q bytes=%d", payload.Event, payload.Instance, len(raw))
+	h.logDebug("[wa-debug] event=%q instance=%q bytes=%d", payload.Event, payload.Instance, len(raw))
 
 	// Only process MESSAGE events (Evolution GO sends "Message", also accept "MESSAGE" and "messages.upsert")
 	event := strings.ToLower(payload.Event)
 	if event != "message" && event != "messages.upsert" {
-		log.Printf("[wa-debug] ignored event type")
+		h.logDebug("[wa-debug] ignored event type")
 		c.JSON(http.StatusOK, gin.H{"status": "ignored"})
 		return
 	}
@@ -138,7 +145,7 @@ func (h *WebhookHandler) HandleWebhook(c *gin.Context) {
 	// Extract message data
 	data := payload.Data
 	if data == nil {
-		log.Printf("[wa-debug] bail: no data (bytes=%d)", len(raw))
+		h.logDebug("[wa-debug] bail: no data (bytes=%d)", len(raw))
 		c.JSON(http.StatusOK, gin.H{"status": "no data"})
 		return
 	}
@@ -179,7 +186,7 @@ func (h *WebhookHandler) HandleWebhook(c *gin.Context) {
 		fromMe, _ = keyMap["fromMe"].(bool)
 	}
 	if fromMe {
-		log.Printf("[wa-debug] bail: own message (FromMe)")
+		h.logDebug("[wa-debug] bail: own message (FromMe)")
 		c.JSON(http.StatusOK, gin.H{"status": "ignored own message"})
 		return
 	}
@@ -215,7 +222,7 @@ func (h *WebhookHandler) HandleWebhook(c *gin.Context) {
 	// remoteJidAlt, ...).
 	phone := resolveSenderPhone(data, info, keyMap, sender)
 	if phone == "" {
-		log.Printf("[wa-debug] bail: no phone (bytes=%d)", len(raw))
+		h.logDebug("[wa-debug] bail: no phone (bytes=%d)", len(raw))
 		c.JSON(http.StatusOK, gin.H{"status": "no phone"})
 		return
 	}
@@ -261,7 +268,7 @@ func (h *WebhookHandler) HandleWebhook(c *gin.Context) {
 		actionID = actionTitle
 	}
 	if actionID == "" {
-		log.Printf("[wa-debug] bail: no text. sender=%q", sender)
+		h.logDebug("[wa-debug] bail: no text. sender=%q", sender)
 		c.JSON(http.StatusOK, gin.H{"status": "no text content"})
 		return
 	}
@@ -297,7 +304,7 @@ func (h *WebhookHandler) HandleWebhook(c *gin.Context) {
 		if messageID != "" {
 			services.MarkMessageProcessed(messageID)
 		}
-		log.Printf("[wa-debug] stale message held silently (id=%s age=%s)", shortID(messageID), staleAge)
+		h.logDebug("[wa-debug] stale message held silently (id=%s age=%s)", shortID(messageID), staleAge)
 		c.JSON(http.StatusOK, gin.H{"status": "stale — held silently"})
 		return
 	}
@@ -387,7 +394,7 @@ func (h *WebhookHandler) HandleButtonClick(c *gin.Context) {
 			}
 			services.MarkMessageProcessed(key)
 		}
-		log.Printf("[wa-debug] stale button tap held silently (id=%s age=%s)", shortID(messageID), time.Since(ts).Round(time.Second))
+		h.logDebug("[wa-debug] stale button tap held silently (id=%s age=%s)", shortID(messageID), time.Since(ts).Round(time.Second))
 		c.JSON(http.StatusOK, gin.H{"status": "stale — held silently"})
 		return
 	}
@@ -508,7 +515,9 @@ func resolveSenderPhone(data, info, keyMap map[string]interface{}, sender string
 	fallback := cleanPhone(sender)
 	if fallback != "" && len(fallback) > 10 {
 		// LID-only contact: keep the row working, but make it visible in logs.
-		log.Printf("[wa-debug] LID-only sender, storing LID row (unsendable): len=%d", len(fallback))
+		if strings.EqualFold(os.Getenv("LOG_LEVEL"), "debug") {
+			log.Printf("[wa-debug] LID-only sender, storing LID row (unsendable): len=%d", len(fallback))
+		}
 	}
 	return fallback
 }

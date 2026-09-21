@@ -202,7 +202,7 @@ Tech-OCP/
 ## Prerequisites
 
 - **Docker** and **Docker Compose** (recommended)
-- Or: **Node.js** 18+, **Go** 1.21+, **PostgreSQL** 14+
+- Or: **Node.js** 20+, **Go** 1.25+, **PostgreSQL** 16+
 
 ---
 
