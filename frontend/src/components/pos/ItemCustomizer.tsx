@@ -18,10 +18,15 @@ type AddonGroup = {
   items: { id: string; name: string; price: number }[];
 };
 
-// Hardcoded Petpooja parity for Chicken Dominator (production-grade, mirrors migration 033 seed)
+// Petpooja parity: Addons for select pizzas when size is regular
+// Fresh Veggie (no addons) vs Chicken Dominator / Cheese & Corn (with addons) per reference
 function getAddonGroups(item: PosMenuItem, size: string): AddonGroup[] {
-  if (item.slug !== 'chicken-dominator' && !item.name.toLowerCase().includes('chicken dominator')) return [];
-  if (size !== 'regular') return []; // groups are size_scope regular per spec
+  if (size !== 'regular') return [];
+  const nameLower = item.name.toLowerCase();
+  // Fresh Veggie and similar veg classic have no addons in reference
+  if (nameLower.includes('fresh veggie')) return [];
+  if (!item.price_by_size && item.price < 50) return [];
+  const isVeg = nameLower.includes('cheese & corn') || nameLower.includes('cheese and corn') || nameLower.includes('veg') && !nameLower.includes('chicken') && !nameLower.includes('non-veg');
   return [
     {
       id: 'cheese-burst',
@@ -32,12 +37,15 @@ function getAddonGroups(item: PosMenuItem, size: string): AddonGroup[] {
       items: [{ id: 'cheese-burst', name: 'Cheese Burst', price: 85 }],
     },
     {
-      id: 'nonveg-combo',
-      name: 'Non-veg Supreme Combo Addon (regular)',
+      id: isVeg ? 'veg-combo' : 'nonveg-combo',
+      name: isVeg ? 'Veg Calsic Combo Addon (regular)' : 'Non-veg Supreme Combo Addon (regular)',
       selectionType: 'single',
       min: 0,
       max: 1,
-      items: [
+      items: isVeg ? [
+        { id: 'cheese-tomato', name: 'Cheese & Tomato Pizza', price: 150 },
+        { id: 'cheese-corn', name: 'Cheese & Corn Pizza', price: 150 },
+      ] : [
         { id: 'chicken-tikka-makhani', name: 'Chicken Tikka Makhani Pizza', price: 150 },
         { id: 'heavy-loaded-kebabs', name: 'Heavy Loaded Kebabs Pizza', price: 150 },
         { id: 'chicken-supreme', name: 'Chicken Supreme Pizza', price: 150 },
@@ -95,7 +103,7 @@ export default function ItemCustomizer({
   const estPaise = basePaise + addonPaise;
 
   return (
-    <Modal open onClose={onClose} title={item.name} size="md">
+    <Modal open onClose={onClose} title={item.name} size={addonGroups.length ? "lg" : "md"}>
       <div className="space-y-5">
         {categoryName && <div className="text-xs font-bold uppercase tracking-wider text-zinc-400 -mt-2">{categoryName}</div>}
 
