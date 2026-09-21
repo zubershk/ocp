@@ -10,6 +10,7 @@ export interface CartLine {
   categoryName: string;
   /** Advisory unit estimate in paise (display only; server reprices). */
   unitPaise: number | null;
+  addons?: { name: string; price: number }[];
 }
 
 export interface RecordedPayment {
