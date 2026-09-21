@@ -202,15 +202,15 @@ export default function MenuPanel({
                   tabIndex={0}
                   onClick={() => tapItem(item)}
                   onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && tapItem(item)}
-                  className={`h-full rounded-lg border bg-white overflow-hidden transition-all cursor-pointer select-none active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-[var(--pos-accent)]/20 ${hasCart ? 'border-l-4 border-l-[var(--pos-success)] border-y border-r border-zinc-200 shadow-sm' : 'border border-zinc-200 hover:border-zinc-300 hover:shadow-sm'}`}
+                  className={`h-full rounded-lg bg-white overflow-hidden transition-all cursor-pointer select-none active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-[var(--pos-accent)]/20 border-y border-r border-zinc-200 border-l-4 border-l-[var(--pos-accent)] ${hasCart ? 'shadow-sm ring-1 ring-[var(--pos-accent)]/20' : 'hover:border-zinc-300 hover:shadow-sm'}`}
                 >
-                  <div className="bg-stone-50 px-2 pt-2">
+                  <div className="bg-white px-1.5 pt-1.5">
                     <ItemImage src={item.image_url} name={item.name} />
                   </div>
-                  <div className="p-2.5">
-                    <div className="font-bold text-xs leading-tight line-clamp-2 min-h-8">{item.name}</div>
+                  <div className="p-2">
+                    <div className="font-bold text-[11px] leading-tight line-clamp-2 min-h-7">{item.name}</div>
                     <div className="mt-1 flex items-center justify-between gap-2">
-                      <span className="font-black text-sm tabular-nums">₹{item.price}</span>
+                      <span className="font-black text-xs tabular-nums">₹{item.price}</span>
                       {simple && inCart > 0 ? (
                         <span
                           className="inline-flex items-center gap-1.5"
