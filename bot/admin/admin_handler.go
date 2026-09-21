@@ -1579,106 +1579,93 @@ func (h *AdminHandler) GetAuditLog(c *gin.Context) {
 
 func (h *AdminHandler) GetAnalytics(c *gin.Context) {
 	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
-	// Today
-	var todayRevenue float64
-	var todayCount int
-	_ = database.DB.QueryRow(`SELECT COALESCE(SUM(total),0), COUNT(*) FROM orders WHERE created_at::date = CURRENT_DATE AND status != 'cancelled' AND restaurant_id = $1`, rid).Scan(&todayRevenue, &todayCount)
-	// Week (last 7 days inclusive)
-	var weekRevenue float64
-	var weekCount int
-	_ = database.DB.QueryRow(`SELECT COALESCE(SUM(total),0), COUNT(*) FROM orders WHERE created_at >= CURRENT_DATE - INTERVAL '6 days' AND status != 'cancelled' AND restaurant_id = $1`, rid).Scan(&weekRevenue, &weekCount)
-
-	// Orders by status
-	statusRows, _ := database.DB.Query(`SELECT status, COUNT(*) FROM orders WHERE restaurant_id = $1 GROUP BY status`, rid)
-	statusMap := map[string]int{}
-	if statusRows != nil {
-		defer statusRows.Close()
-		for statusRows.Next() {
-			var s string
-			var n int
-			_ = statusRows.Scan(&s, &n)
-			statusMap[s] = n
+	// Param-aware dashboard (backward compat: no params = 7d)
+	var from, to *time.Time
+	if f := c.Query("from"); f != "" {
+		if t, err := time.Parse("2006-01-02", f); err == nil {
+			from = &t
 		}
 	}
-	// Top items (last 30 days)
-	type TopItem struct {
-		Name     string  `json:"name"`
-		Quantity int     `json:"quantity"`
-		Revenue  float64 `json:"revenue"`
-	}
-	var top []TopItem
-	rows, err := database.DB.Query(`
-		SELECT oi.name, SUM(oi.quantity)::int, SUM(oi.subtotal)
-		FROM order_items oi JOIN orders o ON o.id = oi.order_id
-		WHERE o.created_at >= CURRENT_DATE - INTERVAL '30 days' AND o.status != 'cancelled' AND o.restaurant_id = $1
-		GROUP BY oi.name ORDER BY SUM(oi.quantity) DESC LIMIT 5
-	`, rid)
-	if err == nil && rows != nil {
-		defer rows.Close()
-		for rows.Next() {
-			var t TopItem
-			_ = rows.Scan(&t.Name, &t.Quantity, &t.Revenue)
-			top = append(top, t)
+	if tStr := c.Query("to"); tStr != "" {
+		if t, err := time.Parse("2006-01-02", tStr); err == nil {
+			to = &t
 		}
 	}
-	if top == nil {
-		top = []TopItem{}
-	}
-	// Revenue by day last 7 days
-	type DayRev struct {
-		Day     string  `json:"day"`
-		Revenue float64 `json:"revenue"`
-		Orders  int     `json:"orders"`
-	}
-	var byDay []DayRev
-	dayRows, err := database.DB.Query(`
-		SELECT to_char(d::date,'YYYY-MM-DD') as day, COALESCE(SUM(o.total),0), COUNT(o.id)
-		FROM generate_series(CURRENT_DATE - INTERVAL '6 days', CURRENT_DATE, '1 day') d
-		LEFT JOIN orders o ON o.created_at::date = d::date AND o.status != 'cancelled' AND o.restaurant_id = $1
-		GROUP BY d::date ORDER BY d::date
-	`, rid)
-	if err == nil && dayRows != nil {
-		defer dayRows.Close()
-		for dayRows.Next() {
-			var dr DayRev
-			_ = dayRows.Scan(&dr.Day, &dr.Revenue, &dr.Orders)
-			byDay = append(byDay, dr)
+	var outletID *int
+	if s := c.Query("outlet_id"); s != "" {
+		if v, err := strconv.Atoi(s); err == nil {
+			outletID = &v
 		}
 	}
-	if byDay == nil {
-		byDay = []DayRev{}
-	}
-	// Orders by hour-of-day, last 7 days (peak-hour heatmap).
-	type HourStat struct {
-		Hour   int `json:"hour"`
-		Orders int `json:"orders"`
-	}
-	byHour := make([]HourStat, 24)
-	for h := 0; h < 24; h++ {
-		byHour[h].Hour = h
-	}
-	hourRows, err := database.DB.Query(`
-		SELECT EXTRACT(HOUR FROM created_at)::int AS h, COUNT(*)
-		FROM orders WHERE created_at >= CURRENT_DATE - INTERVAL '6 days' AND restaurant_id = $1
-		GROUP BY h
-	`, rid)
-	if err == nil && hourRows != nil {
-		defer hourRows.Close()
-		for hourRows.Next() {
-			var h, n int
-			if err := hourRows.Scan(&h, &n); err == nil && h >= 0 && h < 24 {
-				byHour[h].Orders = n
-			}
-		}
-	}
-	c.JSON(http.StatusOK, gin.H{
-		"today":     gin.H{"revenue": todayRevenue, "orders": todayCount},
-		"week":      gin.H{"revenue": weekRevenue, "orders": weekCount},
-		"by_status": statusMap,
-		"top_items": top,
-		"by_day":    byDay,
-		"by_hour":   byHour,
+	source := c.Query("source")
+	granularity := c.Query("granularity")
+	result, err := services.GetDashboard(services.DashboardParams{
+		RestaurantID: rid,
+		OutletID:     outletID,
+		From:         from,
+		To:           to,
+		Granularity:  granularity,
+		Source:       source,
 	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load analytics"})
+		return
+	}
+	c.Header("Cache-Control", "public, max-age=60")
+	c.JSON(http.StatusOK, result)
+}
+
+func (h *AdminHandler) GetAnalyticsCohort(c *gin.Context) {
+	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
+	months := 6
+	if s := c.Query("months"); s != "" {
+		if v, err := strconv.Atoi(s); err == nil && v > 0 && v <= 12 {
+			months = v
+		}
+	}
+	result, _ := services.GetCohort(rid, months)
+	c.Header("Cache-Control", "public, max-age=120")
+	c.JSON(http.StatusOK, result)
+}
+
+func (h *AdminHandler) GetAnalyticsFunnel(c *gin.Context) {
+	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
+	from, to := time.Now().AddDate(0, 0, -6), time.Now()
+	if f := c.Query("from"); f != "" {
+		if t, err := time.Parse("2006-01-02", f); err == nil {
+			from = t
+		}
+	}
+	if tStr := c.Query("to"); tStr != "" {
+		if t, err := time.Parse("2006-01-02", tStr); err == nil {
+			to = t
+		}
+	}
+	result, _ := services.GetFunnel(rid, from, to)
+	c.Header("Cache-Control", "public, max-age=60")
+	c.JSON(http.StatusOK, result)
+}
+
+func (h *AdminHandler) GetAnalyticsBreakdown(c *gin.Context) {
+	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
+	dim := c.Query("dim")
+	if dim == "" {
+		dim = c.Query("dimension")
+	}
+	from, to := time.Now().AddDate(0, 0, -6), time.Now()
+	if f := c.Query("from"); f != "" {
+		if t, err := time.Parse("2006-01-02", f); err == nil {
+			from = t
+		}
+	}
+	if tStr := c.Query("to"); tStr != "" {
+		if t, err := time.Parse("2006-01-02", tStr); err == nil {
+			to = t
+		}
+	}
+	result, _ := services.GetBreakdown(rid, dim, from, to)
+	c.Header("Cache-Control", "public, max-age=60")
+	c.JSON(http.StatusOK, gin.H{"breakdown": result})
 }
 
 // --- Settings: outlets + restaurant config ---
