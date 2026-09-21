@@ -26,60 +26,42 @@ function useClock(): string {
 export default function PosHeader({ outletId, onOutlet, operator, role, heldCount, onNewSale, onHeld, onLock, online }: PosHeaderProps) {
   const time = useClock();
   return (
-    <header className="sticky top-0 z-40 bg-zinc-950 text-white shadow-lg">
-      <div className="px-3 sm:px-5 h-16 flex items-center gap-3">
+    <header className="sticky top-0 z-40 bg-[var(--pos-header)] text-[var(--pos-header-fg)] border-b border-[var(--pos-header-border)] shadow-sm">
+      <div className="px-3 sm:px-5 h-14 flex items-center gap-3">
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-10 h-10 rounded-xl bg-orange-600 grid place-items-center shrink-0 font-black" aria-hidden>
+          <div className="w-9 h-9 rounded-lg bg-[#b91c1c] grid place-items-center shrink-0 font-black text-white" aria-hidden>
             CP
           </div>
           <div className="min-w-0">
-            <div className="font-bold leading-tight">OCP POS</div>
-            <div className="text-[11px] text-zinc-400 truncate">{time} · <span className="capitalize">{role}</span>{operator ? ` · ${operator}` : ''}</div>
+            <div className="font-bold leading-tight text-sm">OCP POS</div>
+            <div className="text-[11px] text-zinc-500 truncate">{time} · <span className="capitalize">{role}</span>{operator ? ` · ${operator}` : ''}</div>
           </div>
         </div>
 
-        <div className="hidden md:flex items-center gap-2 text-sm text-zinc-300 mx-auto">
-          <span className="inline-flex items-center gap-1.5">
-            <OutletSwitcher outletId={outletId} onChange={onOutlet} variant="dark" />
-          </span>
-          <span
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full ${online ? 'bg-emerald-900/60 text-emerald-300' : 'bg-red-900/60 text-red-300'}`}
-            role="status"
-          >
+        <div className="hidden md:flex items-center gap-2 mx-auto">
+          <OutletSwitcher outletId={outletId} onChange={onOutlet} variant="light" />
+          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${online ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'}`} role="status">
             {online ? <Wifi size={13} /> : <WifiOff size={13} />}
             {online ? 'Online' : 'Offline'}
           </span>
+          <span className="hidden lg:flex items-center gap-1 text-xs text-zinc-600 ml-2">
+            <span className="px-2 py-1 rounded bg-white border text-zinc-700">Bill No -</span>
+            <span className="px-2 py-1 rounded bg-white border text-zinc-700">KOT No -</span>
+          </span>
         </div>
 
-        <div className="ml-auto flex items-center gap-2">
-          <button
-            type="button"
-            onClick={onHeld}
-            className="h-11 px-3.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 font-semibold text-sm inline-flex items-center gap-2 transition-colors"
-          >
-            <PauseCircle size={16} />
+        <div className="ml-auto flex items-center gap-1.5">
+          <button type="button" onClick={onHeld} className="h-9 px-3 rounded-lg bg-white border border-zinc-200 hover:bg-zinc-50 font-semibold text-xs inline-flex items-center gap-1.5">
+            <PauseCircle size={14} />
             Held
-            {heldCount > 0 && (
-              <span className="min-w-5 h-5 px-1 rounded-full bg-orange-600 text-[11px] font-bold grid place-items-center tabular-nums">
-                {heldCount}
-              </span>
-            )}
+            {heldCount > 0 && <span className="min-w-5 h-5 px-1 rounded-full bg-[var(--pos-accent)] text-white text-[11px] font-bold grid place-items-center tabular-nums">{heldCount}</span>}
           </button>
-          <button
-            type="button"
-            onClick={onNewSale}
-            className="h-11 px-5 rounded-xl bg-orange-600 hover:bg-orange-500 font-bold text-sm inline-flex items-center gap-2 transition-colors active:scale-95"
-          >
-            <Plus size={16} />
-            New Sale
+          <button type="button" onClick={onNewSale} className="h-9 px-4 rounded-lg bg-[var(--pos-accent)] hover:bg-[var(--pos-accent-hover)] text-white font-bold text-xs inline-flex items-center gap-1.5 active:scale-95">
+            <Plus size={14} />
+            New Order
           </button>
-          <button
-            type="button"
-            onClick={onLock}
-            aria-label="Lock terminal"
-            className="h-11 w-11 rounded-xl bg-zinc-800 hover:bg-zinc-700 grid place-items-center transition-colors"
-          >
-            <Lock size={16} />
+          <button type="button" onClick={onLock} aria-label="Lock terminal" className="h-9 w-9 rounded-lg bg-white border border-zinc-200 hover:bg-zinc-50 grid place-items-center">
+            <Lock size={14} />
           </button>
         </div>
       </div>
