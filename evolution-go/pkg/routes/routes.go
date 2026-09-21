@@ -41,22 +41,6 @@ type Routes struct {
 }
 
 func (r *Routes) AssignRoutes(eng *gin.Engine) {
-	// Configuração do CORS
-	eng.Use(func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Origin, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, Accept, Cache-Control, X-Requested-With, apikey, ApiKey")
-		c.Writer.Header().Set("Access-Control-Expose-Headers", "Content-Length")
-
-		if c.Request.Method == "OPTIONS" {
-			c.AbortWithStatus(200)
-			return
-		}
-
-		c.Next()
-	})
-
 	eng.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	eng.GET("/favicon.ico", func(c *gin.Context) {
@@ -76,6 +60,7 @@ func (r *Routes) AssignRoutes(eng *gin.Engine) {
 	})
 
 	eng.GET("/server/ok", r.serverHandler.ServerOk)
+	eng.GET("/health", r.serverHandler.ServerOk)
 
 	routes := eng.Group("/instance")
 	{

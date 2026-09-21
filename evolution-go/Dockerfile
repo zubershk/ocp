@@ -30,6 +30,8 @@ COPY --from=build /build/VERSION ./VERSION
 
 ENV TZ=America/Sao_Paulo
 ENV GIN_MODE=release
+ENV SERVER_PORT=8080
+EXPOSE 8080
 
 USER nobody
 ENTRYPOINT ["/app/server"]

@@ -147,7 +147,14 @@ func (c *Config) CreateUsersDB() (*gorm.DB, error) {
 	dbDSN := c.postgresUsersDB
 
 	if c.postgresUsersDB == "" {
-		dbDSN = fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", c.PostgresHost, c.PostgresPort, c.PostgresUser, c.PostgresPassword, c.PostgresDB)
+		sslMode := os.Getenv("POSTGRES_SSLMODE")
+		if sslMode == "" {
+			sslMode = os.Getenv("PGSSLMODE")
+		}
+		if sslMode == "" {
+			sslMode = "disable"
+		}
+		dbDSN = fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s", c.PostgresHost, c.PostgresPort, c.PostgresUser, c.PostgresPassword, c.PostgresDB, sslMode)
 	}
 
 	if err := ensureDBExists(dbDSN); err != nil {
@@ -181,7 +188,14 @@ func (c *Config) CreateAuthDB() (*sql.DB, error) {
 	dbDSN := c.postgresUsersDB
 
 	if c.postgresUsersDB == "" {
-		dbDSN = fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", c.PostgresHost, c.PostgresPort, c.PostgresUser, c.PostgresPassword, c.PostgresDB)
+		sslMode := os.Getenv("POSTGRES_SSLMODE")
+		if sslMode == "" {
+			sslMode = os.Getenv("PGSSLMODE")
+		}
+		if sslMode == "" {
+			sslMode = "disable"
+		}
+		dbDSN = fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s", c.PostgresHost, c.PostgresPort, c.PostgresUser, c.PostgresPassword, c.PostgresDB, sslMode)
 	}
 
 	if err := ensureDBExists(dbDSN); err != nil {
