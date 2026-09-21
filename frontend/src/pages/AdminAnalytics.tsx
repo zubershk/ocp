@@ -248,6 +248,14 @@ export default function AdminAnalytics() {
             <h2 id="rev-heading" className="font-semibold">Revenue & Orders — last {data.by_day.length} days</h2>
             <Button variant="outline" size="default" aria-label="Download analytics by day CSV" onClick={() => exportCSV(`analytics-by-day-${range}.csv`, data.by_day as unknown as Record<string, unknown>[])} className="min-h-[44px]"><Download aria-hidden="true" className="w-4 h-4 mr-1" />CSV</Button>
           </div>
+          {data.by_day.every(d => d.revenue === 0 && d.orders === 0) ? (
+            <div className="h-[280px] sm:h-72 md:h-[320px] w-full flex flex-col items-center justify-center text-center p-8 border rounded-lg bg-muted/20">
+              <BarChart3 aria-hidden="true" className="w-12 h-12 text-muted-foreground mb-3" />
+              <p className="font-medium">No revenue in this period</p>
+              <p className="text-sm text-muted-foreground mt-1">Try a larger range (30d) or check Top 5 below for 30-day sales</p>
+              <p className="text-xs text-muted-foreground mt-2">Data is filtered by selected outlet/source • Today/Week KPIs are independent</p>
+            </div>
+          ) : (
           <div className="h-[280px] sm:h-72 md:h-[320px] w-full min-w-0 overflow-hidden" role="img" aria-label={`Revenue and orders by day, last ${data.by_day.length} days`}>
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={chartData} margin={{ top: 8, right: 16, left: 8, bottom: 0 }}>
@@ -262,13 +270,14 @@ export default function AdminAnalytics() {
               </ComposedChart>
             </ResponsiveContainer>
           </div>
+          )}
           <table className="sr-only">
             <caption>Revenue and orders by day</caption>
             <thead><tr><th>Day</th><th>Revenue</th><th>Orders</th></tr></thead>
             <tbody>{chartData.map(d => <tr key={d.day}><td>{d.day}</td><td>{d.revenue}</td><td>{d.orders}</td></tr>)}</tbody>
           </table>
           <div className="flex gap-4 text-xs text-muted-foreground mt-2">
-            <span>Peak revenue {formatINR(maxRev)} • Avg {formatINR(Math.round(data.by_day.reduce((a,b)=>a+b.revenue,0)/Math.max(1,data.by_day.length)))}</span>
+            <span>Peak revenue {formatINR(maxRev)} • Avg {formatINR(Math.round(data.by_day.reduce((a,b)=>a+b.revenue,0)/Math.max(1,data.by_day.length)))} • Top items is 30-day window, KPIs are 7-day</span>
           </div>
         </CardContent>
       </Card>
@@ -317,7 +326,9 @@ export default function AdminAnalytics() {
                 );
               })}
             </div>
-            <p className="text-xs text-muted-foreground mt-3">Healthy cancel rate &lt;5% • Current {cancelRate.toFixed(1)}%</p>
+            <div className={`mt-3 p-2 rounded text-xs ${cancelRate > 30 ? 'bg-destructive/10 text-destructive border border-destructive/20' : cancelRate > 10 ? 'bg-amber-50 text-amber-800 border border-amber-200' : 'text-muted-foreground'}`}>
+              {cancelRate > 30 ? '⚠️ Critical: Cancel rate very high — review kitchen capacity and order flow' : cancelRate > 10 ? '⚠️ Elevated cancel rate — investigate reasons' : 'Healthy cancel rate <5%'} • Current {cancelRate.toFixed(1)}%
+            </div>
           </CardContent>
         </Card>
       </div>

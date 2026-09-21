@@ -3,7 +3,6 @@ package services
 import (
 	"database/sql"
 	"fmt"
-	"strings"
 	"time"
 
 	"orangecheesepizza/bot/database"
@@ -72,15 +71,36 @@ type SourceStat struct {
 	Revenue float64 `json:"revenue"`
 }
 
+func isValidSource(s string) bool {
+	return s == "pos" || s == "website" || s == "whatsapp" || s == "qr"
+}
+
+// buildFilter returns SQL fragment and args for outlet/source filtering with correct placeholder indices.
+// startIdx is the next placeholder number ($n) before adding these filters.
+func buildFilter(outletID *int, source string, startIdx int) (string, []interface{}) {
+	clause := ""
+	args := []interface{}{}
+	idx := startIdx
+	if outletID != nil {
+		clause += fmt.Sprintf(" AND outlet_id = $%d", idx)
+		args = append(args, *outletID)
+		idx++
+	}
+	if source != "" && source != "all" && isValidSource(source) {
+		clause += fmt.Sprintf(" AND source = $%d", idx)
+		args = append(args, source)
+		idx++
+	}
+	return clause, args
+}
+
 // GetDashboard is param-aware replacement for the hardcoded 7d analytics.
-// Defaults: 7d window, granularity day, all outlets/sources, restaurant-scoped.
 func GetDashboard(p DashboardParams) (*DashboardResult, error) {
 	rid := ResolveRestaurant(p.RestaurantID)
 	if rid == 0 {
 		return nil, fmt.Errorf("invalid restaurant")
 	}
-	// Default window: last 7d inclusive
- fromD, toD := time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -6), time.Now().UTC().Truncate(24*time.Hour)
+	fromD, toD := time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -6), time.Now().UTC().Truncate(24*time.Hour)
 	if p.From != nil {
 		fromD = p.From.Truncate(24 * time.Hour)
 	}
@@ -90,35 +110,23 @@ func GetDashboard(p DashboardParams) (*DashboardResult, error) {
 	if toD.Before(fromD) {
 		toD = fromD
 	}
-	// Cap range to 366d
 	if toD.Sub(fromD) > 366*24*time.Hour {
 		fromD = toD.AddDate(0, 0, -365)
 	}
-	outletFilter := ""
-	outletArgs := []interface{}{}
-	if p.OutletID != nil {
-		outletFilter = " AND outlet_id = $2"
-		outletArgs = append(outletArgs, *p.OutletID)
-	}
-	sourceFilter := ""
-	if p.Source != "" && p.Source != "all" {
-		// validated against order_types.go allowlist
-		if p.Source == "pos" || p.Source == "website" || p.Source == "whatsapp" || p.Source == "qr" {
-			sourceFilter = " AND source = $3"
-			// note: param indices shift after outlet; rebuilt below with positional handling
-		}
-	}
-	// For simplicity, build queries with outlet/source injection safely via placeholder rewriting.
-	// Today (still CURRENT_DATE for today KPI, independent of range)
+
+	// Today - uses CURRENT_DATE, independent of range, but still filtered by outlet/source
+	todayFilter, todayArgs := buildFilter(p.OutletID, p.Source, 2)
 	var todayRevenue float64
 	var todayCount int
-	_ = database.DB.QueryRow(`SELECT COALESCE(SUM(total),0), COUNT(*) FROM orders WHERE created_at::date = CURRENT_DATE AND status != 'cancelled' AND restaurant_id = $1`+outletFilter+sourceFilterRepl(sourceFilter, len(outletArgs)), appendArgs(rid, outletArgs, p.Source)...).Scan(&todayRevenue, &todayCount)
+	_ = database.DB.QueryRow(`SELECT COALESCE(SUM(total),0), COUNT(*) FROM orders WHERE created_at::date = CURRENT_DATE AND status != 'cancelled' AND restaurant_id = $1`+todayFilter, append([]interface{}{rid}, todayArgs...)...).Scan(&todayRevenue, &todayCount)
 
 	var weekRevenue float64
 	var weekCount int
-	_ = database.DB.QueryRow(`SELECT COALESCE(SUM(total),0), COUNT(*) FROM orders WHERE created_at >= CURRENT_DATE - INTERVAL '6 days' AND status != 'cancelled' AND restaurant_id = $1`+outletFilter+sourceFilterRepl(sourceFilter, len(outletArgs)), appendArgs(rid, outletArgs, p.Source)...).Scan(&weekRevenue, &weekCount)
+	weekFilter, weekArgs := buildFilter(p.OutletID, p.Source, 2)
+	_ = database.DB.QueryRow(`SELECT COALESCE(SUM(total),0), COUNT(*) FROM orders WHERE created_at >= CURRENT_DATE - INTERVAL '6 days' AND status != 'cancelled' AND restaurant_id = $1`+weekFilter, append([]interface{}{rid}, weekArgs...)...).Scan(&weekRevenue, &weekCount)
 
-	statusRows, _ := database.DB.Query(`SELECT status, COUNT(*) FROM orders WHERE restaurant_id = $1`+outletFilter+sourceFilterRepl(sourceFilter, len(outletArgs))+` GROUP BY status`, appendArgs(rid, outletArgs, p.Source)...)
+	statusFilter, statusArgs := buildFilter(p.OutletID, p.Source, 4)
+	statusRows, _ := database.DB.Query(`SELECT status, COUNT(*) FROM orders WHERE restaurant_id = $1 AND created_at >= $2 AND created_at < $3 + INTERVAL '1 day'`+statusFilter+` GROUP BY status`, append([]interface{}{rid, fromD, toD}, statusArgs...)...)
 	statusMap := map[string]int{}
 	if statusRows != nil {
 		defer statusRows.Close()
@@ -130,18 +138,19 @@ func GetDashboard(p DashboardParams) (*DashboardResult, error) {
 		}
 	}
 
-	// Top items last 30d (or range if custom)
+	// Top items - last 30d or custom range
 	topFrom := fromD
 	if p.From == nil {
 		topFrom = time.Now().UTC().AddDate(0, 0, -30)
 	}
+	topFilter, topArgs := buildFilter(p.OutletID, p.Source, 4)
 	var top []TopItem
 	rows, err := database.DB.Query(`
 		SELECT oi.name, SUM(oi.quantity)::int, SUM(oi.subtotal)
 		FROM order_items oi JOIN orders o ON o.id = oi.order_id
-		WHERE o.created_at >= $2 AND o.created_at < $3 + INTERVAL '1 day' AND o.status != 'cancelled' AND o.restaurant_id = $1`+outletFilterRepl(outletFilter, 4)+sourceFilterRepl(sourceFilter, len(outletArgs)+3)+`
+		WHERE o.created_at >= $2 AND o.created_at < $3 + INTERVAL '1 day' AND o.status != 'cancelled' AND o.restaurant_id = $1`+topFilter+`
 		GROUP BY oi.name ORDER BY SUM(oi.quantity) DESC LIMIT 5
-	`, appendArgsTop(rid, topFrom, toD, outletArgs, p.Source, p.OutletID != nil)...)
+	`, append([]interface{}{rid, topFrom, toD}, topArgs...)...)
 	if err == nil && rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -154,14 +163,15 @@ func GetDashboard(p DashboardParams) (*DashboardResult, error) {
 		top = []TopItem{}
 	}
 
-	// Revenue by day — gap-filled
+	// Revenue by day - gap-filled
+	dayFilter, dayArgs := buildFilter(p.OutletID, p.Source, 4)
 	var byDay []DayRev
 	dayRows, err := database.DB.Query(`
 		SELECT to_char(d::date,'YYYY-MM-DD') as day, COALESCE(SUM(o.total),0), COUNT(o.id)
 		FROM generate_series($2::date, $3::date, '1 day') d
-		LEFT JOIN orders o ON o.created_at::date = d::date AND o.status != 'cancelled' AND o.restaurant_id = $1`+outletFilterRepl(outletFilter, 4)+sourceFilterRepl(sourceFilter, len(outletArgs)+3)+`
+		LEFT JOIN orders o ON o.created_at::date = d::date AND o.status != 'cancelled' AND o.restaurant_id = $1`+dayFilter+`
 		GROUP BY d::date ORDER BY d::date
-	`, appendArgsTop(rid, fromD, toD, outletArgs, p.Source, p.OutletID != nil)...)
+	`, append([]interface{}{rid, fromD, toD}, dayArgs...)...)
 	if err == nil && dayRows != nil {
 		defer dayRows.Close()
 		for dayRows.Next() {
@@ -174,15 +184,16 @@ func GetDashboard(p DashboardParams) (*DashboardResult, error) {
 		byDay = []DayRev{}
 	}
 
-	// Orders by hour (7d aggregate, 24 buckets) + detailed per-day-hour when granularity hour
+	// Orders by hour
 	byHour := make([]HourStat, 24)
 	for h := 0; h < 24; h++ {
 		byHour[h].Hour = h
 	}
+	hourFilter, hourArgs := buildFilter(p.OutletID, p.Source, 4)
 	hourRows, err := database.DB.Query(`
 		SELECT EXTRACT(HOUR FROM created_at)::int AS h, COUNT(*)
-		FROM orders WHERE created_at >= $2 AND created_at < $3 + INTERVAL '1 day' AND restaurant_id = $1`+outletFilterRepl(outletFilter, 4)+sourceFilterRepl(sourceFilter, len(outletArgs)+3)+` GROUP BY h
-	`, appendArgsTop(rid, fromD, toD, outletArgs, p.Source, p.OutletID != nil)...)
+		FROM orders WHERE created_at >= $2 AND created_at < $3 + INTERVAL '1 day' AND restaurant_id = $1`+hourFilter+` GROUP BY h
+	`, append([]interface{}{rid, fromD, toD}, hourArgs...)...)
 	if err == nil && hourRows != nil {
 		defer hourRows.Close()
 		for hourRows.Next() {
@@ -227,7 +238,6 @@ func GetDashboard(p DashboardParams) (*DashboardResult, error) {
 		}
 	}
 
-	// New vs returning (period)
 	newVsRet := map[string]int{}
 	var newCount, retCount int
 	_ = database.DB.QueryRow(`
@@ -240,7 +250,6 @@ func GetDashboard(p DashboardParams) (*DashboardResult, error) {
 	newVsRet["new"] = newCount
 	newVsRet["returning"] = retCount
 
-	// ARPU (period revenue / distinct customers)
 	var arpu float64
 	var distinctCustomers int
 	var periodRevenue float64
@@ -261,49 +270,6 @@ func GetDashboard(p DashboardParams) (*DashboardResult, error) {
 		NewVsReturning:  newVsRet,
 		ARPU:            arpu,
 	}, nil
-}
-
-func appendArgs(rid int, outletArgs []interface{}, source string) []interface{} {
-	args := []interface{}{rid}
-	args = append(args, outletArgs...)
-	if source != "" && source != "all" && (source == "pos" || source == "website" || source == "whatsapp" || source == "qr") {
-		args = append(args, source)
-	}
-	return args
-}
-
-func appendArgsTop(rid int, fromD, toD time.Time, outletArgs []interface{}, source string, hasOutlet bool) []interface{} {
-	args := []interface{}{rid, fromD, toD}
-	if hasOutlet {
-		args = append(args, outletArgs...)
-	}
-	if source != "" && source != "all" && (source == "pos" || source == "website" || source == "whatsapp" || source == "qr") {
-		args = append(args, source)
-	}
-	return args
-}
-
-func sourceFilterRepl(f string, outletLen int) string {
-	if f == "" {
-		return ""
-	}
-	// source param index = 2 if no outlet, 3 if outlet present (rid is $1, outlet $2)
-	// This helper is used with appendArgs which builds args correctly; placeholder is computed by caller
-	// For GetDashboard's today/week/status queries: rid $1, outlet $2, source $3 or $2
-	// Simplify: replace $3 with correct index
-	if outletLen == 0 {
-		return strings.ReplaceAll(f, "$3", "$2")
-	}
-	return f
-}
-
-func outletFilterRepl(f string, base int) string {
-	// outletFilter is " AND outlet_id = $2" or "$4" depending on base
-	// base is the number of prior params before outlet
-	if f == "" {
-		return ""
-	}
-	return strings.ReplaceAll(f, "$2", fmt.Sprintf("$%d", base))
 }
 
 // GetCohort returns monthly cohort retention matrix.
