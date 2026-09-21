@@ -1334,6 +1334,29 @@ func (h *AdminHandler) CalculatePOSPrice(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"price_breakdown": br, "advisory_only": true})
 }
 
+// POS Config — admin-configurable foundation (restaurant-level, outlet override ready via ResolvePOSConfig)
+func (h *AdminHandler) GetPOSConfig(c *gin.Context) {
+	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
+	outletID := c.GetInt("outletID")
+	cfg := services.ResolvePOSConfig(rid, outletID)
+	c.JSON(http.StatusOK, gin.H{"pos_config": cfg})
+}
+
+func (h *AdminHandler) UpdatePOSConfig(c *gin.Context) {
+	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
+	var cfg services.POSConfig
+	if err := c.ShouldBindJSON(&cfg); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON: " + err.Error()})
+		return
+	}
+	if err := services.SavePOSConfig(&cfg, rid); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	auditLog(c, "update_pos_config", "pos_config", cfg)
+	c.JSON(http.StatusOK, gin.H{"ok": true, "pos_config": services.ResolvePOSConfig(rid, 0)})
+}
+
 // Live chat — SaaS bot dashboard
 
 func (h *AdminHandler) ListConversations(c *gin.Context) {
