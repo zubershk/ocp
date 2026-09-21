@@ -29,7 +29,8 @@ const RECENT_KEY = 'ocp_recent_tabs';
 const GROUPS_KEY = 'ocp_nav_groups';
 
 function isActiveFor(pathname: string, item: { to: string; exact?: boolean }) {
-  return item.exact ? pathname === item.to : pathname.startsWith(item.to);
+  if (item.exact) return pathname === item.to;
+  return pathname === item.to || pathname.startsWith(item.to + '/');
 }
 
 function loadJSON<T>(key: string, fallback: T): T {
