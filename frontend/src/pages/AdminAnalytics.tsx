@@ -182,6 +182,11 @@ export default function AdminAnalytics() {
         <Clock aria-hidden="true" className="w-3 h-3" />
         {lastUpdated ? <><time dateTime={lastUpdated.toISOString()}>Updated {format(lastUpdated, 'HH:mm:ss')}</time> • </> : ''}
         Range {range} • {data.by_day.length} days • {live ? 'real-time' : 'auto-refresh 30s'}
+        {data.by_day.length > 1 && (
+          <span className="ml-2 hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-muted text-xs">
+            {data.by_day[0].day} → {data.by_day[data.by_day.length - 1].day}
+          </span>
+        )}
         {deltas && (
           <span className="ml-2 flex items-center gap-1">
             {deltas.revDelta >= 0 ? <ArrowUpRight aria-hidden="true" className="w-3 h-3 text-green-600" /> : <ArrowDownRight aria-hidden="true" className="w-3 h-3 text-red-600" />}
@@ -295,7 +300,8 @@ export default function AdminAnalytics() {
                   tabIndex={0}
                   aria-label={`${String(h.hour).padStart(2,'0')}:00 — ${h.orders} orders`}
                   title={`${String(h.hour).padStart(2,'0')}:00 — ${h.orders} orders`}
-                  className="aspect-square min-h-[44px] min-w-[44px] p-1 sm:p-0 rounded flex items-center justify-center text-xs sm:text-[11px] font-mono focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1"
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (e.target as HTMLElement).title && alert((e.target as HTMLElement).title); } }}
+                  className="aspect-square min-h-[44px] min-w-[44px] p-1 sm:p-0 rounded flex items-center justify-center text-xs sm:text-[11px] font-mono focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 cursor-pointer"
                   style={{ backgroundColor: `hsl(var(--primary) / ${h.orders ? 0.15 + 0.85 * (h.orders / maxHourOrders) : 0.06})`, color: h.orders / maxHourOrders > 0.5 ? 'hsl(var(--primary-foreground))' : 'hsl(var(--foreground))' }}
                 >
                   {String(h.hour).padStart(2, '0')}
