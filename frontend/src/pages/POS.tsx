@@ -66,6 +66,7 @@ export default function POS() {
   const [isComplimentary, setIsComplimentary] = useState(false);
   const [isAdvance, setIsAdvance] = useState(false);
   const [advanceAt, setAdvanceAt] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
   const [online, setOnline] = useState(true);
   useEffect(() => {
@@ -174,12 +175,12 @@ export default function POS() {
         <div className="hidden xl:flex xl:flex-col rounded-xl border border-[var(--pos-border)] bg-white overflow-hidden max-h-[calc(100vh-72px)] sticky top-[66px]">
           <div className="h-9 px-3 flex items-center bg-zinc-900 text-white text-xs font-bold tracking-wider">CATEGORIES</div>
           <div className="flex-1 overflow-y-auto">
-            <CategoryColumn outletId={outletId} />
+            <CategoryColumn selected={selectedCategory} onSelect={setSelectedCategory} />
           </div>
         </div>
         {/* MIDDLE - Menu grid */}
         <div className="rounded-xl border border-[var(--pos-border)] bg-white p-3 flex flex-col min-h-0 max-h-[calc(100vh-72px)] overflow-hidden">
-          <MenuPanel onAdd={addLine} outletId={outletId} cart={cart} onQty={(k,d)=> setCart(p=>p.map(l=>l.key===k?{...l,quantity:l.quantity+d}:l).filter(l=>l.quantity>0))} />
+          <MenuPanel onAdd={addLine} outletId={outletId} cart={cart} onQty={(k: string,d: number)=> setCart((p: CartLine[])=>p.map(l=>l.key===k?{...l,quantity:l.quantity+d}:l).filter(l=>l.quantity>0))} selectedCategory={selectedCategory} onSelectCategory={setSelectedCategory} />
         </div>
         {/* RIGHT - Bill */}
         <div className="rounded-xl border border-[var(--pos-border)] bg-white overflow-hidden flex flex-col max-h-[calc(100vh-72px)] sticky top-[66px]">
@@ -214,14 +215,30 @@ export default function POS() {
   );
 }
 
-// Extracted left category column to avoid re-render of whole POS
-function CategoryColumn({ outletId }: { outletId: number | null }) {
-  // Reuse MenuPanel's category fetch via posApi.getCategories? Instead render vertical list by reusing MenuPanel's internal categories
-  // For now, render a placeholder that MenuPanel will hide on xl (we keep both for backward compat, hide horizontal pills on xl)
+// Left vertical categories — production-grade with [D] tags
+function CategoryColumn({ selected, onSelect }: { selected: string; onSelect: (id: string) => void }) {
+  const catQuery = useQuery({
+    queryKey: ['pos-categories'],
+    queryFn: () => posApi.getCategories(),
+    staleTime: 60_000,
+  });
+  const cats = catQuery.data ?? [];
   return (
-    <div className="p-2 space-y-1">
-      <p className="px-2 py-1.5 text-xs font-bold text-zinc-500 uppercase tracking-wider">All Items</p>
-      <div className="text-xs text-zinc-400 px-2">Categories show in middle panel — vertical list coming soon. Use search above.</div>
+    <div className="p-2 space-y-0.5">
+      <button onClick={() => onSelect('all')} className={`w-full text-left px-2 py-2 rounded text-xs font-bold flex justify-between items-center ${selected==='all' ? 'bg-[var(--pos-accent)] text-white' : 'hover:bg-zinc-50 text-zinc-700'}`}>
+        <span>All Items</span><span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded">{cats.length}</span>
+      </button>
+      {cats.map((c: { id: number; name: string; isDeliverable?: boolean }) => (
+        <button
+          key={c.id}
+          onClick={() => onSelect(String(c.id))}
+          className={`w-full text-left px-2 py-2 rounded text-xs flex justify-between items-center border-b border-zinc-100 last:border-0 ${selected===String(c.id) ? 'bg-zinc-900 text-white border-zinc-900' : 'hover:bg-zinc-50 text-zinc-700'}`}
+        >
+          <span className="truncate">{c.name} {c.isDeliverable === false ? '' : '[D]'}</span>
+          <span className={`w-1.5 h-6 rounded ${selected===String(c.id) ? 'bg-white' : 'bg-emerald-500'}`} />
+        </button>
+      ))}
+      {catQuery.isLoading && <p className="px-2 py-2 text-xs text-zinc-400">Loading…</p>}
     </div>
   );
 }
