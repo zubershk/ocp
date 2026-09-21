@@ -68,7 +68,7 @@ export function ProductCard({
   };
 
   return (
-    <Card className={cn("group flex flex-col gap-0 rounded-2xl bg-card p-0 transition-all overflow-hidden ring-0 border w-[270px] h-[410px] shrink-0", className,)}>
+    <Card className={cn("group flex w-full max-w-[270px] flex-col gap-0 rounded-2xl bg-card p-0 transition-all overflow-hidden ring-0 border h-[410px] shrink-0 justify-self-stretch", className,)}>
       <div className="relative overflow-hidden bg-muted/50 h-[170px] shrink-0">
         {dietary && (
           <span
