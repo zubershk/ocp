@@ -22,6 +22,7 @@ type SizeOption struct {
 	Key    string `json:"key"`
 	Label  string `json:"label"`
 	Active bool   `json:"active"`
+	Inches string `json:"inches,omitempty"`
 }
 
 type PaymentMethod struct {
@@ -328,9 +329,9 @@ func defaultBusinessConfig() *BusinessConfig {
 		DeliveryFee:    0,
 		MinOrderAmount: 0,
 		Sizes: []SizeOption{
-			{Key: "regular", Label: "Regular", Active: true},
-			{Key: "medium", Label: "Medium", Active: true},
-			{Key: "large", Label: "Large", Active: true},
+			{Key: "regular", Label: "Regular", Active: true, Inches: "7 Inches"},
+			{Key: "medium", Label: "Medium", Active: true, Inches: "10 Inches"},
+			{Key: "large", Label: "Large", Active: true, Inches: "13 Inches"},
 		},
 		PaymentMethods: []PaymentMethod{
 			{Key: "cod", Label: "Cash on Delivery", Icon: "cash", Active: true},

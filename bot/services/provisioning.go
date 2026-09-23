@@ -73,6 +73,22 @@ func ProvisionRestaurant(orgName, restName, slug, ownerName, ownerKeyHash string
 	_, _ = tx.Exec(`INSERT INTO roles (organization_id, name, is_system, description) VALUES
 	 ($1,'owner',true,'Full access'),($1,'manager',true,''),($1,'cashier',true,''),($1,'kitchen',true,''),($1,'viewer',true,'')
 	 ON CONFLICT (organization_id, name) DO NOTHING`, orgID)
+	// ensure pos.* permissions exist and seed per-org grants (mirrors 026 for new tenants)
+	_, _ = tx.Exec(`INSERT INTO permissions (key, description) VALUES
+	 ('pos.read','View POS menu, orders, tables, discounts, prices'),
+	 ('pos.create_order','Create POS draft orders'),
+	 ('pos.update_order','Update, hold, resume, complete, cancel POS orders'),
+	 ('pos.apply_discount','Apply or remove POS discounts'),
+	 ('pos.take_payment','Record POS payments'),
+	 ('pos.refund','Record POS refunds'),
+	 ('pos.manage_tables','Assign and manage POS tables')
+	 ON CONFLICT (key) DO NOTHING`)
+	_, _ = tx.Exec(`INSERT INTO role_permissions (role_id, permission_id)
+	 SELECT r.id, p.id FROM roles r JOIN permissions p ON p.key LIKE 'pos.%' WHERE r.organization_id=$1 AND r.is_system AND r.name IN ('owner','manager') ON CONFLICT DO NOTHING`, orgID)
+	_, _ = tx.Exec(`INSERT INTO role_permissions (role_id, permission_id)
+	 SELECT r.id, p.id FROM roles r JOIN permissions p ON p.key IN ('pos.read','pos.create_order','pos.update_order','pos.take_payment') WHERE r.organization_id=$1 AND r.is_system AND r.name='cashier' ON CONFLICT DO NOTHING`, orgID)
+	_, _ = tx.Exec(`INSERT INTO role_permissions (role_id, permission_id)
+	 SELECT r.id, p.id FROM roles r JOIN permissions p ON p.key IN ('pos.read') WHERE r.organization_id=$1 AND r.is_system AND r.name IN ('kitchen','viewer') ON CONFLICT DO NOTHING`, orgID)
 	// owner user if provided — never reassign existing key to another org
 	if ownerKeyHash != "" {
 		err = tx.QueryRow(`INSERT INTO users (organization_id, name, key_hash, role, active) VALUES ($1,$2,$3,'owner',true)
