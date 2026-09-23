@@ -336,6 +336,9 @@ func main() {
 		adminGroup.POST("/pos/discounts", adminHandler.RequireRole("owner", "manager"), adminHandler.RequirePermission("pos.apply_discount"), adminHandler.ApplyPOSDiscount)
 		adminGroup.DELETE("/pos/discounts/:id", adminHandler.RequireRole("owner", "manager"), adminHandler.RequirePermission("pos.apply_discount"), adminHandler.RemovePOSDiscount)
 		adminGroup.GET("/pos/price", adminHandler.RequirePermission("pos.read"), adminHandler.CalculatePOSPrice)
+		// POS config foundation — admin-configurable, no behavior change until POS wiring (PR 3)
+		adminGroup.GET("/pos/config", adminHandler.RequirePermission("pos.read"), adminHandler.GetPOSConfig)
+		adminGroup.PUT("/pos/config", adminHandler.RequireRole("owner", "manager"), adminHandler.UpdatePOSConfig)
 	}
 
 	// Health / readiness — SaaS observability

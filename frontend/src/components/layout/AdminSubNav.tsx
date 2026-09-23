@@ -20,6 +20,7 @@ const items = [
   { to: '/admin/team', label: 'Team', icon: Users, group: 'Setup', roles: ['owner'] },
   { to: '/admin/bot-workflows', label: 'Bot', icon: Bot, group: 'Setup', roles: ['owner', 'manager'] },
   { to: '/admin/business-config', label: 'Config', icon: Store, group: 'Setup', roles: ['owner', 'manager'] },
+  { to: '/admin/pos-config', label: 'POS Config', icon: Monitor, group: 'Setup', roles: ['owner', 'manager'] },
 ];
 
 const groups = ['Sell', 'Catalog', 'Marketing', 'Insights', 'Setup'];
