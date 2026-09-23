@@ -116,6 +116,25 @@ func ProvisionRestaurant(orgName, restName, slug, ownerName, ownerKeyHash string
 	} else if bootRest == 0 {
 		_, _ = tx.Exec(`INSERT INTO site_settings (key, value, restaurant_id) VALUES ('bot_config', '{}'::jsonb, $1) ON CONFLICT (key, restaurant_id) DO NOTHING`, restID)
 	}
+	// pos_config seed per-restaurant
+	_, _ = tx.Exec(`INSERT INTO site_settings (key, value, restaurant_id)
+	 SELECT 'pos_config', value, $2 FROM site_settings WHERE key='pos_config' AND restaurant_id=$1
+	 ON CONFLICT (key, restaurant_id) DO NOTHING`, bootRest, restID)
+	// Fallback default if boot has no pos_config (fresh DB or old)
+	_, _ = tx.Exec(`INSERT INTO site_settings (key, value, restaurant_id) VALUES ('pos_config', '{
+    "order_types": [
+      {"key":"dine_in","label":"Dine In","short":"Dine In","icon":"utensils","active":true,"requires_table":true},
+      {"key":"delivery","label":"Delivery","short":"Delivery","icon":"bike","active":true,"requires_address":true},
+      {"key":"takeaway","label":"Take Away","short":"Take Away","icon":"bag","active":true}
+    ],
+    "size_meta": {"regular":{"label":"Regular","inches":"7 Inches"},"medium":{"label":"Medium","inches":"10 Inches"},"large":{"label":"Large","inches":"13 Inches"}},
+    "bill_rows": [{"key":"subtotal","label":"Sub Total","visible":true},{"key":"discount","label":"Discount","visible":true},{"key":"container","label":"Container Charge","visible":true,"editable":true},{"key":"tax","label":"Tax","visible":true},{"key":"round_off","label":"Round Off","visible":true},{"key":"customer_paid","label":"Customer Paid","visible":true},{"key":"return_to_customer","label":"Return to Customer","visible":true},{"key":"tip","label":"Tip","visible":true,"editable":true}],
+    "charges": {"container_default":0,"tip_enabled":true,"round_mode":"nearest","tax_source":"restaurant.tax_percent"},
+    "customer_fields": {"phone":{"visible":true,"required":true,"for":["delivery","takeaway"]},"name":{"visible":true,"required":false,"for":["dine_in","delivery","takeaway"]},"address":{"visible":true,"required":false,"for":["delivery"]},"locality":{"visible":true,"required":false,"for":["delivery"]}},
+    "features": {"bogo":false,"split_bill":false,"complimentary":true,"advance_order":true,"kot":true,"hold":true},
+    "ui": {"header_title":"OCP POS","currency_symbol":"₹","pos_accent":"#b91c1c"},
+    "version": 1
+  }'::jsonb, $1) ON CONFLICT (key, restaurant_id) DO NOTHING`, restID)
 	_, _ = tx.Exec(`INSERT INTO onboarding_progress (restaurant_id, current_step) VALUES ($1,'business_info') ON CONFLICT (restaurant_id) DO NOTHING`, restID)
 
 	if err = tx.Commit(); err != nil {
