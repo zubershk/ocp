@@ -217,11 +217,27 @@ export function describeDiscount(d: PosDiscount): string {
   return `${formatPaise(d.value)} off`;
 }
 
+export interface DraftAddon {
+  group_id: number;
+  menu_item_id: number;
+}
 export interface DraftLine {
   menuItemID: number;
   size?: string;
   crust?: string;
   quantity: number;
+  addons?: DraftAddon[];
+}
+export interface PosCreateMeta {
+  customer_phone?: string;
+  customer_name?: string;
+  address?: string;
+  locality?: string;
+  guest_count?: number;
+  container_charge?: number;
+  tip_amount?: number;
+  is_complimentary?: boolean;
+  advance_at?: string;
 }
 
 export interface PosCategory {
@@ -240,7 +256,12 @@ export const posApi = {
   getOutlets: () =>
     posFetch<{ outlets: PosOutlet[] }>('/admin/outlets').then((r) => r.outlets ?? []),
 
-  createOrder: (lines: DraftLine[], tableID: number, orderType: PosOrderType) =>
+  getAddonGroups: (menuItemId: number) =>
+    posFetch<{ addon_groups: { id: number; menu_item_id: number; name: string; size_scope: string; selection_type: string; min_select: number; max_select: number; sort_order: number; active: boolean }[] }>(`/admin/addon-groups?menu_item_id=${menuItemId}`).then(r => r.addon_groups ?? []),
+  getAddonItems: (groupId: number) =>
+    posFetch<{ addon_items: { id: number; group_id: number; menu_item_id: number; menu_item_name?: string; price_override: number | null; sort_order: number; active: boolean }[] }>(`/admin/addon-groups/${groupId}/items`).then(r => r.addon_items ?? []),
+
+  createOrder: (lines: DraftLine[], tableID: number, orderType: PosOrderType, meta?: PosCreateMeta) =>
     posFetch<{ order: PosOrder }>('/admin/pos/orders', {
       method: 'POST',
       body: {
@@ -249,9 +270,19 @@ export const posApi = {
           Size: l.size ?? '',
           Crust: l.crust ?? '',
           Quantity: l.quantity,
+          addons: (l.addons ?? []).map(a => ({ group_id: a.group_id, menu_item_id: a.menu_item_id })),
         })),
         TableID: tableID,
         order_type: orderType,
+        customer_phone: meta?.customer_phone ?? '',
+        customer_name: meta?.customer_name ?? '',
+        address: meta?.address ?? '',
+        locality: meta?.locality ?? '',
+        guest_count: meta?.guest_count ?? 1,
+        container_charge: meta?.container_charge ?? 0,
+        tip_amount: meta?.tip_amount ?? 0,
+        is_complimentary: meta?.is_complimentary ?? false,
+        advance_at: meta?.advance_at ?? '',
       },
     }).then((r) => r.order),
 

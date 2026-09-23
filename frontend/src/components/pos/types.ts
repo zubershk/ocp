@@ -10,7 +10,7 @@ export interface CartLine {
   categoryName: string;
   /** Advisory unit estimate in paise (display only; server reprices). */
   unitPaise: number | null;
-  addons?: { name: string; price: number }[];
+  addons?: { group_id: number; menu_item_id: number; name: string; price: number }[];
 }
 
 export interface RecordedPayment {
@@ -29,5 +29,5 @@ export interface HeldOrder {
   at: string;
 }
 
-export const cartLineKey = (menuItemID: number, size: string, crust: string): string =>
-  `${menuItemID}|${size}|${crust}`;
+export const cartLineKey = (menuItemID: number, size: string, crust: string, addonKey?: string): string =>
+  `${menuItemID}|${size}|${crust}|${addonKey ?? ''}`;

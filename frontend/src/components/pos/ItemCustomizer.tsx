@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Minus, Plus, Search } from 'lucide-react';
 import { Modal } from '../ui/Modal';
@@ -7,54 +7,17 @@ import { useCrusts } from '../../context/CrustContext';
 import type { CartLine } from './types';
 import { sizesOf, unitRupees } from './MenuPanel';
 
-const SIZE_INCHES: Record<string, string> = { regular: '7 Inches', medium: '10 Inches', large: '13 Inches' };
+const SIZE_INCHES: Record<string, string> = { regular: '7"', medium: '10"', large: '13"' };
 
-type AddonGroup = {
-  id: string;
+type RealAddonGroup = {
+  id: number;
   name: string;
-  selectionType: 'single' | 'multiple';
-  min: number;
-  max: number;
-  items: { id: string; name: string; price: number }[];
+  size_scope: string;
+  selection_type: string;
+  min_select: number;
+  max_select: number;
+  items: { id: number; name: string; price: number }[];
 };
-
-// Petpooja parity: Addons for select pizzas when size is regular
-// Fresh Veggie (no addons) vs Chicken Dominator / Cheese & Corn (with addons) per reference
-function getAddonGroups(item: PosMenuItem, size: string): AddonGroup[] {
-  if (size !== 'regular') return [];
-  const nameLower = item.name.toLowerCase();
-  // Fresh Veggie and similar veg classic have no addons in reference
-  if (nameLower.includes('fresh veggie')) return [];
-  if (!item.price_by_size && item.price < 50) return [];
-  const isVeg = nameLower.includes('cheese & corn') || nameLower.includes('cheese and corn') || nameLower.includes('veg') && !nameLower.includes('chicken') && !nameLower.includes('non-veg');
-  return [
-    {
-      id: 'cheese-burst',
-      name: 'Addon Cheese Burst (regular)',
-      selectionType: 'multiple',
-      min: 0,
-      max: 1,
-      items: [{ id: 'cheese-burst', name: 'Cheese Burst', price: 85 }],
-    },
-    {
-      id: isVeg ? 'veg-combo' : 'nonveg-combo',
-      name: isVeg ? 'Veg Calsic Combo Addon (regular)' : 'Non-veg Supreme Combo Addon (regular)',
-      selectionType: 'single',
-      min: 0,
-      max: 1,
-      items: isVeg ? [
-        { id: 'cheese-tomato', name: 'Cheese & Tomato Pizza', price: 150 },
-        { id: 'cheese-corn', name: 'Cheese & Corn Pizza', price: 150 },
-      ] : [
-        { id: 'chicken-tikka-makhani', name: 'Chicken Tikka Makhani Pizza', price: 150 },
-        { id: 'heavy-loaded-kebabs', name: 'Heavy Loaded Kebabs Pizza', price: 150 },
-        { id: 'chicken-supreme', name: 'Chicken Supreme Pizza', price: 150 },
-        { id: 'tornado', name: 'Tornado Pizza', price: 150 },
-        { id: 'chicken-pepperoni', name: 'Chicken Pepperoni Pizza', price: 150 },
-      ],
-    },
-  ];
-}
 
 export default function ItemCustomizer({
   item,
@@ -68,16 +31,54 @@ export default function ItemCustomizer({
   onAdd: (line: Omit<CartLine, 'key'>) => void;
 }) {
   const sizes = sizesOf(item);
-  const [sizeBase] = useState(sizes.includes('regular') ? 'regular' : sizes[0]);
-  const [size, setSize] = useState(sizeBase);
+  const [size, setSize] = useState(() => (sizes.includes('regular') ? 'regular' : sizes[0]));
   const [crust, setCrust] = useState('');
   const [qty, setQty] = useState(1);
   const [addonSearch, setAddonSearch] = useState('');
-  const [selectedAddons, setSelectedAddons] = useState<Record<string, Set<string>>>({});
+  const [selectedAddons, setSelectedAddons] = useState<Record<number, Set<number>>>({});
   const { crusts } = useCrusts();
   const optionsNest = !item.no_crust && crusts.length > 0;
   const selectedCrust = crusts.find((c) => c.slug === crust);
-  const addonGroups = useMemo(() => getAddonGroups(item, size), [item, size]);
+
+  // Reset size/qty/addons when item changes (fixes stale customizer)
+  useEffect(() => {
+    setSize(sizes.includes('regular') ? 'regular' : sizes[0]);
+    setCrust('');
+    setQty(1);
+    setSelectedAddons({});
+    setAddonSearch('');
+  }, [item.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Clear addons that are not valid for new size
+  useEffect(() => {
+    setSelectedAddons({});
+  }, [size]);
+
+  const groupsQuery = useQuery({
+    queryKey: ['pos-addon-groups', item.id],
+    queryFn: async () => {
+      const groups = await posApi.getAddonGroups(item.id);
+      const withItems: RealAddonGroup[] = [];
+      for (const g of groups) {
+        const rawItems = await posApi.getAddonItems(g.id);
+        const items = rawItems.map(it => ({
+          id: it.menu_item_id,
+          name: it.menu_item_name ?? String(it.menu_item_id),
+          price: it.price_override ?? 0,
+        }));
+        withItems.push({ id: g.id, name: g.name, size_scope: g.size_scope, selection_type: g.selection_type, min_select: g.min_select, max_select: g.max_select, items });
+      }
+      return withItems.filter(g => g.items.length > 0);
+    },
+    staleTime: 30_000,
+    retry: 1,
+  });
+
+  const addonGroups = useMemo(() => {
+    const all = groupsQuery.data ?? [];
+    // filter by size_scope
+    return all.filter(g => g.size_scope === 'all' || g.size_scope === size);
+  }, [groupsQuery.data, size]);
 
   const estimate = useQuery({
     queryKey: ['pos-price', item.id, size, crust],
@@ -119,7 +120,8 @@ export default function ItemCustomizer({
                     type="button"
                     onClick={() => setSize(s)}
                     aria-pressed={isSel}
-                    className={`h-16 rounded font-bold border-2 transition-all capitalize active:scale-[0.97] flex flex-col items-center justify-center gap-0.5 ${isSel ? 'bg-[#b91c1c] text-white border-[#b91c1c]' : 'bg-zinc-800 text-white border-zinc-800 hover:bg-zinc-700'}`}
+                    aria-label={`Size ${s} ${SIZE_INCHES[s] ?? ''} price ₹${unitRupees(item, s)}`}
+                    className={`h-16 rounded font-bold border-2 transition-all capitalize active:scale-[0.97] flex flex-col items-center justify-center gap-0.5 ${isSel ? 'bg-[var(--pos-accent)] text-white border-[var(--pos-accent)]' : 'bg-zinc-800 text-white border-zinc-800 hover:bg-zinc-700'}`}
                   >
                     <span className="text-xs font-bold">{s.charAt(0).toUpperCase() + s.slice(1)} [{SIZE_INCHES[s] || s}]</span>
                     <span className="text-sm font-bold">₹{unitRupees(item, s)}</span>
@@ -164,33 +166,38 @@ export default function ItemCustomizer({
           </div>
         )}
 
-        {addonGroups.length > 0 && (
+        {groupsQuery.isLoading ? (
+          <div className="py-6 text-center text-sm text-zinc-500">Loading addons…</div>
+        ) : addonGroups.length > 0 ? (
           <div className="space-y-4">
             <div className="relative">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" aria-hidden />
               <input
                 value={addonSearch}
                 onChange={e => setAddonSearch(e.target.value)}
                 placeholder="Search addon item"
-                className="w-full h-9 rounded border border-zinc-200 pl-8 pr-3 text-sm focus:outline-none focus:border-zinc-400"
+                aria-label="Search addon item"
+                className="w-full h-11 rounded border border-zinc-200 pl-8 pr-3 text-sm focus:outline-none focus:border-zinc-400"
               />
             </div>
             {addonGroups.map(g => {
               const filtered = g.items.filter(it => !addonSearch || it.name.toLowerCase().includes(addonSearch.toLowerCase()));
-              const selected = selectedAddons[g.id] ?? new Set<string>();
-              const isSingle = g.selectionType === 'single';
+              const selected = selectedAddons[g.id] ?? new Set<number>();
+              const isSingle = g.selection_type === 'single';
               return (
                 <div key={g.id}>
-                  <div className="text-sm font-bold">{g.name} <span className="ml-2 text-xs font-normal text-blue-500 bg-blue-50 px-2 py-0.5 rounded">{isSingle ? 'Single Add-on Only' : 'Multiple Add-ons'} (Min: {g.min}, Max: {g.max})</span></div>
-                  <div className="grid gap-2 mt-2" style={{ gridTemplateColumns: `repeat(${Math.min(filtered.length, 5)}, minmax(0, 1fr))` }}>
+                  <div className="text-sm font-bold">{g.name} <span className="ml-2 text-xs font-normal text-blue-500 bg-blue-50 px-2 py-0.5 rounded">{isSingle ? 'Single Add-on Only' : 'Multiple Add-ons'} (Min: {g.min_select}, Max: {g.max_select})</span></div>
+                  <div className="grid gap-2 mt-2 grid-cols-2 sm:grid-cols-3">
                     {filtered.map(it => {
                       const isSel = selected.has(it.id);
-                      const canSelect = isSel || selected.size < g.max;
+                      const canSelect = isSel || selected.size < g.max_select;
                       return (
                         <button
                           key={it.id}
                           type="button"
                           disabled={!canSelect}
+                          aria-pressed={isSel}
+                          aria-label={`${it.name} ₹${it.price}${isSel ? ' selected' : ''}`}
                           onClick={() => {
                             setSelectedAddons(prev => {
                               const next = { ...prev };
@@ -206,7 +213,7 @@ export default function ItemCustomizer({
                               return next;
                             });
                           }}
-                          className={`p-3 rounded border-2 text-left transition-all flex flex-col gap-1 min-h-[80px] ${isSel ? 'border-[#b91c1c] bg-[#b91c1c] text-white' : 'border-zinc-200 bg-white hover:border-zinc-300'} ${!canSelect ? 'opacity-50 cursor-not-allowed' : 'active:scale-[0.97]'}`}
+                          className={`p-3 rounded border-2 text-left transition-all flex flex-col gap-1 min-h-[80px] ${isSel ? 'border-[var(--pos-accent)] bg-[var(--pos-accent)] text-white' : 'border-zinc-200 bg-white hover:border-zinc-300'} ${!canSelect ? 'opacity-50 cursor-not-allowed' : 'active:scale-[0.97]'}`}
                         >
                           <span className="text-xs font-medium leading-tight line-clamp-2">{it.name}</span>
                           <span className="text-sm font-bold">₹{it.price}</span>
@@ -219,7 +226,7 @@ export default function ItemCustomizer({
               );
             })}
           </div>
-        )}
+        ) : null}
 
         <div className="flex items-center justify-between">
           <div className="text-xs font-bold uppercase tracking-wider text-zinc-500">Quantity</div>
@@ -228,7 +235,8 @@ export default function ItemCustomizer({
               type="button"
               aria-label="Decrease quantity"
               onClick={() => setQty((q) => Math.max(1, q - 1))}
-              className="w-12 h-12 rounded-2xl bg-zinc-100 hover:bg-zinc-200 grid place-items-center font-bold text-lg active:scale-95"
+              disabled={qty <= 1}
+              className="w-11 h-11 rounded-2xl bg-zinc-100 hover:bg-zinc-200 disabled:opacity-50 disabled:cursor-not-allowed grid place-items-center font-bold text-lg active:scale-95"
             >
               <Minus size={18} />
             </button>
@@ -237,7 +245,8 @@ export default function ItemCustomizer({
               type="button"
               aria-label="Increase quantity"
               onClick={() => setQty((q) => Math.min(20, q + 1))}
-              className="w-12 h-12 rounded-2xl bg-zinc-950 text-white hover:bg-zinc-800 grid place-items-center font-bold text-lg active:scale-95"
+              disabled={qty >= 20}
+              className="w-11 h-11 rounded-2xl bg-zinc-950 text-white hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed grid place-items-center font-bold text-lg active:scale-95"
             >
               <Plus size={18} />
             </button>
@@ -247,20 +256,21 @@ export default function ItemCustomizer({
         {(() => {
           const canAdd = addonGroups.every(g => {
             const sel = selectedAddons[g.id]?.size ?? 0;
-            return sel >= g.min && sel <= g.max;
+            return sel >= g.min_select && sel <= g.max_select;
           });
           return (
             <button
               type="button"
               disabled={!canAdd}
+              aria-disabled={!canAdd}
               onClick={() => {
                 const addons = addonGroups.flatMap(g => {
                   const sel = selectedAddons[g.id];
                   if (!sel) return [];
                   return Array.from(sel).map(id => {
                     const it = g.items.find(x => x.id === id);
-                    return it ? { name: it.name, price: it.price } : null;
-                  }).filter(Boolean) as { name: string; price: number }[];
+                    return it ? { group_id: g.id, menu_item_id: it.id, name: it.name, price: it.price } : null;
+                  }).filter(Boolean) as { group_id: number; menu_item_id: number; name: string; price: number }[];
                 });
                 onAdd({
                   menuItemID: item.id,
@@ -276,7 +286,7 @@ export default function ItemCustomizer({
                 } as Omit<CartLine, 'key'>);
                 onClose();
               }}
-              className={`w-full h-14 rounded-2xl font-bold text-lg transition-all active:scale-[0.98] ${canAdd ? 'bg-[#b91c1c] hover:bg-[#991b1b] text-white' : 'bg-zinc-200 text-zinc-500 cursor-not-allowed'}`}
+              className={`w-full h-14 rounded-2xl font-bold text-lg transition-all active:scale-[0.98] ${canAdd ? 'bg-[var(--pos-accent)] hover:bg-[var(--pos-accent-hover)] text-white' : 'bg-zinc-200 text-zinc-500 cursor-not-allowed'}`}
             >
               {canAdd ? 'Save' : 'Select required addons'} {canAdd && estPaise > 0 && `· ${formatPaise(estPaise * qty)}`}
             </button>

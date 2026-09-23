@@ -995,7 +995,7 @@ func (h *AdminHandler) GetPOSMenu(c *gin.Context) {
 // CreatePOSOrder creates a new POS order draft.
 // Tenant is taken from middleware context, never from the body: a
 // caller cannot forge restaurant/outlet IDs, and the source is always
-// stamped pos on this endpoint.
+// stamped pos on this endpoint. Hardening: transports customer, financial, and addon fields.
 func (h *AdminHandler) CreatePOSOrder(c *gin.Context) {
 	var draft services.DraftOrder
 	if err := c.ShouldBindJSON(&draft); err != nil {
@@ -1004,12 +1004,50 @@ func (h *AdminHandler) CreatePOSOrder(c *gin.Context) {
 	}
 	restaurantID := c.GetInt("restaurantID")
 	outletID := c.GetInt("outletID")
-	order, err := h.posOrderService.CreateOrder(restaurantID, outletID, draft.Items, draft.TableID, services.SourcePOS, draft.OrderType)
+	// enforce source server-side
+	draft.Source = services.SourcePOS
+	// Support both legacy Items and new single-item fallback
+	if len(draft.Items) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "order must contain at least one item"})
+		return
+	}
+	order, err := h.posOrderService.CreateOrderWithDraft(restaurantID, outletID, draft)
 	if err != nil {
+		// surface validation as 400 where possible
+		msg := err.Error()
+		if isPOSValidationError(msg) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": msg})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"order": order})
+}
+
+func isPOSValidationError(msg string) bool {
+	msgLower := msg
+	// quick heuristic without importing strings lower
+	return containsValidation(msgLower)
+}
+func containsValidation(msg string) bool {
+	// avoid extra imports: check substrings that are validation errors (from createOrderInternal)
+	for _, sub := range []string{
+		"quantity must be", "too many addons", "addon group", "addon item", "phone too long", "name too long",
+		"address too long", "locality too long", "guest_count", "container_charge", "tip_amount",
+		"invalid advance_at", "requires", "selections",
+		"table not found", "does not belong",
+	} {
+		if len(msg) >= len(sub) {
+			// simple contains without strings import (use manual)
+			for i := 0; i <= len(msg)-len(sub); i++ {
+				if msg[i:i+len(sub)] == sub {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // GetPOSOrder returns a POS order by ID.
