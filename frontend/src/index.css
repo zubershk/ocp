@@ -238,6 +238,17 @@
     --duration-slow: 400ms;
   }
 
+  .pos {
+    --pos-header: #f5f5f5;
+    --pos-header-fg: #1c1917;
+    --pos-header-border: #e5e0d8;
+    --pos-panel: #f9f5f0;
+    --pos-accent: #b91c1c;
+    --pos-accent-hover: #991b1b;
+    --pos-success: #16a34a;
+    --pos-border: #e5e0d8;
+  }
+
   html {
     scroll-behavior: smooth;
     -webkit-font-smoothing: antialiased;
