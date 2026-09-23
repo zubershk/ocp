@@ -106,14 +106,49 @@ export default function AdminPosConfig() {
 
       <Card>
         <CardContent className="p-6 space-y-4">
-          <h2 className="font-semibold">Sizes & Inches</h2>
+          <h2 className="font-semibold">Sizes (label via POS Config, inches via Business Config)</h2>
           {Object.entries(local.size_meta).map(([k, v]) => (
             <div key={k} className="flex gap-2 items-center">
               <span className="w-20 text-sm font-mono">{k}</span>
               <Input value={v.label} onChange={e => setLocal({ ...local, size_meta: { ...local.size_meta, [k]: { ...v, label: e.target.value } } })} placeholder="Label" className="flex-1" />
-              <Input value={v.inches} onChange={e => setLocal({ ...local, size_meta: { ...local.size_meta, [k]: { ...v, inches: e.target.value } } })} placeholder="Inches" className="w-28" />
+              <span className="w-28 px-3 py-2 rounded-xl border bg-zinc-50 text-sm text-zinc-600" title="Inches are canonical from Settings → Business Config → Sizes, not editable here to prevent drift">{v.inches || '—'}</span>
             </div>
           ))}
+          <p className="text-xs text-muted-foreground">Inches are read-only here. Edit via <span className="font-mono">Settings → Business Config → Sizes</span> (single source: <code className="px-1 bg-zinc-100 rounded">bot_config.sizes[].inches</code>). POS Config only controls the label.</p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="p-6 space-y-4">
+          <h2 className="font-semibold">Charges (foundation — no calculation in PR #2)</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+              <label className="text-xs font-semibold">Container Default (₹)</label>
+              <Input type="number" value={String(local.charges.container_default)} onChange={e => setLocal({ ...local, charges: { ...local.charges, container_default: Number(e.target.value) || 0 } })} className="mt-1" />
+            </div>
+            <div className="flex flex-col justify-end">
+              <label className="inline-flex items-center gap-2 text-sm"><input type="checkbox" checked={local.charges.tip_enabled} onChange={e => setLocal({ ...local, charges: { ...local.charges, tip_enabled: e.target.checked } })} /> Tip enabled</label>
+            </div>
+            <div>
+              <label className="text-xs font-semibold">Round Mode</label>
+              <select value={local.charges.round_mode} onChange={e => setLocal({ ...local, charges: { ...local.charges, round_mode: e.target.value } })} className="mt-1 w-full px-3 py-2.5 rounded-xl border bg-white text-sm">
+                <option value="none">none</option><option value="nearest">nearest</option><option value="up">up</option><option value="down">down</option>
+              </select>
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">Tax is <code className="px-1 bg-zinc-100 rounded">restaurant.tax_percent</code> (excludes tip + container; enforced in PR #4 pricing).</p>
+          <div>
+            <label className="text-xs font-semibold">Bill Rows (visible toggles)</label>
+            <div className="grid sm:grid-cols-2 gap-2 mt-2">
+              {local.bill_rows.map((r, i) => (
+                <label key={r.key} className="flex items-center gap-2 text-sm border rounded-xl px-3 py-2">
+                  <input type="checkbox" checked={r.visible} onChange={e => { const v = [...local.bill_rows]; v[i] = { ...r, visible: e.target.checked }; setLocal({ ...local, bill_rows: v }); }} />
+                  <span className="font-mono text-xs">{r.key}</span>
+                  <span className="flex-1 truncate">{r.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
         </CardContent>
       </Card>
 

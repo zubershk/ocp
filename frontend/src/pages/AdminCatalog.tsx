@@ -147,7 +147,24 @@ export default function AdminCatalog() {
   });
 
   // ---- Crusts ----
-  const [tab, setTab] = useState<'items' | 'crusts' | 'media'>('items');
+  const [tab, setTab] = useState<'items' | 'crusts' | 'media' | 'addons'>('items');
+  const [addonMenuItemId, setAddonMenuItemId] = useState<number | ''>('');
+  const addonGroupsQuery = useQuery({
+    queryKey: ['admin-addon-groups', addonMenuItemId],
+    queryFn: () => {
+      const q = addonMenuItemId ? `?menu_item_id=${addonMenuItemId}` : '';
+      return adminFetch<{ addon_groups: { id: number; menu_item_id: number; name: string; size_scope: string; selection_type: string; min_select: number; max_select: number; sort_order: number; active: boolean }[] }>(`/admin/addon-groups${q}`).then(r => r.addon_groups ?? []);
+    },
+    enabled: authed && tab === 'addons',
+  });
+  const [newGroupName, setNewGroupName] = useState('');
+  const [newGroupScope, setNewGroupScope] = useState('regular');
+  const [newGroupType, setNewGroupType] = useState('multiple');
+  const createAddonGroupMut = useMutation({
+    mutationFn: (body: Record<string, unknown>) => adminFetch('/admin/addon-groups', { method: 'POST', body: JSON.stringify(body) }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-addon-groups'] }); setNewGroupName(''); toast.push({ type: 'success', title: 'Addon group created' }); },
+    onError: (e: Error) => toast.push({ type: 'error', title: e.message }),
+  });
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [confirmMediaDelete, setConfirmMediaDelete] = useState<{ name: string } | null>(null);
@@ -436,15 +453,15 @@ export default function AdminCatalog() {
 
       {/* Sub-nav */}
 
-      {/* Items / Crusts / Media tabs */}
+      {/* Items / Crusts / Media / Addons tabs */}
       <div className="mt-4 flex gap-1 p-1 bg-stone-100 rounded-2xl w-fit text-sm">
-        {(['items', 'crusts', 'media'] as const).map((t) => (
+        {(['items', 'crusts', 'media', 'addons'] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
             className={`px-4 py-1.5 rounded-xl text-xs font-semibold capitalize transition-colors ${tab === t ? 'bg-zinc-900 text-white' : 'text-zinc-600 hover:bg-white'}`}
           >
-            {t} {t === 'crusts' && crusts.length > 0 && `(${crusts.length})`}
+            {t} {t === 'crusts' && crusts.length > 0 && `(${crusts.length})`} {t === 'addons' && (addonGroupsQuery.data?.length ? `(${addonGroupsQuery.data.length})` : '')}
           </button>
         ))}
       </div>
@@ -729,6 +746,53 @@ export default function AdminCatalog() {
           </div>
         )}
       </div>
+      )}
+
+      {tab === 'addons' && (
+        <div className="mt-4 space-y-4">
+          <Card className="p-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="text-xs font-semibold">Menu Item</label>
+              <select value={addonMenuItemId} onChange={e => setAddonMenuItemId(e.target.value ? Number(e.target.value) : '')} className="px-3 py-2.5 rounded-xl border bg-white text-sm min-w-[220px]">
+                <option value="">All items ({items.length}) — pick one to add group</option>
+                {items.map(it => <option key={it.id} value={it.id}>{it.name} #{it.id}</option>)}
+              </select>
+              <Badge variant="secondary">{addonGroupsQuery.data?.length ?? 0} groups</Badge>
+              {addonGroupsQuery.isLoading && <span className="text-xs text-muted-foreground">Loading…</span>}
+            </div>
+            <div className="mt-3 grid sm:grid-cols-4 gap-2">
+              <Input value={newGroupName} onChange={e => setNewGroupName(e.target.value)} placeholder="Group name e.g. Extra Cheese" maxLength={200} />
+              <select value={newGroupScope} onChange={e => setNewGroupScope(e.target.value)} className="px-3 py-2.5 rounded-xl border bg-white text-sm"><option value="regular">regular</option><option value="medium">medium</option><option value="large">large</option><option value="all">all</option></select>
+              <select value={newGroupType} onChange={e => setNewGroupType(e.target.value)} className="px-3 py-2.5 rounded-xl border bg-white text-sm"><option value="multiple">multiple</option><option value="single">single (max 1)</option></select>
+              <Button onClick={() => {
+                if (!addonMenuItemId) { toast.push({ type: 'warning', title: 'Pick a menu item first' }); return; }
+                if (!newGroupName.trim()) { toast.push({ type: 'warning', title: 'Group name required' }); return; }
+                createAddonGroupMut.mutate({ menu_item_id: Number(addonMenuItemId), name: newGroupName.trim(), size_scope: newGroupScope, selection_type: newGroupType, min_select: 0, max_select: newGroupType === 'single' ? 1 : 5, sort_order: addonGroupsQuery.data?.length ?? 0, active: true });
+              }} disabled={createAddonGroupMut.isPending}>Add group</Button>
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">Keep <code className="px-1 bg-zinc-100 rounded">menu_item_id NOT NULL</code> per PR #2; reuse via junction later. Single ⇒ max 1 enforced.</p>
+          </Card>
+          {(addonGroupsQuery.data ?? []).length === 0 ? (
+            <Card className="py-10 text-center px-4"><p className="font-semibold">No addon groups</p><p className="text-sm text-zinc-500">Create one above for the selected item. Foundation only — pricing stays server-authoritative, snapshot in order_items.addons_snapshot.</p></Card>
+          ) : (
+            <div className="space-y-3">
+              {(addonGroupsQuery.data ?? []).map(g => (
+                <Card key={g.id} className="p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="font-semibold">{g.name} <span className="text-xs font-mono text-muted-foreground">#{g.id}</span></div>
+                      <div className="text-xs text-muted-foreground mt-1">Scope {g.size_scope} · {g.selection_type} · min {g.min_select} max {g.max_select} · pos {g.sort_order} · {g.active ? 'active' : 'inactive'}</div>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" onClick={() => { if (confirm(`Delete group ${g.name}?`)) adminFetch(`/admin/addon-groups/${g.id}`, { method: 'DELETE' }).then(() => qc.invalidateQueries({ queryKey: ['admin-addon-groups'] })); }}>Delete</Button>
+                    </div>
+                  </div>
+                  <div className="mt-3 text-xs text-muted-foreground">Items in group are managed via <code className="px-1 bg-zinc-100 rounded">POST /admin/addon-groups/:id/items</code> (menu_item_id + price_override). Use pos snapshots for history; see foundation docs.</div>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
       )}
 
       {/* Modal */}

@@ -27,7 +27,7 @@ type POSOrderType struct {
 
 type POSSizeMeta struct {
 	Label  string `json:"label"`
-	Inches string `json:"inches"`
+	Inches string `json:"inches"` // derived from bot_config.sizes[].inches (canonical); not edited via pos_config UI
 }
 
 type POSBillRow struct {
@@ -117,6 +117,32 @@ func defaultPOSConfig() *POSConfig {
 	}
 }
 
+func enrichPOSSizeMeta(cfg *POSConfig, restaurantID int) {
+	if cfg == nil || cfg.SizeMeta == nil {
+		return
+	}
+	biz := GetBizConfigFor(restaurantID)
+	if biz == nil || len(biz.Sizes) == 0 {
+		return
+	}
+	byKey := map[string]string{}
+	for _, s := range biz.Sizes {
+		if s.Inches != "" {
+			byKey[s.Key] = s.Inches
+		}
+	}
+	for k, v := range cfg.SizeMeta {
+		if inches, ok := byKey[k]; ok {
+			v.Inches = inches
+			cfg.SizeMeta[k] = v
+		}
+	}
+}
+
+func canonicalizePOSSizeMeta(cfg *POSConfig, restaurantID int) {
+	enrichPOSSizeMeta(cfg, restaurantID)
+}
+
 func validatePOSConfig(cfg *POSConfig) error {
 	if len(cfg.OrderTypes) == 0 || len(cfg.OrderTypes) > 5 {
 		return fmt.Errorf("order_types must be 1..5")
@@ -174,12 +200,14 @@ func validatePOSConfig(cfg *POSConfig) error {
 }
 
 // LoadPOSConfigFor loads and caches per-restaurant config. Falls back to defaults if no row.
+// Size inches are derived from bot_config.sizes[].inches (canonical) on every load.
 func LoadPOSConfigFor(restaurantID int) *POSConfig {
 	rid := ResolveRestaurant(restaurantID)
 	posCfgMu.RLock()
 	if c, ok := posCfgCache[rid]; ok {
 		posCfgMu.RUnlock()
 		out := *c
+		enrichPOSSizeMeta(&out, rid)
 		return &out
 	}
 	posCfgMu.RUnlock()
@@ -188,40 +216,50 @@ func LoadPOSConfigFor(restaurantID int) *POSConfig {
 	err := database.DB.QueryRow(`SELECT value::text FROM site_settings WHERE key='pos_config' AND restaurant_id=$1`, rid).Scan(&raw)
 	if err != nil {
 		cfg := defaultPOSConfig()
+		enrichPOSSizeMeta(cfg, rid)
 		posCfgMu.Lock()
 		posCfgCache[rid] = cfg
 		posCfgMu.Unlock()
 		out := *cfg
+		enrichPOSSizeMeta(&out, rid)
 		return &out
 	}
 	var cfg POSConfig
 	if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
 		cfg2 := defaultPOSConfig()
+		enrichPOSSizeMeta(cfg2, rid)
 		posCfgMu.Lock()
 		posCfgCache[rid] = cfg2
 		posCfgMu.Unlock()
 		out := *cfg2
+		enrichPOSSizeMeta(&out, rid)
 		return &out
 	}
 	// Validate persisted value; on failure return defaults (do not cache invalid)
 	if err := validatePOSConfig(&cfg); err != nil {
 		cfg2 := defaultPOSConfig()
+		enrichPOSSizeMeta(cfg2, rid)
 		out := *cfg2
+		enrichPOSSizeMeta(&out, rid)
 		return &out
 	}
+	enrichPOSSizeMeta(&cfg, rid)
 	posCfgMu.Lock()
 	posCfgCache[rid] = &cfg
 	posCfgMu.Unlock()
 	out := cfg
+	enrichPOSSizeMeta(&out, rid)
 	return &out
 }
 
 // SavePOSConfig validates, persists, and invalidates cache.
+// Inches are canonicalized from bot_config before persist to prevent drift.
 func SavePOSConfig(cfg *POSConfig, restaurantID int) error {
 	if err := validatePOSConfig(cfg); err != nil {
 		return err
 	}
 	rid := ResolveRestaurant(restaurantID)
+	canonicalizePOSSizeMeta(cfg, rid)
 	raw, err := json.Marshal(cfg)
 	if err != nil {
 		return err
@@ -247,10 +285,12 @@ func InvalidatePOSCache(restaurantID int) {
 }
 
 // ResolvePOSConfig returns effective config for restaurant+outlet.
-// Today: restaurant only; later: merges outlet overrides.
+// Today: restaurant only; later: merges outlet overrides. Always enriches inches from bot_config.
 func ResolvePOSConfig(restaurantID, outletID int) *POSConfig {
 	_ = outletID // reserved for outlet overrides
-	return LoadPOSConfigFor(restaurantID)
+	cfg := LoadPOSConfigFor(restaurantID)
+	enrichPOSSizeMeta(cfg, ResolveRestaurant(restaurantID))
+	return cfg
 }
 
 // Helper for provisioning new restaurant default pos_config (call after org/restaurant creation)
