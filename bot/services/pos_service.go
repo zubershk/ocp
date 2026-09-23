@@ -206,6 +206,20 @@ func NormalizePOSOrderType(t string) (string, error) {
 // totals are then derived by RecalculateOrderTotals. Client-supplied
 // amounts are never trusted. The header + lines insert atomically.
 func (s *POSOrderService) CreateOrder(restaurantID int, outletID int, items []DraftItem, tableID int, source string, orderType string) (*models.Order, error) {
+	draft := DraftOrder{Items: items, TableID: tableID, Source: source, OrderType: orderType}
+	return s.createOrderInternal(restaurantID, outletID, draft)
+}
+
+// CreateOrderWithDraft is the hardening entrypoint that transports customer, financial, and addon fields.
+func (s *POSOrderService) CreateOrderWithDraft(restaurantID int, outletID int, draft DraftOrder) (*models.Order, error) {
+	return s.createOrderInternal(restaurantID, outletID, draft)
+}
+
+func (s *POSOrderService) createOrderInternal(restaurantID int, outletID int, draft DraftOrder) (*models.Order, error) {
+	items := draft.Items
+	tableID := draft.TableID
+	source := draft.Source
+	orderType := draft.OrderType
 	if len(items) == 0 {
 		return nil, fmt.Errorf("order must contain at least one item")
 	}
@@ -216,9 +230,12 @@ func (s *POSOrderService) CreateOrder(restaurantID int, outletID int, items []Dr
 		if it.Quantity < 1 || it.Quantity > 20 {
 			return nil, fmt.Errorf("item %d: quantity must be 1..20", i+1)
 		}
+		if len(it.Addons) > 20 {
+			return nil, fmt.Errorf("item %d: too many addons (max 20)", i+1)
+		}
 	}
 	if !ValidOrderSource(source) {
-		source = SourcePOS // authoritative default; never trust client values blindly
+		source = SourcePOS
 	}
 	if outletID <= 0 {
 		outletID = DefaultOutletID(restaurantID)
@@ -227,6 +244,52 @@ func (s *POSOrderService) CreateOrder(restaurantID int, outletID int, items []Dr
 	if err != nil {
 		return nil, err
 	}
+	// Hardening: validate and sanitize customer/financial fields (transport only, no calc)
+	customerPhone := strings.TrimSpace(draft.CustomerPhone)
+	customerName := strings.TrimSpace(draft.CustomerName)
+	address := strings.TrimSpace(draft.Address)
+	locality := strings.TrimSpace(draft.Locality)
+	if len(customerPhone) > 20 {
+		return nil, fmt.Errorf("phone too long (max 20)")
+	}
+	if len(customerName) > 100 {
+		return nil, fmt.Errorf("name too long (max 100)")
+	}
+	if len(address) > 500 {
+		return nil, fmt.Errorf("address too long (max 500)")
+	}
+	if len(locality) > 200 {
+		return nil, fmt.Errorf("locality too long (max 200)")
+	}
+	guestCount := draft.GuestCount
+	if guestCount == 0 {
+		guestCount = 1
+	}
+	if guestCount < 1 || guestCount > 50 {
+		return nil, fmt.Errorf("guest_count must be 1..50")
+	}
+	if draft.ContainerCharge < 0 || draft.ContainerCharge > 10000 {
+		return nil, fmt.Errorf("container_charge must be 0..10000")
+	}
+	if draft.TipAmount < 0 || draft.TipAmount > 10000 {
+		return nil, fmt.Errorf("tip_amount must be 0..10000")
+	}
+	var advanceAt sql.NullTime
+	if strings.TrimSpace(draft.AdvanceAt) != "" {
+		t, err := time.Parse(time.RFC3339, strings.TrimSpace(draft.AdvanceAt))
+		if err != nil {
+			// also try datetime-local format from frontend
+			if t2, err2 := time.Parse("2006-01-02T15:04", strings.TrimSpace(draft.AdvanceAt)); err2 == nil {
+				t = t2
+			} else {
+				return nil, fmt.Errorf("invalid advance_at format, use RFC3339")
+			}
+		}
+		advanceAt = sql.NullTime{Time: t, Valid: true}
+	}
+	customerSnapshot, _ := json.Marshal(map[string]string{
+		"phone": customerPhone, "name": customerName, "address": address, "locality": locality,
+	})
 
 	tx, err := database.DB.Begin()
 	if err != nil {
@@ -234,14 +297,12 @@ func (s *POSOrderService) CreateOrder(restaurantID int, outletID int, items []Dr
 	}
 	defer tx.Rollback()
 
-	// Build order number
 	var seq int64
 	if err := tx.QueryRow(`SELECT nextval('ocp_order_number_seq')`).Scan(&seq); err != nil {
 		return nil, fmt.Errorf("order number generation failed: %w", err)
 	}
 	orderNumber := fmt.Sprintf("POS-%s-%04d", time.Now().Format("20060102"), seq)
 
-	// Optional table, verified against the tenant before linking.
 	var tableNull sql.NullInt64
 	if tableID > 0 {
 		var tblRestaurantID, tblOutletID int
@@ -259,18 +320,27 @@ func (s *POSOrderService) CreateOrder(restaurantID int, outletID int, items []Dr
 		tableNull = sql.NullInt64{Int64: int64(tableID), Valid: true}
 	}
 
-	// Insert order with zeroed totals; RecalculateOrderTotals owns them.
+	// Try new columns (039) first, fallback to legacy if migration not yet applied
 	var orderID int
 	err = tx.QueryRow(`
-		INSERT INTO orders (order_number, customer_name, customer_phone, order_type, address, landmark, payment_method, subtotal, delivery_fee, discount, total, status, source, restaurant_id, outlet_id, table_id)
-		VALUES ($1, '', '', $2, '', '', '', 0, 0, 0, 0, 'draft', $3, $4, $5, $6)
+		INSERT INTO orders (order_number, customer_name, customer_phone, order_type, address, landmark, payment_method, subtotal, delivery_fee, discount, total, status, source, restaurant_id, outlet_id, table_id, guest_count, container_charge, tip_amount, is_complimentary, advance_at, customer_snapshot)
+		VALUES ($1, $2, $3, $4, $5, $6, '', 0, 0, 0, 0, 'draft', $7, $8, $9, $10, $11, $12, $13, $14, $15, $16::jsonb)
 		RETURNING id
-	`, orderNumber, normalizedType, source, restaurantID, outletID, tableNull).Scan(&orderID)
+	`, orderNumber, customerName, customerPhone, normalizedType, address, locality, source, restaurantID, outletID, tableNull, guestCount, draft.ContainerCharge, draft.TipAmount, draft.IsComplimentary, advanceAt, string(customerSnapshot)).Scan(&orderID)
 	if err != nil {
-		return nil, fmt.Errorf("order insert failed: %w", err)
+		// fallback for DB without 039 columns (tests / old)
+		if strings.Contains(err.Error(), "guest_count") || strings.Contains(err.Error(), "container_charge") || strings.Contains(err.Error(), "customer_snapshot") {
+			err = tx.QueryRow(`
+				INSERT INTO orders (order_number, customer_name, customer_phone, order_type, address, landmark, payment_method, subtotal, delivery_fee, discount, total, status, source, restaurant_id, outlet_id, table_id)
+				VALUES ($1, $2, $3, $4, $5, $6, '', 0, 0, 0, 0, 'draft', $7, $8, $9, $10)
+				RETURNING id
+			`, orderNumber, customerName, customerPhone, normalizedType, address, locality, source, restaurantID, outletID, tableNull).Scan(&orderID)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("order insert failed: %w", err)
+		}
 	}
 
-	// Insert order items at canonical unit prices.
 	for _, item := range items {
 		unitPaise, size, crust, itemName, err := canonicalDraftLine(tx, item, restaurantID)
 		if err != nil {
@@ -281,19 +351,34 @@ func (s *POSOrderService) CreateOrder(restaurantID int, outletID int, items []Dr
 			"size":  size,
 			"crust": crust,
 		})
-		if _, err := tx.Exec(`
-			INSERT INTO order_items (order_id, menu_item_id, name, quantity, unit_price, options, subtotal, restaurant_id)
-			VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8)
+		addonsSnap, err := resolveAddonsSnapshot(tx, item, restaurantID)
+		if err != nil {
+			return nil, err
+		}
+		addonsJSON, _ := json.Marshal(addonsSnap)
+		if len(addonsJSON) == 0 {
+			addonsJSON = []byte("[]")
+		}
+		// Try addons_snapshot column (037), fallback if missing
+		_, err = tx.Exec(`
+			INSERT INTO order_items (order_id, menu_item_id, name, quantity, unit_price, options, subtotal, restaurant_id, addons_snapshot)
+			VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9::jsonb)
 		`, orderID, item.MenuItemID, itemName, item.Quantity,
 			paiseToRupees(unitPaise), string(optionsJSON),
-			paiseToRupees(lineTotal), restaurantID); err != nil {
+			paiseToRupees(lineTotal), restaurantID, string(addonsJSON))
+		if err != nil && strings.Contains(err.Error(), "addons_snapshot") {
+			_, err = tx.Exec(`
+				INSERT INTO order_items (order_id, menu_item_id, name, quantity, unit_price, options, subtotal, restaurant_id)
+				VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8)
+			`, orderID, item.MenuItemID, itemName, item.Quantity,
+				paiseToRupees(unitPaise), string(optionsJSON),
+				paiseToRupees(lineTotal), restaurantID)
+		}
+		if err != nil {
 			return nil, fmt.Errorf("order item insert failed: %w", err)
 		}
 	}
 
-	// Authoritative totals inside the same transaction: header, lines,
-	// and totals commit atomically, so a failed recalculation can never
-	// leave a draft persisted with zero/wrong totals.
 	if _, err := recalculateOrderTotalsTx(tx, orderID, restaurantID); err != nil {
 		return nil, err
 	}
@@ -302,7 +387,6 @@ func (s *POSOrderService) CreateOrder(restaurantID int, outletID int, items []Dr
 		return nil, fmt.Errorf("order commit failed: %w", err)
 	}
 
-	// Return the order
 	var order models.Order
 	err = database.DB.QueryRow(`
 		SELECT id, order_number, customer_name, customer_phone, order_type, address, landmark, payment_method, subtotal, delivery_fee, discount, total, status, created_at, updated_at
@@ -311,6 +395,86 @@ func (s *POSOrderService) CreateOrder(restaurantID int, outletID int, items []Dr
 		return nil, err
 	}
 	return &order, nil
+}
+
+// resolveAddonsSnapshot validates addons against addon_groups/addon_items catalog and builds historical snapshot.
+// Frontend selection is NOT price authority: price comes from catalog price_override or menu price.
+func resolveAddonsSnapshot(tx *sql.Tx, item DraftItem, restaurantID int) ([]map[string]interface{}, error) {
+	if len(item.Addons) == 0 {
+		return []map[string]interface{}{}, nil
+	}
+	// Group addons by group_id to enforce min/max and size_scope
+	type groupInfo struct {
+		id            int
+		name          string
+		sizeScope     string
+		selType       string
+		min, max      int
+	}
+	groups := map[int]groupInfo{}
+	for _, ad := range item.Addons {
+		var gi groupInfo
+		err := tx.QueryRow(
+			`SELECT id, name, size_scope, selection_type, min_select, max_select FROM addon_groups WHERE id=$1 AND restaurant_id=$2 AND active=true`, ad.GroupID, restaurantID).Scan(&gi.id, &gi.name, &gi.sizeScope, &gi.selType, &gi.min, &gi.max)
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("addon group %d not found or inactive", ad.GroupID)
+		}
+		if err != nil {
+			return nil, err
+		}
+		// Ensure group belongs to this base item
+		var grpMenuItem int
+		_ = tx.QueryRow(`SELECT menu_item_id FROM addon_groups WHERE id=$1`, ad.GroupID).Scan(&grpMenuItem)
+		if grpMenuItem != item.MenuItemID {
+			return nil, fmt.Errorf("addon group %d does not belong to menu item %d", ad.GroupID, item.MenuItemID)
+		}
+		if gi.sizeScope != "all" && gi.sizeScope != strings.ToLower(strings.TrimSpace(item.Size)) && gi.sizeScope != "regular" && strings.TrimSpace(item.Size) == "" {
+			// allow regular default when size empty
+		} else if gi.sizeScope != "all" && gi.sizeScope != strings.ToLower(strings.TrimSpace(item.Size)) {
+			return nil, fmt.Errorf("addon group %q not available for size %q", gi.name, item.Size)
+		}
+		groups[ad.GroupID] = gi
+	}
+	// Count per group
+	counts := map[int]int{}
+	for _, ad := range item.Addons {
+		counts[ad.GroupID]++
+	}
+	for gid, gi := range groups {
+		c := counts[gid]
+		if c < gi.min || c > gi.max {
+			return nil, fmt.Errorf("addon group %q requires %d..%d selections (got %d)", gi.name, gi.min, gi.max, c)
+		}
+	}
+	var out []map[string]interface{}
+	for _, ad := range item.Addons {
+		gi := groups[ad.GroupID]
+		var itName string
+		var priceOverride sql.NullFloat64
+		var addonRest int
+		err := tx.QueryRow(
+			`SELECT mi.name, ai.price_override, ai.restaurant_id FROM addon_items ai JOIN menu_items mi ON mi.id=ai.menu_item_id WHERE ai.group_id=$1 AND ai.menu_item_id=$2 AND ai.restaurant_id=$3 AND ai.active=true`,
+			ad.GroupID, ad.MenuItemID, restaurantID).Scan(&itName, &priceOverride, &addonRest)
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("addon item %d not found in group %d", ad.MenuItemID, ad.GroupID)
+		}
+		if err != nil {
+			return nil, err
+		}
+		var price float64
+		if priceOverride.Valid {
+			price = priceOverride.Float64
+		} else {
+			_ = tx.QueryRow(`SELECT price FROM menu_items WHERE id=$1`, ad.MenuItemID).Scan(&price)
+		}
+		out = append(out, map[string]interface{}{
+			"group": gi.name, "group_id": gi.id, "item": itName, "item_id": ad.MenuItemID, "quantity": 1, "price": price,
+		})
+	}
+	if out == nil {
+		out = []map[string]interface{}{}
+	}
+	return out, nil
 }
 
 // canonicalDraftLine resolves one draft item to its menu-authoritative
@@ -374,21 +538,38 @@ func (s *POSOrderService) UpdateOrder(id, restaurantID, outletID int, orderType 
 
 // DraftOrder represents a POS order before it is finalized.
 // It carries the tenant context (org / restaurant / outlet) and items.
+// Hardening: plus customer/financial fields (transport only, no business calc yet).
 type DraftOrder struct {
-	RestaurantID int
-	OutletID     int
-	Items        []DraftItem
-	TableID      int // 0 = none
-	Source       string
-	OrderType    string `json:"order_type"` // dine_in | takeaway | delivery
+	RestaurantID    int
+	OutletID        int
+	Items           []DraftItem `json:"Items"`
+	TableID         int         `json:"TableID"` // 0 = none
+	Source          string      `json:"source"`
+	OrderType       string      `json:"order_type"` // dine_in | takeaway | delivery
+	CustomerPhone   string      `json:"customer_phone"`
+	CustomerName    string      `json:"customer_name"`
+	Address         string      `json:"address"`
+	Locality        string      `json:"locality"` // -> landmark
+	GuestCount      int         `json:"guest_count"`
+	ContainerCharge float64     `json:"container_charge"`
+	TipAmount       float64     `json:"tip_amount"`
+	IsComplimentary bool        `json:"is_complimentary"`
+	AdvanceAt       string      `json:"advance_at"` // RFC3339 or ""
+}
+
+// DraftAddon is one addon selection within a DraftItem (frontend selection, backend validates price).
+type DraftAddon struct {
+	GroupID    int `json:"group_id"`
+	MenuItemID int `json:"menu_item_id"`
 }
 
 // DraftItem is a single item in a draft order.
 type DraftItem struct {
-	MenuItemID int
-	Size       string
-	Crust      string
-	Quantity   int
+	MenuItemID int          `json:"MenuItemID"`
+	Size       string       `json:"Size"`
+	Crust      string       `json:"Crust"`
+	Quantity   int          `json:"Quantity"`
+	Addons     []DraftAddon `json:"addons"`
 }
 
 // PriceSummary is the summary shown to the cashier before payment.

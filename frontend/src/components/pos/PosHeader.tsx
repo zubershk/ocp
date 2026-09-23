@@ -12,6 +12,8 @@ interface PosHeaderProps {
   onHeld: () => void;
   onLock: () => void;
   online: boolean;
+  billNo?: string | null;
+  kotNo?: string | null;
 }
 
 function useClock(): string {
@@ -23,30 +25,30 @@ function useClock(): string {
   return now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
 }
 
-export default function PosHeader({ outletId, onOutlet, operator, role, heldCount, onNewSale, onHeld, onLock, online }: PosHeaderProps) {
+export default function PosHeader({ outletId, onOutlet, operator, role, heldCount, onNewSale, onHeld, onLock, online, billNo, kotNo }: PosHeaderProps) {
   const time = useClock();
   return (
     <header className="sticky top-0 z-40 bg-[var(--pos-header)] text-[var(--pos-header-fg)] border-b border-[var(--pos-header-border)] shadow-sm">
-      <div className="px-3 sm:px-5 h-14 flex items-center gap-3">
+      <div className="px-3 sm:px-5 h-14 flex items-center gap-2 sm:gap-3">
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-9 h-9 rounded-lg bg-[#b91c1c] grid place-items-center shrink-0 font-black text-white" aria-hidden>
+          <div className="w-9 h-9 rounded-lg bg-[var(--pos-accent)] grid place-items-center shrink-0 font-black text-white" aria-hidden>
             CP
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 hidden sm:block">
             <div className="font-bold leading-tight text-sm">OCP POS</div>
             <div className="text-[11px] text-zinc-500 truncate">{time} · <span className="capitalize">{role}</span>{operator ? ` · ${operator}` : ''}</div>
           </div>
         </div>
 
-        <div className="hidden md:flex items-center gap-2 mx-auto">
+        <div className="flex items-center gap-1.5 sm:gap-2 mx-auto">
           <OutletSwitcher outletId={outletId} onChange={onOutlet} variant="light" />
-          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${online ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'}`} role="status">
+          <span className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${online ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'}`} role="status" aria-live="polite">
             {online ? <Wifi size={13} /> : <WifiOff size={13} />}
             {online ? 'Online' : 'Offline'}
           </span>
           <span className="hidden lg:flex items-center gap-1 text-xs text-zinc-600 ml-2">
-            <span className="px-2 py-1 rounded bg-white border text-zinc-700">Bill No -</span>
-            <span className="px-2 py-1 rounded bg-white border text-zinc-700">KOT No -</span>
+            <span className="px-2 py-1 rounded bg-white border text-zinc-700 truncate max-w-[140px]">Bill No {billNo ?? '-'}</span>
+            <span className="px-2 py-1 rounded bg-white border text-zinc-700 truncate max-w-[140px]">KOT No {kotNo ?? '-'}</span>
           </span>
         </div>
 
