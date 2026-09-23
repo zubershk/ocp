@@ -46,14 +46,23 @@ export default function MenuPanel({
   cart,
   onQty,
   outletId,
+  selectedCategory,
+  onSelectCategory,
 }: {
   onAdd: (line: Omit<CartLine, 'key'>) => void;
   cart: CartLine[];
   onQty: (key: string, delta: number) => void;
   outletId: number | null;
+  selectedCategory?: string;
+  onSelectCategory?: (id: string) => void;
 }) {
   const [search, setSearch] = useState('');
-  const [catId, setCatId] = useState<number | 'all'>('all');
+  const [catIdInternal, setCatIdInternal] = useState<number | 'all'>('all');
+  const catId: number | 'all' = selectedCategory !== undefined ? (selectedCategory === 'all' ? 'all' : (Number(selectedCategory) as number | 'all')) : catIdInternal;
+  const setCatId = (v: number | 'all') => {
+    if (onSelectCategory) onSelectCategory(String(v));
+    else setCatIdInternal(v);
+  };
   const [customize, setCustomize] = useState<PosMenuItem | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const { crusts } = useCrusts();
@@ -141,8 +150,8 @@ export default function MenuPanel({
         />
       </div>
 
-      {/* Category tabs */}
-      <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1" role="tablist" aria-label="Categories">
+      {/* Category tabs — hidden on xl where left vertical shows */}
+      <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 xl:hidden" role="tablist" aria-label="Categories">
         {[{ id: 'all' as const, name: 'All' }, ...(catsQuery.data ?? []).map((c) => ({ id: c.id, name: c.name }))].map((c) => {
           const active = catId === c.id;
           return (
@@ -151,8 +160,8 @@ export default function MenuPanel({
               role="tab"
               aria-selected={active}
               onClick={() => setCatId(c.id)}
-              className={`h-11 px-4 rounded-xl font-bold text-sm whitespace-nowrap border-2 transition-all active:scale-95 ${
-                active ? 'bg-zinc-950 text-white border-zinc-950' : 'bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400'
+              className={`h-9 px-3 rounded-lg font-bold text-xs whitespace-nowrap border transition-all active:scale-95 ${
+                active ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white text-zinc-600 border-zinc-200 hover:border-zinc-300'
               }`}
             >
               {c.name}
@@ -181,10 +190,11 @@ export default function MenuPanel({
           <div className="text-sm">Try another search or category.</div>
         </div>
       ) : (
-        <ul className="grid grid-cols-2 sm:grid-cols-3 2xl:grid-cols-4 gap-3 overflow-y-auto pb-3">
+        <ul className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 overflow-y-auto pb-3">
           {items.map((item) => {
             const inCart = qtyByKey.get(`${item.id}|regular|`) ?? 0;
             const simple = isSimple(item);
+            const hasCart = inCart > 0;
             return (
               <li key={item.id}>
                 <div
@@ -192,15 +202,15 @@ export default function MenuPanel({
                   tabIndex={0}
                   onClick={() => tapItem(item)}
                   onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && tapItem(item)}
-                  className="h-full rounded-2xl border-2 border-zinc-200 bg-white overflow-hidden hover:border-orange-400 hover:shadow-md transition-all cursor-pointer select-none active:scale-[0.98] focus:outline-none focus:ring-4 focus:ring-orange-500/20"
+                  className={`h-full rounded-lg bg-white overflow-hidden transition-all cursor-pointer select-none active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-[var(--pos-accent)]/20 border-y border-r border-zinc-200 border-l-4 border-l-[var(--pos-accent)] ${hasCart ? 'shadow-sm ring-1 ring-[var(--pos-accent)]/20' : 'hover:border-zinc-300 hover:shadow-sm'}`}
                 >
-                  <div className="bg-stone-50 px-2 pt-2">
+                  <div className="bg-white px-1.5 pt-1.5">
                     <ItemImage src={item.image_url} name={item.name} />
                   </div>
-                  <div className="p-3">
-                    <div className="font-bold text-sm leading-tight line-clamp-2 min-h-9">{item.name}</div>
+                  <div className="p-2">
+                    <div className="font-bold text-[11px] leading-tight line-clamp-2 min-h-7">{item.name}</div>
                     <div className="mt-1 flex items-center justify-between gap-2">
-                      <span className="font-black text-base tabular-nums">₹{item.price}</span>
+                      <span className="font-black text-xs tabular-nums">₹{item.price}</span>
                       {simple && inCart > 0 ? (
                         <span
                           className="inline-flex items-center gap-1.5"
