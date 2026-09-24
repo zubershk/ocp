@@ -129,7 +129,7 @@ func recalculateOrderTotalsTx(q dbQuerier, orderID, restaurantID int) (PriceSumm
 	}
 
 	rows, err := q.Query(
-		`SELECT menu_item_id, quantity, options FROM order_items WHERE order_id = $1`,
+		`SELECT quantity, unit_price, COALESCE(addons_snapshot,'[]'::jsonb) FROM order_items WHERE order_id = $1`,
 		orderID)
 	if err != nil {
 		return summary, err
@@ -139,26 +139,42 @@ func recalculateOrderTotalsTx(q dbQuerier, orderID, restaurantID int) (PriceSumm
 	// another statement on the same tx mid-iteration interleaves on
 	// the wire (pq: unexpected Parse response) or deadlocks.
 	type orderLine struct {
-		menuItemID int
 		quantity   int
-		size       string
-		crust      string
+		unitPaise  int64
+		addonPaise int64
 	}
 	var lines []orderLine
 	for rows.Next() {
-		var menuItemID, quantity int
-		var optionsJSON []byte
-		if err := rows.Scan(&menuItemID, &quantity, &optionsJSON); err != nil {
+		var quantity int
+		var unitPrice float64
+		var addonsRaw []byte
+		if err := rows.Scan(&quantity, &unitPrice, &addonsRaw); err != nil {
 			rows.Close()
 			return summary, err
 		}
-		var opts map[string]string
-		_ = json.Unmarshal(optionsJSON, &opts)
+		unitPaise := rounding(unitPrice)
+		var addonPaise int64
+		if len(addonsRaw) > 0 && string(addonsRaw) != "[]" {
+			var snap []map[string]interface{}
+			if err := json.Unmarshal(addonsRaw, &snap); err == nil {
+				for _, a := range snap {
+					if p, ok := a["price"]; ok {
+						switch v := p.(type) {
+						case float64:
+							addonPaise += rounding(v)
+						case int:
+							addonPaise += int64(v) * 100
+						case int64:
+							addonPaise += v * 100
+						}
+					}
+				}
+			}
+		}
 		lines = append(lines, orderLine{
-			menuItemID: menuItemID,
 			quantity:   quantity,
-			size:       opts["size"],
-			crust:      opts["crust"],
+			unitPaise:  unitPaise,
+			addonPaise: addonPaise,
 		})
 	}
 	if err := rows.Err(); err != nil {
@@ -170,11 +186,7 @@ func recalculateOrderTotalsTx(q dbQuerier, orderID, restaurantID int) (PriceSumm
 	var subtotalPaise int64
 	itemCount := 0
 	for _, line := range lines {
-		unitPaise, err := canonicalUnitPrice(q, line.menuItemID, line.size, line.crust, restaurantID)
-		if err != nil {
-			return summary, err
-		}
-		subtotalPaise += unitPaise * int64(line.quantity)
+		subtotalPaise += (line.unitPaise + line.addonPaise) * int64(line.quantity)
 		itemCount += line.quantity
 	}
 

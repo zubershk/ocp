@@ -290,6 +290,29 @@ func (s *POSOrderService) createOrderInternal(restaurantID int, outletID int, dr
 	customerSnapshot, _ := json.Marshal(map[string]string{
 		"phone": customerPhone, "name": customerName, "address": address, "locality": locality,
 	})
+	idempotencyKey := strings.TrimSpace(draft.IdempotencyKey)
+	if idempotencyKey != "" {
+		var normErr error
+		idempotencyKey, normErr = NormalizeIdempotencyKey(idempotencyKey)
+		if normErr != nil {
+			return nil, normErr
+		}
+		var existingID int
+		if err := database.DB.QueryRow(`SELECT id FROM orders WHERE restaurant_id=$1 AND idempotency_key=$2`, restaurantID, idempotencyKey).Scan(&existingID); err == nil {
+			var order models.Order
+			if err := database.DB.QueryRow(`
+				SELECT id, order_number, customer_name, customer_phone, order_type, address, landmark, payment_method, subtotal, delivery_fee, discount, total, status, created_at, updated_at
+				FROM orders WHERE id=$1 AND restaurant_id=$2`, existingID, restaurantID).Scan(&order.ID, &order.OrderNumber, &order.CustomerName, &order.CustomerPhone, &order.OrderType, &order.Address, &order.Landmark, &order.PaymentMethod, &order.Subtotal, &order.DeliveryFee, &order.Discount, &order.Total, &order.Status, &order.CreatedAt, &order.UpdatedAt); err == nil {
+				return &order, nil
+			}
+		} else if err != sql.ErrNoRows {
+			// log but continue to create
+		}
+	}
+	var idempotencyNull sql.NullString
+	if idempotencyKey != "" {
+		idempotencyNull = sql.NullString{String: idempotencyKey, Valid: true}
+	}
 
 	tx, err := database.DB.Begin()
 	if err != nil {
@@ -323,18 +346,42 @@ func (s *POSOrderService) createOrderInternal(restaurantID int, outletID int, dr
 	// Try new columns (039) first, fallback to legacy if migration not yet applied
 	var orderID int
 	err = tx.QueryRow(`
-		INSERT INTO orders (order_number, customer_name, customer_phone, order_type, address, landmark, payment_method, subtotal, delivery_fee, discount, total, status, source, restaurant_id, outlet_id, table_id, guest_count, container_charge, tip_amount, is_complimentary, advance_at, customer_snapshot)
-		VALUES ($1, $2, $3, $4, $5, $6, '', 0, 0, 0, 0, 'draft', $7, $8, $9, $10, $11, $12, $13, $14, $15, $16::jsonb)
+		INSERT INTO orders (order_number, customer_name, customer_phone, order_type, address, landmark, payment_method, subtotal, delivery_fee, discount, total, status, source, restaurant_id, outlet_id, table_id, guest_count, container_charge, tip_amount, is_complimentary, advance_at, customer_snapshot, idempotency_key)
+		VALUES ($1, $2, $3, $4, $5, $6, '', 0, 0, 0, 0, 'draft', $7, $8, $9, $10, $11, $12, $13, $14, $15, $16::jsonb, $17)
 		RETURNING id
-	`, orderNumber, customerName, customerPhone, normalizedType, address, locality, source, restaurantID, outletID, tableNull, guestCount, draft.ContainerCharge, draft.TipAmount, draft.IsComplimentary, advanceAt, string(customerSnapshot)).Scan(&orderID)
+	`, orderNumber, customerName, customerPhone, normalizedType, address, locality, source, restaurantID, outletID, tableNull, guestCount, draft.ContainerCharge, draft.TipAmount, draft.IsComplimentary, advanceAt, string(customerSnapshot), idempotencyNull).Scan(&orderID)
 	if err != nil {
+		if IsUniqueViolation(err, "uq_orders_idempotency_restaurant") && idempotencyNull.Valid {
+			var existingID int
+			if err2 := tx.QueryRow(`SELECT id FROM orders WHERE restaurant_id=$1 AND idempotency_key=$2`, restaurantID, idempotencyNull.String).Scan(&existingID); err2 == nil {
+				_ = tx.Rollback()
+				var order models.Order
+				if err3 := database.DB.QueryRow(`
+					SELECT id, order_number, customer_name, customer_phone, order_type, address, landmark, payment_method, subtotal, delivery_fee, discount, total, status, created_at, updated_at
+					FROM orders WHERE id=$1 AND restaurant_id=$2`, existingID, restaurantID).Scan(&order.ID, &order.OrderNumber, &order.CustomerName, &order.CustomerPhone, &order.OrderType, &order.Address, &order.Landmark, &order.PaymentMethod, &order.Subtotal, &order.DeliveryFee, &order.Discount, &order.Total, &order.Status, &order.CreatedAt, &order.UpdatedAt); err3 == nil {
+					return &order, nil
+				}
+			}
+		}
 		// fallback for DB without 039 columns (tests / old)
 		if strings.Contains(err.Error(), "guest_count") || strings.Contains(err.Error(), "container_charge") || strings.Contains(err.Error(), "customer_snapshot") {
 			err = tx.QueryRow(`
-				INSERT INTO orders (order_number, customer_name, customer_phone, order_type, address, landmark, payment_method, subtotal, delivery_fee, discount, total, status, source, restaurant_id, outlet_id, table_id)
-				VALUES ($1, $2, $3, $4, $5, $6, '', 0, 0, 0, 0, 'draft', $7, $8, $9, $10)
+				INSERT INTO orders (order_number, customer_name, customer_phone, order_type, address, landmark, payment_method, subtotal, delivery_fee, discount, total, status, source, restaurant_id, outlet_id, table_id, idempotency_key)
+				VALUES ($1, $2, $3, $4, $5, $6, '', 0, 0, 0, 0, 'draft', $7, $8, $9, $10, $11)
 				RETURNING id
-			`, orderNumber, customerName, customerPhone, normalizedType, address, locality, source, restaurantID, outletID, tableNull).Scan(&orderID)
+			`, orderNumber, customerName, customerPhone, normalizedType, address, locality, source, restaurantID, outletID, tableNull, idempotencyNull).Scan(&orderID)
+			if err != nil && IsUniqueViolation(err, "uq_orders_idempotency_restaurant") && idempotencyNull.Valid {
+				var existingID int
+				if err2 := tx.QueryRow(`SELECT id FROM orders WHERE restaurant_id=$1 AND idempotency_key=$2`, restaurantID, idempotencyNull.String).Scan(&existingID); err2 == nil {
+					_ = tx.Rollback()
+					var order models.Order
+					if err3 := database.DB.QueryRow(`
+						SELECT id, order_number, customer_name, customer_phone, order_type, address, landmark, payment_method, subtotal, delivery_fee, discount, total, status, created_at, updated_at
+						FROM orders WHERE id=$1 AND restaurant_id=$2`, existingID, restaurantID).Scan(&order.ID, &order.OrderNumber, &order.CustomerName, &order.CustomerPhone, &order.OrderType, &order.Address, &order.Landmark, &order.PaymentMethod, &order.Subtotal, &order.DeliveryFee, &order.Discount, &order.Total, &order.Status, &order.CreatedAt, &order.UpdatedAt); err3 == nil {
+						return &order, nil
+					}
+				}
+			}
 		}
 		if err != nil {
 			return nil, fmt.Errorf("order insert failed: %w", err)
@@ -346,15 +393,23 @@ func (s *POSOrderService) createOrderInternal(restaurantID int, outletID int, dr
 		if err != nil {
 			return nil, err
 		}
-		lineTotal := unitPaise * int64(item.Quantity)
-		optionsJSON, _ := json.Marshal(map[string]string{
-			"size":  size,
-			"crust": crust,
-		})
 		addonsSnap, err := resolveAddonsSnapshot(tx, item, restaurantID)
 		if err != nil {
 			return nil, err
 		}
+		var addonPaise int64
+		for _, a := range addonsSnap {
+			if p, ok := a["price"]; ok {
+				if pf, ok := p.(float64); ok {
+					addonPaise += rounding(pf)
+				}
+			}
+		}
+		lineTotal := (unitPaise + addonPaise) * int64(item.Quantity)
+		optionsJSON, _ := json.Marshal(map[string]string{
+			"size":  size,
+			"crust": crust,
+		})
 		addonsJSON, _ := json.Marshal(addonsSnap)
 		if len(addonsJSON) == 0 {
 			addonsJSON = []byte("[]")
@@ -555,6 +610,7 @@ type DraftOrder struct {
 	TipAmount       float64     `json:"tip_amount"`
 	IsComplimentary bool        `json:"is_complimentary"`
 	AdvanceAt       string      `json:"advance_at"` // RFC3339 or ""
+	IdempotencyKey  string      `json:"idempotency_key"`
 }
 
 // DraftAddon is one addon selection within a DraftItem (frontend selection, backend validates price).
@@ -678,7 +734,10 @@ func (s *POSOrderService) CompleteOrder(orderID, restaurantID, outletID int) err
 	if err := RequireTransition(status, OrderStatusCompleted); err != nil {
 		return err
 	}
-	_, _, duePaise := ComputeDueFromLedger(orderID)
+	_, _, duePaise, err := ComputeDueFromLedger(orderID)
+	if err != nil {
+		return fmt.Errorf("failed to compute due: %w", err)
+	}
 	if duePaise > 0 {
 		return fmt.Errorf("%w: %d paise still due", ErrOrderHasDue, duePaise)
 	}
@@ -755,7 +814,10 @@ func (s *POSOrderService) TakePayment(orderID, restaurantID, outletID int, metho
 		return 0, false, 0, err
 	}
 	// Compute due: derived from the payment ledger (see ComputeDueFromLedger).
-	_, _, duePaise = ComputeDueFromLedger(orderID)
+	_, _, duePaise, err = ComputeDueFromLedger(orderID)
+	if err != nil {
+		return 0, false, 0, fmt.Errorf("failed to compute due: %w", err)
+	}
 	return paymentID, replayed, duePaise, nil
 }
 
@@ -763,23 +825,27 @@ func (s *POSOrderService) TakePayment(orderID, restaurantID, outletID int, metho
 // table for a given order. All amounts are in paise. The ledger is
 // authoritative: due = order total - paid + refunded. (orders.total is
 // stored in rupees, so it is converted via rounding, never truncated.)
-func ComputeDueFromLedger(orderID int) (paidPaise int64, refundedPaise int64, duePaise int64) {
+// DB failures are propagated (not swallowed) to avoid completing unpaid orders on infrastructure failure.
+func ComputeDueFromLedger(orderID int) (paidPaise int64, refundedPaise int64, duePaise int64, err error) {
 	var totalRupees float64
-	err := database.DB.QueryRow(`SELECT total FROM orders WHERE id = $1`, orderID).Scan(&totalRupees)
-	if err != nil {
-		return 0, 0, 0
+	if err = database.DB.QueryRow(`SELECT total FROM orders WHERE id = $1`, orderID).Scan(&totalRupees); err != nil {
+		return 0, 0, 0, fmt.Errorf("failed to load order total: %w", err)
 	}
 	totalPaise := rounding(totalRupees)
 
 	// Sum payments (DECIMAL reads as rupees first; see RefundPayment).
 	var paidRupees float64
-	database.DB.QueryRow(`
-		SELECT COALESCE(SUM(amount), 0) FROM order_payments WHERE order_id = $1 AND amount > 0`, orderID).Scan(&paidRupees)
+	if err = database.DB.QueryRow(`
+		SELECT COALESCE(SUM(amount), 0) FROM order_payments WHERE order_id = $1 AND amount > 0`, orderID).Scan(&paidRupees); err != nil {
+		return 0, 0, 0, fmt.Errorf("failed to sum payments: %w", err)
+	}
 
 	// Sum refunds (negative amounts).
 	var refundedRupees float64
-	database.DB.QueryRow(`
-		SELECT COALESCE(SUM(ABS(amount)), 0) FROM order_payments WHERE order_id = $1 AND amount < 0`, orderID).Scan(&refundedRupees)
+	if err = database.DB.QueryRow(`
+		SELECT COALESCE(SUM(ABS(amount)), 0) FROM order_payments WHERE order_id = $1 AND amount < 0`, orderID).Scan(&refundedRupees); err != nil {
+		return 0, 0, 0, fmt.Errorf("failed to sum refunds: %w", err)
+	}
 
 	paidPaise = paiseFromDecimal(paidRupees)
 	refundedPaise = paiseFromDecimal(refundedRupees)
@@ -787,7 +853,7 @@ func ComputeDueFromLedger(orderID int) (paidPaise int64, refundedPaise int64, du
 	if duePaise < 0 {
 		duePaise = 0
 	}
-	return paidPaise, refundedPaise, duePaise
+	return paidPaise, refundedPaise, duePaise, nil
 }
 
 // OrderEventPayload is what gets posted to the order_events table.

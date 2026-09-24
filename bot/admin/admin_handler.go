@@ -996,6 +996,7 @@ func (h *AdminHandler) GetPOSMenu(c *gin.Context) {
 // Tenant is taken from middleware context, never from the body: a
 // caller cannot forge restaurant/outlet IDs, and the source is always
 // stamped pos on this endpoint. Hardening: transports customer, financial, and addon fields.
+// Idempotency: Idempotency-Key header (or body field) ensures duplicate POSTs create one order.
 func (h *AdminHandler) CreatePOSOrder(c *gin.Context) {
 	var draft services.DraftOrder
 	if err := c.ShouldBindJSON(&draft); err != nil {
@@ -1006,14 +1007,24 @@ func (h *AdminHandler) CreatePOSOrder(c *gin.Context) {
 	outletID := c.GetInt("outletID")
 	// enforce source server-side
 	draft.Source = services.SourcePOS
-	// Support both legacy Items and new single-item fallback
 	if len(draft.Items) == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "order must contain at least one item"})
 		return
 	}
+	key := c.GetHeader("Idempotency-Key")
+	if key == "" {
+		key = c.GetHeader("idempotency-key")
+	}
+	if key == "" {
+		key = draft.IdempotencyKey
+	}
+	draft.IdempotencyKey = key
 	order, err := h.posOrderService.CreateOrderWithDraft(restaurantID, outletID, draft)
 	if err != nil {
-		// surface validation as 400 where possible
+		if errors.Is(err, services.ErrIdempotencyKeyTooLong) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "idempotency key exceeds 120 characters"})
+			return
+		}
 		msg := err.Error()
 		if isPOSValidationError(msg) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": msg})
