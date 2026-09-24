@@ -2,6 +2,7 @@ package services
 
 import (
 	"errors"
+	"log"
 	"os"
 	"strings"
 
@@ -79,9 +80,13 @@ var (
 
 // IsSingleTenantMode reports whether the process is running in self-hosted single-tenant fallback.
 // For open-source installs this defaults to true (backward compat). Set SINGLE_TENANT_MODE=0/false to enforce SaaS strict tenant.
+// In GIN_MODE=release (production), default is false (fail-closed) to avoid accidental tenant isolation bypass via deployment misconfiguration.
 func IsSingleTenantMode() bool {
 	v := strings.ToLower(strings.TrimSpace(os.Getenv("SINGLE_TENANT_MODE")))
 	if v == "" {
+		if os.Getenv("GIN_MODE") == "release" {
+			return false
+		}
 		// open-source only default: allow fallback to bootstrap tenant
 		return true
 	}
@@ -110,6 +115,7 @@ func RequireTenant(c *gin.Context) (restaurantID, outletID int, err error) {
 		if rid == 0 {
 			return 0, 0, ErrTenantNotFound
 		}
+		log.Printf("[WARN] single-tenant fallback active: no restaurant context, falling back to bootstrap restaurant %d (SINGLE_TENANT_MODE fallback)", rid)
 		if c != nil {
 			c.Set("restaurantID", rid)
 			if outletID == 0 {

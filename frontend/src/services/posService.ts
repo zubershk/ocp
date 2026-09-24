@@ -261,9 +261,11 @@ export const posApi = {
   getAddonItems: (groupId: number) =>
     posFetch<{ addon_items: { id: number; group_id: number; menu_item_id: number; menu_item_name?: string; price_override: number | null; sort_order: number; active: boolean }[] }>(`/admin/addon-groups/${groupId}/items`).then(r => r.addon_items ?? []),
 
-  createOrder: (lines: DraftLine[], tableID: number, orderType: PosOrderType, meta?: PosCreateMeta) =>
-    posFetch<{ order: PosOrder }>('/admin/pos/orders', {
+  createOrder: (lines: DraftLine[], tableID: number, orderType: PosOrderType, meta?: PosCreateMeta) => {
+    const key = newIdempotencyKey();
+    return posFetch<{ order: PosOrder }>('/admin/pos/orders', {
       method: 'POST',
+      idempotencyKey: key,
       body: {
         Items: lines.map((l) => ({
           MenuItemID: l.menuItemID,
@@ -283,8 +285,10 @@ export const posApi = {
         tip_amount: meta?.tip_amount ?? 0,
         is_complimentary: meta?.is_complimentary ?? false,
         advance_at: meta?.advance_at ?? '',
+        idempotency_key: key,
       },
-    }).then((r) => r.order),
+    }).then((r) => r.order);
+  },
 
   getOrder: (id: number) =>
     posFetch<{ order: PosOrder }>(`/admin/pos/orders/${id}`).then((r) => r.order),
