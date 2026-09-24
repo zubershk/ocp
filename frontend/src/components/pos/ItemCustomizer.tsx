@@ -6,8 +6,9 @@ import { posApi, formatPaise, type PosMenuItem } from '../../services/posService
 import { useCrusts } from '../../context/CrustContext';
 import type { CartLine } from './types';
 import { sizesOf, unitRupees } from './MenuPanel';
+import { usePosConfig } from '../../hooks/usePosConfig';
 
-const SIZE_INCHES: Record<string, string> = { regular: '7"', medium: '10"', large: '13"' };
+const FALLBACK_INCHES: Record<string, string> = { regular: '7"', medium: '10"', large: '13"' };
 
 type RealAddonGroup = {
   id: number;
@@ -37,6 +38,7 @@ export default function ItemCustomizer({
   const [addonSearch, setAddonSearch] = useState('');
   const [selectedAddons, setSelectedAddons] = useState<Record<number, Set<number>>>({});
   const { crusts } = useCrusts();
+  const { config: posConfig } = usePosConfig();
   const optionsNest = !item.no_crust && crusts.length > 0;
   const selectedCrust = crusts.find((c) => c.slug === crust);
 
@@ -114,17 +116,21 @@ export default function ItemCustomizer({
             <div className="grid grid-cols-3 gap-2">
               {sizes.map((s) => {
                 const isSel = size === s;
+                const meta = posConfig.size_meta?.[s];
+                const inches = meta?.inches || FALLBACK_INCHES[s] || s;
+                const label = meta?.label || s.charAt(0).toUpperCase() + s.slice(1);
+                const currency = posConfig.ui?.currency_symbol || '₹';
                 return (
                   <button
                     key={s}
                     type="button"
                     onClick={() => setSize(s)}
                     aria-pressed={isSel}
-                    aria-label={`Size ${s} ${SIZE_INCHES[s] ?? ''} price ₹${unitRupees(item, s)}`}
+                    aria-label={`Size ${label} ${inches} price ${currency}${unitRupees(item, s)}`}
                     className={`h-16 rounded font-bold border-2 transition-all capitalize active:scale-[0.97] flex flex-col items-center justify-center gap-0.5 ${isSel ? 'bg-[var(--pos-accent)] text-white border-[var(--pos-accent)]' : 'bg-zinc-800 text-white border-zinc-800 hover:bg-zinc-700'}`}
                   >
-                    <span className="text-xs font-bold">{s.charAt(0).toUpperCase() + s.slice(1)} [{SIZE_INCHES[s] || s}]</span>
-                    <span className="text-sm font-bold">₹{unitRupees(item, s)}</span>
+                    <span className="text-xs font-bold">{label} [{inches}]</span>
+                    <span className="text-sm font-bold">{currency}{unitRupees(item, s)}</span>
                   </button>
                 );
               })}

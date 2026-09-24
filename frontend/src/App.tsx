@@ -181,7 +181,7 @@ function AppRoutes() {
       <Route path="/admin/pos-config" element={<AdminSuspense><AdminPageShell><AdminPosConfig /></AdminPageShell></AdminSuspense>} />
       <Route path="/admin/tables" element={<AdminSuspense><AdminPageShell><AdminTables /></AdminPageShell></AdminSuspense>} />
       <Route path="/admin/payment-methods" element={<AdminSuspense><AdminPageShell><AdminPaymentMethods /></AdminPageShell></AdminSuspense>} />
-      <Route path="/pos" element={<AdminSuspense><POS /></AdminSuspense>} />
+      <Route path="/pos" element={<AdminSuspense><RealtimeProvider><POS /></RealtimeProvider></AdminSuspense>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

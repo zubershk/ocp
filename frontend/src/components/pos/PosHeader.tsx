@@ -14,6 +14,7 @@ interface PosHeaderProps {
   online: boolean;
   billNo?: string | null;
   kotNo?: string | null;
+  headerTitle?: string;
 }
 
 function useClock(): string {
@@ -25,7 +26,7 @@ function useClock(): string {
   return now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
 }
 
-export default function PosHeader({ outletId, onOutlet, operator, role, heldCount, onNewSale, onHeld, onLock, online, billNo, kotNo }: PosHeaderProps) {
+export default function PosHeader({ outletId, onOutlet, operator, role, heldCount, onNewSale, onHeld, onLock, online, billNo, kotNo, headerTitle }: PosHeaderProps) {
   const time = useClock();
   return (
     <header className="sticky top-0 z-40 bg-[var(--pos-header)] text-[var(--pos-header-fg)] border-b border-[var(--pos-header-border)] shadow-sm">
@@ -35,7 +36,7 @@ export default function PosHeader({ outletId, onOutlet, operator, role, heldCoun
             CP
           </div>
           <div className="min-w-0 hidden sm:block">
-            <div className="font-bold leading-tight text-sm">OCP POS</div>
+            <div className="font-bold leading-tight text-sm">{headerTitle || 'OCP POS'}</div>
             <div className="text-[11px] text-zinc-500 truncate">{time} · <span className="capitalize">{role}</span>{operator ? ` · ${operator}` : ''}</div>
           </div>
         </div>

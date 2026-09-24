@@ -1392,6 +1392,8 @@ func (h *AdminHandler) UpdatePOSConfig(c *gin.Context) {
 		return
 	}
 	auditLog(c, "update_pos_config", "pos_config", cfg)
+	// SSE invalidation: pos.config_updated is cache invalidation, not payload authority
+	services.BroadcastRealtimeFor(rid, 0, c.GetInt("orgID"), "pos.config_updated", map[string]interface{}{"restaurant_id": rid, "version": cfg.Version})
 	c.JSON(http.StatusOK, gin.H{"ok": true, "pos_config": services.ResolvePOSConfig(rid, 0)})
 }
 
