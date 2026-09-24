@@ -13,7 +13,7 @@ export { ApiError };
 
 export type PosOrderType = 'dine_in' | 'takeaway' | 'delivery';
 export type PosOrderStatus = 'draft' | 'held' | 'confirmed' | 'completed' | 'cancelled';
-export type PosPayMethod = 'cash' | 'upi' | 'card';
+export type PosPayMethod = 'cash' | 'upi' | 'card' | 'online' | 'other';
 
 export interface PosMenuItem {
   id: number;

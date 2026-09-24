@@ -12,13 +12,21 @@ import {
   type PosOrder,
   type PosPayMethod,
 } from '../../services/posService';
+import { adminFetch } from '../../services/api';
 import type { RecordedPayment } from './types';
 
-const METHODS: { value: PosPayMethod; label: string; icon: React.ReactNode }[] = [
+const FALLBACK_METHODS: { value: PosPayMethod; label: string; icon: React.ReactNode }[] = [
   { value: 'cash', label: 'Cash', icon: <Banknote size={22} /> },
   { value: 'upi', label: 'UPI', icon: <QrCode size={22} /> },
   { value: 'card', label: 'Card', icon: <CreditCard size={22} /> },
 ];
+
+function iconFor(key: string) {
+  if (key === 'cash') return <Banknote size={22} />;
+  if (key === 'upi') return <QrCode size={22} />;
+  if (key === 'card' || key === 'online') return <CreditCard size={22} />;
+  return <Banknote size={22} />;
+}
 
 function statusLabel(s: string): string {
   switch (s) {
@@ -74,6 +82,13 @@ export default function CheckoutPanel({
   const orderOpen = order != null && ['draft', 'held', 'confirmed'].includes(order.status);
   const due = duePaise ?? (order ? toPaise(order.total) : 0);
   const paidPaise = order ? toPaise(order.total) - due : 0;
+  const pmQuery = useQuery({
+    queryKey: ['pos-payment-methods'],
+    queryFn: () => adminFetch<{ payment_methods: { key: string; label: string; icon: string; active: boolean; sort_order: number }[] }>('/admin/payment-methods').then(r => (r.payment_methods ?? []).filter(m => m.active).sort((a,b)=>a.sort_order-b.sort_order)),
+    staleTime: 60_000,
+    retry: 1,
+  });
+  const METHODS = (pmQuery.data?.length ? pmQuery.data.map(pm => ({ value: pm.key as PosPayMethod, label: pm.label, icon: iconFor(pm.key) })) : FALLBACK_METHODS) as { value: PosPayMethod; label: string; icon: React.ReactNode }[];
 
   const [payOpen, setPayOpen] = useState(false);
   const [method, setMethod] = useState<PosPayMethod>('cash');

@@ -18,6 +18,7 @@ import TablePicker from '../components/pos/TablePicker';
 import CartPanel from '../components/pos/CartPanel';
 import CheckoutPanel from '../components/pos/CheckoutPanel';
 import HoldDrawer from '../components/pos/HoldDrawer';
+import { usePosConfig } from '../hooks/usePosConfig';
 import ReceiptModal from '../components/pos/ReceiptModal';
 import type { CartLine, HeldOrder, RecordedPayment } from '../components/pos/types';
 
@@ -95,6 +96,29 @@ export default function POS() {
   const canRefund = ['owner', 'manager'].includes(role);
   const outletsQuery = useQuery({ queryKey: ['pos-outlets-name'], queryFn: posApi.getOutlets, enabled: authed, staleTime: 60_000 });
   const outletName = outletsQuery.data?.find(o => o.id === outletId)?.name ?? null;
+  const { config } = usePosConfig();
+  const activeOrderTypes = useMemo(() => config.order_types.filter(o => o.active), [config.order_types]);
+  // Sync container default from config (once, when config loads, if not dirty)
+  useEffect(() => {
+    if (config.charges.container_default !== containerCharge && cart.length === 0 && orderId == null) {
+      setContainerCharge(config.charges.container_default);
+    }
+  }, [config.charges.container_default]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Apply POS accent token reactively
+  useEffect(() => {
+    const root = document.querySelector('.pos') as HTMLElement | null;
+    if (root && config.ui.pos_accent) {
+      root.style.setProperty('--pos-accent', config.ui.pos_accent);
+      root.style.setProperty('--pos-accent-hover', config.ui.pos_accent);
+    }
+  }, [config.ui.pos_accent]);
+  // Keep orderType in sync with config's active order types
+  useEffect(() => {
+    if (activeOrderTypes.length && !activeOrderTypes.find(o => o.key === orderType)) {
+      const first = activeOrderTypes[0]?.key as PosOrderType | undefined;
+      if (first) setOrderType(first);
+    }
+  }, [activeOrderTypes, orderType]);
 
   const heldKey = (id: number | null) => `ocp_pos_held:${id ?? 'default'}`;
   const orderKey = (id: number | null) => `ocp_pos_order:${id ?? 'default'}`;
@@ -201,8 +225,9 @@ export default function POS() {
       online={online}
       billNo={orderId ? `#${orderId}` : null}
       kotNo={null}
+      headerTitle={config.ui.header_title}
     />
-  ), [outletId, operatorName, role, held.length, queryClient, cart.length, orderId, resetSale]);
+  ), [outletId, operatorName, role, held.length, queryClient, cart.length, orderId, resetSale, config.ui.header_title]);
 
   const orderQuery = useQuery({
     queryKey: ['pos-order', orderId],
@@ -232,6 +257,8 @@ export default function POS() {
         {/* RIGHT - Bill */}
         <div className="rounded-xl border border-[var(--pos-border)] bg-white overflow-hidden flex flex-col lg:max-h-[calc(100dvh-72px)] xl:sticky xl:top-[66px] lg:col-span-2 xl:col-span-1">
           <RightBill
+            config={config}
+            activeOrderTypes={activeOrderTypes}
             orderType={orderType} onOrderType={(t: PosOrderType)=>{setOrderType(t); if(t!=='dine_in') setTableId(0);}}
             tableId={tableId} setTableId={setTableId} guestCount={guestCount} setGuestCount={setGuestCount} outletId={outletId}
             customer={customer} setCustomer={setCustomer}
@@ -293,7 +320,9 @@ function CategoryColumn({ selected, onSelect }: { selected: string; onSelect: (i
 }
 
 function RightBill(props: any) {
-  const { orderType, onOrderType, tableId, setTableId, guestCount, setGuestCount, outletId, customer, setCustomer, cart, order, orderId, containerCharge, setContainerCharge, tip, setTip, isComplimentary, setIsComplimentary, isAdvance, setIsAdvance, advanceAt, setAdvanceAt, onQty, onRemove, onClear, onCreate, creating, canCreate, payments, duePaise, onPaid, onCompleted, onHold, onCancel, onReceipt, canPay, canDiscount, fatal, setFatal, role, notice } = props;
+  const { config, activeOrderTypes, orderType, onOrderType, tableId, setTableId, guestCount, setGuestCount, outletId, customer, setCustomer, cart, order, orderId, containerCharge, setContainerCharge, tip, setTip, isComplimentary, setIsComplimentary, isAdvance, setIsAdvance, advanceAt, setAdvanceAt, onQty, onRemove, onClear, onCreate, creating, canCreate, payments, duePaise, onPaid, onCompleted, onHold, onCancel, onReceipt, canPay, canDiscount, fatal, setFatal, role, notice } = props;
+  const cfg = config ?? { order_types: [{key:'dine_in',label:'Dine In',active:true},{key:'delivery',label:'Delivery',active:true},{key:'takeaway',label:'Take Away',active:true}], bill_rows: [{key:'subtotal',label:'Sub Total',visible:true},{key:'discount',label:'Discount',visible:true},{key:'container',label:'Container Charge',visible:true},{key:'tax',label:'Tax',visible:true},{key:'round_off',label:'Round Off',visible:true},{key:'customer_paid',label:'Customer Paid',visible:true},{key:'return_to_customer',label:'Return to Customer',visible:true},{key:'tip',label:'Tip',visible:true}], charges: {container_default:0,tip_enabled:true}, features: {complimentary:true,advance_order:true}, ui:{currency_symbol:'₹'}, customer_fields:{phone:{visible:true,for:['delivery','takeaway']},name:{visible:true,for:['dine_in','delivery','takeaway']},address:{visible:true,for:['delivery']},locality:{visible:true,for:['delivery']}} };
+  const currency = cfg.ui?.currency_symbol || '₹';
   const subTotal = order ? order.subtotal : cart.reduce((s:number,l:any)=> s + (l.unitPaise ?? 0)*l.quantity,0)/100;
   const discount = order?.discount ?? 0;
   const tax = order?.tax_amount ?? 0;
@@ -301,20 +330,37 @@ function RightBill(props: any) {
   const roundOff = 0;
   const customerPaid = payments.reduce((s:number,p:any)=> s + (p.amountPaise>0? p.amountPaise:0),0)/100;
   const ret = Math.max(0, customerPaid - (order ? order.total : subTotal));
-  const isDelivery = orderType==='delivery';
+  const tabs = activeOrderTypes?.length ? activeOrderTypes : cfg.order_types.filter((o:any)=>o.active);
   const isDine = orderType==='dine_in';
-  const isTakeaway = orderType==='takeaway';
   const nowLocal = new Date().toISOString().slice(0,16);
+  const shouldShowField = (key: string) => {
+    const f = cfg.customer_fields?.[key];
+    if (!f) return true;
+    if (!f.visible) return false;
+    if (!f.for || f.for.length===0) return true;
+    return f.for.includes(orderType);
+  };
+  const billRows = (cfg.bill_rows || []).filter((b:any)=>b.visible);
+  const rowValues: Record<string, number> = {
+    subtotal: subTotal,
+    discount,
+    container: containerCharge,
+    tax,
+    round_off: roundOff,
+    customer_paid: customerPaid,
+    return_to_customer: ret,
+    tip,
+  };
   return (
     <div className="flex flex-col h-full">
-      {/* Tabs - accessible */}
-      <div role="tablist" aria-label="Order type" className="grid grid-cols-3 border-b border-[var(--pos-border)] text-xs font-bold">
-        <button type="button" role="tab" aria-selected={isDine} onClick={()=>onOrderType('dine_in')} className={`h-11 min-h-[44px] ${isDine?'bg-[var(--pos-panel)] border-b-2 border-[var(--pos-accent)] text-[var(--pos-accent)]':'text-zinc-500'}`}>Dine In</button>
-        <button type="button" role="tab" aria-selected={isDelivery} onClick={()=>onOrderType('delivery')} className={`h-11 min-h-[44px] ${isDelivery?'bg-[var(--pos-panel)] border-b-2 border-[var(--pos-accent)] text-[var(--pos-accent)]':'text-zinc-500'}`}>Delivery</button>
-        <button type="button" role="tab" aria-selected={isTakeaway} onClick={()=>onOrderType('takeaway')} className={`h-11 min-h-[44px] ${isTakeaway?'bg-[var(--pos-panel)] border-b-2 border-[var(--pos-accent)] text-[var(--pos-accent)]':'text-zinc-500'}`}>TAKE AWAY</button>
+      {/* Tabs - config-driven, fallback to hardcoded */}
+      <div role="tablist" aria-label="Order type" className="grid border-b border-[var(--pos-border)] text-xs font-bold" style={{gridTemplateColumns: `repeat(${tabs.length}, minmax(0,1fr))`}}>
+        {tabs.map((ot:any)=> (
+          <button key={ot.key} type="button" role="tab" aria-selected={orderType===ot.key} onClick={()=>onOrderType(ot.key)} className={`h-11 min-h-[44px] px-1 truncate ${orderType===ot.key?'bg-[var(--pos-panel)] border-b-2 border-[var(--pos-accent)] text-[var(--pos-accent)]':'text-zinc-500'}`}>{ot.label}</button>
+        ))}
       </div>
-      {/* Table/Guest + Customer - labeled */}
-      {(isDine || isDelivery) && (
+      {/* Table/Guest + Customer - config-driven visibility */}
+      {(isDine || shouldShowField('phone') || shouldShowField('name') || shouldShowField('address') || shouldShowField('locality')) && (
         <div className="p-3 space-y-3 border-b border-[var(--pos-border)] bg-[var(--pos-panel)]">
           {isDine && (
             <div className="flex gap-2 items-center">
@@ -333,10 +379,10 @@ function RightBill(props: any) {
             </div>
           )}
           <div className="grid grid-cols-[70px_1fr] gap-2 items-center">
-            <label htmlFor="pos-phone" className="text-xs font-bold">Mobile:</label><input id="pos-phone" type="tel" inputMode="numeric" autoComplete="tel" maxLength={15} value={customer.phone} onChange={e=> setCustomer({...customer,phone:e.target.value.replace(/[^0-9+\- ]/g,'')})} placeholder="Mobile No." aria-label="Customer mobile" className="h-11 min-h-[44px] rounded border px-2 text-sm" />
-            <label htmlFor="pos-name" className="text-xs font-bold">Name:</label><input id="pos-name" type="text" autoComplete="name" value={customer.name} onChange={e=> setCustomer({...customer,name:e.target.value})} placeholder="Name" aria-label="Customer name" className="h-11 min-h-[44px] rounded border px-2 text-sm" />
-            <label htmlFor="pos-addr" className="text-xs font-bold">Add:</label><input id="pos-addr" type="text" autoComplete="street-address" value={customer.address} onChange={e=> setCustomer({...customer,address:e.target.value})} placeholder="Address" aria-label="Customer address" className="h-11 min-h-[44px] rounded border px-2 text-sm" />
-            <label htmlFor="pos-locality" className="text-xs font-bold">Locality:</label><input id="pos-locality" type="text" value={customer.locality} onChange={e=> setCustomer({...customer,locality:e.target.value})} placeholder="Locality" aria-label="Customer locality" className="h-11 min-h-[44px] rounded border px-2 text-sm" />
+            {shouldShowField('phone') && (<><label htmlFor="pos-phone" className="text-xs font-bold">Mobile:{cfg.customer_fields?.phone?.required ? ' *' : ''}</label><input id="pos-phone" type="tel" inputMode="numeric" autoComplete="tel" maxLength={15} value={customer.phone} onChange={e=> setCustomer({...customer,phone:e.target.value.replace(/[^0-9+\- ]/g,'')})} placeholder="Mobile No." aria-label="Customer mobile" className="h-11 min-h-[44px] rounded border px-2 text-sm" /></>)}
+            {shouldShowField('name') && (<><label htmlFor="pos-name" className="text-xs font-bold">Name:{cfg.customer_fields?.name?.required ? ' *' : ''}</label><input id="pos-name" type="text" autoComplete="name" value={customer.name} onChange={e=> setCustomer({...customer,name:e.target.value})} placeholder="Name" aria-label="Customer name" className="h-11 min-h-[44px] rounded border px-2 text-sm" /></>)}
+            {shouldShowField('address') && (<><label htmlFor="pos-addr" className="text-xs font-bold">Add:{cfg.customer_fields?.address?.required ? ' *' : ''}</label><input id="pos-addr" type="text" autoComplete="street-address" value={customer.address} onChange={e=> setCustomer({...customer,address:e.target.value})} placeholder="Address" aria-label="Customer address" className="h-11 min-h-[44px] rounded border px-2 text-sm" /></>)}
+            {shouldShowField('locality') && (<><label htmlFor="pos-locality" className="text-xs font-bold">Locality:{cfg.customer_fields?.locality?.required ? ' *' : ''}</label><input id="pos-locality" type="text" value={customer.locality} onChange={e=> setCustomer({...customer,locality:e.target.value})} placeholder="Locality" aria-label="Customer locality" className="h-11 min-h-[44px] rounded border px-2 text-sm" /></>)}
           </div>
         </div>
       )}
@@ -368,36 +414,41 @@ function RightBill(props: any) {
         )}
         {cart.length>0 && <button type="button" onClick={()=>{ if(confirm(`Clear ${cart.length} item(s)?`)) onClear(); }} className="w-full mt-2 h-8 rounded border text-xs text-zinc-600 hover:bg-zinc-50">Clear cart</button>}
       </div>
-      {/* 8-row breakdown */}
+      {/* Bill breakdown - config-driven via pos_config bill_rows */}
       <div className="border-t">
-        {[
-          ['Sub Total', subTotal],
-          ['Discount', discount, true],
-          ['Container Charge', containerCharge],
-          ['Tax', tax],
-          ['Round Off', roundOff],
-          ['Customer Paid', customerPaid],
-          ['Return to Customer', ret],
-          ['Tip', tip],
-        ].map(([label, val, isDiscount])=>(
-          <div key={String(label)} className="grid grid-cols-[1fr_80px] gap-2 px-3 py-1.5 text-xs odd:bg-zinc-100 even:bg-white border-b">
-            <span className="font-medium">{String(label)} {String(label)==='Discount' && <span className="text-[10px] text-zinc-500"> (after order)</span>}</span>
-            <span className="text-right tabular-nums">{isDiscount ? `(${Number(val).toFixed(2)})` : Number(val).toFixed(2)}</span>
-          </div>
-        ))}
+        {billRows.map((br:any)=> {
+          const val = rowValues[br.key] ?? 0;
+          const isDiscount = br.key === 'discount';
+          // Hide tip row if charges.tip_enabled false (presentation) — but keep safe fallback if bill_rows says visible
+          if (br.key === 'tip' && cfg.charges && cfg.charges.tip_enabled === false) return null;
+          return (
+            <div key={br.key} className="grid grid-cols-[1fr_80px] gap-2 px-3 py-1.5 text-xs odd:bg-zinc-100 even:bg-white border-b">
+              <span className="font-medium">{br.label} {br.key==='discount' && <span className="text-[10px] text-zinc-500"> (after order)</span>}</span>
+              <span className="text-right tabular-nums">{isDiscount ? `(${currency}${Number(val).toFixed(2)})` : `${currency}${Number(val).toFixed(2)}`}</span>
+            </div>
+          );
+        })}
         <div className="grid grid-cols-2 gap-2 p-2 bg-white">
-          <label htmlFor="pos-container" className="flex items-center gap-1 text-xs">Container <input id="pos-container" type="number" inputMode="numeric" min={0} value={containerCharge} onChange={e=>setContainerCharge(Math.max(0, parseFloat(e.target.value)||0))} className="ml-auto w-16 h-11 min-h-[44px] rounded border px-1 text-right" aria-label="Container charge" /></label>
-          <label htmlFor="pos-tip" className="flex items-center gap-1 text-xs">Tip <input id="pos-tip" type="number" inputMode="numeric" min={0} value={tip} onChange={e=>setTip(Math.max(0, parseFloat(e.target.value)||0))} className="ml-auto w-16 h-11 min-h-[44px] rounded border px-1 text-right" aria-label="Tip amount" /></label>
+          {billRows.find((b:any)=>b.key==='container') && (
+            <label htmlFor="pos-container" className="flex items-center gap-1 text-xs">{billRows.find((b:any)=>b.key==='container')?.label || 'Container'} <input id="pos-container" type="number" inputMode="numeric" min={0} value={containerCharge} onChange={e=>setContainerCharge(Math.max(0, parseFloat(e.target.value)||0))} className="ml-auto w-16 h-11 min-h-[44px] rounded border px-1 text-right" aria-label="Container charge" /></label>
+          )}
+          {cfg.charges?.tip_enabled !== false && billRows.find((b:any)=>b.key==='tip') && (
+            <label htmlFor="pos-tip" className="flex items-center gap-1 text-xs">{billRows.find((b:any)=>b.key==='tip')?.label || 'Tip'} <input id="pos-tip" type="number" inputMode="numeric" min={0} value={tip} onChange={e=>setTip(Math.max(0, parseFloat(e.target.value)||0))} className="ml-auto w-16 h-11 min-h-[44px] rounded border px-1 text-right" aria-label="Tip amount" /></label>
+          )}
         </div>
       </div>
-      {/* Bottom bar - hardened: single primary path */}
+      {/* Bottom bar - feature-flag driven, no business rules */}
       <div className="p-2 border-t bg-white space-y-2">
         <div className="flex gap-2 flex-wrap items-center">
-          <button type="button" onClick={()=> setIsAdvance((v: boolean)=>!v)} aria-pressed={isAdvance} className={`px-3 py-1.5 rounded text-xs min-h-[44px] ${isAdvance?'bg-blue-100 border border-blue-300': 'bg-zinc-100 border'}`}>Advance Order</button>
-          <label className="flex items-center gap-1 text-xs ml-auto"><input type="checkbox" checked={isComplimentary} onChange={e=>setIsComplimentary(e.target.checked)} />Complimentary</label>
-          <span className="text-sm font-bold tabular-nums">Total {isComplimentary ? '₹0.00' : `₹${(total + containerCharge + tip).toFixed(2)}`}</span>
+          {cfg.features?.advance_order !== false && (
+            <button type="button" onClick={()=> setIsAdvance((v: boolean)=>!v)} aria-pressed={isAdvance} className={`px-3 py-1.5 rounded text-xs min-h-[44px] ${isAdvance?'bg-blue-100 border border-blue-300': 'bg-zinc-100 border'}`}>Advance Order</button>
+          )}
+          {cfg.features?.complimentary !== false && (
+            <label className="flex items-center gap-1 text-xs ml-auto"><input type="checkbox" checked={isComplimentary} onChange={e=>setIsComplimentary(e.target.checked)} />Complimentary</label>
+          )}
+          <span className="text-sm font-bold tabular-nums">Total {isComplimentary ? `${currency}0.00` : `${currency}${(total + containerCharge + tip).toFixed(2)}`}</span>
         </div>
-        {isAdvance && <input type="datetime-local" value={advanceAt} min={nowLocal} onChange={e=>setAdvanceAt(e.target.value)} aria-label="Advance order time" className="w-full h-11 min-h-[44px] rounded border px-2 text-xs" />}
+        {isAdvance && cfg.features?.advance_order !== false && <input type="datetime-local" value={advanceAt} min={nowLocal} onChange={e=>setAdvanceAt(e.target.value)} aria-label="Advance order time" className="w-full h-11 min-h-[44px] rounded border px-2 text-xs" />}
         {fatal && <div role="alert" aria-live="assertive" className="rounded border border-red-200 bg-red-50 p-2 text-xs text-red-700">{fatal} <button type="button" onClick={()=>setFatal(null)} className="underline">Dismiss</button></div>}
         {notice && <div role="status" aria-live="polite" className="rounded border border-amber-200 bg-amber-50 p-2 text-xs">{notice}</div>}
         {orderId==null ? (
@@ -406,7 +457,7 @@ function RightBill(props: any) {
           </button>
         ) : (
           <div className="grid grid-cols-2 gap-2">
-            <button type="button" onClick={onHold} className="h-11 min-h-[44px] rounded bg-amber-600 text-white text-xs font-bold">Hold</button>
+            {cfg.features?.hold !== false && <button type="button" onClick={onHold} className="h-11 min-h-[44px] rounded bg-amber-600 text-white text-xs font-bold">Hold</button>}
             <button type="button" onClick={onCancel} className="h-11 min-h-[44px] rounded border text-xs font-bold">Cancel</button>
           </div>
         )}
