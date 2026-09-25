@@ -1153,7 +1153,13 @@ func (h *AdminHandler) ConfirmPOSOrder(c *gin.Context) {
 		return
 	}
 	if err := h.posOrderService.ConfirmOrder(id, c.GetInt("restaurantID"), c.GetInt("outletID")); err != nil {
-		if errors.Is(err, services.ErrInvalidOrderTransition) || errors.Is(err, services.ErrOrderNotFound) || errors.Is(err, services.ErrOrderTenantMismatch) {
+		// Absent resources are 404; tenant mismatch stays indistinguishable
+		// from not-found for security (same 404, never a 200/null body).
+		if errors.Is(err, services.ErrOrderNotFound) || errors.Is(err, services.ErrOrderTenantMismatch) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "order not found"})
+			return
+		}
+		if errors.Is(err, services.ErrInvalidOrderTransition) {
 			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 			return
 		}
