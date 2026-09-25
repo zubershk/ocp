@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, ReactNode, useCallback } from 'react';
+import { useRef, useEffect, ReactNode, useCallback, useId } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
@@ -15,6 +15,8 @@ const sizeMap = { sm: 'max-w-sm', md: 'max-w-md', lg: 'max-w-lg', full: 'max-w-3
 export function Modal({ open, onClose, title, children, size = 'md' }: ModalProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const prevFocusRef = useRef<HTMLElement | null>(null);
+  const titleId = useId();
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.key === 'Escape') { onClose(); return; }
@@ -22,27 +24,33 @@ export function Modal({ open, onClose, title, children, size = 'md' }: ModalProp
       const focusable = contentRef.current.querySelectorAll<HTMLElement>(
         'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
       );
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
+      const visible = Array.from(focusable).filter((el) => !(el as HTMLButtonElement).disabled && el.offsetParent !== null);
+      if (visible.length === 0) return;
+      const first = visible[0];
+      const last = visible[visible.length - 1];
       if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
       else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
     }
   }, [onClose]);
 
   useEffect(() => {
-    if (open) {
-      document.body.style.overflow = 'hidden';
-      window.addEventListener('keydown', handleKeyDown);
-      setTimeout(() => {
-        const firstFocusable = contentRef.current?.querySelector<HTMLElement>(
-          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-        );
-        firstFocusable?.focus();
-      }, 50);
-      return () => { document.body.style.overflow = ''; window.removeEventListener('keydown', handleKeyDown); };
-    }
-    document.body.style.overflow = '';
+    if (!open) return;
+    prevFocusRef.current = document.activeElement as HTMLElement | null;
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', handleKeyDown);
+    const t = setTimeout(() => {
+      const firstFocusable = contentRef.current?.querySelector<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      );
+      firstFocusable?.focus();
+    }, 50);
+    return () => {
+      clearTimeout(t);
+      document.body.style.overflow = '';
+      window.removeEventListener('keydown', handleKeyDown);
+      prevFocusRef.current?.focus?.();
+      prevFocusRef.current = null;
+    };
   }, [open, handleKeyDown]);
 
   if (!open) return null;
@@ -53,12 +61,12 @@ export function Modal({ open, onClose, title, children, size = 'md' }: ModalProp
       className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-fade-in"
       onClick={(e) => { if (e.target === overlayRef.current) onClose(); }}
     >
-      <div ref={contentRef} className={`bg-white rounded-3xl shadow-2xl w-full ${sizeMap[size]} max-h-[85vh] flex flex-col animate-slide-in-up`} role="dialog" aria-modal="true" aria-label={title}>
+      <div ref={contentRef} className={`bg-white rounded-3xl shadow-2xl w-full ${sizeMap[size]} max-h-[85vh] flex flex-col animate-slide-in-up`} role="dialog" aria-modal="true" aria-labelledby={title ? titleId : undefined}>
         {title && (
           <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-stone-100">
-            <h2 className="font-heading font-bold text-lg">{title}</h2>
-            <button onClick={onClose} className="w-8 h-8 rounded-full border-2 border-orange-500 text-orange-500 hover:bg-orange-50 grid place-items-center transition-colors" aria-label="Close">
-              <X size={14} strokeWidth={2.5} />
+            <h2 id={titleId} className="font-heading font-bold text-lg">{title}</h2>
+            <button type="button" onClick={onClose} className="w-11 h-11 min-h-[44px] min-w-[44px] rounded-full border-2 border-orange-500 text-orange-500 hover:bg-orange-50 grid place-items-center transition-colors" aria-label="Close dialog">
+              <X size={16} strokeWidth={2.5} aria-hidden />
             </button>
           </div>
         )}
@@ -78,11 +86,26 @@ interface BottomSheetProps {
 
 export function BottomSheet({ open, onClose, title, children }: BottomSheetProps) {
   const sheetRef = useRef<HTMLDivElement>(null);
+  const prevFocusRef = useRef<HTMLElement | null>(null);
+  const titleId = useId();
 
   useEffect(() => {
-    if (open) document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = ''; };
-  }, [open]);
+    if (!open) return;
+    prevFocusRef.current = document.activeElement as HTMLElement | null;
+    document.body.style.overflow = 'hidden';
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    const t = setTimeout(() => {
+      sheetRef.current?.querySelector<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')?.focus();
+    }, 50);
+    return () => {
+      clearTimeout(t);
+      document.body.style.overflow = '';
+      window.removeEventListener('keydown', onKey);
+      prevFocusRef.current?.focus?.();
+      prevFocusRef.current = null;
+    };
+  }, [open, onClose]);
 
   if (!open) return null;
 
@@ -92,15 +115,18 @@ export function BottomSheet({ open, onClose, title, children }: BottomSheetProps
       <div
         ref={sheetRef}
         className="absolute bottom-0 inset-x-0 bg-white rounded-t-3xl shadow-2xl max-h-[85vh] flex flex-col animate-slide-in-up"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={title ? titleId : undefined}
       >
-        <div className="flex justify-center pt-3 pb-1">
+        <div className="flex justify-center pt-3 pb-1" aria-hidden>
           <div className="w-10 h-1 rounded-full bg-stone-300" />
         </div>
         {title && (
           <div className="flex items-center justify-between px-5 py-3 border-b border-stone-100">
-            <h2 className="font-heading font-semibold">{title}</h2>
-            <button onClick={onClose} className="p-2 rounded-xl hover:bg-stone-50" aria-label="Close">
-              <X size={18} />
+            <h2 id={titleId} className="font-heading font-semibold">{title}</h2>
+            <button type="button" onClick={onClose} className="w-11 h-11 min-h-[44px] min-w-[44px] p-2 rounded-xl hover:bg-stone-50 grid place-items-center" aria-label="Close dialog">
+              <X size={18} aria-hidden />
             </button>
           </div>
         )}

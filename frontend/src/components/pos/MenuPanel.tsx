@@ -36,8 +36,8 @@ function ItemImage({ src, name }: { src: string; name: string }) {
     return <img src={src} alt={name} loading="lazy" className="h-20 w-full object-contain" onError={() => setErr(true)} />;
   }
   return (
-    <div className="h-20 grid place-items-center bg-zinc-50 text-zinc-400" aria-hidden={false} aria-label={name}>
-      <span className="text-3xl font-black tracking-tight" aria-hidden>{name.slice(0, 2).toUpperCase()}</span>
+    <div className="h-20 grid place-items-center bg-zinc-50 text-zinc-400" role="img" aria-label={name}>
+      <span className="text-3xl font-black tracking-tight" aria-hidden="true">{name.slice(0, 2).toUpperCase()}</span>
     </div>
   );
 }

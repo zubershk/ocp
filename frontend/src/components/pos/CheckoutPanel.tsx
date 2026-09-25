@@ -313,18 +313,18 @@ export default function CheckoutPanel({
 
           {method === 'cash' && (
             <div className="space-y-2">
-              <label className="block text-xs font-bold uppercase tracking-wider text-zinc-500">Cash received</label>
+              <label htmlFor="cash-received" className="block text-xs font-bold uppercase tracking-wider text-zinc-500">Cash received</label>
               <input
+                id="cash-received"
                 inputMode="decimal"
                 value={tendered}
                 onChange={(e) => setTendered(e.target.value)}
                 placeholder={dueRupees.toFixed(2)}
-                aria-label="Cash received"
                 className="w-full h-12 rounded-2xl border-2 border-zinc-200 px-4 text-lg font-bold focus:outline-none focus:border-orange-500"
               />
               <div className="flex gap-2">
                 {[...new Set([Math.ceil(dueRupees), Math.ceil(dueRupees / 100) * 100, Math.ceil(dueRupees / 500) * 500])].map((v) => (
-                  <button key={v} type="button" onClick={() => setTendered(String(v))} className="flex-1 h-10 rounded-xl bg-zinc-100 hover:bg-zinc-200 font-bold text-sm">₹{v}</button>
+                  <button key={v} type="button" aria-label={`Set tendered to ₹${v}`} onClick={() => setTendered(String(v))} className="flex-1 h-11 min-h-[44px] rounded-xl bg-zinc-100 hover:bg-zinc-200 font-bold text-sm">₹{v}</button>
                 ))}
               </div>
               <div className="flex justify-between rounded-2xl bg-zinc-50 px-3 py-2 text-sm font-bold tabular-nums">
@@ -344,7 +344,7 @@ export default function CheckoutPanel({
             </p>
           )}
 
-          {payErr && <p className="rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-semibold px-3 py-2">{payErr}</p>}
+          {payErr && <p role="alert" aria-live="assertive" className="rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-semibold px-3 py-2">{payErr}</p>}
 
           <button
             type="button"
@@ -373,7 +373,7 @@ export default function CheckoutPanel({
 function DiscountList({ busy, onPick, onRemove }: { busy: boolean; onPick: (id: number) => void; onRemove: (() => void) | null }) {
   const q = useQuery({ queryKey: ['pos-discounts'], queryFn: posApi.getDiscounts, staleTime: 30_000, retry: 1 });
   if (q.isLoading) return <div className="space-y-2">{Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-12 rounded-xl bg-zinc-100 animate-pulse" />)}</div>;
-  if (q.isError) return <div className="rounded-xl bg-red-50 p-3 text-sm text-red-700 font-medium">Couldn't load discounts. <button className="font-bold underline" onClick={() => q.refetch()}>Retry</button></div>;
+  if (q.isError) return <div className="rounded-xl bg-red-50 p-3 text-sm text-red-700 font-medium" role="alert">Couldn't load discounts. <button type="button" className="font-bold underline" onClick={() => q.refetch()}>Retry</button></div>;
   return (
     <ul className="space-y-2">
       {onRemove && (

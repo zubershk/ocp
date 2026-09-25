@@ -190,10 +190,12 @@ export default function ItemCustomizer({
               const filtered = g.items.filter(it => !addonSearch || it.name.toLowerCase().includes(addonSearch.toLowerCase()));
               const selected = selectedAddons[g.id] ?? new Set<number>();
               const isSingle = g.selection_type === 'single';
+              const helperId = `addon-help-${g.id}`;
               return (
-                <div key={g.id}>
-                  <div className="text-sm font-bold">{g.name} <span className="ml-2 text-xs font-normal text-blue-500 bg-blue-50 px-2 py-0.5 rounded">{isSingle ? 'Single Add-on Only' : 'Multiple Add-ons'} (Min: {g.min_select}, Max: {g.max_select})</span></div>
-                  <div className="grid gap-2 mt-2 grid-cols-2 sm:grid-cols-3">
+                <fieldset key={g.id}>
+                  <legend className="text-sm font-bold">{g.name} <span className="ml-2 text-xs font-normal text-blue-500 bg-blue-50 px-2 py-0.5 rounded">{isSingle ? 'Single Add-on Only' : 'Multiple Add-ons'} (Min: {g.min_select}, Max: {g.max_select})</span></legend>
+                  <div id={helperId} className="sr-only">Select {g.min_select} to {g.max_select} options. {selected.size} selected.</div>
+                  <div className="grid gap-2 mt-2 grid-cols-2 sm:grid-cols-3" role="group" aria-labelledby={helperId}>
                     {filtered.map(it => {
                       const isSel = selected.has(it.id);
                       const canSelect = isSel || selected.size < g.max_select;
@@ -203,6 +205,7 @@ export default function ItemCustomizer({
                           type="button"
                           disabled={!canSelect}
                           aria-pressed={isSel}
+                          aria-describedby={helperId}
                           aria-label={`${it.name} ₹${it.price}${isSel ? ' selected' : ''}`}
                           onClick={() => {
                             setSelectedAddons(prev => {
@@ -228,7 +231,7 @@ export default function ItemCustomizer({
                       );
                     })}
                   </div>
-                </div>
+                </fieldset>
               );
             })}
           </div>
