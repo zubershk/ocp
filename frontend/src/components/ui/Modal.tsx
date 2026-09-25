@@ -12,26 +12,33 @@ interface ModalProps {
 
 const sizeMap = { sm: 'max-w-sm', md: 'max-w-md', lg: 'max-w-lg', full: 'max-w-3xl' };
 
+function visibleFocusable(root: HTMLElement | null): HTMLElement[] {
+  if (!root) return [];
+  const nodes = root.querySelectorAll<HTMLElement>(
+    'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+  );
+  return Array.from(nodes).filter((el) => !(el as HTMLButtonElement).disabled && el.getClientRects().length > 0);
+}
+
 export function Modal({ open, onClose, title, children, size = 'md' }: ModalProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const prevFocusRef = useRef<HTMLElement | null>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
   const titleId = useId();
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (e.key === 'Escape') { onClose(); return; }
+    if (e.key === 'Escape') { onCloseRef.current(); return; }
     if (e.key === 'Tab' && contentRef.current) {
-      const focusable = contentRef.current.querySelectorAll<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-      );
-      const visible = Array.from(focusable).filter((el) => !(el as HTMLButtonElement).disabled && el.offsetParent !== null);
+      const visible = visibleFocusable(contentRef.current);
       if (visible.length === 0) return;
       const first = visible[0];
       const last = visible[visible.length - 1];
       if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
       else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
     }
-  }, [onClose]);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -39,10 +46,7 @@ export function Modal({ open, onClose, title, children, size = 'md' }: ModalProp
     document.body.style.overflow = 'hidden';
     window.addEventListener('keydown', handleKeyDown);
     const t = setTimeout(() => {
-      const firstFocusable = contentRef.current?.querySelector<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-      );
-      firstFocusable?.focus();
+      visibleFocusable(contentRef.current)[0]?.focus();
     }, 50);
     return () => {
       clearTimeout(t);
@@ -89,14 +93,27 @@ export function BottomSheet({ open, onClose, title, children }: BottomSheetProps
   const prevFocusRef = useRef<HTMLElement | null>(null);
   const titleId = useId();
 
+  const sheetCloseRef = useRef(onClose);
+  sheetCloseRef.current = onClose;
+
   useEffect(() => {
     if (!open) return;
     prevFocusRef.current = document.activeElement as HTMLElement | null;
     document.body.style.overflow = 'hidden';
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { sheetCloseRef.current(); return; }
+      if (e.key === 'Tab' && sheetRef.current) {
+        const visible = visibleFocusable(sheetRef.current);
+        if (visible.length === 0) return;
+        const first = visible[0];
+        const last = visible[visible.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+    };
     window.addEventListener('keydown', onKey);
     const t = setTimeout(() => {
-      sheetRef.current?.querySelector<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')?.focus();
+      visibleFocusable(sheetRef.current)[0]?.focus();
     }, 50);
     return () => {
       clearTimeout(t);
@@ -105,7 +122,7 @@ export function BottomSheet({ open, onClose, title, children }: BottomSheetProps
       prevFocusRef.current?.focus?.();
       prevFocusRef.current = null;
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 

@@ -23,16 +23,18 @@ export default function ConfirmDialog({
   const descId = useId();
   const containerRef = useRef<HTMLDivElement>(null);
   const prevFocusRef = useRef<HTMLElement | null>(null);
+  const onCancelRef = useRef(onCancel);
+  onCancelRef.current = onCancel;
 
   useEffect(() => {
     if (!open) return;
     prevFocusRef.current = document.activeElement as HTMLElement | null;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { e.preventDefault(); onCancel(); return; }
+      if (e.key === 'Escape') { e.preventDefault(); onCancelRef.current(); return; }
       if (e.key === 'Tab' && containerRef.current) {
         const focusable = Array.from(
           containerRef.current.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')
-        ).filter((el) => !(el as HTMLButtonElement).disabled && el.offsetParent !== null);
+        ).filter((el) => !(el as HTMLButtonElement).disabled && el.getClientRects().length > 0);
         if (focusable.length === 0) return;
         const first = focusable[0];
         const last = focusable[focusable.length - 1];
@@ -42,7 +44,8 @@ export default function ConfirmDialog({
     };
     window.addEventListener('keydown', onKey);
     const t = setTimeout(() => {
-      containerRef.current?.querySelector<HTMLElement>('button')?.focus();
+      // Focus the safe default (Cancel, first button), never the destructive confirm.
+      containerRef.current?.querySelectorAll<HTMLElement>('button')[0]?.focus();
     }, 30);
     return () => {
       clearTimeout(t);
@@ -50,7 +53,7 @@ export default function ConfirmDialog({
       prevFocusRef.current?.focus?.();
       prevFocusRef.current = null;
     };
-  }, [open, onCancel]);
+  }, [open]);
 
   if (!open) return null;
   return (
@@ -70,7 +73,6 @@ export default function ConfirmDialog({
           <button
             type="button"
             onClick={onConfirm}
-            autoFocus
             className={`flex-1 px-4 py-3.5 min-h-[48px] text-sm font-semibold border-l transition-colors ${
               danger
                 ? 'text-red-600 hover:bg-red-50'
