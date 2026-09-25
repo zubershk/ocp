@@ -36,7 +36,7 @@ export default function PosHeader({ outletId, onOutlet, operator, role, heldCoun
             CP
           </div>
           <div className="min-w-0 hidden sm:block">
-            <div className="font-bold leading-tight text-sm">{headerTitle || 'OCP POS'}</div>
+            <h1 className="font-bold leading-tight text-sm">{headerTitle || 'OCP POS'}</h1>
             <div className="text-[11px] text-zinc-500 truncate">{time} · <span className="capitalize">{role}</span>{operator ? ` · ${operator}` : ''}</div>
           </div>
         </div>
@@ -54,17 +54,17 @@ export default function PosHeader({ outletId, onOutlet, operator, role, heldCoun
         </div>
 
         <div className="ml-auto flex items-center gap-1.5">
-          <button type="button" onClick={onHeld} className="h-9 px-3 rounded-lg bg-white border border-zinc-200 hover:bg-zinc-50 font-semibold text-xs inline-flex items-center gap-1.5">
-            <PauseCircle size={14} />
+          <button type="button" onClick={onHeld} aria-label={`Held orders${heldCount > 0 ? `, ${heldCount} held` : ''}`} className="h-11 min-h-[44px] px-3 rounded-lg bg-white border border-zinc-200 hover:bg-zinc-50 font-semibold text-xs inline-flex items-center gap-1.5">
+            <PauseCircle size={14} aria-hidden />
             Held
             {heldCount > 0 && <span className="min-w-5 h-5 px-1 rounded-full bg-[var(--pos-accent)] text-white text-[11px] font-bold grid place-items-center tabular-nums">{heldCount}</span>}
           </button>
-          <button type="button" onClick={onNewSale} className="h-9 px-4 rounded-lg bg-[var(--pos-accent)] hover:bg-[var(--pos-accent-hover)] text-white font-bold text-xs inline-flex items-center gap-1.5 active:scale-95">
-            <Plus size={14} />
+          <button type="button" onClick={onNewSale} className="h-11 min-h-[44px] px-4 rounded-lg bg-[var(--pos-accent)] hover:bg-[var(--pos-accent-hover)] text-white font-bold text-xs inline-flex items-center gap-1.5 active:scale-95">
+            <Plus size={14} aria-hidden />
             New Order
           </button>
-          <button type="button" onClick={onLock} aria-label="Lock terminal" className="h-9 w-9 rounded-lg bg-white border border-zinc-200 hover:bg-zinc-50 grid place-items-center">
-            <Lock size={14} />
+          <button type="button" onClick={onLock} aria-label="Lock terminal" className="h-11 w-11 min-h-[44px] min-w-[44px] rounded-lg bg-white border border-zinc-200 hover:bg-zinc-50 grid place-items-center">
+            <Lock size={14} aria-hidden />
           </button>
         </div>
       </div>

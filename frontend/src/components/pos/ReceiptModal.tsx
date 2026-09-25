@@ -156,12 +156,14 @@ export default function ReceiptModal({
                   {payments.map((p) => (
                     <li key={p.paymentId}>
                       <button
+                        type="button"
+                        aria-label={`Refund ${p.method} ${formatINR(toRupees(p.amountPaise))}`}
                         onClick={() => {
                           setRefundId(p.paymentId);
                           setRefundAmount(toRupees(p.amountPaise).toFixed(2));
                           setRefundMsg(null);
                         }}
-                        className="w-full flex justify-between items-center rounded-xl border border-zinc-200 px-3 py-2 text-sm hover:border-zinc-400"
+                        className="w-full min-h-[44px] flex justify-between items-center rounded-xl border border-zinc-200 px-3 py-2 text-sm hover:border-zinc-400"
                       >
                         <span className="uppercase font-semibold flex items-center gap-1.5">
                           <Undo2 size={13} /> {p.method}
