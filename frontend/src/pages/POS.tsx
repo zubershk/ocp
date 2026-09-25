@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { PauseCircle, PlusCircle, ReceiptText } from 'lucide-react';
 import Button from '../components/ui/Button';
@@ -236,15 +236,22 @@ export default function POS() {
     finally { setCancelling(false); }
   }, [orderId, resetSale]);
 
+  const confirmingRef = useRef(false);
   const executePendingConfirm = useCallback(async () => {
+    if (confirmingRef.current) return;
     const pc = pendingConfirm;
-    setPendingConfirm(null);
     if (!pc) return;
-    if (pc.kind === 'outlet') doOutletSwitch(pc.id);
-    else if (pc.kind === 'new-sale') resetSale();
-    else if (pc.kind === 'cancel') await doCancelOrder();
-    else if (pc.kind === 'remove') setCart((p: CartLine[]) => p.filter(l => l.key !== pc.key));
-    else if (pc.kind === 'clear') setCart([]);
+    confirmingRef.current = true;
+    setPendingConfirm(null);
+    try {
+      if (pc.kind === 'outlet') doOutletSwitch(pc.id);
+      else if (pc.kind === 'new-sale') resetSale();
+      else if (pc.kind === 'cancel') await doCancelOrder();
+      else if (pc.kind === 'remove') setCart((p: CartLine[]) => p.filter(l => l.key !== pc.key));
+      else if (pc.kind === 'clear') setCart([]);
+    } finally {
+      confirmingRef.current = false;
+    }
   }, [pendingConfirm, doOutletSwitch, resetSale, doCancelOrder]);
 
   const confirmCopy: { title: string; message: string; confirmLabel: string; danger: boolean } = pendingConfirm == null
@@ -280,7 +287,7 @@ export default function POS() {
       kotNo={null}
       headerTitle={config.ui.header_title}
     />
-  ), [outletId, operatorName, role, held.length, queryClient, cart.length, orderId, resetSale, doOutletSwitch, config.ui.header_title]);
+  ), [outletId, operatorName, role, held.length, cart.length, orderId, resetSale, doOutletSwitch, online, config.ui.header_title]);
 
   const orderQuery = useQuery({
     queryKey: ['pos-order', orderId],
@@ -332,20 +339,13 @@ export default function POS() {
             isComplimentary={isComplimentary} setIsComplimentary={setIsComplimentary}
             isAdvance={isAdvance} setIsAdvance={setIsAdvance} advanceAt={advanceAt} setAdvanceAt={setAdvanceAt}
             onQty={(k: string,d: number)=> setCart((p: CartLine[])=>p.map(l=>l.key===k?{...l,quantity:Math.min(20, Math.max(1, l.quantity+d))}:l).filter(l=>l.quantity>0))}
-            onRemove={(k: string)=> setCart((p: CartLine[])=>p.filter(l=>l.key!==k))}
-            onClear={()=>setCart([])}
             onCreate={createOrder} creating={creating} canCreate={cart.length>0}
-            // checkout props
-            payments={payments} duePaise={duePaise ?? (order ? toPaise(order.total) : 0)}
-            onPaid={(p: RecordedPayment,due: number)=>{setPayments((prev: RecordedPayment[])=>[...prev,p]); setDuePaise(due);}}
-            onCompleted={()=>{queryClient.invalidateQueries({queryKey:['pos-order',orderId]}); setReceiptOpen(true);}}
+            payments={payments}
             onHold={async()=>{ if(orderId==null) return; setHolding(true); try{await posApi.holdOrder(orderId); const d=await posApi.getOrder(orderId); setHeld((prev: HeldOrder[])=>[{id:d.id,orderNumber:d.order_number,total:d.total,at:new Date().toISOString()},...prev].slice(0,20)); resetSale(); setNotice(`Order #${d.order_number} held.`);}catch(e){setNotice(posErrorMessage(e as Error).message);}finally{setHolding(false);}}}
             onCancel={async()=>{ if(orderId==null) return; setPendingConfirm({ kind: 'cancel' }); }}
             onRequestRemove={(key: string, name: string)=> setPendingConfirm({ kind: 'remove', key, name })}
             onRequestClear={(count: number)=> setPendingConfirm({ kind: 'clear', count })}
-            onReceipt={()=>setReceiptOpen(true)}
-            canPay={canPay} canDiscount={canDiscount}
-            fatal={fatal} setFatal={setFatal} role={role} notice={notice}
+            fatal={fatal} setFatal={setFatal} notice={notice}
           />
         </div>
       </main>
@@ -366,7 +366,7 @@ function CategoryColumn({ selected, onSelect }: { selected: string; onSelect: (i
   const cats = catQuery.data ?? [];
   return (
     <div className="p-2 space-y-0.5">
-      <button type="button" aria-pressed={selected==='all'} aria-current={selected==='all' ? 'true' : undefined} onClick={() => onSelect('all')} className={`w-full text-left px-2 py-2 rounded text-xs font-bold flex justify-between items-center ${selected==='all' ? 'bg-[var(--pos-accent)] text-white' : 'hover:bg-zinc-50 text-zinc-700'}`}>
+      <button type="button" aria-pressed={selected==='all'} onClick={() => onSelect('all')} className={`w-full text-left px-2 py-2 rounded text-xs font-bold flex justify-between items-center ${selected==='all' ? 'bg-[var(--pos-accent)] text-white' : 'hover:bg-zinc-50 text-zinc-700'}`}>
         <span>All Items</span><span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded">{cats.length}</span>
       </button>
       {cats.map((c: { id: number; name: string; isDeliverable?: boolean }) => (
@@ -375,7 +375,6 @@ function CategoryColumn({ selected, onSelect }: { selected: string; onSelect: (i
           key={c.id}
           onClick={() => onSelect(String(c.id))}
           aria-pressed={selected===String(c.id)}
-          aria-current={selected===String(c.id) ? 'true' : undefined}
           className={`w-full text-left px-2 py-2 rounded text-xs flex justify-between items-center border-b border-zinc-100 last:border-0 ${selected===String(c.id) ? 'bg-zinc-900 text-white border-zinc-900' : 'hover:bg-zinc-50 text-zinc-700'}`}
         >
           <span className="truncate">{c.name}{c.isDeliverable ? ' [D]' : ''}</span>
@@ -388,7 +387,7 @@ function CategoryColumn({ selected, onSelect }: { selected: string; onSelect: (i
 }
 
 function RightBill(props: any) {
-  const { config, activeOrderTypes, orderType, onOrderType, tableId, setTableId, guestCount, setGuestCount, outletId, customer, setCustomer, cart, order, orderId, containerCharge, setContainerCharge, tip, setTip, isComplimentary, setIsComplimentary, isAdvance, setIsAdvance, advanceAt, setAdvanceAt, onQty, onRemove, onClear, onCreate, creating, canCreate, payments, duePaise, onPaid, onCompleted, onHold, onCancel, onReceipt, onRequestRemove, onRequestClear, canPay, canDiscount, fatal, setFatal, role, notice } = props;
+  const { config, activeOrderTypes, orderType, onOrderType, tableId, setTableId, guestCount, setGuestCount, customer, setCustomer, cart, order, orderId, containerCharge, setContainerCharge, tip, setTip, isComplimentary, setIsComplimentary, isAdvance, setIsAdvance, advanceAt, setAdvanceAt, onQty, onCreate, creating, canCreate, payments, onHold, onCancel, onRequestRemove, onRequestClear, fatal, setFatal, notice } = props;
   const cfg = config ?? { order_types: [{key:'dine_in',label:'Dine In',active:true},{key:'delivery',label:'Delivery',active:true},{key:'takeaway',label:'Take Away',active:true}], bill_rows: [{key:'subtotal',label:'Sub Total',visible:true},{key:'discount',label:'Discount',visible:true},{key:'container',label:'Container Charge',visible:true},{key:'tax',label:'Tax',visible:true},{key:'round_off',label:'Round Off',visible:true},{key:'customer_paid',label:'Customer Paid',visible:true},{key:'return_to_customer',label:'Return to Customer',visible:true},{key:'tip',label:'Tip',visible:true}], charges: {container_default:0,tip_enabled:true}, features: {complimentary:true,advance_order:true}, ui:{currency_symbol:'₹'}, customer_fields:{phone:{visible:true,for:['delivery','takeaway']},name:{visible:true,for:['dine_in','delivery','takeaway']},address:{visible:true,for:['delivery']},locality:{visible:true,for:['delivery']}} };
   const currency = cfg.ui?.currency_symbol || '₹';
   const subTotal = order ? order.subtotal : cart.reduce((s:number,l:any)=> s + (l.unitPaise ?? 0)*l.quantity,0)/100;
@@ -510,7 +509,7 @@ function RightBill(props: any) {
       <div className="p-2 border-t bg-white space-y-2">
         <div className="flex gap-2 flex-wrap items-center">
           {cfg.features?.advance_order !== false && (
-            <button type="button" onClick={()=> setIsAdvance((v: boolean)=>!v)} aria-pressed={isAdvance} className={`px-3 py-1.5 rounded text-xs min-h-[44px] ${isAdvance?'bg-blue-100 border border-blue-300': 'bg-zinc-100 border'}`}>Advance Order</button>
+            <button type="button" onClick={()=> setIsAdvance((v: boolean)=>!v)} aria-pressed={isAdvance} aria-expanded={isAdvance} aria-controls="advance-at" className={`px-3 py-1.5 rounded text-xs min-h-[44px] ${isAdvance?'bg-blue-100 border border-blue-300': 'bg-zinc-100 border'}`}>Advance Order</button>
           )}
           {cfg.features?.complimentary !== false && (
             <label className="flex items-center gap-1 text-xs ml-auto"><input type="checkbox" checked={isComplimentary} onChange={e=>setIsComplimentary(e.target.checked)} />Complimentary</label>
@@ -520,7 +519,7 @@ function RightBill(props: any) {
         {isAdvance && cfg.features?.advance_order !== false && (
           <div>
             <label htmlFor="advance-at" className="text-xs font-bold">Advance time</label>
-            <input id="advance-at" type="datetime-local" value={advanceAt} min={nowLocal} onChange={e=>setAdvanceAt(e.target.value)} aria-label="Advance order time" aria-expanded={isAdvance} aria-controls="advance-at" className="w-full h-11 min-h-[44px] rounded border px-2 text-xs mt-1" />
+            <input id="advance-at" type="datetime-local" value={advanceAt} min={nowLocal} onChange={e=>setAdvanceAt(e.target.value)} aria-label="Advance order time" className="w-full h-11 min-h-[44px] rounded border px-2 text-xs mt-1" />
           </div>
         )}
         {fatal && <div role="alert" aria-live="assertive" aria-atomic="true" className="rounded border border-red-200 bg-red-50 p-2 text-xs text-red-700">{fatal} <button type="button" onClick={()=>setFatal(null)} className="underline">Dismiss</button></div>}
