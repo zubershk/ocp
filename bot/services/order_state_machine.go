@@ -61,6 +61,15 @@ var ErrOrderTenantMismatch = errors.New("order does not belong to current restau
 // an outstanding ledger balance.
 var ErrOrderHasDue = errors.New("order has outstanding due")
 
+// ErrPaymentExceedsDue is returned when a payment amount exceeds the
+// authoritative due. The ledger is the authority; the frontend due is
+// advisory only.
+var ErrPaymentExceedsDue = errors.New("payment amount exceeds due")
+
+// ErrOrderHasPayments is returned when cancelling an order that already
+// has ledger payments. Cancel must not silently orphan money; refund first.
+var ErrOrderHasPayments = errors.New("order has payments, refund before cancel")
+
 // orderTransitions is the single source of truth for status moves.
 var orderTransitions = map[string]map[string]bool{
 	OrderStatusDraft: {

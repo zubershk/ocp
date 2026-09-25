@@ -305,6 +305,12 @@ export const posApi = {
   resumeOrder: (id: number) =>
     posFetch<{ resumed: boolean }>(`/admin/pos/orders/${id}/resume`, { method: 'POST' }),
 
+  confirmOrder: (id: number) =>
+    posFetch<{ confirmed: boolean }>(`/admin/pos/orders/${id}/confirm`, { method: 'POST' }),
+
+  getHeldOrders: () =>
+    posFetch<{ held: { id: number; order_number: string; total: number; order_type: string; created_at: string }[] }>('/admin/pos/held').then((r) => r.held ?? []),
+
   completeOrder: (id: number) =>
     posFetch<{ completed: boolean }>(`/admin/pos/orders/${id}/complete`, { method: 'POST' }),
 

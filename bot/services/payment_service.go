@@ -237,6 +237,24 @@ func RefundPayment(paymentID, orderID, restaurantID, outletID int, amountPaise i
 		return 0, false, err
 	}
 
+	// Order row is the serialization point: lock it first so a concurrent
+	// TakePayment/Cancel/Complete serializes here instead of racing the
+	// payment row lock below.
+	var orderStatus string
+	var orderRestaurantID, orderOutletID int
+	err = tx.QueryRow(
+		`SELECT status, restaurant_id, outlet_id FROM orders WHERE id = $1 FOR UPDATE`,
+		orderID).Scan(&orderStatus, &orderRestaurantID, &orderOutletID)
+	if err == sql.ErrNoRows {
+		return 0, false, ErrOrderNotFound
+	}
+	if err != nil {
+		return 0, false, err
+	}
+	if orderRestaurantID != restaurantID || orderOutletID != outletID {
+		return 0, false, ErrRefundTenantMismatch
+	}
+
 	if key != "" {
 		var existing int
 		err := tx.QueryRow(

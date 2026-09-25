@@ -1143,8 +1143,41 @@ func (h *AdminHandler) ResumePOSOrder(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"resumed": true})
 }
 
+// ConfirmPOSOrder moves a draft/held POS order to confirmed.
+// draft→completed stays invalid; confirm first, then complete when due==0.
+// Confirm and payment stay separate: TakePayment never confirms.
+func (h *AdminHandler) ConfirmPOSOrder(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid ID"})
+		return
+	}
+	if err := h.posOrderService.ConfirmOrder(id, c.GetInt("restaurantID"), c.GetInt("outletID")); err != nil {
+		if errors.Is(err, services.ErrInvalidOrderTransition) || errors.Is(err, services.ErrOrderNotFound) || errors.Is(err, services.ErrOrderTenantMismatch) {
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
+		return
+	}
+	auditLog(c, "confirm_pos_order", strconv.Itoa(id), nil)
+	c.JSON(http.StatusOK, gin.H{"confirmed": true})
+}
+
+// ListHeldPOSOrders returns server-backed held orders for the HoldDrawer.
+// The frontend local held list is a cache only; this is the source of truth.
+func (h *AdminHandler) ListHeldPOSOrders(c *gin.Context) {
+	held, err := h.posOrderService.ListHeldOrders(c.GetInt("restaurantID"), c.GetInt("outletID"))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"held": held})
+}
+
 // CompletePOSOrder completes a fully-paid POS order.
 // Rejects terminal states and any order with outstanding due.
+// Only confirmed→completed is allowed; draft must confirm first.
 func (h *AdminHandler) CompletePOSOrder(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -1152,6 +1185,10 @@ func (h *AdminHandler) CompletePOSOrder(c *gin.Context) {
 		return
 	}
 	if err := h.posOrderService.CompleteOrder(id, c.GetInt("restaurantID"), c.GetInt("outletID")); err != nil {
+		if errors.Is(err, services.ErrOrderHasDue) || errors.Is(err, services.ErrInvalidOrderTransition) || errors.Is(err, services.ErrOrderNotFound) || errors.Is(err, services.ErrOrderTenantMismatch) {
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+			return
+		}
 		c.JSON(http.StatusConflict, gin.H{"error": safeError(err)})
 		return
 	}
@@ -1159,6 +1196,7 @@ func (h *AdminHandler) CompletePOSOrder(c *gin.Context) {
 }
 
 // CancelPOSOrder cancels a non-terminal POS order.
+// Cancelling an order with ledger payments is rejected (409): refund first.
 func (h *AdminHandler) CancelPOSOrder(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -1166,6 +1204,14 @@ func (h *AdminHandler) CancelPOSOrder(c *gin.Context) {
 		return
 	}
 	if err := h.posOrderService.CancelOrder(id, c.GetInt("restaurantID"), c.GetInt("outletID")); err != nil {
+		if errors.Is(err, services.ErrOrderHasPayments) {
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+			return
+		}
+		if errors.Is(err, services.ErrInvalidOrderTransition) || errors.Is(err, services.ErrOrderNotFound) || errors.Is(err, services.ErrOrderTenantMismatch) {
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+			return
+		}
 		c.JSON(http.StatusConflict, gin.H{"error": safeError(err)})
 		return
 	}
@@ -1207,6 +1253,14 @@ func (h *AdminHandler) TakePaymentPOSOrder(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, services.ErrIdempotencyKeyTooLong) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "idempotency key exceeds 120 characters"})
+			return
+		}
+		if errors.Is(err, services.ErrPaymentExceedsDue) {
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+			return
+		}
+		if errors.Is(err, services.ErrInvalidOrderTransition) || errors.Is(err, services.ErrOrderNotFound) || errors.Is(err, services.ErrOrderTenantMismatch) {
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})

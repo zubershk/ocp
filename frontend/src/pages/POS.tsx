@@ -194,8 +194,12 @@ export default function POS() {
           advance_at: isAdvance ? advanceAt : '',
         },
       );
+      // POS orchestrates lifecycle: create (draft) → confirm (confirmed).
+      // Payment and completion stay separate services; confirm here so
+      // Pay/Complete work without a manual hold→resume loop.
+      try { await posApi.confirmOrder(created.id); } catch { /* already confirmed or held; pay flow will surface */ }
       setCart([]); setTableId(0); openOrder(created.id, created.total);
-      setNotice(`Order #${created.order_number} created.`);
+      setNotice(`Order #${created.order_number} created and confirmed.`);
     } catch (e) {
       const { status, message } = posErrorMessage(e);
       setFatal(status === 403 ? 'Your role cannot create orders.' : message);
@@ -237,6 +241,14 @@ export default function POS() {
     retry: 1,
   });
   const order: PosOrder | undefined = orderQuery.data;
+  const serverHeldQuery = useQuery({
+    queryKey: ['pos-held', outletId],
+    queryFn: () => posApi.getHeldOrders(),
+    enabled: authed && holdOpen,
+    staleTime: 10_000,
+    retry: 1,
+  });
+  const serverHeld = serverHeldQuery.data ?? [];
 
   if (!authed) return <PosAuthGate onAuthed={() => setAuthed(true)} />;
   return (
@@ -283,7 +295,7 @@ export default function POS() {
           />
         </div>
       </main>
-      <HoldDrawer open={holdOpen} onClose={()=>setHoldOpen(false)} held={held} orderTypes={{}} onResume={async(h: HeldOrder)=>{ setResumingId(h.id); try{await posApi.resumeOrder(h.id); setHeld((prev: HeldOrder[])=>prev.filter(x=>x.id!==h.id)); setHoldOpen(false); const r=await posApi.getOrder(h.id); openOrder(r.id,r.total); setNotice(`Order #${r.order_number} resumed.`);}catch(e){setNotice(posErrorMessage(e as Error).message);}finally{setResumingId(null);}}} resumingId={resumingId} />
+      <HoldDrawer open={holdOpen} onClose={()=>setHoldOpen(false)} held={[...serverHeld.map(s => ({ id: s.id, orderNumber: s.order_number, total: s.total, at: s.created_at })), ...held.filter(l => !serverHeld.some(s => s.id === l.id))].slice(0,20)} orderTypes={{}} onResume={async(h: HeldOrder)=>{ setResumingId(h.id); try{await posApi.resumeOrder(h.id); setHeld((prev: HeldOrder[])=>prev.filter(x=>x.id!==h.id)); setHoldOpen(false); const r=await posApi.getOrder(h.id); openOrder(r.id,r.total); setNotice(`Order #${r.order_number} resumed.`);}catch(e){setNotice(posErrorMessage(e as Error).message);}finally{setResumingId(null);}}} resumingId={resumingId} />
       <ReceiptModal open={receiptOpen} onClose={()=>setReceiptOpen(false)} order={order ?? null} payments={payments} canRefund={role==='owner'||role==='manager'} outletName={outletName ?? 'Outlet'} onNewSale={resetSale} />
     </div>
   );

@@ -326,6 +326,8 @@ func main() {
 		adminGroup.PATCH("/pos/orders/:id", adminHandler.RequireRole("owner", "manager", "cashier"), adminHandler.RequirePermission("pos.update_order"), adminHandler.UpdatePOSOrder)
 		adminGroup.POST("/pos/orders/:id/hold", adminHandler.RequireRole("owner", "manager", "cashier"), adminHandler.RequirePermission("pos.update_order"), adminHandler.HoldPOSOrder)
 		adminGroup.POST("/pos/orders/:id/resume", adminHandler.RequireRole("owner", "manager", "cashier"), adminHandler.RequirePermission("pos.update_order"), adminHandler.ResumePOSOrder)
+		adminGroup.POST("/pos/orders/:id/confirm", adminHandler.RequireRole("owner", "manager", "cashier"), adminHandler.RequirePermission("pos.update_order"), adminHandler.ConfirmPOSOrder)
+		adminGroup.GET("/pos/held", adminHandler.RequirePermission("pos.read"), adminHandler.ListHeldPOSOrders)
 		adminGroup.POST("/pos/orders/:id/complete", adminHandler.RequireRole("owner", "manager", "cashier"), adminHandler.RequirePermission("pos.update_order"), adminHandler.CompletePOSOrder)
 		adminGroup.POST("/pos/orders/:id/cancel", adminHandler.RequireRole("owner", "manager"), adminHandler.RequirePermission("pos.update_order"), adminHandler.CancelPOSOrder)
 		adminGroup.POST("/pos/orders/:id/payments", adminHandler.RequireRole("owner", "manager", "cashier"), adminHandler.RequirePermission("pos.take_payment"), adminHandler.TakePaymentPOSOrder)
