@@ -197,7 +197,15 @@ export default function POS() {
       // POS orchestrates lifecycle: create (draft) → confirm (confirmed).
       // Payment and completion stay separate services; confirm here so
       // Pay/Complete work without a manual hold→resume loop.
-      try { await posApi.confirmOrder(created.id); } catch { /* already confirmed or held; pay flow will surface */ }
+      // Confirmation failures surface explicitly: never pretend confirmed.
+      try {
+        await posApi.confirmOrder(created.id);
+      } catch (e) {
+        const { status, message } = posErrorMessage(e);
+        setCart([]); setTableId(0); openOrder(created.id, created.total);
+        setFatal(`Order #${created.order_number} created but confirm failed (${status ?? 'error'}): ${message}. Pay/complete may be blocked until confirmed.`);
+        return;
+      }
       setCart([]); setTableId(0); openOrder(created.id, created.total);
       setNotice(`Order #${created.order_number} created and confirmed.`);
     } catch (e) {

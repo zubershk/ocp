@@ -1023,6 +1023,12 @@ func (s *POSOrderService) TakePayment(orderID, restaurantID, outletID int, metho
 	if amountPaise > due {
 		return 0, false, 0, fmt.Errorf("%w: amount %d paise exceeds due %d paise", ErrPaymentExceedsDue, amountPaise, due)
 	}
+	// SAVEPOINT keeps the order lock: a failed INSERT poisons only the
+	// savepoint, not the transaction, so the replay lookup + due stay
+	// serialized on the locked order row.
+	if _, serr := tx.Exec(`SAVEPOINT sp_payment_insert`); serr != nil {
+		return 0, false, 0, serr
+	}
 	var id int
 	err = tx.QueryRow(`
 		INSERT INTO order_payments (order_id, restaurant_id, outlet_id,
@@ -1032,16 +1038,27 @@ func (s *POSOrderService) TakePayment(orderID, restaurantID, outletID int, metho
 		orderID, restaurantID, outletID, method, amountPaise, tenderedPaise, 0, reference, nullReceiver(receivedBy), nullIfEmpty(key)).Scan(&id)
 	if err != nil {
 		if key != "" && IsUniqueViolation(err, "uq_order_payments_idempotency") {
-			_ = tx.Rollback()
-			if existing, findErr := GetPaymentIDByIdempotencyKey(key, orderID); findErr == nil && existing > 0 {
-				_, _, dueAfter, derr := ComputeDueFromLedger(orderID)
+			if _, rserr := tx.Exec(`ROLLBACK TO SAVEPOINT sp_payment_insert`); rserr != nil {
+				return 0, false, 0, rserr
+			}
+			var existing int
+			if serr := tx.QueryRow(
+				`SELECT id FROM order_payments WHERE idempotency_key = $1 AND order_id = $2`,
+				key, orderID).Scan(&existing); serr == nil && existing > 0 {
+				_, _, dueAfter, derr := ledgerDueTx(tx, orderID, totalRupees)
 				if derr != nil {
 					return 0, false, 0, fmt.Errorf("failed to compute due: %w", derr)
+				}
+				if err := tx.Commit(); err != nil {
+					return 0, false, 0, err
 				}
 				return existing, true, dueAfter, nil
 			}
 		}
 		return 0, false, 0, err
+	}
+	if _, serr := tx.Exec(`RELEASE SAVEPOINT sp_payment_insert`); serr != nil {
+		return 0, false, 0, serr
 	}
 	_, _, dueAfter, err := ledgerDueTx(tx, orderID, totalRupees)
 	if err != nil {
