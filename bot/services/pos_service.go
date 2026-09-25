@@ -668,18 +668,102 @@ func loadOrderForMutation(orderID, restaurantID, outletID int) (status string, o
 	return status, orderRestaurantID, nil
 }
 
-// HoldOrder moves a draft/confirmed order to held. The status is read
-// first and the write is conditional on it, so two concurrent holders
-// cannot both succeed: the loser sees zero affected rows.
+// loadOrderForMutationTx loads an order's status inside a transaction
+// holding a row lock (SELECT ... FOR UPDATE). The order row becomes the
+// serialization point for payment/order financial state: concurrent
+// TakePayment/Cancel/Refund/Complete/Confirm serialize here, giving a
+// deterministic winner instead of a check-then-update race.
+func loadOrderForMutationTx(tx *sql.Tx, orderID, restaurantID, outletID int) (status string, totalRupees float64, err error) {
+	var orderRestaurantID, orderOutletID int
+	err = tx.QueryRow(
+		`SELECT status, restaurant_id, outlet_id, total FROM orders WHERE id = $1 FOR UPDATE`,
+		orderID).Scan(&status, &orderRestaurantID, &orderOutletID, &totalRupees)
+	if err == sql.ErrNoRows {
+		return "", 0, ErrOrderNotFound
+	}
+	if err != nil {
+		return "", 0, err
+	}
+	if orderRestaurantID != restaurantID || orderOutletID != outletID {
+		return "", 0, ErrOrderTenantMismatch
+	}
+	return status, totalRupees, nil
+}
+
+// ledgerDueTx recomputes due inside a transaction holding the order lock.
+// totalRupees must come from the locked order row, not a re-read.
+func ledgerDueTx(tx *sql.Tx, orderID int, totalRupees float64) (paidPaise, refundedPaise, duePaise int64, err error) {
+	totalPaise := rounding(totalRupees)
+	var paidRupees float64
+	if err = tx.QueryRow(
+		`SELECT COALESCE(SUM(amount), 0) FROM order_payments WHERE order_id = $1 AND amount > 0`, orderID).Scan(&paidRupees); err != nil {
+		return 0, 0, 0, fmt.Errorf("failed to sum payments: %w", err)
+	}
+	var refundedRupees float64
+	if err = tx.QueryRow(
+		`SELECT COALESCE(SUM(ABS(amount)), 0) FROM order_payments WHERE order_id = $1 AND amount < 0`, orderID).Scan(&refundedRupees); err != nil {
+		return 0, 0, 0, fmt.Errorf("failed to sum refunds: %w", err)
+	}
+	paidPaise = paiseFromDecimal(paidRupees)
+	refundedPaise = paiseFromDecimal(refundedRupees)
+	duePaise = totalPaise - paidPaise + refundedPaise
+	if duePaise < 0 {
+		duePaise = 0
+	}
+	return paidPaise, refundedPaise, duePaise, nil
+}
+
+// ConfirmOrder moves a draft/held order to confirmed. It is the explicit
+// transition that makes an order payable-completable: draft→completed
+// stays invalid, and confirmed→completed stays due-gated. Same-state or
+// terminal moves are rejected, never silently replayed.
+func (s *POSOrderService) ConfirmOrder(orderID, restaurantID, outletID int) error {
+	tx, err := database.DB.Begin()
+	if err != nil {
+		return fmt.Errorf("tx begin failed: %w", err)
+	}
+	defer tx.Rollback()
+	status, _, err := loadOrderForMutationTx(tx, orderID, restaurantID, outletID)
+	if err != nil {
+		return err
+	}
+	if err := RequireTransition(status, OrderStatusConfirmed); err != nil {
+		return err
+	}
+	res, err := tx.Exec(`
+		UPDATE orders SET status = 'confirmed', updated_at = CURRENT_TIMESTAMP
+		WHERE id = $1 AND status = $2 AND restaurant_id = $3 AND outlet_id = $4
+	`, orderID, status, restaurantID, outletID)
+	if err != nil {
+		return err
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return fmt.Errorf("%w: order changed under us", ErrInvalidOrderTransition)
+	}
+	return tx.Commit()
+}
+
+// HoldOrder moves a draft/confirmed order to held. The order row is
+// locked first so two concurrent holders serialize: the loser blocks
+// on FOR UPDATE, then fails RequireTransition on the fresh status.
 func (s *POSOrderService) HoldOrder(orderID, restaurantID, outletID int, heldBy int, reason string) (bool, error) {
-	status, _, err := loadOrderForMutation(orderID, restaurantID, outletID)
+	tx, err := database.DB.Begin()
+	if err != nil {
+		return false, fmt.Errorf("tx begin failed: %w", err)
+	}
+	defer tx.Rollback()
+	status, _, err := loadOrderForMutationTx(tx, orderID, restaurantID, outletID)
 	if err != nil {
 		return false, err
 	}
 	if err := RequireTransition(status, OrderStatusHeld); err != nil {
 		return false, err
 	}
-	res, err := database.DB.Exec(`
+	res, err := tx.Exec(`
 		UPDATE orders SET status = 'held', updated_at = CURRENT_TIMESTAMP
 		WHERE id = $1 AND status = $2 AND restaurant_id = $3 AND outlet_id = $4
 	`, orderID, status, restaurantID, outletID)
@@ -693,20 +777,28 @@ func (s *POSOrderService) HoldOrder(orderID, restaurantID, outletID int, heldBy 
 	if rows == 0 {
 		return false, fmt.Errorf("%w: order changed under us", ErrInvalidOrderTransition)
 	}
+	if err := tx.Commit(); err != nil {
+		return false, err
+	}
 	return true, nil
 }
 
 // ResumeOrder moves a held order back to confirmed. Resuming anything
 // that is not held is an explicit error, not a silent no-op.
 func (s *POSOrderService) ResumeOrder(orderID, restaurantID, outletID int) error {
-	status, _, err := loadOrderForMutation(orderID, restaurantID, outletID)
+	tx, err := database.DB.Begin()
+	if err != nil {
+		return fmt.Errorf("tx begin failed: %w", err)
+	}
+	defer tx.Rollback()
+	status, _, err := loadOrderForMutationTx(tx, orderID, restaurantID, outletID)
 	if err != nil {
 		return err
 	}
 	if err := RequireTransition(status, OrderStatusConfirmed); err != nil {
 		return err
 	}
-	res, err := database.DB.Exec(`
+	res, err := tx.Exec(`
 		UPDATE orders SET status = 'confirmed', updated_at = CURRENT_TIMESTAMP
 		WHERE id = $1 AND status = 'held' AND restaurant_id = $2 AND outlet_id = $3
 	`, orderID, restaurantID, outletID)
@@ -720,28 +812,35 @@ func (s *POSOrderService) ResumeOrder(orderID, restaurantID, outletID int) error
 	if rows == 0 {
 		return fmt.Errorf("%w: order changed under us", ErrInvalidOrderTransition)
 	}
-	return nil
+	return tx.Commit()
 }
 
 // CompleteOrder completes a confirmed order once its ledger balance is
 // fully paid (due == 0). Completed orders are terminal: no further
-// hold, payment, discount, or table change is possible.
+// hold, payment, discount, or table change is possible. draft→completed
+// stays invalid; confirm first. The due is computed inside the order
+// lock so a concurrent payment cannot slip between check and update.
 func (s *POSOrderService) CompleteOrder(orderID, restaurantID, outletID int) error {
-	status, _, err := loadOrderForMutation(orderID, restaurantID, outletID)
+	tx, err := database.DB.Begin()
+	if err != nil {
+		return fmt.Errorf("tx begin failed: %w", err)
+	}
+	defer tx.Rollback()
+	status, totalRupees, err := loadOrderForMutationTx(tx, orderID, restaurantID, outletID)
 	if err != nil {
 		return err
 	}
 	if err := RequireTransition(status, OrderStatusCompleted); err != nil {
 		return err
 	}
-	_, _, duePaise, err := ComputeDueFromLedger(orderID)
+	_, _, duePaise, err := ledgerDueTx(tx, orderID, totalRupees)
 	if err != nil {
 		return fmt.Errorf("failed to compute due: %w", err)
 	}
 	if duePaise > 0 {
 		return fmt.Errorf("%w: %d paise still due", ErrOrderHasDue, duePaise)
 	}
-	res, err := database.DB.Exec(`
+	res, err := tx.Exec(`
 		UPDATE orders SET status = 'completed', updated_at = CURRENT_TIMESTAMP
 		WHERE id = $1 AND status = $2 AND restaurant_id = $3 AND outlet_id = $4
 	`, orderID, status, restaurantID, outletID)
@@ -755,20 +854,36 @@ func (s *POSOrderService) CompleteOrder(orderID, restaurantID, outletID int) err
 	if rows == 0 {
 		return fmt.Errorf("%w: order changed under us", ErrInvalidOrderTransition)
 	}
-	return nil
+	return tx.Commit()
 }
 
 // CancelOrder cancels a non-terminal order. Completed and cancelled
-// orders are terminal and reject cancellation.
+// orders are terminal and reject cancellation. Cancelling an order with
+// ledger payments is rejected (409 HasPayments): refund first so money
+// is never silently orphaned. The check runs inside the order lock so a
+// concurrent TakePayment cannot win after the check.
 func (s *POSOrderService) CancelOrder(orderID, restaurantID, outletID int) error {
-	status, _, err := loadOrderForMutation(orderID, restaurantID, outletID)
+	tx, err := database.DB.Begin()
+	if err != nil {
+		return fmt.Errorf("tx begin failed: %w", err)
+	}
+	defer tx.Rollback()
+	status, _, err := loadOrderForMutationTx(tx, orderID, restaurantID, outletID)
 	if err != nil {
 		return err
 	}
 	if err := RequireTransition(status, OrderStatusCancelled); err != nil {
 		return err
 	}
-	res, err := database.DB.Exec(`
+	var paidCount int
+	if err := tx.QueryRow(
+		`SELECT COUNT(*) FROM order_payments WHERE order_id = $1 AND amount > 0`, orderID).Scan(&paidCount); err != nil {
+		return fmt.Errorf("failed to check payments: %w", err)
+	}
+	if paidCount > 0 {
+		return ErrOrderHasPayments
+	}
+	res, err := tx.Exec(`
 		UPDATE orders SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP
 		WHERE id = $1 AND status = $2 AND restaurant_id = $3 AND outlet_id = $4
 	`, orderID, status, restaurantID, outletID)
@@ -782,21 +897,92 @@ func (s *POSOrderService) CancelOrder(orderID, restaurantID, outletID int) error
 	if rows == 0 {
 		return fmt.Errorf("%w: order changed under us", ErrInvalidOrderTransition)
 	}
-	return nil
+	return tx.Commit()
+}
+
+// HeldOrderInfo is one server-backed held order for the HoldDrawer.
+type HeldOrderInfo struct {
+	ID          int     `json:"id"`
+	OrderNumber string  `json:"order_number"`
+	Total       float64 `json:"total"`
+	OrderType   string  `json:"order_type"`
+	CreatedAt   string  `json:"created_at"`
+}
+
+// ListHeldOrders returns held orders for the caller's tenant, newest first.
+// Server-backed source of truth for the HoldDrawer; the frontend local
+// held list is a cache only.
+func (s *POSOrderService) ListHeldOrders(restaurantID, outletID int) ([]HeldOrderInfo, error) {
+	rows, err := database.DB.Query(`
+		SELECT id, order_number, total, order_type, created_at::text
+		FROM orders WHERE restaurant_id = $1 AND outlet_id = $2 AND status = 'held'
+		ORDER BY created_at DESC LIMIT 20
+	`, restaurantID, outletID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []HeldOrderInfo
+	for rows.Next() {
+		var h HeldOrderInfo
+		if err := rows.Scan(&h.ID, &h.OrderNumber, &h.Total, &h.OrderType, &h.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, h)
+	}
+	if out == nil {
+		out = []HeldOrderInfo{}
+	}
+	return out, rows.Err()
 }
 
 // TakePayment records a payment against an order. Returns the payment ID,
 // whether the call replayed an earlier operation (same idempotency key),
 // and the remaining due amount (paise). Append-only: never update a row.
 //
+// Server-authoritative lifecycle, in strict order:
+//
+//	BEGIN → SELECT order FOR UPDATE → idempotency check → reload
+//	authoritative total+ledger → due → validate amount<=due → INSERT →
+//	recompute ledger → COMMIT.
+//
+// Idempotency is checked BEFORE overpay validation so a retried request
+// whose commit succeeded but whose response was lost returns the original
+// payment instead of a spurious 409 Overpaid. Same key always replays,
+// even with a different payload (documented PR B behavior).
+//
 // Tenant guard: the order must belong to (restaurantID, outletID); the
 // ledger row carries the same tenant so cross-tenant payments are
-// impossible even if a caller forges IDs.
+// impossible even if a caller forges IDs. Confirm and payment stay
+// separate: TakePayment never confirms or completes.
 func (s *POSOrderService) TakePayment(orderID, restaurantID, outletID int, method string, amountPaise int64, tenderedPaise int64, reference string, receivedBy int, idempotencyKey string) (paymentID int, replayed bool, duePaise int64, err error) {
-	var orderRestaurantID, orderOutletID int
+	key, err := NormalizeIdempotencyKey(idempotencyKey)
+	if err != nil {
+		return 0, false, 0, err
+	}
+	if err := ValidatePaymentInput(method, amountPaise); err != nil {
+		return 0, false, 0, err
+	}
+	if err := ValidatePaymentReference(reference); err != nil {
+		return 0, false, 0, err
+	}
+	if tenderedPaise < 0 {
+		return 0, false, 0, fmt.Errorf("tendered amount cannot be negative")
+	}
+	if tenderedPaise > 10_000_000_00 {
+		return 0, false, 0, fmt.Errorf("tendered amount too large")
+	}
+	tx, err := database.DB.Begin()
+	if err != nil {
+		return 0, false, 0, fmt.Errorf("tx begin failed: %w", err)
+	}
+	defer tx.Rollback()
 	var status string
-	err = database.DB.QueryRow(
-		`SELECT restaurant_id, outlet_id, status FROM orders WHERE id = $1`, orderID).Scan(&orderRestaurantID, &orderOutletID, &status)
+	var totalRupees float64
+	var orderRestaurantID, orderOutletID int
+	err = tx.QueryRow(
+		`SELECT status, restaurant_id, outlet_id, total FROM orders WHERE id = $1 FOR UPDATE`,
+		orderID).Scan(&status, &orderRestaurantID, &orderOutletID, &totalRupees)
 	if err == sql.ErrNoRows {
 		return 0, false, 0, ErrOrderNotFound
 	}
@@ -804,21 +990,67 @@ func (s *POSOrderService) TakePayment(orderID, restaurantID, outletID int, metho
 		return 0, false, 0, err
 	}
 	if orderRestaurantID != restaurantID || orderOutletID != outletID {
-		return 0, false, 0, fmt.Errorf("order does not belong to current restaurant/outlet")
+		return 0, false, 0, ErrOrderTenantMismatch
 	}
 	if !CanAcceptPayment(status) {
 		return 0, false, 0, fmt.Errorf("%w: cannot take payment on %q order", ErrInvalidOrderTransition, status)
 	}
-	paymentID, replayed, err = RecordPayment(orderID, restaurantID, outletID, method, amountPaise, tenderedPaise, reference, receivedBy, idempotencyKey)
-	if err != nil {
-		return 0, false, 0, err
+	// Idempotency BEFORE due validation: a retry after commit-but-no-response
+	// must replay, not 409.
+	if key != "" {
+		var existing int
+		err := tx.QueryRow(
+			`SELECT id FROM order_payments WHERE idempotency_key = $1 AND order_id = $2`,
+			key, orderID).Scan(&existing)
+		if err == nil && existing > 0 {
+			_, _, due, err := ledgerDueTx(tx, orderID, totalRupees)
+			if err != nil {
+				return 0, false, 0, fmt.Errorf("failed to compute due: %w", err)
+			}
+			if err := tx.Commit(); err != nil {
+				return 0, false, 0, err
+			}
+			return existing, true, due, nil
+		}
+		if err != nil && err != sql.ErrNoRows {
+			return 0, false, 0, err
+		}
 	}
-	// Compute due: derived from the payment ledger (see ComputeDueFromLedger).
-	_, _, duePaise, err = ComputeDueFromLedger(orderID)
+	_, _, due, err := ledgerDueTx(tx, orderID, totalRupees)
 	if err != nil {
 		return 0, false, 0, fmt.Errorf("failed to compute due: %w", err)
 	}
-	return paymentID, replayed, duePaise, nil
+	if amountPaise > due {
+		return 0, false, 0, fmt.Errorf("%w: amount %d paise exceeds due %d paise", ErrPaymentExceedsDue, amountPaise, due)
+	}
+	var id int
+	err = tx.QueryRow(`
+		INSERT INTO order_payments (order_id, restaurant_id, outlet_id,
+			method, amount, tendered, change_due, reference, received_by, idempotency_key, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP)
+		RETURNING id`,
+		orderID, restaurantID, outletID, method, amountPaise, tenderedPaise, 0, reference, nullReceiver(receivedBy), nullIfEmpty(key)).Scan(&id)
+	if err != nil {
+		if key != "" && IsUniqueViolation(err, "uq_order_payments_idempotency") {
+			_ = tx.Rollback()
+			if existing, findErr := GetPaymentIDByIdempotencyKey(key, orderID); findErr == nil && existing > 0 {
+				_, _, dueAfter, derr := ComputeDueFromLedger(orderID)
+				if derr != nil {
+					return 0, false, 0, fmt.Errorf("failed to compute due: %w", derr)
+				}
+				return existing, true, dueAfter, nil
+			}
+		}
+		return 0, false, 0, err
+	}
+	_, _, dueAfter, err := ledgerDueTx(tx, orderID, totalRupees)
+	if err != nil {
+		return 0, false, 0, fmt.Errorf("failed to compute due: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, false, 0, err
+	}
+	return id, false, dueAfter, nil
 }
 
 // ComputeDueFromLedger calculates paid, refunded, and due from the order_payments
