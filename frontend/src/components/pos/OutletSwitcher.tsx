@@ -21,12 +21,12 @@ export default function OutletSwitcher({
   const current = outletId ?? getPosOutletId();
 
   const selectClass = variant === 'dark'
-    ? 'h-9 rounded-xl border border-zinc-700 bg-zinc-800 px-2.5 text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-brand-500/30 max-w-44'
-    : 'h-9 rounded-xl border border-zinc-200 bg-white px-2.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-500/30 max-w-44';
+    ? 'h-11 min-h-[44px] rounded-xl border border-zinc-700 bg-zinc-800 px-2.5 text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-brand-500/30 max-w-32 sm:max-w-44 truncate'
+    : 'h-11 min-h-[44px] rounded-xl border border-zinc-200 bg-white px-2.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-500/30 max-w-32 sm:max-w-44 truncate';
 
   return (
-    <label className="inline-flex items-center gap-2 text-sm">
-      <Store size={15} className={variant === 'dark' ? 'text-zinc-400 shrink-0' : 'text-zinc-500 shrink-0'} />
+    <label className="inline-flex items-center gap-2 text-sm min-w-0">
+      <Store size={15} aria-hidden className={variant === 'dark' ? 'text-zinc-400 shrink-0' : 'text-zinc-500 shrink-0'} />
       <span className="sr-only">Outlet</span>
       <select
         aria-label="Outlet"

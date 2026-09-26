@@ -137,7 +137,7 @@ export default function MenuPanel({
   };
 
   return (
-    <section aria-label="Menu" className="flex flex-col min-h-0 gap-3">
+    <section aria-label="Menu" className="flex flex-col min-h-0 h-full flex-1 gap-3">
       {/* Search */}
       <div className="relative">
         <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" aria-hidden />
@@ -152,8 +152,8 @@ export default function MenuPanel({
         />
       </div>
 
-      {/* Category tabs — hidden on xl where left vertical shows */}
-      <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 xl:hidden snap-x" role="tablist" aria-label="Categories">
+      {/* Category tabs — below lg where the vertical sidebar shows */}
+      <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 lg:hidden snap-x" role="tablist" aria-label="Categories">
         {[{ id: 'all' as const, name: 'All' }, ...(catsQuery.data ?? []).map((c) => ({ id: c.id, name: c.name }))].map((c) => {
           const active = catId === c.id;
           return (
@@ -175,7 +175,7 @@ export default function MenuPanel({
 
       {/* Grid */}
       {menuQuery.isLoading ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 2xl:grid-cols-4 gap-3" role="status" aria-live="polite" aria-busy="true">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3" role="status" aria-live="polite" aria-busy="true">
           {Array.from({ length: 8 }).map((_, i) => (
             <Skeleton key={i} className="h-40 rounded-2xl" />
           ))}
@@ -193,7 +193,7 @@ export default function MenuPanel({
           <div className="text-sm">Try another search or category.</div>
         </div>
       ) : (
-        <ul className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 overflow-y-auto pb-3">
+        <ul className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 overflow-y-auto flex-1 min-h-0 pb-3">
           {items.map((item) => {
             const inCart = qtyByKey.get(`${item.id}|regular|`) ?? 0;
             const simple = isSimple(item);
