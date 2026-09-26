@@ -35,7 +35,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
               ${icon ? 'pl-10' : ''}
               ${error
                 ? 'border-red-300 focus:border-red-500 focus:ring-red-500/20'
-                : 'border-stone-200 focus:border-brand-500 focus:ring-brand-500/10'
+                : 'border-stone-200 focus:border-[var(--pos-accent,#b91c1c)] focus:ring-[var(--pos-accent,#b91c1c)]/10'
               }
               ${className}
             `}

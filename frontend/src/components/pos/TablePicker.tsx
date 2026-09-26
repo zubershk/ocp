@@ -1,11 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 import { posApi, type PosTable } from '../../services/posService';
+import Skeleton from '../ui/Skeleton';
 
 const statusStyle: Record<PosTable['status'], string> = {
   free: 'bg-emerald-50 border-emerald-300 text-emerald-800 hover:border-emerald-500',
-  occupied: 'bg-zinc-100 border-zinc-200 text-zinc-400 cursor-not-allowed',
+  occupied: 'bg-zinc-100 border-zinc-200 text-zinc-600 cursor-not-allowed',
   reserved: 'bg-amber-50 border-amber-300 text-amber-800 cursor-not-allowed',
-  dirty: 'bg-red-50 border-red-200 text-red-400 cursor-not-allowed',
+  dirty: 'bg-red-50 border-red-200 text-red-700 cursor-not-allowed',
 };
 
 const statusLabel: Record<PosTable['status'], string> = {
@@ -33,13 +34,13 @@ export default function TablePicker({
   const tables = (q.data ?? []).filter((t) => t.active);
 
   if (q.isLoading) {
-    return <div className="grid grid-cols-4 gap-2">{Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-12 rounded-2xl bg-zinc-100 animate-pulse" />)}</div>;
+    return <div className="grid grid-cols-4 gap-2" role="status" aria-live="polite" aria-busy="true">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-12 rounded-2xl" />)}</div>;
   }
   if (q.isError) {
     return (
-      <div className="rounded-2xl border-2 border-red-200 bg-red-50 p-3 text-sm text-red-700 font-medium">
+      <div className="rounded-2xl border-2 border-red-200 bg-red-50 p-3 text-sm text-red-700 font-medium" role="alert">
         Tables unavailable.{' '}
-        <button className="font-bold underline" onClick={() => q.refetch()}>Retry</button>
+        <button type="button" className="font-bold underline" onClick={() => q.refetch()}>Retry</button>
       </div>
     );
   }
@@ -68,7 +69,7 @@ export default function TablePicker({
             title={`${t.name} · ${statusLabel[t.status]} · seats ${t.capacity}`}
           >
             <div className="text-sm leading-none">{t.name}</div>
-            <div className="text-[10px] opacity-70 font-semibold mt-0.5">{active ? 'Selected' : statusLabel[t.status]}</div>
+            <div className="text-2xs opacity-70 font-semibold mt-0.5">{active ? 'Selected' : statusLabel[t.status]}</div>
           </button>
         );
       })}
