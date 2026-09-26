@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Lock, PauseCircle, Plus, Wifi, WifiOff } from 'lucide-react';
 import OutletSwitcher from './OutletSwitcher';
+import Badge from '../ui/Badge';
 
 interface PosHeaderProps {
   outletId: number | null;
@@ -37,15 +38,16 @@ export default function PosHeader({ outletId, onOutlet, operator, role, heldCoun
           </div>
           <div className="min-w-0 hidden sm:block">
             <h1 className="font-bold leading-tight text-sm">{headerTitle || 'OCP POS'}</h1>
-            <div className="text-[11px] text-zinc-500 truncate">{time} · <span className="capitalize">{role}</span>{operator ? ` · ${operator}` : ''}</div>
+            <div className="text-xs text-zinc-500 truncate">{time} · <span className="capitalize">{role}</span>{operator ? ` · ${operator}` : ''}</div>
           </div>
         </div>
 
         <div className="flex items-center gap-1.5 sm:gap-2 mx-auto min-w-0 flex-1 sm:flex-none justify-center">
           <OutletSwitcher outletId={outletId} onChange={onOutlet} variant="light" />
-          <span className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${online ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'}`} role="status" aria-live="polite">
-            {online ? <Wifi size={13} /> : <WifiOff size={13} />}
-            {online ? 'Online' : 'Offline'}
+          <span className="hidden sm:inline-flex" role="status" aria-live="polite">
+            <Badge variant={online ? 'success' : 'error'} icon={online ? <Wifi size={13} aria-hidden /> : <WifiOff size={13} aria-hidden />}>
+              {online ? 'Online' : 'Offline'}
+            </Badge>
           </span>
           <span className="hidden lg:flex items-center gap-1 text-xs text-zinc-600 ml-2">
             <span className="px-2 py-1 rounded bg-white border text-zinc-700 truncate max-w-[140px]">Bill No {billNo ?? '-'}</span>
@@ -57,7 +59,7 @@ export default function PosHeader({ outletId, onOutlet, operator, role, heldCoun
           <button type="button" onClick={onHeld} aria-label={`Held orders${heldCount > 0 ? `, ${heldCount} held` : ''}`} className="h-11 min-h-[44px] px-2 sm:px-3 rounded-lg bg-white border border-zinc-200 hover:bg-zinc-50 font-semibold text-xs inline-flex items-center gap-1.5 shrink-0">
             <PauseCircle size={14} aria-hidden />
             <span className="hidden min-[420px]:inline">Held</span>
-            {heldCount > 0 && <span className="min-w-5 h-5 px-1 rounded-full bg-[var(--pos-accent)] text-white text-[11px] font-bold grid place-items-center tabular-nums">{heldCount}</span>}
+            {heldCount > 0 && <span className="min-w-5 h-5 px-1 rounded-full bg-[var(--pos-accent)] text-white text-xs font-bold grid place-items-center tabular-nums">{heldCount}</span>}
           </button>
           <button type="button" onClick={onNewSale} className="h-11 min-h-[44px] px-3 sm:px-4 rounded-lg bg-[var(--pos-accent)] hover:bg-[var(--pos-accent-hover)] text-white font-bold text-xs inline-flex items-center gap-1.5 active:scale-95 shrink-0">
             <Plus size={14} aria-hidden />
