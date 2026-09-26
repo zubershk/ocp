@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Banknote, CreditCard, Pause, QrCode, ReceiptText, Tag, Undo2, XCircle } from 'lucide-react';
 import { Modal } from '../ui/Modal';
+import Badge from '../ui/Badge';
+import Skeleton from '../ui/Skeleton';
 import {
   posApi,
   posErrorMessage,
@@ -39,12 +41,12 @@ function statusLabel(s: string): string {
   }
 }
 
-const statusChip: Record<string, string> = {
-  draft: 'bg-zinc-100 text-zinc-600',
-  held: 'bg-amber-100 text-amber-800',
-  confirmed: 'bg-blue-100 text-blue-800',
-  completed: 'bg-emerald-100 text-emerald-800',
-  cancelled: 'bg-red-100 text-red-600',
+const statusVariant: Record<string, 'neutral' | 'warning' | 'brand' | 'success' | 'error'> = {
+  draft: 'neutral',
+  held: 'warning',
+  confirmed: 'brand',
+  completed: 'success',
+  cancelled: 'error',
 };
 
 export default function CheckoutPanel({
@@ -187,13 +189,13 @@ export default function CheckoutPanel({
       {/* Header */}
       <div className="flex items-center gap-2 flex-wrap">
         <h2 className="font-black text-lg">Order {order ? `#${order.order_number}` : `#${orderId}`}</h2>
-        {order && <span className={`px-2.5 py-1 rounded-full text-[11px] font-black uppercase tracking-wide ${statusChip[order.status] ?? 'bg-zinc-100 text-zinc-600'}`}>{statusLabel(order.status)}</span>}
+        {order && <Badge variant={statusVariant[order.status] ?? 'neutral'}><span className="uppercase tracking-wide">{statusLabel(order.status)}</span></Badge>}
         <button type="button" onClick={() => orderQuery.refetch()} className="ml-auto text-xs font-bold text-zinc-400 hover:text-zinc-700">Refresh</button>
       </div>
 
       {order == null ? (
         orderQuery.isLoading ? (
-          <div className="space-y-2">{Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-14 rounded-2xl bg-zinc-100 animate-pulse" />)}</div>
+          <div className="space-y-2" role="status" aria-live="polite" aria-busy="true">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-14 rounded-2xl" />)}</div>
         ) : (
           <div className="rounded-2xl border-2 border-red-200 bg-red-50 p-4 text-red-700 font-medium">
             Couldn't load this order.{' '}
@@ -216,7 +218,7 @@ export default function CheckoutPanel({
           </ul>
 
           {/* Totals: server-authoritative */}
-          <dl className="rounded-2xl border-2 border-zinc-100 p-3 space-y-1 text-sm tabular-nums">
+          <dl className="rounded-2xl border border-zinc-100 p-3 space-y-1 text-sm tabular-nums">
             <div className="flex justify-between"><dt className="text-zinc-500 font-medium">Subtotal</dt><dd className="font-bold">{formatINR(order.subtotal)}</dd></div>
             {order.discount > 0 && <div className="flex justify-between text-emerald-700"><dt className="font-medium">Discount</dt><dd className="font-bold">−{formatINR(order.discount)}</dd></div>}
             {(order.tax_amount ?? 0) > 0 && <div className="flex justify-between"><dt className="text-zinc-500 font-medium">Tax</dt><dd className="font-bold">{formatINR(order.tax_amount ?? 0)}</dd></div>}
@@ -280,7 +282,7 @@ export default function CheckoutPanel({
                   type="button"
                   onClick={openPay}
                   disabled={!canPay}
-                  className="mt-3 w-full h-14 rounded-2xl bg-orange-500 hover:bg-orange-400 font-black text-lg transition-all active:scale-[0.98] disabled:opacity-40"
+                  className="mt-3 w-full h-14 rounded-2xl bg-[var(--pos-accent)] hover:bg-[var(--pos-accent-hover)] font-black text-lg transition-all active:scale-[0.98] disabled:opacity-40"
                 >
                   {canPay ? 'Pay' : 'Pay (manager key required)'}
                 </button>
@@ -320,7 +322,7 @@ export default function CheckoutPanel({
                 value={tendered}
                 onChange={(e) => setTendered(e.target.value)}
                 placeholder={dueRupees.toFixed(2)}
-                className="w-full h-12 rounded-2xl border-2 border-zinc-200 px-4 text-lg font-bold focus:outline-none focus:border-orange-500"
+                className="w-full h-12 rounded-2xl border-2 border-zinc-200 px-4 text-lg font-bold focus:outline-none focus:border-[var(--pos-accent)]"
               />
               <div className="flex gap-2">
                 {[...new Set([Math.ceil(dueRupees), Math.ceil(dueRupees / 100) * 100, Math.ceil(dueRupees / 500) * 500])].map((v) => (
@@ -350,11 +352,11 @@ export default function CheckoutPanel({
             type="button"
             onClick={submitPayment}
             disabled={paying || !validTender}
-            className="w-full h-14 rounded-2xl bg-orange-600 hover:bg-orange-500 disabled:bg-zinc-200 disabled:text-zinc-400 text-white font-black text-lg transition-all active:scale-[0.98]"
+            className="w-full h-14 rounded-2xl bg-[var(--pos-accent)] hover:bg-[var(--pos-accent-hover)] disabled:bg-zinc-200 disabled:text-zinc-400 text-white font-black text-lg transition-all active:scale-[0.98]"
           >
             {paying ? 'Processing payment…' : `Record ${method.toUpperCase()} ${formatINR(dueRupees)}`}
           </button>
-          <p className="text-[11px] text-zinc-400 text-center">Retries reuse the same request key — no double submission.</p>
+          <p className="text-xs text-zinc-400 text-center">Retries reuse the same request key — no double submission.</p>
         </div>
       </Modal>
 
@@ -372,7 +374,7 @@ export default function CheckoutPanel({
 
 function DiscountList({ busy, onPick, onRemove }: { busy: boolean; onPick: (id: number) => void; onRemove: (() => void) | null }) {
   const q = useQuery({ queryKey: ['pos-discounts'], queryFn: posApi.getDiscounts, staleTime: 30_000, retry: 1 });
-  if (q.isLoading) return <div className="space-y-2">{Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-12 rounded-xl bg-zinc-100 animate-pulse" />)}</div>;
+  if (q.isLoading) return <div className="space-y-2" role="status" aria-live="polite" aria-busy="true">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-12 rounded-xl" />)}</div>;
   if (q.isError) return <div className="rounded-xl bg-red-50 p-3 text-sm text-red-700 font-medium" role="alert">Couldn't load discounts. <button type="button" className="font-bold underline" onClick={() => q.refetch()}>Retry</button></div>;
   return (
     <ul className="space-y-2">

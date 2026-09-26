@@ -52,10 +52,10 @@ export default function CartPanel({
       ) : (
         <ul className="flex-1 min-h-0 overflow-y-auto space-y-2 pr-0.5">
           {cart.map((l) => (
-            <li key={l.key} className="rounded-2xl border-2 border-zinc-100 bg-white p-2.5 flex items-center gap-2.5">
+            <li key={l.key} className="rounded-2xl border border-zinc-100 bg-white p-2.5 flex items-center gap-2.5">
               <div className="min-w-0 flex-1">
                 <div className="font-bold text-sm leading-tight truncate">{l.name}</div>
-                <div className="text-[11px] font-semibold text-zinc-400 capitalize">
+                <div className="text-xs font-semibold text-zinc-400 capitalize">
                   {l.size !== 'regular' && l.size}
                   {l.size !== 'regular' && l.crustName && ' · '}
                   {l.crustName}
@@ -70,7 +70,7 @@ export default function CartPanel({
                   type="button"
                   aria-label={`Reduce ${l.name}`}
                   onClick={() => onQty(l.key, -1)}
-                  className="w-10 h-10 rounded-xl bg-zinc-100 hover:bg-zinc-200 font-black text-lg grid place-items-center active:scale-95"
+                  className="w-11 h-11 min-h-[44px] min-w-[44px] rounded-xl bg-zinc-100 hover:bg-zinc-200 font-black text-lg grid place-items-center active:scale-95"
                 >
                   −
                 </button>
@@ -79,7 +79,7 @@ export default function CartPanel({
                   type="button"
                   aria-label={`Increase ${l.name}`}
                   onClick={() => onQty(l.key, 1)}
-                  className="w-10 h-10 rounded-xl bg-zinc-950 text-white hover:bg-zinc-800 font-black text-lg grid place-items-center active:scale-95"
+                  className="w-11 h-11 min-h-[44px] min-w-[44px] rounded-xl bg-zinc-950 text-white hover:bg-zinc-800 font-black text-lg grid place-items-center active:scale-95"
                 >
                   +
                 </button>
@@ -88,7 +88,7 @@ export default function CartPanel({
                 type="button"
                 aria-label={`Remove ${l.name}`}
                 onClick={() => onRemove(l.key)}
-                className="w-10 h-10 rounded-xl text-zinc-300 hover:text-red-600 hover:bg-red-50 grid place-items-center"
+                className="w-11 h-11 min-h-[44px] min-w-[44px] rounded-xl text-zinc-300 hover:text-red-600 hover:bg-red-50 grid place-items-center"
               >
                 <Trash2 size={16} />
               </button>
@@ -105,13 +105,13 @@ export default function CartPanel({
           </div>
         )}
         {missingPrice && (
-          <p className="text-[11px] text-zinc-400">Some items price at the register when the order is created.</p>
+          <p className="text-xs text-zinc-400">Some items price at the register when the order is created.</p>
         )}
         <button
           type="button"
           disabled={!canCreate || creating}
           onClick={onCreate}
-          className="w-full h-14 rounded-2xl bg-orange-600 hover:bg-orange-500 disabled:bg-zinc-200 disabled:text-zinc-400 disabled:cursor-not-allowed text-white font-black text-lg transition-all active:scale-[0.98] shadow-lg shadow-orange-600/25"
+          className="w-full h-14 rounded-2xl bg-[var(--pos-accent,#b91c1c)] hover:bg-[var(--pos-accent-hover,#991b1b)] disabled:bg-zinc-200 disabled:text-zinc-400 disabled:cursor-not-allowed text-white font-black text-lg transition-all active:scale-[0.98] shadow-lg"
         >
           {creating ? 'Creating order…' : 'Create order'}
         </button>

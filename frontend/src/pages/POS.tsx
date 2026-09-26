@@ -371,7 +371,7 @@ function CategoryColumn({ selected, onSelect }: { selected: string; onSelect: (i
   return (
     <div className="p-2 space-y-0.5">
       <button type="button" aria-pressed={selected==='all'} onClick={() => onSelect('all')} className={`w-full text-left px-2 py-2 rounded text-xs font-bold flex justify-between items-center ${selected==='all' ? 'bg-[var(--pos-accent)] text-white' : 'hover:bg-zinc-50 text-zinc-700'}`}>
-        <span>All Items</span><span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded">{cats.length}</span>
+        <span>All Items</span><span className="text-2xs bg-white/20 px-1.5 py-0.5 rounded">{cats.length}</span>
       </button>
       {cats.map((c: { id: number; name: string; isDeliverable?: boolean }) => (
         <button
@@ -463,7 +463,7 @@ function RightBill(props: any) {
         </div>
       )}
       {/* ITEMS header */}
-      <div className="grid grid-cols-[1fr_50px_50px_70px] gap-1 px-2 py-1.5 bg-zinc-900 text-white text-[10px] font-bold tracking-wider">
+      <div className="grid grid-cols-[1fr_50px_50px_70px] gap-1 px-2 py-1.5 bg-zinc-900 text-white text-2xs font-bold tracking-wider">
         <span>ITEMS</span><span className="text-center">CHECK</span><span className="text-center">QTY.</span><span className="text-right">PRICE</span>
       </div>
       {/* List */}
@@ -478,7 +478,7 @@ function RightBill(props: any) {
             <button type="button" aria-label={`Decrease ${l.name}`} onClick={()=>onQty(l.key,-1)} disabled={l.quantity<=1} className="w-11 h-11 min-h-[44px] min-w-[44px] rounded border grid place-items-center disabled:opacity-50 shrink-0">−</button>
             <span className="w-6 text-center shrink-0" aria-live="polite">{l.quantity}</span>
             <button type="button" aria-label={`Increase ${l.name}`} onClick={()=>onQty(l.key,1)} disabled={l.quantity>=20} className="w-11 h-11 min-h-[44px] min-w-[44px] rounded border bg-zinc-900 text-white disabled:opacity-50 grid place-items-center shrink-0">+</button>
-            <span className="w-14 shrink-0 text-right text-[11px] tabular-nums truncate">₹{((l.unitPaise??0)*l.quantity/100).toFixed(2)}</span>
+            <span className="w-14 shrink-0 text-right text-xs tabular-nums truncate">₹{((l.unitPaise??0)*l.quantity/100).toFixed(2)}</span>
             <button type="button" aria-label={`Remove ${l.name}`} onClick={()=> onRequestRemove(l.key, l.name)} className="w-11 h-11 min-h-[44px] min-w-[44px] text-red-600 grid place-items-center text-lg shrink-0">×</button>
           </div>
         )) : (
@@ -499,7 +499,7 @@ function RightBill(props: any) {
           if (br.key === 'tip' && cfg.charges && cfg.charges.tip_enabled === false) return null;
           return (
             <div key={br.key} className="grid grid-cols-[1fr_80px] gap-2 px-3 py-1.5 text-xs odd:bg-zinc-100 even:bg-white border-b">
-              <span className="font-medium">{br.label} {br.key==='discount' && <span className="text-[10px] text-zinc-500"> (after order)</span>}</span>
+              <span className="font-medium">{br.label} {br.key==='discount' && <span className="text-2xs text-zinc-500"> (after order)</span>}</span>
               <span className="text-right tabular-nums">{isDiscount ? `(${currency}${Number(val).toFixed(2)})` : `${currency}${Number(val).toFixed(2)}`}</span>
             </div>
           );

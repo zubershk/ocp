@@ -148,7 +148,7 @@ export default function MenuPanel({
           placeholder="Search menu… (Ctrl+K)"
           aria-label="Search menu (Ctrl+K)"
           aria-keyshortcuts="Control+K"
-          className="w-full h-12 rounded-2xl border-2 border-zinc-200 bg-white pl-10 pr-4 text-base font-medium placeholder:text-zinc-400 focus:outline-none focus:border-orange-500 focus:ring-4 focus:ring-orange-500/15"
+          className="w-full h-12 rounded-2xl border-2 border-zinc-200 bg-white pl-10 pr-4 text-base font-medium placeholder:text-zinc-400 focus:outline-none focus:border-[var(--pos-accent)] focus:ring-4 focus:ring-[var(--pos-accent)]/15"
         />
       </div>
 
@@ -217,11 +217,11 @@ export default function MenuPanel({
                       <ItemImage src={item.image_url} name={item.name} />
                     </div>
                     <div className="p-2">
-                      <div className="font-bold text-[11px] leading-tight line-clamp-2 min-h-7">{item.name}</div>
+                      <div className="font-bold text-xs leading-tight line-clamp-2 min-h-7">{item.name}</div>
                       <div className="mt-1 flex items-center justify-between gap-2">
                         <span className="font-black text-xs tabular-nums">₹{item.price}</span>
                         {!simple || inCart === 0 ? (
-                          <span className="inline-flex items-center gap-1 text-orange-600 font-bold text-sm">
+                          <span className="inline-flex items-center gap-1 text-[var(--pos-accent)] font-bold text-sm">
                             <Plus size={15} aria-hidden /> Add
                           </span>
                         ) : null}
@@ -243,7 +243,7 @@ export default function MenuPanel({
                         type="button"
                         aria-label={`Increase ${item.name}`}
                         onClick={() => onQty(cartLineKey(item.id, 'regular', ''), 1)}
-                        className="w-11 h-11 rounded-xl bg-orange-600 text-white hover:bg-orange-500 grid place-items-center font-bold min-h-[44px] min-w-[44px]"
+                              className="w-11 h-11 rounded-xl bg-[var(--pos-accent)] text-white hover:bg-[var(--pos-accent-hover)] grid place-items-center font-bold min-h-[44px] min-w-[44px]"
                       >
                         <Plus size={15} />
                       </button>
