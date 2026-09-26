@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Minus, Plus, Search } from 'lucide-react';
+import Input from '../ui/Input';
 import { Modal } from '../ui/Modal';
 import { posApi, formatPaise, type PosMenuItem } from '../../services/posService';
 import { useCrusts } from '../../context/CrustContext';
@@ -176,16 +177,14 @@ export default function ItemCustomizer({
           <div className="py-6 text-center text-sm text-zinc-500">Loading addons…</div>
         ) : addonGroups.length > 0 ? (
           <div className="space-y-4">
-            <div className="relative">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" aria-hidden />
-              <input
-                value={addonSearch}
-                onChange={e => setAddonSearch(e.target.value)}
-                placeholder="Search addon item"
-                aria-label="Search addon item"
-                className="w-full h-11 rounded border border-zinc-200 pl-8 pr-3 text-sm focus:outline-none focus:border-[var(--pos-accent)]"
-              />
-            </div>
+            <Input
+              value={addonSearch}
+              onChange={e => setAddonSearch(e.target.value)}
+              placeholder="Search addon item"
+              aria-label="Search addon item"
+              icon={<Search size={14} aria-hidden />}
+              className="h-11"
+            />
             {addonGroups.map(g => {
               const filtered = g.items.filter(it => !addonSearch || it.name.toLowerCase().includes(addonSearch.toLowerCase()));
               const selected = selectedAddons[g.id] ?? new Set<number>();

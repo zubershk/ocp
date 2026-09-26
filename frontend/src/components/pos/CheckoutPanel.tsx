@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Banknote, CreditCard, Pause, QrCode, ReceiptText, Tag, Undo2, XCircle } from 'lucide-react';
 import { Modal } from '../ui/Modal';
 import Badge from '../ui/Badge';
+import Input from '../ui/Input';
 import Skeleton from '../ui/Skeleton';
 import {
   posApi,
@@ -315,14 +316,14 @@ export default function CheckoutPanel({
 
           {method === 'cash' && (
             <div className="space-y-2">
-              <label htmlFor="cash-received" className="block text-xs font-bold uppercase tracking-wider text-zinc-500">Cash received</label>
-              <input
+              <Input
                 id="cash-received"
+                label="Cash received"
                 inputMode="decimal"
                 value={tendered}
                 onChange={(e) => setTendered(e.target.value)}
                 placeholder={dueRupees.toFixed(2)}
-                className="w-full h-12 rounded-2xl border-2 border-zinc-200 px-4 text-lg font-bold focus:outline-none focus:border-[var(--pos-accent)]"
+                className="h-12 rounded-2xl border-2 px-4 text-lg font-bold"
               />
               <div className="flex gap-2">
                 {[...new Set([Math.ceil(dueRupees), Math.ceil(dueRupees / 100) * 100, Math.ceil(dueRupees / 500) * 500])].map((v) => (
