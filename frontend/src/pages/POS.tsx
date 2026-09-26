@@ -313,20 +313,24 @@ export default function POS() {
         Skip to menu
       </a>
       {header}
-      <main id="pos-main" className="mx-auto w-full max-w-[1600px] flex-1 p-2 gap-2 grid grid-cols-1 lg:grid-cols-[220px_1fr] xl:grid-cols-[220px_minmax(0,1fr)_400px] items-start">
-        {/* LEFT - Categories vertical */}
-        <div className="hidden lg:flex lg:flex-col rounded-xl border border-[var(--pos-border)] bg-white overflow-hidden lg:max-h-[calc(100dvh-72px)] lg:sticky lg:top-[66px]">
+      <main id="pos-main" className="mx-auto w-full max-w-[1600px] flex-1 p-2 gap-2 grid grid-cols-1 md:grid-cols-[200px_1fr] lg:grid-cols-[220px_minmax(0,1fr)_340px] xl:grid-cols-[220px_minmax(0,1fr)_400px] items-start">
+        {/* LEFT - Categories vertical (md+; tabs below md/lg breakpoint) */}
+        <div className="hidden md:flex md:flex-col rounded-xl border border-[var(--pos-border)] bg-white overflow-hidden md:max-h-[calc(100dvh-72px)] md:sticky md:top-[66px]">
           <div className="h-9 px-3 flex items-center bg-zinc-900 text-white text-xs font-bold tracking-wider">CATEGORIES</div>
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto min-h-0">
             <CategoryColumn selected={selectedCategory} onSelect={setSelectedCategory} />
           </div>
         </div>
         {/* MIDDLE - Menu grid */}
-        <div className="rounded-xl border border-[var(--pos-border)] bg-white p-3 flex flex-col min-h-0 lg:max-h-[calc(100dvh-72px)] lg:overflow-hidden">
+        <div className="rounded-xl border border-[var(--pos-border)] bg-white p-3 flex flex-col min-h-0 md:max-h-[calc(100dvh-72px)] md:overflow-hidden">
           <MenuPanel onAdd={addLine} outletId={outletId} cart={cart} onQty={(k: string,d: number)=> setCart((p: CartLine[])=>p.map(l=>l.key===k?{...l,quantity:Math.max(1, Math.min(20, l.quantity+d))}:l).filter(l=>l.quantity>0))} selectedCategory={selectedCategory} onSelectCategory={setSelectedCategory} />
         </div>
-        {/* RIGHT - Bill */}
-        <div className="rounded-xl border border-[var(--pos-border)] bg-white overflow-hidden flex flex-col lg:max-h-[calc(100dvh-72px)] xl:sticky xl:top-[66px] lg:col-span-2 xl:col-span-1">
+        {/* Bill anchor — navigation only, no pricing (visible below lg where bill sits under menu) */}
+        <a href="#pos-bill" className="md:col-span-2 lg:hidden rounded-xl border border-[var(--pos-border)] bg-zinc-900 text-white text-sm font-bold text-center py-3 min-h-[44px] flex items-center justify-center gap-2">
+          Go to bill ↓
+        </a>
+        {/* RIGHT - Bill (below on <lg, sticky third column at lg+) */}
+        <div id="pos-bill" className="rounded-xl border border-[var(--pos-border)] bg-white overflow-hidden flex flex-col md:max-h-[calc(100dvh-72px)] md:col-span-2 lg:col-span-1 lg:sticky lg:top-[66px] scroll-mt-[72px]">
           <RightBill
             config={config}
             activeOrderTypes={activeOrderTypes}
@@ -430,18 +434,22 @@ function RightBill(props: any) {
       {(isDine || shouldShowField('phone') || shouldShowField('name') || shouldShowField('address') || shouldShowField('locality')) && (
         <div className="p-3 space-y-3 border-b border-[var(--pos-border)] bg-[var(--pos-panel)]">
           {isDine && (
-            <div className="flex gap-2 items-center">
-              <label htmlFor="pos-table" className="text-xs font-bold w-16">Table No</label>
-              <div className="flex-1 flex gap-1">
-                <button type="button" aria-label="Decrease table number" onClick={()=> setTableId(Math.max(0, tableId-1))} disabled={tableId<=0} className="w-11 h-11 min-h-[44px] min-w-[44px] rounded border bg-white disabled:opacity-50 grid place-items-center">−</button>
-                <input id="pos-table" type="number" inputMode="numeric" min={0} value={tableId || ''} onChange={e=> setTableId(Math.max(0, parseInt(e.target.value)||0))} placeholder="-" className="flex-1 h-11 min-h-[44px] rounded border bg-white text-center text-sm" />
-                <button type="button" aria-label="Increase table number" onClick={()=> setTableId(Math.min(99, tableId+1))} className="w-11 h-11 min-h-[44px] min-w-[44px] rounded border bg-white grid place-items-center">+</button>
+            <div className="space-y-2">
+              <div className="flex gap-2 items-center">
+                <label htmlFor="pos-table" className="text-xs font-bold w-16 shrink-0">Table No</label>
+                <div className="flex-1 flex gap-1 min-w-0">
+                  <button type="button" aria-label="Decrease table number" onClick={()=> setTableId(Math.max(0, tableId-1))} disabled={tableId<=0} className="w-11 h-11 min-h-[44px] min-w-[44px] rounded border bg-white disabled:opacity-50 grid place-items-center shrink-0">−</button>
+                  <input id="pos-table" type="number" inputMode="numeric" min={0} value={tableId || ''} onChange={e=> setTableId(Math.max(0, parseInt(e.target.value)||0))} placeholder="-" className="flex-1 min-w-0 h-11 min-h-[44px] rounded border bg-white text-center text-sm" />
+                  <button type="button" aria-label="Increase table number" onClick={()=> setTableId(Math.min(99, tableId+1))} className="w-11 h-11 min-h-[44px] min-w-[44px] rounded border bg-white grid place-items-center shrink-0">+</button>
+                </div>
               </div>
-              <label htmlFor="pos-guests" className="text-xs font-bold">Guests</label>
-              <div className="flex gap-1 items-center">
-                <button type="button" aria-label="Decrease guests" disabled={(guestCount??1)<=1} onClick={()=> setGuestCount(Math.max(1, (guestCount??1)-1))} className="w-11 h-11 min-h-[44px] min-w-[44px] rounded border bg-white grid place-items-center disabled:opacity-50">−</button>
-                <input id="pos-guests" type="number" min={1} max={50} value={guestCount} onChange={e=> setGuestCount(Math.max(1, Math.min(50, parseInt(e.target.value)||1)))} className="w-14 h-11 min-h-[44px] rounded border bg-white text-center text-sm" />
-                <button type="button" aria-label="Increase guests" disabled={(guestCount??1)>=50} onClick={()=> setGuestCount(Math.min(50, (guestCount??1)+1))} className="w-11 h-11 min-h-[44px] min-w-[44px] rounded border bg-white grid place-items-center disabled:opacity-50">+</button>
+              <div className="flex gap-2 items-center">
+                <label htmlFor="pos-guests" className="text-xs font-bold w-16 shrink-0">Guests</label>
+                <div className="flex-1 flex gap-1 items-center min-w-0">
+                  <button type="button" aria-label="Decrease guests" disabled={(guestCount??1)<=1} onClick={()=> setGuestCount(Math.max(1, (guestCount??1)-1))} className="w-11 h-11 min-h-[44px] min-w-[44px] rounded border bg-white grid place-items-center disabled:opacity-50 shrink-0">−</button>
+                  <input id="pos-guests" type="number" min={1} max={50} value={guestCount} onChange={e=> setGuestCount(Math.max(1, Math.min(50, parseInt(e.target.value)||1)))} className="w-14 h-11 min-h-[44px] rounded border bg-white text-center text-sm shrink-0" />
+                  <button type="button" aria-label="Increase guests" disabled={(guestCount??1)>=50} onClick={()=> setGuestCount(Math.min(50, (guestCount??1)+1))} className="w-11 h-11 min-h-[44px] min-w-[44px] rounded border bg-white grid place-items-center disabled:opacity-50 shrink-0">+</button>
+                </div>
               </div>
             </div>
           )}
@@ -465,13 +473,13 @@ function RightBill(props: any) {
             <div key={it.id} className="flex justify-between text-sm border-b py-1.5"><span>{it.quantity}× {it.name} {it.size?`(${it.size})`:''}{it.addons_snapshot && JSON.parse(it.addons_snapshot||'[]').length? ` +${JSON.parse(it.addons_snapshot).length} addon`:''}</span><span>₹{it.line_total ?? it.subtotal}</span></div>
           )) : <div className="grid place-items-center py-12 text-center" role="status"><div className="text-sm font-bold">No Item Selected</div><div className="text-xs text-zinc-500">Please Select Item from Left Menu</div></div>
         ) : cart.length ? cart.map((l:any)=>(
-          <div key={l.key} className="flex items-center gap-1 border rounded p-1.5 text-sm">
-            <span className="flex-1 truncate" title={l.addons?.map((a:any)=>a.name).join(', ')}>{l.name} {l.size?`(${l.size})`:''}{l.addons?.length? ` +${l.addons.length}`:''}</span>
-            <button type="button" aria-label={`Decrease ${l.name}`} onClick={()=>onQty(l.key,-1)} disabled={l.quantity<=1} className="w-11 h-11 min-h-[44px] min-w-[44px] rounded border grid place-items-center disabled:opacity-50">−</button>
-            <span className="w-6 text-center" aria-live="polite">{l.quantity}</span>
-            <button type="button" aria-label={`Increase ${l.name}`} onClick={()=>onQty(l.key,1)} disabled={l.quantity>=20} className="w-11 h-11 min-h-[44px] min-w-[44px] rounded border bg-zinc-900 text-white disabled:opacity-50 grid place-items-center">+</button>
-            <span className="w-16 text-right text-xs tabular-nums">₹{((l.unitPaise??0)*l.quantity/100).toFixed(2)}</span>
-            <button type="button" aria-label={`Remove ${l.name}`} onClick={()=> onRequestRemove(l.key, l.name)} className="w-11 h-11 min-h-[44px] min-w-[44px] text-red-600 grid place-items-center text-lg">×</button>
+          <div key={l.key} className="flex items-center gap-1 border rounded p-1.5 text-sm min-w-0">
+            <span className="flex-1 min-w-0 truncate" title={`${l.name}${l.addons?.length ? ` + ${l.addons.map((a:any)=>a.name).join(', ')}` : ''}`}>{l.name} {l.size?`(${l.size})`:''}{l.addons?.length? ` +${l.addons.length}`:''}</span>
+            <button type="button" aria-label={`Decrease ${l.name}`} onClick={()=>onQty(l.key,-1)} disabled={l.quantity<=1} className="w-11 h-11 min-h-[44px] min-w-[44px] rounded border grid place-items-center disabled:opacity-50 shrink-0">−</button>
+            <span className="w-6 text-center shrink-0" aria-live="polite">{l.quantity}</span>
+            <button type="button" aria-label={`Increase ${l.name}`} onClick={()=>onQty(l.key,1)} disabled={l.quantity>=20} className="w-11 h-11 min-h-[44px] min-w-[44px] rounded border bg-zinc-900 text-white disabled:opacity-50 grid place-items-center shrink-0">+</button>
+            <span className="w-14 shrink-0 text-right text-[11px] tabular-nums truncate">₹{((l.unitPaise??0)*l.quantity/100).toFixed(2)}</span>
+            <button type="button" aria-label={`Remove ${l.name}`} onClick={()=> onRequestRemove(l.key, l.name)} className="w-11 h-11 min-h-[44px] min-w-[44px] text-red-600 grid place-items-center text-lg shrink-0">×</button>
           </div>
         )) : (
           <div className="grid place-items-center py-12 text-center" role="status">

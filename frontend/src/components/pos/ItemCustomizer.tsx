@@ -295,7 +295,7 @@ export default function ItemCustomizer({
                 } as Omit<CartLine, 'key'>);
                 onClose();
               }}
-              className={`w-full h-14 rounded-2xl font-bold text-lg transition-all active:scale-[0.98] ${canAdd ? 'bg-[var(--pos-accent)] hover:bg-[var(--pos-accent-hover)] text-white' : 'bg-zinc-200 text-zinc-500 cursor-not-allowed'}`}
+              className={`w-full h-14 rounded-2xl font-bold text-lg transition-all active:scale-[0.98] sticky bottom-0 ${canAdd ? 'bg-[var(--pos-accent)] hover:bg-[var(--pos-accent-hover)] text-white shadow-lg' : 'bg-zinc-200 text-zinc-500 cursor-not-allowed'}`}
             >
               {canAdd ? 'Save' : 'Select required addons'} {canAdd && estPaise > 0 && `· ${formatPaise(estPaise * qty)}`}
             </button>

@@ -41,7 +41,7 @@ export default function PosHeader({ outletId, onOutlet, operator, role, heldCoun
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 sm:gap-2 mx-auto">
+        <div className="flex items-center gap-1.5 sm:gap-2 mx-auto min-w-0 flex-1 sm:flex-none justify-center">
           <OutletSwitcher outletId={outletId} onChange={onOutlet} variant="light" />
           <span className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${online ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'}`} role="status" aria-live="polite">
             {online ? <Wifi size={13} /> : <WifiOff size={13} />}
@@ -53,15 +53,16 @@ export default function PosHeader({ outletId, onOutlet, operator, role, heldCoun
           </span>
         </div>
 
-        <div className="ml-auto flex items-center gap-1.5">
-          <button type="button" onClick={onHeld} aria-label={`Held orders${heldCount > 0 ? `, ${heldCount} held` : ''}`} className="h-11 min-h-[44px] px-3 rounded-lg bg-white border border-zinc-200 hover:bg-zinc-50 font-semibold text-xs inline-flex items-center gap-1.5">
+        <div className="ml-auto flex items-center gap-1.5 shrink-0">
+          <button type="button" onClick={onHeld} aria-label={`Held orders${heldCount > 0 ? `, ${heldCount} held` : ''}`} className="h-11 min-h-[44px] px-2 sm:px-3 rounded-lg bg-white border border-zinc-200 hover:bg-zinc-50 font-semibold text-xs inline-flex items-center gap-1.5 shrink-0">
             <PauseCircle size={14} aria-hidden />
-            Held
+            <span className="hidden min-[420px]:inline">Held</span>
             {heldCount > 0 && <span className="min-w-5 h-5 px-1 rounded-full bg-[var(--pos-accent)] text-white text-[11px] font-bold grid place-items-center tabular-nums">{heldCount}</span>}
           </button>
-          <button type="button" onClick={onNewSale} className="h-11 min-h-[44px] px-4 rounded-lg bg-[var(--pos-accent)] hover:bg-[var(--pos-accent-hover)] text-white font-bold text-xs inline-flex items-center gap-1.5 active:scale-95">
+          <button type="button" onClick={onNewSale} className="h-11 min-h-[44px] px-3 sm:px-4 rounded-lg bg-[var(--pos-accent)] hover:bg-[var(--pos-accent-hover)] text-white font-bold text-xs inline-flex items-center gap-1.5 active:scale-95 shrink-0">
             <Plus size={14} aria-hidden />
-            New Order
+            <span className="hidden min-[420px]:inline">New Order</span>
+            <span className="min-[420px]:hidden">New</span>
           </button>
           <button type="button" onClick={onLock} aria-label="Lock terminal" className="h-11 w-11 min-h-[44px] min-w-[44px] rounded-lg bg-white border border-zinc-200 hover:bg-zinc-50 grid place-items-center">
             <Lock size={14} aria-hidden />
