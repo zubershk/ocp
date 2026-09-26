@@ -20,6 +20,7 @@ import CheckoutPanel from '../components/pos/CheckoutPanel';
 import HoldDrawer from '../components/pos/HoldDrawer';
 import { usePosConfig } from '../hooks/usePosConfig';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
+import Input from '../components/ui/Input';
 import ReceiptModal from '../components/pos/ReceiptModal';
 import type { CartLine, HeldOrder, RecordedPayment } from '../components/pos/types';
 
@@ -439,7 +440,7 @@ function RightBill(props: any) {
                 <label htmlFor="pos-table" className="text-xs font-bold w-16 shrink-0">Table No</label>
                 <div className="flex-1 flex gap-1 min-w-0">
                   <button type="button" aria-label="Decrease table number" onClick={()=> setTableId(Math.max(0, tableId-1))} disabled={tableId<=0} className="w-11 h-11 min-h-[44px] min-w-[44px] rounded border bg-white disabled:opacity-50 grid place-items-center shrink-0">−</button>
-                  <input id="pos-table" type="number" inputMode="numeric" min={0} value={tableId || ''} onChange={e=> setTableId(Math.max(0, parseInt(e.target.value)||0))} placeholder="-" className="flex-1 min-w-0 h-11 min-h-[44px] rounded border bg-white text-center text-sm" />
+                  <input id="pos-table" type="number" inputMode="numeric" min={0} value={tableId || ''} onChange={e=> setTableId(Math.max(0, parseInt(e.target.value)||0))} placeholder="-" className="flex-1 min-w-0 h-11 min-h-[44px] rounded border bg-white text-center text-sm focus:outline-none focus:border-[var(--pos-accent)]" />
                   <button type="button" aria-label="Increase table number" onClick={()=> setTableId(Math.min(99, tableId+1))} className="w-11 h-11 min-h-[44px] min-w-[44px] rounded border bg-white grid place-items-center shrink-0">+</button>
                 </div>
               </div>
@@ -447,18 +448,18 @@ function RightBill(props: any) {
                 <label htmlFor="pos-guests" className="text-xs font-bold w-16 shrink-0">Guests</label>
                 <div className="flex-1 flex gap-1 items-center min-w-0">
                   <button type="button" aria-label="Decrease guests" disabled={(guestCount??1)<=1} onClick={()=> setGuestCount(Math.max(1, (guestCount??1)-1))} className="w-11 h-11 min-h-[44px] min-w-[44px] rounded border bg-white grid place-items-center disabled:opacity-50 shrink-0">−</button>
-                  <input id="pos-guests" type="number" min={1} max={50} value={guestCount} onChange={e=> setGuestCount(Math.max(1, Math.min(50, parseInt(e.target.value)||1)))} className="w-14 h-11 min-h-[44px] rounded border bg-white text-center text-sm shrink-0" />
+                  <input id="pos-guests" type="number" min={1} max={50} value={guestCount} onChange={e=> setGuestCount(Math.max(1, Math.min(50, parseInt(e.target.value)||1)))} className="w-14 h-11 min-h-[44px] rounded border bg-white text-center text-sm shrink-0 focus:outline-none focus:border-[var(--pos-accent)]" />
                   <button type="button" aria-label="Increase guests" disabled={(guestCount??1)>=50} onClick={()=> setGuestCount(Math.min(50, (guestCount??1)+1))} className="w-11 h-11 min-h-[44px] min-w-[44px] rounded border bg-white grid place-items-center disabled:opacity-50 shrink-0">+</button>
                 </div>
               </div>
             </div>
           )}
-          <fieldset className="grid grid-cols-[70px_1fr] gap-2 items-center">
+          <fieldset className="space-y-2">
             <legend className="sr-only">Customer details</legend>
-            {shouldShowField('phone') && (<><label htmlFor="pos-phone" className="text-xs font-bold">Mobile:{cfg.customer_fields?.phone?.required ? ' *' : ''}</label><input id="pos-phone" type="tel" inputMode="numeric" autoComplete="tel" maxLength={15} required={!!cfg.customer_fields?.phone?.required} aria-required={!!cfg.customer_fields?.phone?.required} value={customer.phone} onChange={e=> setCustomer({...customer,phone:e.target.value.replace(/[^0-9+\- ]/g,'')})} placeholder="Mobile No." className="h-11 min-h-[44px] rounded border px-2 text-sm" /></>)}
-            {shouldShowField('name') && (<><label htmlFor="pos-name" className="text-xs font-bold">Name:{cfg.customer_fields?.name?.required ? ' *' : ''}</label><input id="pos-name" type="text" autoComplete="name" value={customer.name} onChange={e=> setCustomer({...customer,name:e.target.value})} placeholder="Name" required={!!cfg.customer_fields?.name?.required} aria-required={!!cfg.customer_fields?.name?.required} className="h-11 min-h-[44px] rounded border px-2 text-sm" /></>)}
-            {shouldShowField('address') && (<><label htmlFor="pos-addr" className="text-xs font-bold">Add:{cfg.customer_fields?.address?.required ? ' *' : ''}</label><input id="pos-addr" type="text" autoComplete="street-address" value={customer.address} onChange={e=> setCustomer({...customer,address:e.target.value})} placeholder="Address" required={!!cfg.customer_fields?.address?.required} aria-required={!!cfg.customer_fields?.address?.required} className="h-11 min-h-[44px] rounded border px-2 text-sm" /></>)}
-            {shouldShowField('locality') && (<><label htmlFor="pos-locality" className="text-xs font-bold">Locality:{cfg.customer_fields?.locality?.required ? ' *' : ''}</label><input id="pos-locality" type="text" value={customer.locality} onChange={e=> setCustomer({...customer,locality:e.target.value})} placeholder="Locality" required={!!cfg.customer_fields?.locality?.required} aria-required={!!cfg.customer_fields?.locality?.required} className="h-11 min-h-[44px] rounded border px-2 text-sm" /></>)}
+            {shouldShowField('phone') && (<Input id="pos-phone" label={`Mobile${cfg.customer_fields?.phone?.required ? ' *' : ''}`} type="tel" inputMode="numeric" autoComplete="tel" maxLength={15} required={!!cfg.customer_fields?.phone?.required} aria-required={!!cfg.customer_fields?.phone?.required} value={customer.phone} onChange={e=> setCustomer({...customer,phone:e.target.value.replace(/[^0-9+\- ]/g,'')})} placeholder="Mobile No." className="h-11 min-h-[44px]" />)}
+            {shouldShowField('name') && (<Input id="pos-name" label={`Name${cfg.customer_fields?.name?.required ? ' *' : ''}`} type="text" autoComplete="name" value={customer.name} onChange={e=> setCustomer({...customer,name:e.target.value})} placeholder="Name" required={!!cfg.customer_fields?.name?.required} aria-required={!!cfg.customer_fields?.name?.required} className="h-11 min-h-[44px]" />)}
+            {shouldShowField('address') && (<Input id="pos-addr" label={`Address${cfg.customer_fields?.address?.required ? ' *' : ''}`} type="text" autoComplete="street-address" value={customer.address} onChange={e=> setCustomer({...customer,address:e.target.value})} placeholder="Address" required={!!cfg.customer_fields?.address?.required} aria-required={!!cfg.customer_fields?.address?.required} className="h-11 min-h-[44px]" />)}
+            {shouldShowField('locality') && (<Input id="pos-locality" label={`Locality${cfg.customer_fields?.locality?.required ? ' *' : ''}`} type="text" value={customer.locality} onChange={e=> setCustomer({...customer,locality:e.target.value})} placeholder="Locality" required={!!cfg.customer_fields?.locality?.required} aria-required={!!cfg.customer_fields?.locality?.required} className="h-11 min-h-[44px]" />)}
           </fieldset>
         </div>
       )}
@@ -506,10 +507,10 @@ function RightBill(props: any) {
         })}
         <div className="grid grid-cols-2 gap-2 p-2 bg-white">
           {billRows.find((b:any)=>b.key==='container') && (
-            <label htmlFor="pos-container" className="flex items-center gap-1 text-xs">{billRows.find((b:any)=>b.key==='container')?.label || 'Container'} <input id="pos-container" type="number" inputMode="numeric" min={0} value={containerCharge} onChange={e=>setContainerCharge(Math.max(0, parseFloat(e.target.value)||0))} className="ml-auto w-16 h-11 min-h-[44px] rounded border px-1 text-right" /></label>
+            <label htmlFor="pos-container" className="flex items-center gap-1 text-xs">{billRows.find((b:any)=>b.key==='container')?.label || 'Container'} <input id="pos-container" type="number" inputMode="numeric" min={0} value={containerCharge} onChange={e=>setContainerCharge(Math.max(0, parseFloat(e.target.value)||0))} className="ml-auto w-16 h-11 min-h-[44px] rounded border px-1 text-right focus:outline-none focus:border-[var(--pos-accent)]" /></label>
           )}
           {cfg.charges?.tip_enabled !== false && billRows.find((b:any)=>b.key==='tip') && (
-            <label htmlFor="pos-tip" className="flex items-center gap-1 text-xs">{billRows.find((b:any)=>b.key==='tip')?.label || 'Tip'} <input id="pos-tip" type="number" inputMode="numeric" min={0} value={tip} onChange={e=>setTip(Math.max(0, parseFloat(e.target.value)||0))} className="ml-auto w-16 h-11 min-h-[44px] rounded border px-1 text-right" /></label>
+            <label htmlFor="pos-tip" className="flex items-center gap-1 text-xs">{billRows.find((b:any)=>b.key==='tip')?.label || 'Tip'} <input id="pos-tip" type="number" inputMode="numeric" min={0} value={tip} onChange={e=>setTip(Math.max(0, parseFloat(e.target.value)||0))} className="ml-auto w-16 h-11 min-h-[44px] rounded border px-1 text-right focus:outline-none focus:border-[var(--pos-accent)]" /></label>
           )}
         </div>
       </div>
@@ -525,10 +526,7 @@ function RightBill(props: any) {
           <span className="text-sm font-bold tabular-nums">Total {isComplimentary ? `${currency}0.00` : `${currency}${(total + containerCharge + tip).toFixed(2)}`}</span>
         </div>
         {isAdvance && cfg.features?.advance_order !== false && (
-          <div>
-            <label htmlFor="advance-at" className="text-xs font-bold">Advance time</label>
-            <input id="advance-at" type="datetime-local" value={advanceAt} min={nowLocal} onChange={e=>setAdvanceAt(e.target.value)} aria-label="Advance order time" className="w-full h-11 min-h-[44px] rounded border px-2 text-xs mt-1" />
-          </div>
+          <Input id="advance-at" label="Advance time" type="datetime-local" value={advanceAt} min={nowLocal} onChange={e=>setAdvanceAt(e.target.value)} aria-label="Advance order time" className="h-11 min-h-[44px] text-xs" />
         )}
         {fatal && <div role="alert" aria-live="assertive" aria-atomic="true" className="rounded border border-red-200 bg-red-50 p-2 text-xs text-red-700">{fatal} <button type="button" onClick={()=>setFatal(null)} className="underline">Dismiss</button></div>}
         {notice && <div role="status" aria-live="polite" aria-atomic="true" className="rounded border border-amber-200 bg-amber-50 p-2 text-xs">{notice}</div>}

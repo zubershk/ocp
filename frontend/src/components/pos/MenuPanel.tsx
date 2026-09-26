@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Minus, Plus, Search } from 'lucide-react';
 import Skeleton from '../ui/Skeleton';
+import Input from '../ui/Input';
 import { posApi, type PosMenuItem } from '../../services/posService';
 import { useCrusts } from '../../context/CrustContext';
 import ItemCustomizer from './ItemCustomizer';
@@ -140,15 +141,15 @@ export default function MenuPanel({
     <section aria-label="Menu" className="flex flex-col min-h-0 h-full flex-1 gap-3">
       {/* Search */}
       <div className="relative">
-        <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" aria-hidden />
-        <input
+        <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none z-10" aria-hidden />
+        <Input
           ref={searchRef}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search menu… (Ctrl+K)"
           aria-label="Search menu (Ctrl+K)"
           aria-keyshortcuts="Control+K"
-          className="w-full h-12 rounded-2xl border-2 border-zinc-200 bg-white pl-10 pr-4 text-base font-medium placeholder:text-zinc-400 focus:outline-none focus:border-[var(--pos-accent)] focus:ring-4 focus:ring-[var(--pos-accent)]/15"
+          className="h-12 rounded-2xl border-2 pl-10 pr-4 text-base font-medium"
         />
       </div>
 
