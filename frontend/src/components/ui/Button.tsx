@@ -12,7 +12,7 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const variantStyles: Record<Variant, string> = {
-  primary: 'bg-brand-600 text-white hover:bg-brand-700 shadow-sm hover:shadow-md active:bg-brand-800 focus-visible:ring-brand-500',
+  primary: 'bg-[var(--pos-accent,#b91c1c)] text-white hover:bg-[var(--pos-accent-hover,#991b1b)] shadow-sm hover:shadow-md active:bg-[var(--pos-accent-hover,#991b1b)] focus-visible:ring-[var(--pos-accent,#b91c1c)]',
   secondary: 'bg-white text-zinc-700 border border-zinc-200 hover:border-brand-300 hover:text-brand-600 hover:bg-brand-50/50 focus-visible:ring-brand-500',
   ghost: 'text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 focus-visible:ring-zinc-400',
   danger: 'bg-red-600 text-white hover:bg-red-700 shadow-sm focus-visible:ring-red-500',
@@ -21,8 +21,8 @@ const variantStyles: Record<Variant, string> = {
 
 const sizeStyles: Record<Size, string> = {
   sm: 'h-8 px-3 text-xs rounded-lg gap-1.5',
-  md: 'h-10 px-4 text-sm rounded-xl gap-2',
-  lg: 'h-12 px-6 text-base rounded-xl gap-2.5',
+  md: 'h-10 min-h-[44px] px-4 text-sm rounded-xl gap-2',
+  lg: 'h-12 min-h-[44px] px-6 text-base rounded-xl gap-2.5',
   icon: 'h-10 w-10 rounded-xl p-0 justify-center',
 };
 

@@ -183,7 +183,7 @@ export default function ItemCustomizer({
                 onChange={e => setAddonSearch(e.target.value)}
                 placeholder="Search addon item"
                 aria-label="Search addon item"
-                className="w-full h-11 rounded border border-zinc-200 pl-8 pr-3 text-sm focus:outline-none focus:border-zinc-400"
+                className="w-full h-11 rounded border border-zinc-200 pl-8 pr-3 text-sm focus:outline-none focus:border-[var(--pos-accent)]"
               />
             </div>
             {addonGroups.map(g => {
@@ -226,7 +226,7 @@ export default function ItemCustomizer({
                         >
                           <span className="text-xs font-medium leading-tight line-clamp-2">{it.name}</span>
                           <span className="text-sm font-bold">₹{it.price}</span>
-                          {isSel && <span className="text-[10px]">✓ Selected</span>}
+                          {isSel && <span className="text-2xs">✓ Selected</span>}
                         </button>
                       );
                     })}

@@ -49,7 +49,7 @@ export default function HeldDrawer({
                 type="button"
                 onClick={() => onResume(h)}
                 disabled={resumingId != null}
-                className="h-11 px-4 rounded-xl bg-orange-600 hover:bg-orange-500 disabled:opacity-50 text-white font-bold text-sm inline-flex items-center gap-1.5 transition-all active:scale-95"
+                className="h-11 px-4 rounded-xl bg-[var(--pos-accent)] hover:bg-[var(--pos-accent-hover)] disabled:opacity-50 text-white font-bold text-sm inline-flex items-center gap-1.5 transition-all active:scale-95"
               >
                 <Play size={14} /> {resumingId === h.id ? 'Resuming…' : 'Resume'}
               </button>
@@ -58,7 +58,7 @@ export default function HeldDrawer({
         </ul>
       )}
       {held.length > 4 && (
-        <p className="text-[11px] text-zinc-400 text-center mt-2 inline-flex items-center gap-1 justify-center w-full">
+        <p className="text-xs text-zinc-400 text-center mt-2 inline-flex items-center gap-1 justify-center w-full">
           <Search size={11} /> Use order search to find older held orders.
         </p>
       )}
