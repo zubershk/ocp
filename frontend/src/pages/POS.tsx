@@ -345,11 +345,17 @@ export default function POS() {
             isAdvance={isAdvance} setIsAdvance={setIsAdvance} advanceAt={advanceAt} setAdvanceAt={setAdvanceAt}
             onQty={(k: string,d: number)=> setCart((p: CartLine[])=>p.map(l=>l.key===k?{...l,quantity:Math.min(20, Math.max(1, l.quantity+d))}:l).filter(l=>l.quantity>0))}
             onCreate={createOrder} creating={creating} canCreate={cart.length>0}
-            payments={payments}
+            // checkout props — live CheckoutPanel once the order exists
+            payments={payments} duePaise={duePaise ?? (order ? toPaise(order.total) : 0)}
+            onPaid={(p: RecordedPayment,due: number)=>{setPayments((prev: RecordedPayment[])=>[...prev,p]); setDuePaise(due);}}
+            onCompleted={()=>{queryClient.invalidateQueries({queryKey:['pos-order',orderId]}); setReceiptOpen(true);}}
             onHold={async()=>{ if(orderId==null) return; setHolding(true); try{await posApi.holdOrder(orderId); const d=await posApi.getOrder(orderId); setHeld((prev: HeldOrder[])=>[{id:d.id,orderNumber:d.order_number,total:d.total,at:new Date().toISOString()},...prev].slice(0,20)); resetSale(); setNotice(`Order #${d.order_number} held.`);}catch(e){setNotice(posErrorMessage(e as Error).message);}finally{setHolding(false);}}}
             onCancel={async()=>{ if(orderId==null) return; setPendingConfirm({ kind: 'cancel' }); }}
+            onModify={()=>{ setNotice('To change items, cancel this order and start a new sale.'); }}
+            onReceipt={()=>setReceiptOpen(true)}
             onRequestRemove={(key: string, name: string)=> setPendingConfirm({ kind: 'remove', key, name })}
             onRequestClear={(count: number)=> setPendingConfirm({ kind: 'clear', count })}
+            canPay={canPay} canDiscount={canDiscount}
             fatal={fatal} setFatal={setFatal} notice={notice}
           />
         </div>
@@ -392,7 +398,7 @@ function CategoryColumn({ selected, onSelect }: { selected: string; onSelect: (i
 }
 
 function RightBill(props: any) {
-  const { config, activeOrderTypes, orderType, onOrderType, tableId, setTableId, guestCount, setGuestCount, customer, setCustomer, cart, order, orderId, containerCharge, setContainerCharge, tip, setTip, isComplimentary, setIsComplimentary, isAdvance, setIsAdvance, advanceAt, setAdvanceAt, onQty, onCreate, creating, canCreate, payments, onHold, onCancel, onRequestRemove, onRequestClear, fatal, setFatal, notice } = props;
+  const { config, activeOrderTypes, orderType, onOrderType, tableId, setTableId, guestCount, setGuestCount, customer, setCustomer, cart, order, orderId, containerCharge, setContainerCharge, tip, setTip, isComplimentary, setIsComplimentary, isAdvance, setIsAdvance, advanceAt, setAdvanceAt, onQty, onCreate, creating, canCreate, payments, duePaise, onPaid, onCompleted, onHold, onCancel, onModify, onReceipt, onRequestRemove, onRequestClear, canPay, canDiscount, fatal, setFatal, notice } = props;
   const cfg = config ?? { order_types: [{key:'dine_in',label:'Dine In',active:true},{key:'delivery',label:'Delivery',active:true},{key:'takeaway',label:'Take Away',active:true}], bill_rows: [{key:'subtotal',label:'Sub Total',visible:true},{key:'discount',label:'Discount',visible:true},{key:'container',label:'Container Charge',visible:true},{key:'tax',label:'Tax',visible:true},{key:'round_off',label:'Round Off',visible:true},{key:'customer_paid',label:'Customer Paid',visible:true},{key:'return_to_customer',label:'Return to Customer',visible:true},{key:'tip',label:'Tip',visible:true}], charges: {container_default:0,tip_enabled:true}, features: {complimentary:true,advance_order:true}, ui:{currency_symbol:'₹'}, customer_fields:{phone:{visible:true,for:['delivery','takeaway']},name:{visible:true,for:['dine_in','delivery','takeaway']},address:{visible:true,for:['delivery']},locality:{visible:true,for:['delivery']}} };
   const currency = cfg.ui?.currency_symbol || '₹';
   const subTotal = order ? order.subtotal : cart.reduce((s:number,l:any)=> s + (l.unitPaise ?? 0)*l.quantity,0)/100;
@@ -535,10 +541,19 @@ function RightBill(props: any) {
             {creating ? 'Creating order…' : 'Save'}
           </button>
         ) : (
-          <div className="grid grid-cols-2 gap-2">
-            {cfg.features?.hold !== false && <button type="button" onClick={onHold} className="h-11 min-h-[44px] rounded bg-amber-600 text-white text-xs font-bold">Hold</button>}
-            <button type="button" onClick={onCancel} className="h-11 min-h-[44px] rounded border text-xs font-bold">Cancel</button>
-          </div>
+          <CheckoutPanel
+            orderId={orderId}
+            payments={payments}
+            duePaise={duePaise}
+            onPaid={onPaid}
+            onCompleted={onCompleted}
+            onHold={onHold}
+            onCancel={onCancel}
+            onModify={onModify}
+            onReceipt={onReceipt}
+            canPay={canPay}
+            canDiscount={canDiscount}
+          />
         )}
       </div>
     </div>
