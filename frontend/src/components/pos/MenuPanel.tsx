@@ -196,7 +196,7 @@ export default function MenuPanel({
       ) : (
         <ul className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2 overflow-y-auto flex-1 min-h-0 pb-3">
           {items.map((item) => {
-            const inCart = qtyByKey.get(`${item.id}|regular|`) ?? 0;
+            const inCart = qtyByKey.get(cartLineKey(item.id, 'regular', '')) ?? 0;
             const simple = isSimple(item);
             const hasCart = inCart > 0;
             return (
