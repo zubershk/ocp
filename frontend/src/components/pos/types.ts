@@ -29,5 +29,12 @@ export interface HeldOrder {
   at: string;
 }
 
+export interface CustomerInfo {
+  phone: string;
+  name: string;
+  address: string;
+  locality: string;
+}
+
 export const cartLineKey = (menuItemID: number, size: string, crust: string, addonKey?: string): string =>
   `${menuItemID}|${size}|${crust}|${addonKey ?? ''}`;
