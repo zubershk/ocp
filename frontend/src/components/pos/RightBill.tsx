@@ -1,3 +1,4 @@
+import type React from 'react';
 import Input from '../ui/Input';
 import CheckoutPanel from './CheckoutPanel';
 import type { POSConfig } from '../../hooks/usePosConfig';
@@ -42,6 +43,8 @@ export interface RightBillProps {
   onReceipt: () => void;
   canPay: boolean;
   canDiscount: boolean;
+  lineRefs: React.RefObject<Map<string, HTMLDivElement>>;
+  pulseKey: string | null;
   onRequestRemove: (key: string, name: string) => void;
   onRequestClear: (count: number) => void;
   fatal: string | null;
@@ -115,12 +118,14 @@ function shouldShowField(cfg: POSConfig, orderType: PosOrderType, key: string): 
   return f.for.includes(orderType);
 }
 
-function CartLines({ order, cart, onQty, onRequestRemove, onRequestClear }: {
+function CartLines({ order, cart, onQty, onRequestRemove, onRequestClear, lineRefs, pulseKey }: {
   order: PosOrder | undefined;
   cart: CartLine[];
   onQty: (key: string, delta: number) => void;
   onRequestRemove: (key: string, name: string) => void;
   onRequestClear: (count: number) => void;
+  lineRefs: React.RefObject<Map<string, HTMLDivElement>>;
+  pulseKey: string | null;
 }) {
   return (
     <div className="flex-1 overflow-y-auto p-2 space-y-2 bg-white min-h-[200px]">
@@ -129,7 +134,11 @@ function CartLines({ order, cart, onQty, onRequestRemove, onRequestClear }: {
           <div key={it.id} className="flex justify-between text-sm border-b py-1.5"><span>{it.quantity}× {it.name} {it.size ? `(${it.size})` : ''}{it.addons_snapshot && JSON.parse(it.addons_snapshot || '[]').length ? ` +${JSON.parse(it.addons_snapshot).length} addon` : ''}</span><span>₹{it.line_total ?? it.subtotal}</span></div>
         )) : <div className="grid place-items-center py-12 text-center" role="status"><div className="text-sm font-bold">No Item Selected</div><div className="text-xs text-zinc-500">Please Select Item from Left Menu</div></div>
       ) : cart.length ? cart.map((l) => (
-        <div key={l.key} className="border rounded p-1.5 text-sm min-w-0 space-y-1.5">
+        <div
+          key={l.key}
+          ref={(el) => { if (el) lineRefs.current.set(l.key, el); else lineRefs.current.delete(l.key); }}
+          className={`border rounded p-1.5 text-sm min-w-0 space-y-1.5 transition-colors ${pulseKey === l.key ? 'border-[var(--pos-accent)] bg-amber-50' : ''}`}
+        >
           <div className="flex items-center gap-2 min-w-0">
             <span className="flex-1 min-w-0 truncate" title={`${l.name}${l.addons?.length ? ` + ${l.addons.map((a) => a.name).join(', ')}` : ''}`}>{l.name} {l.size ? `(${l.size})` : ''}{l.addons?.length ? ` +${l.addons.length}` : ''}</span>
             <span className="shrink-0 text-xs font-bold tabular-nums">₹{((l.unitPaise ?? 0) * l.quantity / 100).toFixed(2)}</span>
@@ -154,7 +163,7 @@ function CartLines({ order, cart, onQty, onRequestRemove, onRequestClear }: {
 }
 
 export default function RightBill(props: RightBillProps) {
-  const { config, activeOrderTypes, orderType, onOrderType, tableId, setTableId, guestCount, setGuestCount, customer, setCustomer, cart, order, orderId, containerCharge, setContainerCharge, tip, setTip, isComplimentary, setIsComplimentary, isAdvance, setIsAdvance, advanceAt, setAdvanceAt, onQty, onCreate, creating, canCreate, payments, duePaise, onPaid, onCompleted, onHold, onCancel, onModify, onReceipt, canPay, canDiscount, onRequestRemove, onRequestClear, fatal, setFatal, notice } = props;
+  const { config, activeOrderTypes, orderType, onOrderType, tableId, setTableId, guestCount, setGuestCount, customer, setCustomer, cart, order, orderId, containerCharge, setContainerCharge, tip, setTip, isComplimentary, setIsComplimentary, isAdvance, setIsAdvance, advanceAt, setAdvanceAt, onQty, onCreate, creating, canCreate, payments, duePaise, onPaid, onCompleted, onHold, onCancel, onModify, onReceipt, canPay, canDiscount, lineRefs, pulseKey, onRequestRemove, onRequestClear, fatal, setFatal, notice } = props;
   const cfg = config;
   const currency = cfg.ui?.currency_symbol || '₹';
   // Display-only estimates for immediate UI feedback (quantity/addon/cart edits).
@@ -191,7 +200,7 @@ export default function RightBill(props: RightBillProps) {
       <div className="px-2 py-1.5 bg-zinc-900 text-white text-2xs font-bold tracking-wider">
         ITEMS ({order ? ((order.items ?? []).length) : cart.length})
       </div>
-      <CartLines order={order} cart={cart} onQty={onQty} onRequestRemove={onRequestRemove} onRequestClear={onRequestClear} />
+      <CartLines order={order} cart={cart} onQty={onQty} onRequestRemove={onRequestRemove} onRequestClear={onRequestClear} lineRefs={lineRefs} pulseKey={pulseKey} />
       <div className="border-t">
         {billRows.map((br) => {
           const val = rowValues[br.key] ?? 0;

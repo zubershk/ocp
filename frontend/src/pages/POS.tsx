@@ -22,6 +22,8 @@ import { usePosConfig } from '../hooks/usePosConfig';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import CategoryColumn from '../components/pos/CategoryColumn';
 import RightBill from '../components/pos/RightBill';
+import Input from '../components/ui/Input';
+import { useToast } from '../context/ToastContext';
 import ReceiptModal from '../components/pos/ReceiptModal';
 import type { CartLine, CustomerInfo, HeldOrder, RecordedPayment } from '../components/pos/types';
 
@@ -68,6 +70,11 @@ export default function POS() {
   const [holdOpen, setHoldOpen] = useState(false);
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm>(null);
+  const toast = useToast();
+  // Last-added cart line: drives toast-adjacent highlight + scroll-into-view.
+  const [lastAddedKey, setLastAddedKey] = useState<string | null>(null);
+  const [pulseKey, setPulseKey] = useState<string | null>(null);
+  const lineRefs = useRef(new Map<string, HTMLDivElement>());
   const queryClient = useQueryClient();
 
   // Customer / extra billing state
@@ -173,7 +180,34 @@ const canDiscount = ['owner', 'manager'].includes(role);
       return [...prev, { ...line, key, quantity: Math.min(20, line.quantity), addons: line.addons } as CartLine];
     });
     setNotice(null);
-  }, []);
+    // Confirmation feedback: toast + highlight + scroll. No cart/pricing/order change.
+    setLastAddedKey(key);
+    setPulseKey(key);
+    toast.push({
+      type: 'success',
+      title: `${Math.min(20, line.quantity)}× ${line.name} added`,
+      action: {
+        label: 'View bill',
+        onClick: () => document.getElementById('pos-bill')?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+      },
+    });
+  }, [toast]);
+
+  // Scroll the newly added bill line into view inside the bill list.
+  useEffect(() => {
+    if (lastAddedKey == null) return;
+    const t = requestAnimationFrame(() => {
+      lineRefs.current.get(lastAddedKey)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
+    return () => cancelAnimationFrame(t);
+  }, [cart, lastAddedKey]);
+
+  // Clear the highlight pulse shortly after render.
+  useEffect(() => {
+    if (pulseKey == null) return;
+    const t = setTimeout(() => setPulseKey(null), 1600);
+    return () => clearTimeout(t);
+  }, [pulseKey]);
 
   const createOrder = async () => {
     if (cart.length === 0) return;
@@ -355,6 +389,7 @@ const canDiscount = ['owner', 'manager'].includes(role);
             onRequestRemove={(key: string, name: string)=> setPendingConfirm({ kind: 'remove', key, name })}
             onRequestClear={(count: number)=> setPendingConfirm({ kind: 'clear', count })}
             canPay={canPay} canDiscount={canDiscount}
+            lineRefs={lineRefs} pulseKey={pulseKey}
             fatal={fatal} setFatal={setFatal} notice={notice}
           />
         </div>
