@@ -365,3 +365,4 @@ const canDiscount = ['owner', 'manager'].includes(role);
     </div>
   );
 }
+ (Frontend: POS responsive sizing — fluid auto-fill menu grid, truthful ITEMS header, two-line cart rows (44px kept))

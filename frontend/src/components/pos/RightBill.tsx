@@ -129,13 +129,17 @@ function CartLines({ order, cart, onQty, onRequestRemove, onRequestClear }: {
           <div key={it.id} className="flex justify-between text-sm border-b py-1.5"><span>{it.quantity}× {it.name} {it.size ? `(${it.size})` : ''}{it.addons_snapshot && JSON.parse(it.addons_snapshot || '[]').length ? ` +${JSON.parse(it.addons_snapshot).length} addon` : ''}</span><span>₹{it.line_total ?? it.subtotal}</span></div>
         )) : <div className="grid place-items-center py-12 text-center" role="status"><div className="text-sm font-bold">No Item Selected</div><div className="text-xs text-zinc-500">Please Select Item from Left Menu</div></div>
       ) : cart.length ? cart.map((l) => (
-        <div key={l.key} className="flex items-center gap-1 border rounded p-1.5 text-sm min-w-0">
-          <span className="flex-1 min-w-0 truncate" title={`${l.name}${l.addons?.length ? ` + ${l.addons.map((a) => a.name).join(', ')}` : ''}`}>{l.name} {l.size ? `(${l.size})` : ''}{l.addons?.length ? ` +${l.addons.length}` : ''}</span>
-          <button type="button" aria-label={`Decrease ${l.name}`} onClick={() => onQty(l.key, -1)} disabled={l.quantity <= 1} className="w-11 h-11 min-h-[44px] min-w-[44px] rounded border grid place-items-center disabled:opacity-50 shrink-0">−</button>
-          <span className="w-6 text-center shrink-0" aria-live="polite">{l.quantity}</span>
-          <button type="button" aria-label={`Increase ${l.name}`} onClick={() => onQty(l.key, 1)} disabled={l.quantity >= 20} className="w-11 h-11 min-h-[44px] min-w-[44px] rounded border bg-zinc-900 text-white disabled:opacity-50 grid place-items-center shrink-0">+</button>
-          <span className="w-14 shrink-0 text-right text-xs tabular-nums truncate">₹{((l.unitPaise ?? 0) * l.quantity / 100).toFixed(2)}</span>
-          <button type="button" aria-label={`Remove ${l.name}`} onClick={() => onRequestRemove(l.key, l.name)} className="w-11 h-11 min-h-[44px] min-w-[44px] text-red-600 grid place-items-center text-lg shrink-0">×</button>
+        <div key={l.key} className="border rounded p-1.5 text-sm min-w-0 space-y-1.5">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="flex-1 min-w-0 truncate" title={`${l.name}${l.addons?.length ? ` + ${l.addons.map((a) => a.name).join(', ')}` : ''}`}>{l.name} {l.size ? `(${l.size})` : ''}{l.addons?.length ? ` +${l.addons.length}` : ''}</span>
+            <span className="shrink-0 text-xs font-bold tabular-nums">₹{((l.unitPaise ?? 0) * l.quantity / 100).toFixed(2)}</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <button type="button" aria-label={`Decrease ${l.name}`} onClick={() => onQty(l.key, -1)} disabled={l.quantity <= 1} className="w-11 h-11 min-h-[44px] min-w-[44px] rounded border grid place-items-center disabled:opacity-50 shrink-0">−</button>
+            <span className="w-6 text-center shrink-0" aria-live="polite">{l.quantity}</span>
+            <button type="button" aria-label={`Increase ${l.name}`} onClick={() => onQty(l.key, 1)} disabled={l.quantity >= 20} className="w-11 h-11 min-h-[44px] min-w-[44px] rounded border bg-zinc-900 text-white disabled:opacity-50 grid place-items-center shrink-0">+</button>
+            <button type="button" aria-label={`Remove ${l.name}`} onClick={() => onRequestRemove(l.key, l.name)} className="w-11 h-11 min-h-[44px] min-w-[44px] ml-auto rounded border border-red-200 text-red-600 grid place-items-center text-lg shrink-0">×</button>
+          </div>
         </div>
       )) : (
         <div className="grid place-items-center py-12 text-center" role="status">
@@ -184,8 +188,8 @@ export default function RightBill(props: RightBillProps) {
       {(isDine || shouldShowField(cfg, orderType, 'phone') || shouldShowField(cfg, orderType, 'name') || shouldShowField(cfg, orderType, 'address') || shouldShowField(cfg, orderType, 'locality')) && (
         <CustomerSection cfg={cfg} orderType={orderType} isDine={isDine} tableId={tableId} setTableId={setTableId} guestCount={guestCount} setGuestCount={setGuestCount} customer={customer} setCustomer={setCustomer} />
       )}
-      <div className="grid grid-cols-[1fr_50px_50px_70px] gap-1 px-2 py-1.5 bg-zinc-900 text-white text-2xs font-bold tracking-wider">
-        <span>ITEMS</span><span className="text-center">CHECK</span><span className="text-center">QTY.</span><span className="text-right">PRICE</span>
+      <div className="px-2 py-1.5 bg-zinc-900 text-white text-2xs font-bold tracking-wider">
+        ITEMS ({order ? ((order.items ?? []).length) : cart.length})
       </div>
       <CartLines order={order} cart={cart} onQty={onQty} onRequestRemove={onRequestRemove} onRequestClear={onRequestClear} />
       <div className="border-t">
