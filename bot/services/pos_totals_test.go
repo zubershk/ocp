@@ -83,6 +83,21 @@ func TestOrderAddonUnmarshalLegacy(t *testing.T) {
 	}
 }
 
+func TestSplitDue(t *testing.T) {
+	if due, over := splitDue(10000, 4000, 0); due != 6000 || over != 0 {
+		t.Fatalf("expected due=6000 over=0, got due=%d over=%d", due, over)
+	}
+	if due, over := splitDue(10000, 10000, 0); due != 0 || over != 0 {
+		t.Fatalf("expected paid exact, got due=%d over=%d", due, over)
+	}
+	if due, over := splitDue(10000, 12000, 0); due != 0 || over != 2000 {
+		t.Fatalf("expected due=0 over=2000, got due=%d over=%d", due, over)
+	}
+	if due, over := splitDue(10000, 12000, 3000); due != 1000 || over != 0 {
+		t.Fatalf("expected due=1000 over=0, got due=%d over=%d", due, over)
+	}
+}
+
 func TestPaiseToRupees(t *testing.T) {
 	if got := paiseToRupees(94500); got != 945.0 {
 		t.Fatalf("expected 945.0, got %v", got)

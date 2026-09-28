@@ -718,10 +718,7 @@ func ledgerDueTx(tx *sql.Tx, orderID int, totalRupees float64) (paidPaise, refun
 	}
 	paidPaise = paiseFromDecimal(paidRupees)
 	refundedPaise = paiseFromDecimal(refundedRupees)
-	duePaise = totalPaise - paidPaise + refundedPaise
-	if duePaise < 0 {
-		duePaise = 0
-	}
+	duePaise, _ = splitDue(totalPaise, paidPaise, refundedPaise)
 	return paidPaise, refundedPaise, duePaise, nil
 }
 
@@ -946,6 +943,96 @@ func (s *POSOrderService) ListHeldOrders(restaurantID, outletID int) ([]HeldOrde
 		out = []HeldOrderInfo{}
 	}
 	return out, rows.Err()
+}
+
+// LedgerPayment is one order_payments row in paise for API consumers.
+type LedgerPayment struct {
+	ID            int       `json:"id"`
+	Method        string    `json:"method"`
+	AmountPaise   int64     `json:"amount_paise"`
+	TenderedPaise int64     `json:"tendered_paise"`
+	Reference     string    `json:"reference"`
+	RefundOf      *int      `json:"refund_of,omitempty"`
+	CreatedAt     time.Time `json:"created_at"`
+}
+
+// LedgerSummary is the server-authoritative payment state of an order.
+type LedgerSummary struct {
+	Payments      []LedgerPayment `json:"payments"`
+	TotalPaise    int64           `json:"total_paise"`
+	PaidPaise     int64           `json:"paid_paise"`
+	RefundedPaise int64           `json:"refunded_paise"`
+	DuePaise      int64           `json:"due_paise"`
+	OverpaidPaise int64           `json:"overpaid_paise"`
+}
+
+// GetPaymentLedger returns the server-authoritative payment state of an
+// order. Read-only: no lock is taken, so a concurrent writer may
+// interleave between this read and a later POST. Callers revalidate on
+// TakePayment/CompleteOrder, which lock the order row.
+func (s *POSOrderService) GetPaymentLedger(orderID, restaurantID, outletID int) (*LedgerSummary, error) {
+	var totalRupees float64
+	var orderRestaurantID, orderOutletID int
+	err := database.DB.QueryRow(
+		`SELECT restaurant_id, outlet_id, total FROM orders WHERE id = $1`,
+		orderID).Scan(&orderRestaurantID, &orderOutletID, &totalRupees)
+	if err == sql.ErrNoRows {
+		return nil, ErrOrderNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	if orderRestaurantID != restaurantID || orderOutletID != outletID {
+		return nil, ErrOrderTenantMismatch
+	}
+	var paidRupees, refundedRupees float64
+	if err := database.DB.QueryRow(
+		`SELECT COALESCE(SUM(amount), 0) FROM order_payments WHERE order_id = $1 AND amount > 0`, orderID).Scan(&paidRupees); err != nil {
+		return nil, fmt.Errorf("failed to sum payments: %w", err)
+	}
+	if err := database.DB.QueryRow(
+		`SELECT COALESCE(SUM(ABS(amount)), 0) FROM order_payments WHERE order_id = $1 AND amount < 0`, orderID).Scan(&refundedRupees); err != nil {
+		return nil, fmt.Errorf("failed to sum refunds: %w", err)
+	}
+	totalPaise := rounding(totalRupees)
+	paidPaise := paiseFromDecimal(paidRupees)
+	refundedPaise := paiseFromDecimal(refundedRupees)
+	duePaise, overpaidPaise := splitDue(totalPaise, paidPaise, refundedPaise)
+
+	rows, err := database.DB.Query(
+		`SELECT id, method, amount, tendered, reference, refund_of, created_at
+		 FROM order_payments WHERE order_id = $1 ORDER BY id`, orderID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []LedgerPayment{}
+	for rows.Next() {
+		var p LedgerPayment
+		var amountRupees, tenderedRupees float64
+		var refundOf sql.NullInt64
+		if err := rows.Scan(&p.ID, &p.Method, &amountRupees, &tenderedRupees, &p.Reference, &refundOf, &p.CreatedAt); err != nil {
+			return nil, err
+		}
+		p.AmountPaise = paiseFromDecimal(amountRupees)
+		p.TenderedPaise = paiseFromDecimal(tenderedRupees)
+		if refundOf.Valid {
+			v := int(refundOf.Int64)
+			p.RefundOf = &v
+		}
+		out = append(out, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return &LedgerSummary{
+		Payments:      out,
+		TotalPaise:    totalPaise,
+		PaidPaise:     paidPaise,
+		RefundedPaise: refundedPaise,
+		DuePaise:      duePaise,
+		OverpaidPaise: overpaidPaise,
+	}, nil
 }
 
 // TakePayment records a payment against an order. Returns the payment ID,
