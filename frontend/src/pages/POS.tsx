@@ -364,7 +364,7 @@ const canDiscount = ['owner', 'manager'].includes(role);
           Go to bill ↓
         </a>
         {/* RIGHT - Bill (below on <lg, sticky third column at lg+) */}
-        <div id="pos-bill" className="rounded-xl border border-[var(--pos-border)] bg-white overflow-hidden flex flex-col md:max-h-[calc(100dvh-72px)] md:col-span-2 lg:col-span-1 lg:sticky lg:top-[66px] scroll-mt-[72px]">
+        <div id="pos-bill" className="@container rounded-xl border border-[var(--pos-border)] bg-white overflow-hidden flex flex-col min-h-0 md:col-span-2 lg:col-span-1 lg:h-[calc(100dvh-72px)] lg:sticky lg:top-[66px] scroll-mt-[72px]">
           <RightBill
             config={config}
             activeOrderTypes={activeOrderTypes}
@@ -386,6 +386,7 @@ const canDiscount = ['owner', 'manager'].includes(role);
             onCancel={async()=>{ if(orderId==null) return; setPendingConfirm({ kind: 'cancel' }); }}
             onModify={()=>{ setNotice('To change items, cancel this order and start a new sale.'); }}
             onReceipt={()=>setReceiptOpen(true)}
+            onSavePrint={()=>{ setReceiptOpen(true); setTimeout(()=>window.print(), 450); }}
             onRequestRemove={(key: string, name: string)=> setPendingConfirm({ kind: 'remove', key, name })}
             onRequestClear={(count: number)=> setPendingConfirm({ kind: 'clear', count })}
             canPay={canPay} canDiscount={canDiscount}
