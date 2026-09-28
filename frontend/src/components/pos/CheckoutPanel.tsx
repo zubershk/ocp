@@ -309,7 +309,7 @@ export default function CheckoutPanel({
                   type="button"
                   onClick={openPay}
                   disabled={!canPay}
-                  className={compact ? 'mt-2 w-full h-12 rounded-2xl bg-[var(--pos-accent)] hover:bg-[var(--pos-accent-hover)] font-black text-base transition-all active:scale-[0.98] disabled:opacity-40' : 'mt-3 w-full h-14 rounded-2xl bg-[var(--pos-accent)] hover:bg-[var(--pos-accent-hover)] font-black text-lg transition-all active:scale-[0.98] disabled:opacity-40'}
+                  className={compact ? 'mt-2 w-full h-12 rounded-2xl bg-[var(--pos-accent,#b91c1c)] hover:bg-[var(--pos-accent-hover,#991b1b)] font-black text-base transition-all active:scale-[0.98] disabled:opacity-40' : 'mt-3 w-full h-14 rounded-2xl bg-[var(--pos-accent,#b91c1c)] hover:bg-[var(--pos-accent-hover,#991b1b)] font-black text-lg transition-all active:scale-[0.98] disabled:opacity-40'}
                 >
                   {canPay ? 'Pay' : 'Pay (manager key required)'}
                 </button>
@@ -379,7 +379,7 @@ export default function CheckoutPanel({
             type="button"
             onClick={submitPayment}
             disabled={paying || !validTender}
-            className="w-full h-14 rounded-2xl bg-[var(--pos-accent)] hover:bg-[var(--pos-accent-hover)] disabled:bg-zinc-200 disabled:text-zinc-400 text-white font-black text-lg transition-all active:scale-[0.98]"
+            className="w-full h-14 rounded-2xl bg-[var(--pos-accent,#b91c1c)] hover:bg-[var(--pos-accent-hover,#991b1b)] disabled:bg-zinc-200 disabled:text-zinc-400 text-white font-black text-lg transition-all active:scale-[0.98]"
           >
             {paying ? 'Processing payment…' : `Record ${method.toUpperCase()} ${formatINR(dueRupees)}`}
           </button>

@@ -84,7 +84,7 @@ function MetaSheet({ isDine, tableId, setTableId, guestCount, setGuestCount, loc
         <label htmlFor="pos-guests" className="text-xs font-bold w-16 shrink-0">Guests</label>
         <div className="flex-1 flex gap-1 items-center min-w-0">
           <button type="button" aria-label="Decrease guests" disabled={locked || (guestCount ?? 1) <= 1} onClick={() => setGuestCount(Math.max(1, (guestCount ?? 1) - 1))} className="w-11 h-11 min-h-[44px] min-w-[44px] rounded border bg-white grid place-items-center disabled:opacity-50 shrink-0">−</button>
-          <input id="pos-guests" type="text" inputMode="numeric" pattern="[0-9]*" value={guestCount} disabled={locked} onChange={e => setGuestCount(Math.max(1, Math.min(50, parseInt(e.target.value) || 1)))} className="w-14 h-11 min-h-[44px] rounded border bg-white text-center text-sm tabular-nums shrink-0 focus:outline-none focus:border-[var(--pos-accent)] disabled:opacity-50" />
+          <input id="pos-guests" type="text" inputMode="numeric" pattern="[0-9]*" value={guestCount} disabled={locked} onChange={e => setGuestCount(Math.max(1, Math.min(50, parseInt(e.target.value) || 1)))} className="w-14 h-11 min-h-[44px] rounded border bg-white text-center text-sm tabular-nums shrink-0 focus:outline-none focus:border-[var(--pos-accent,#b91c1c)] disabled:opacity-50" />
           <button type="button" aria-label="Increase guests" disabled={locked || (guestCount ?? 1) >= 50} onClick={() => setGuestCount(Math.min(50, (guestCount ?? 1) + 1))} className="w-11 h-11 min-h-[44px] min-w-[44px] rounded border bg-white grid place-items-center disabled:opacity-50 shrink-0">+</button>
         </div>
       </div>
@@ -133,7 +133,7 @@ function CustomerQuickAdd({ cfg, orderType, isDine, customer, setCustomer, locke
                   [f.key]: f.key === 'phone' ? e.target.value.replace(/[^0-9+\- ]/g, '') : e.target.value,
                 })}
                 placeholder={f.label}
-                className="mt-0.5 w-full h-11 min-h-[44px] rounded-lg border border-zinc-200 bg-white px-2.5 text-sm font-medium focus:outline-none focus:border-[var(--pos-accent)] disabled:opacity-60"
+                className="mt-0.5 w-full h-11 min-h-[44px] rounded-lg border border-zinc-200 bg-white px-2.5 text-sm font-medium focus:outline-none focus:border-[var(--pos-accent,#b91c1c)] disabled:opacity-60"
               />
             </label>
           );
@@ -176,7 +176,7 @@ function CartLines({ order, cart, onQty, onRequestRemove, onRequestClear, lineRe
         <div
           key={l.key}
           ref={(el) => { if (el) lineRefs.current.set(l.key, el); else lineRefs.current.delete(l.key); }}
-          className={`border rounded p-1.5 text-sm min-w-0 space-y-1.5 transition-colors ${pulseKey === l.key ? 'border-[var(--pos-accent)] bg-amber-50' : ''}`}
+          className={`border rounded p-1.5 text-sm min-w-0 space-y-1.5 transition-colors ${pulseKey === l.key ? 'border-[var(--pos-accent,#b91c1c)] bg-amber-50' : ''}`}
         >
           <div className="flex items-center gap-2 min-w-0">
             <span className="flex-1 min-w-0 truncate" title={l.name}>{l.quantity}× {l.name}</span>
@@ -423,10 +423,10 @@ export default function RightBill(props: RightBillProps) {
         </dl>
         <div className="grid grid-cols-1 @[360px]:grid-cols-2 gap-2 p-2 bg-white">
           {billRows.find((b) => b.key === 'container') && (
-            <label htmlFor="pos-container" className="flex items-center gap-1 text-xs">{billRows.find((b) => b.key === 'container')?.label || 'Container'} <input id="pos-container" type="number" inputMode="numeric" min={0} value={containerCharge} onChange={e => setContainerCharge(Math.max(0, parseFloat(e.target.value) || 0))} className="ml-auto w-16 h-11 min-h-[44px] rounded border px-1 text-right focus:outline-none focus:border-[var(--pos-accent)]" /></label>
+            <label htmlFor="pos-container" className="flex items-center gap-1 text-xs">{billRows.find((b) => b.key === 'container')?.label || 'Container'} <input id="pos-container" type="number" inputMode="numeric" min={0} value={containerCharge} onChange={e => setContainerCharge(Math.max(0, parseFloat(e.target.value) || 0))} className="ml-auto w-16 h-11 min-h-[44px] rounded border px-1 text-right focus:outline-none focus:border-[var(--pos-accent,#b91c1c)]" /></label>
           )}
           {cfg.charges?.tip_enabled !== false && billRows.find((b) => b.key === 'tip') && (
-            <label htmlFor="pos-tip" className="flex items-center gap-1 text-xs">{billRows.find((b) => b.key === 'tip')?.label || 'Tip'} <input id="pos-tip" type="number" inputMode="numeric" min={0} value={tip} onChange={e => setTip(Math.max(0, parseFloat(e.target.value) || 0))} className="ml-auto w-16 h-11 min-h-[44px] rounded border px-1 text-right focus:outline-none focus:border-[var(--pos-accent)]" /></label>
+            <label htmlFor="pos-tip" className="flex items-center gap-1 text-xs">{billRows.find((b) => b.key === 'tip')?.label || 'Tip'} <input id="pos-tip" type="number" inputMode="numeric" min={0} value={tip} onChange={e => setTip(Math.max(0, parseFloat(e.target.value) || 0))} className="ml-auto w-16 h-11 min-h-[44px] rounded border px-1 text-right focus:outline-none focus:border-[var(--pos-accent,#b91c1c)]" /></label>
           )}
         </div>
       </div>
@@ -475,7 +475,7 @@ export default function RightBill(props: RightBillProps) {
                 <button type="button" onClick={() => setIsAdvance((v: boolean) => !v)} aria-pressed={isAdvance} aria-expanded={isAdvance} aria-controls="advance-at" className={`h-11 min-h-[44px] px-2.5 rounded-lg border text-xs font-bold shrink-0 ${isAdvance ? 'bg-blue-100 border-blue-300 text-blue-900' : 'bg-zinc-100 border-zinc-200 text-zinc-700'}`}>Advance Order</button>
               )}
               {orderId == null && cfg.features?.complimentary !== false && (
-                <label className="flex items-center gap-1.5 text-xs font-semibold text-zinc-700 shrink-0 px-1"><input type="checkbox" checked={isComplimentary} onChange={e => setIsComplimentary(e.target.checked)} className="h-4 w-4 accent-[var(--pos-accent)]" />Complimentary</label>
+                <label className="flex items-center gap-1.5 text-xs font-semibold text-zinc-700 shrink-0 px-1"><input type="checkbox" checked={isComplimentary} onChange={e => setIsComplimentary(e.target.checked)} className="h-4 w-4 accent-[var(--pos-accent,#b91c1c)]" />Complimentary</label>
               )}
             </div>
             <span className="ml-auto whitespace-nowrap text-sm font-black tabular-nums shrink-0">Total {order ? formatINR(order.total) : `${currency}${displaySubtotal.toFixed(2)}`}</span>
@@ -518,7 +518,7 @@ export default function RightBill(props: RightBillProps) {
         <div className="relative border-t shrink-0">
         <div className="flex items-center gap-1 overflow-x-auto p-2" role="group" aria-label="Bill actions">
           {orderId == null ? (
-            <button type="button" disabled={!canCreate || creating} onClick={onCreate} aria-busy={creating} title="Save this sale as an order" className="h-11 min-h-[44px] px-3 rounded-lg bg-[var(--pos-accent)] text-white text-xs font-bold shrink-0 disabled:opacity-50">
+            <button type="button" disabled={!canCreate || creating} onClick={onCreate} aria-busy={creating} title="Save this sale as an order" className="h-11 min-h-[44px] px-3 rounded-lg bg-[var(--pos-accent,#b91c1c)] text-white text-xs font-bold shrink-0 disabled:opacity-50">
               {creating ? 'Creating order…' : 'Save'}
             </button>
           ) : (
@@ -526,7 +526,7 @@ export default function RightBill(props: RightBillProps) {
               Save
             </button>
           )}
-          <button type="button" disabled={!hasOrder} onClick={onSavePrint} title={!hasOrder ? 'Save the order first' : 'Open the receipt and print it'} className="h-11 min-h-[44px] px-3 rounded-lg bg-[var(--pos-accent)] text-white text-xs font-bold shrink-0 disabled:opacity-50">
+          <button type="button" disabled={!hasOrder} onClick={onSavePrint} title={!hasOrder ? 'Save the order first' : 'Open the receipt and print it'} className="h-11 min-h-[44px] px-3 rounded-lg bg-[var(--pos-accent,#b91c1c)] text-white text-xs font-bold shrink-0 disabled:opacity-50">
             Save &amp; Print
           </button>
           <button type="button" disabled={!hasOrder} onClick={onReceipt} title={!hasOrder ? 'Save the order first' : 'Open the receipt'} className="h-11 min-h-[44px] px-3 rounded-lg bg-white border-2 border-zinc-200 text-zinc-700 text-xs font-bold shrink-0 disabled:opacity-50">

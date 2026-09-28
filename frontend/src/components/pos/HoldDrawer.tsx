@@ -49,7 +49,7 @@ export default function HeldDrawer({
                 type="button"
                 onClick={() => onResume(h)}
                 disabled={resumingId != null}
-                className="h-11 px-4 rounded-xl bg-[var(--pos-accent)] hover:bg-[var(--pos-accent-hover)] disabled:opacity-50 text-white font-bold text-sm inline-flex items-center gap-1.5 transition-all active:scale-95"
+                className="h-11 px-4 rounded-xl bg-[var(--pos-accent,#b91c1c)] hover:bg-[var(--pos-accent-hover,#991b1b)] disabled:opacity-50 text-white font-bold text-sm inline-flex items-center gap-1.5 transition-all active:scale-95"
               >
                 <Play size={14} /> {resumingId === h.id ? 'Resuming…' : 'Resume'}
               </button>
