@@ -1,7 +1,10 @@
 package services
 
 import (
+	"encoding/json"
 	"testing"
+
+	"orangecheesepizza/bot/models"
 )
 
 func TestComputeTotalsPercentAndTax(t *testing.T) {
@@ -57,6 +60,26 @@ func TestApplyChargesComplimentary(t *testing.T) {
 	disc, tax, total := applyCharges(1000, 100, 90, 50, 20, true)
 	if disc != 1000 || tax != 0 || total != 0 {
 		t.Fatalf("unexpected complimentary totals: disc=%d tax=%d total=%d", disc, tax, total)
+	}
+}
+
+func TestOrderAddonUnmarshalCanonical(t *testing.T) {
+	var a models.OrderAddon
+	if err := json.Unmarshal([]byte(`{"group_id":3,"menu_item_id":41,"name":"Extra Cheese","price":30}`), &a); err != nil {
+		t.Fatalf("canonical unmarshal failed: %v", err)
+	}
+	if a.GroupID != 3 || a.MenuItemID != 41 || a.Name != "Extra Cheese" || a.Price != 30 {
+		t.Fatalf("unexpected canonical addon: %+v", a)
+	}
+}
+
+func TestOrderAddonUnmarshalLegacy(t *testing.T) {
+	var a models.OrderAddon
+	if err := json.Unmarshal([]byte(`{"group":"Toppings","group_id":3,"item":"Extra Cheese","item_id":41,"quantity":1,"price":30}`), &a); err != nil {
+		t.Fatalf("legacy unmarshal failed: %v", err)
+	}
+	if a.GroupID != 3 || a.MenuItemID != 41 || a.Name != "Extra Cheese" || a.Price != 30 {
+		t.Fatalf("unexpected legacy addon: %+v", a)
 	}
 }
 

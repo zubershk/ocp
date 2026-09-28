@@ -1,6 +1,7 @@
 package models
 
 import (
+	"encoding/json"
 	"time"
 )
 
@@ -157,6 +158,31 @@ type OrderAddon struct {
 	MenuItemID int     `json:"menu_item_id"`
 	Name       string  `json:"name"`
 	Price      float64 `json:"price"`
+}
+
+// UnmarshalJSON accepts the canonical snapshot shape and the legacy
+// shape ({group, item, item_id}) so rows written before the contract
+// fix keep rendering.
+func (a *OrderAddon) UnmarshalJSON(data []byte) error {
+	type alias OrderAddon
+	var tmp struct {
+		alias
+		Group  string `json:"group"`
+		Item   string `json:"item"`
+		ItemID int    `json:"item_id"`
+	}
+	if err := json.Unmarshal(data, &tmp); err != nil {
+		return err
+	}
+	*a = OrderAddon(tmp.alias)
+	if a.MenuItemID == 0 {
+		a.MenuItemID = tmp.ItemID
+	}
+	if a.Name == "" {
+		a.Name = tmp.Item
+	}
+	_ = tmp.Group
+	return nil
 }
 
 type OrderEvent struct {
