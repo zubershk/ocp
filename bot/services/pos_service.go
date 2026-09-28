@@ -535,7 +535,7 @@ func resolveAddonsSnapshot(tx *sql.Tx, item DraftItem, restaurantID int) ([]map[
 			_ = tx.QueryRow(`SELECT price FROM menu_items WHERE id=$1`, ad.MenuItemID).Scan(&price)
 		}
 		out = append(out, map[string]interface{}{
-			"group": gi.name, "group_id": gi.id, "item": itName, "item_id": ad.MenuItemID, "quantity": 1, "price": price,
+			"group_id": gi.id, "menu_item_id": ad.MenuItemID, "name": itName, "quantity": 1, "price": price,
 		})
 	}
 	if out == nil {
