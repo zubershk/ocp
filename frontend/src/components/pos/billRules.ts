@@ -1,7 +1,6 @@
 import { Bike, Circle, ShoppingBag, Smartphone, UtensilsCrossed, type LucideIcon } from 'lucide-react';
 import type { POSConfig } from '../../hooks/usePosConfig';
 import type { PosOrderType } from '../../services/posService';
-import type { CustomerInfo } from './types';
 
 const ICON_BY_NAME: Record<string, LucideIcon> = {
   utensils: UtensilsCrossed,
@@ -40,29 +39,15 @@ export interface MetaChip {
   empty: boolean;
 }
 
-/** Compact summary chips for the 44px meta strip. Same predicate as the editor, so the two can never disagree. */
+/** Compact summary chips for the 44px meta strip: Table + Guests only. Customer fields live inline below. */
 export function buildMetaChips(
-  cfg: POSConfig,
-  orderType: PosOrderType,
   isDine: boolean,
   tableId: number,
   guestCount: number,
-  customer: CustomerInfo,
 ): MetaChip[] {
-  const chips: MetaChip[] = [];
-  if (isDine) {
-    chips.push({ key: 'table', label: 'Table', value: tableId > 0 ? String(tableId) : '—', empty: tableId <= 0 });
-    chips.push({ key: 'guests', label: 'Guests', value: String(guestCount ?? 1), empty: false });
-  }
-  const field = (key: 'phone' | 'name' | 'address' | 'locality', label: string, value: string) => {
-    if (shouldShowField(cfg, orderType, key)) {
-      const v = value.trim();
-      chips.push({ key, label, value: v || '—', empty: v.length === 0 });
-    }
-  };
-  field('name', 'Name', customer.name);
-  field('phone', 'Mobile', customer.phone);
-  field('address', 'Address', customer.address);
-  field('locality', 'Locality', customer.locality);
-  return chips;
+  if (!isDine) return [];
+  return [
+    { key: 'table', label: 'Table', value: tableId > 0 ? String(tableId) : '—', empty: tableId <= 0 },
+    { key: 'guests', label: 'Guests', value: String(guestCount ?? 1), empty: false },
+  ];
 }

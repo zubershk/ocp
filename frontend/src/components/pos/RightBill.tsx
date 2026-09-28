@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Banknote, ChevronUp, CreditCard, ReceiptText, Wallet } from 'lucide-react';
+import { Banknote, ChevronDown, ChevronUp, CreditCard, ReceiptText, Wallet } from 'lucide-react';
 import Input from '../ui/Input';
 import { Modal } from '../ui/Modal';
 import CheckoutPanel from './CheckoutPanel';
@@ -95,9 +95,10 @@ function MetaSheet({ isDine, tableId, setTableId, guestCount, setGuestCount, loc
   );
 }
 
-function CustomerQuickAdd({ cfg, orderType, customer, setCustomer, locked }: {
+function CustomerQuickAdd({ cfg, orderType, isDine, customer, setCustomer, locked }: {
   cfg: POSConfig;
   orderType: PosOrderType;
+  isDine: boolean;
   customer: CustomerInfo;
   setCustomer: (c: CustomerInfo) => void;
   locked: boolean;
@@ -107,7 +108,7 @@ function CustomerQuickAdd({ cfg, orderType, customer, setCustomer, locked }: {
     { key: 'phone', label: 'Mobile', autoComplete: 'tel' },
     { key: 'address', label: 'Address', autoComplete: 'street-address' },
     { key: 'locality', label: 'Locality', autoComplete: undefined },
-  ] as const).filter((f) => shouldShowField(cfg, orderType, f.key));
+  ] as const).filter((f) => f.key === 'phone' ? (isDine || shouldShowField(cfg, orderType, f.key)) : shouldShowField(cfg, orderType, f.key));
   if (fields.length === 0) return null;
   return (
     <div className="px-2 py-1.5 border-b border-[var(--pos-border)] bg-[var(--pos-panel)]">
@@ -246,7 +247,8 @@ export default function RightBill(props: RightBillProps) {
   const bogoEnabled = cfg.features?.bogo === true;
   const kotEnabled = cfg.features?.kot === true;
   const [metaOpen, setMetaOpen] = useState(false);
-  const chips = buildMetaChips(cfg, orderType, isDine, tableId, guestCount, customer);
+  const chips = buildMetaChips(isDine, tableId, guestCount);
+  const [tapeOpen, setTapeOpen] = useState(true);
 
   const changeOrderType = async (t: PosOrderType) => {
     if (t === orderType) return;
@@ -346,12 +348,9 @@ export default function RightBill(props: RightBillProps) {
     <div className="flex flex-col h-full min-h-0">
       <div className="shrink-0">
         <OrderTypeStrip tabs={tabs} orderType={orderType} onOrderType={changeOrderType} />
-        {(isDine || chips.length > 0) && (
+        {isDine && (
           <div className="flex items-stretch gap-1 px-2 pb-1 min-h-[44px] border-b border-[var(--pos-border)]">
             <ul className="flex-1 min-w-0 flex flex-wrap items-center gap-x-2" aria-label="Order details">
-              {chips.length === 0 && (
-                <li className="shrink-0 max-w-[9rem] truncate text-xs text-zinc-500">Table —</li>
-              )}
               {chips.map((c) => (
                 <li key={c.key} className="shrink-0 max-w-[9rem] truncate text-xs text-zinc-700">
                   <span className="text-zinc-500">{c.label}</span>{' '}
@@ -369,7 +368,7 @@ export default function RightBill(props: RightBillProps) {
           </div>
         )}
         <CustomerQuickAdd
-          cfg={cfg} orderType={orderType}
+          cfg={cfg} orderType={orderType} isDine={isDine}
           customer={customer} setCustomer={setCustomer}
           locked={orderId != null}
         />
@@ -395,6 +394,18 @@ export default function RightBill(props: RightBillProps) {
       <CartLines order={order} cart={cart} onQty={onQty} onRequestRemove={onRequestRemove} onRequestClear={onRequestClear} lineRefs={lineRefs} pulseKey={pulseKey} />
       {orderId == null ? (
       <>
+      <button
+        type="button"
+        onClick={() => setTapeOpen((v) => !v)}
+        aria-expanded={tapeOpen}
+        aria-controls="pos-tape"
+        className="w-full min-h-[44px] flex items-center justify-between px-3 border-t bg-white text-xs font-bold text-zinc-700"
+      >
+        Bill details
+        {tapeOpen ? <ChevronUp size={16} aria-hidden /> : <ChevronDown size={16} aria-hidden />}
+      </button>
+      {tapeOpen ? (
+      <div id="pos-tape">
       <dl className="border-t">
         {billRows.map((br) => {
           // Round Off has no server computation behind it — never render it.
@@ -418,6 +429,8 @@ export default function RightBill(props: RightBillProps) {
             <label htmlFor="pos-tip" className="flex items-center gap-1 text-xs">{billRows.find((b) => b.key === 'tip')?.label || 'Tip'} <input id="pos-tip" type="number" inputMode="numeric" min={0} value={tip} onChange={e => setTip(Math.max(0, parseFloat(e.target.value) || 0))} className="ml-auto w-16 h-11 min-h-[44px] rounded border px-1 text-right focus:outline-none focus:border-[var(--pos-accent)]" /></label>
           )}
         </div>
+      </div>
+      ) : null}
       </>
       ) : null}
       {orderId != null ? (
