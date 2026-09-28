@@ -21,7 +21,7 @@ export default function OrderTypeStrip({ tabs, orderType, onOrderType }: {
             onClick={() => onOrderType(ot.key as PosOrderType)}
             className={`flex-1 min-w-0 min-h-[44px] rounded-lg px-1 py-1 inline-flex flex-col items-center justify-center gap-0.5 text-xs font-bold leading-tight ${
               selected
-                ? 'bg-[var(--pos-accent)] text-white'
+                ? 'bg-[var(--pos-accent,#b91c1c)] text-white'
                 : 'bg-white text-zinc-600 border border-zinc-200 hover:border-zinc-400'
             }`}
           >

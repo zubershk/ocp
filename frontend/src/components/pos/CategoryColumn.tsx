@@ -15,7 +15,7 @@ export default function CategoryColumn({ selected, onSelect }: CategoryColumnPro
   const cats = catQuery.data ?? [];
   return (
     <div className="p-2 space-y-0.5">
-      <button type="button" aria-pressed={selected === 'all'} onClick={() => onSelect('all')} className={`w-full text-left px-2 py-2 rounded text-xs font-bold flex justify-between items-center ${selected === 'all' ? 'bg-[var(--pos-accent)] text-white' : 'hover:bg-zinc-50 text-zinc-700'}`}>
+      <button type="button" aria-pressed={selected === 'all'} onClick={() => onSelect('all')} className={`w-full text-left px-2 py-2 rounded text-xs font-bold flex justify-between items-center ${selected === 'all' ? 'bg-[var(--pos-accent,#b91c1c)] text-white' : 'hover:bg-zinc-50 text-zinc-700'}`}>
         <span>All Items</span><span className="text-2xs bg-white/20 px-1.5 py-0.5 rounded">{cats.length}</span>
       </button>
       {cats.map((c: { id: number; name: string; isDeliverable?: boolean }) => (

@@ -201,7 +201,7 @@ export default function MenuPanel({
             const hasCart = inCart > 0;
             return (
               <li key={item.id}>
-                <div className={`h-full rounded-lg bg-white overflow-hidden border-y border-r border-zinc-200 border-l-4 border-l-[var(--pos-accent)] flex flex-col ${hasCart ? 'shadow-sm ring-1 ring-[var(--pos-accent)]/20' : 'hover:border-zinc-300 hover:shadow-sm'}`}>
+                <div className={`h-full rounded-lg bg-white overflow-hidden border-y border-r border-zinc-200 border-l-4 border-l-[var(--pos-accent,#b91c1c)] flex flex-col ${hasCart ? 'shadow-sm ring-1 ring-[var(--pos-accent,#b91c1c)]/20' : 'hover:border-zinc-300 hover:shadow-sm'}`}>
                   <button
                     type="button"
                     onClick={() => tapItem(item)}
@@ -212,7 +212,7 @@ export default function MenuPanel({
                       }
                     }}
                     aria-label={`${item.name} ₹${item.price}${hasCart ? `, ${inCart} in cart` : ''}`}
-                    className="flex-1 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pos-accent)]/30"
+                    className="flex-1 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pos-accent,#b91c1c)]/30"
                   >
                     <div className="bg-white px-1.5 pt-1.5">
                       <ItemImage src={item.image_url} name={item.name} />
@@ -222,7 +222,7 @@ export default function MenuPanel({
                       <div className="mt-1 flex items-center justify-between gap-2">
                         <span className="font-black text-xs tabular-nums">₹{item.price}</span>
                         {!simple || inCart === 0 ? (
-                          <span className="inline-flex items-center gap-1 text-[var(--pos-accent)] font-bold text-sm">
+                          <span className="inline-flex items-center gap-1 text-[var(--pos-accent,#b91c1c)] font-bold text-sm">
                             <Plus size={15} aria-hidden /> Add
                           </span>
                         ) : null}
@@ -244,7 +244,7 @@ export default function MenuPanel({
                         type="button"
                         aria-label={`Increase ${item.name}`}
                         onClick={() => onQty(cartLineKey(item.id, 'regular', ''), 1)}
-                              className="w-11 h-11 rounded-xl bg-[var(--pos-accent)] text-white hover:bg-[var(--pos-accent-hover)] grid place-items-center font-bold min-h-[44px] min-w-[44px]"
+                              className="w-11 h-11 rounded-xl bg-[var(--pos-accent,#b91c1c)] text-white hover:bg-[var(--pos-accent-hover,#991b1b)] grid place-items-center font-bold min-h-[44px] min-w-[44px]"
                       >
                         <Plus size={15} />
                       </button>

@@ -128,7 +128,7 @@ export default function ItemCustomizer({
                     onClick={() => setSize(s)}
                     aria-pressed={isSel}
                     aria-label={`Size ${label} ${inches} price ${currency}${unitRupees(item, s)}`}
-                    className={`h-16 rounded font-bold border-2 transition-all capitalize active:scale-[0.97] flex flex-col items-center justify-center gap-0.5 ${isSel ? 'bg-[var(--pos-accent)] text-white border-[var(--pos-accent)]' : 'bg-zinc-800 text-white border-zinc-800 hover:bg-zinc-700'}`}
+                    className={`h-16 rounded font-bold border-2 transition-all capitalize active:scale-[0.97] flex flex-col items-center justify-center gap-0.5 ${isSel ? 'bg-[var(--pos-accent,#b91c1c)] text-white border-[var(--pos-accent,#b91c1c)]' : 'bg-zinc-800 text-white border-zinc-800 hover:bg-zinc-700'}`}
                   >
                     <span className="text-xs font-bold">{label} [{inches}]</span>
                     <span className="text-sm font-bold">{currency}{unitRupees(item, s)}</span>
@@ -228,7 +228,7 @@ export default function ItemCustomizer({
                               return next;
                             });
                           }}
-                          className={`p-3 rounded border-2 text-left transition-all flex flex-col gap-1 min-h-[80px] ${isSel ? 'border-[var(--pos-accent)] bg-[var(--pos-accent)] text-white' : 'border-zinc-200 bg-white hover:border-zinc-300'} ${!canSelect ? 'opacity-50 cursor-not-allowed' : 'active:scale-[0.97]'}`}
+                          className={`p-3 rounded border-2 text-left transition-all flex flex-col gap-1 min-h-[80px] ${isSel ? 'border-[var(--pos-accent,#b91c1c)] bg-[var(--pos-accent,#b91c1c)] text-white' : 'border-zinc-200 bg-white hover:border-zinc-300'} ${!canSelect ? 'opacity-50 cursor-not-allowed' : 'active:scale-[0.97]'}`}
                         >
                           <span className="text-xs font-medium leading-tight line-clamp-2">{it.name}</span>
                           <span className="text-sm font-bold">₹{it.price}</span>
@@ -302,7 +302,7 @@ export default function ItemCustomizer({
                 onClose();
               }}
               aria-describedby={!canAdd ? addonGroups.filter(g => (selectedAddons[g.id]?.size ?? 0) < g.min_select).map(g => `addon-help-${g.id}`).join(' ') || undefined : undefined}
-              className={`w-full h-14 min-h-[56px] rounded-2xl font-bold text-lg transition-all active:scale-[0.98] sticky bottom-0 z-10 ${canAdd ? 'bg-[var(--pos-accent)] hover:bg-[var(--pos-accent-hover)] text-white shadow-lg' : 'bg-zinc-200 text-zinc-700 cursor-not-allowed'}`}
+              className={`w-full h-14 min-h-[56px] rounded-2xl font-bold text-lg transition-all active:scale-[0.98] sticky bottom-0 z-10 ${canAdd ? 'bg-[var(--pos-accent,#b91c1c)] hover:bg-[var(--pos-accent-hover,#991b1b)] text-white shadow-lg' : 'bg-zinc-200 text-zinc-700 cursor-not-allowed'}`}
             >
               {canAdd ? 'Save' : 'Select required addons'} {canAdd && estPaise > 0 && `· ${formatPaise(estPaise * qty)}`}
             </button>
