@@ -6,8 +6,7 @@ import { Modal } from '../ui/Modal';
 import CheckoutPanel from './CheckoutPanel';
 import DiscountList from './DiscountList';
 import OrderTypeStrip from './OrderTypeStrip';
-import TablePicker from './TablePicker';
-import { buildMetaChips, shouldShowField } from './billRules';
+import { shouldShowField } from './billRules';
 import type { POSConfig } from '../../hooks/usePosConfig';
 import { formatINR, posApi, posErrorMessage, toRupees, type PosOrder, type PosOrderType, type PosPayMethod } from '../../services/posService';
 import type { CartLine, CustomerInfo, RecordedPayment } from './types';
@@ -26,7 +25,6 @@ export interface RightBillProps {
   cart: CartLine[];
   order: PosOrder | undefined;
   orderId: number | null;
-  outletId: number | null;
   containerCharge: number;
   setContainerCharge: (n: number) => void;
   tip: number;
@@ -61,55 +59,9 @@ export interface RightBillProps {
   notice: string | null;
 }
 
-function MetaSheet({ cfg, orderType, isDine, tableId, setTableId, guestCount, setGuestCount, customer, setCustomer, locked, outletId, orderId, onAssignTable }: {
+function CustomerQuickAdd({ cfg, orderType, customer, setCustomer, locked }: {
   cfg: POSConfig;
   orderType: PosOrderType;
-  isDine: boolean;
-  tableId: number;
-  setTableId: (n: number) => void;
-  guestCount: number;
-  setGuestCount: (n: number) => void;
-  customer: CustomerInfo;
-  setCustomer: (c: CustomerInfo) => void;
-  locked: boolean;
-  outletId: number | null;
-  orderId: number | null;
-  onAssignTable: (id: number) => void;
-}) {
-  return (
-    <div className="space-y-4">
-      {isDine && (
-        <div className="space-y-2">
-          <div className="text-xs font-bold">Table</div>
-          <TablePicker selected={tableId} onSelect={locked && orderId != null ? onAssignTable : setTableId} outletId={outletId} />
-        </div>
-      )}
-      {(shouldShowField(cfg, orderType, 'address') || shouldShowField(cfg, orderType, 'locality')) && (
-        <fieldset className="space-y-2" disabled={locked}>
-          <legend className="text-xs font-bold">Delivery address</legend>
-          {shouldShowField(cfg, orderType, 'address') && (<Input id="pos-addr" label={`Address${cfg.customer_fields?.address?.required ? ' *' : ''}`} type="text" autoComplete="street-address" value={customer.address} onChange={e => setCustomer({ ...customer, address: e.target.value })} placeholder="Address" required={!!cfg.customer_fields?.address?.required} aria-required={!!cfg.customer_fields?.address?.required} className="h-11 min-h-[44px]" />)}
-          {shouldShowField(cfg, orderType, 'locality') && (<Input id="pos-locality" label={`Locality${cfg.customer_fields?.locality?.required ? ' *' : ''}`} type="text" value={customer.locality} onChange={e => setCustomer({ ...customer, locality: e.target.value })} placeholder="Locality" required={!!cfg.customer_fields?.locality?.required} aria-required={!!cfg.customer_fields?.locality?.required} className="h-11 min-h-[44px]" />)}
-        </fieldset>
-      )}
-      <div className="flex gap-2 items-center">
-        <label htmlFor="pos-guests" className="text-xs font-bold w-16 shrink-0">Guests</label>
-        <div className="flex-1 flex gap-1 items-center min-w-0">
-          <button type="button" aria-label="Decrease guests" disabled={locked || (guestCount ?? 1) <= 1} onClick={() => setGuestCount(Math.max(1, (guestCount ?? 1) - 1))} className="w-11 h-11 min-h-[44px] min-w-[44px] rounded border bg-white grid place-items-center disabled:opacity-50 shrink-0">−</button>
-          <input id="pos-guests" type="text" inputMode="numeric" pattern="[0-9]*" value={guestCount} disabled={locked} onChange={e => setGuestCount(Math.max(1, Math.min(50, parseInt(e.target.value) || 1)))} className="w-14 h-11 min-h-[44px] rounded border bg-white text-center text-sm tabular-nums shrink-0 focus:outline-none focus:border-[var(--pos-accent,#b91c1c)] disabled:opacity-50" />
-          <button type="button" aria-label="Increase guests" disabled={locked || (guestCount ?? 1) >= 50} onClick={() => setGuestCount(Math.min(50, (guestCount ?? 1) + 1))} className="w-11 h-11 min-h-[44px] min-w-[44px] rounded border bg-white grid place-items-center disabled:opacity-50 shrink-0">+</button>
-        </div>
-      </div>
-      {locked && (
-        <p role="note" className="text-xs text-zinc-500">Guests and address are fixed after saving. Table changes go through the table list above.</p>
-      )}
-    </div>
-  );
-}
-
-function CustomerQuickAdd({ cfg, orderType, isDine, customer, setCustomer, locked }: {
-  cfg: POSConfig;
-  orderType: PosOrderType;
-  isDine: boolean;
   customer: CustomerInfo;
   setCustomer: (c: CustomerInfo) => void;
   locked: boolean;
@@ -117,7 +69,9 @@ function CustomerQuickAdd({ cfg, orderType, isDine, customer, setCustomer, locke
   const fields = ([
     { key: 'name', label: 'Name', autoComplete: 'name' },
     { key: 'phone', label: 'Mobile', autoComplete: 'tel' },
-  ] as const);
+    { key: 'address', label: 'Address', autoComplete: 'street-address' },
+    { key: 'locality', label: 'Locality', autoComplete: undefined },
+  ] as const).filter((f) => f.key === 'name' || f.key === 'phone' ? true : shouldShowField(cfg, orderType, f.key));
   return (
     <div className="px-2 py-1.5 border-b border-[var(--pos-border)] bg-[var(--pos-panel)]">
       <div className="grid grid-cols-2 gap-1.5" role="group" aria-label="Customer details">
@@ -221,7 +175,7 @@ function CartLines({ order, cart, onQty, onRequestRemove, onRequestClear, lineRe
 }
 
 export default function RightBill(props: RightBillProps) {
-  const { config, activeOrderTypes, orderType, onOrderType, tableId, setTableId, guestCount, setGuestCount, customer, setCustomer, cart, order, orderId, containerCharge, setContainerCharge, tip, setTip, isComplimentary, setIsComplimentary, isAdvance, setIsAdvance, advanceAt, setAdvanceAt, onQty, onCreate, creating, canCreate, payments, duePaise, onPaid, onCompleted, onHold, onCancel, onModify, onReceipt, onSavePrint, canPay, canDiscount, lineRefs, pulseKey, onRequestRemove, onRequestClear, fatal, setFatal, notice, outletId } = props;
+  const { config, activeOrderTypes, orderType, onOrderType, tableId, setTableId, guestCount, setGuestCount, customer, setCustomer, cart, order, orderId, containerCharge, setContainerCharge, tip, setTip, isComplimentary, setIsComplimentary, isAdvance, setIsAdvance, advanceAt, setAdvanceAt, onQty, onCreate, creating, canCreate, payments, duePaise, onPaid, onCompleted, onHold, onCancel, onModify, onReceipt, onSavePrint, canPay, canDiscount, lineRefs, pulseKey, onRequestRemove, onRequestClear, fatal, setFatal, notice } = props;
   const cfg = config;
   const currency = cfg.ui?.currency_symbol || '₹';
   // Display-only estimates for immediate UI feedback (quantity/addon/cart edits).
@@ -254,8 +208,6 @@ export default function RightBill(props: RightBillProps) {
   const isPaid = hasOrder && duePaise === 0;
   const bogoEnabled = cfg.features?.bogo === true;
   const kotEnabled = cfg.features?.kot === true;
-  const [metaOpen, setMetaOpen] = useState(false);
-  const chips = buildMetaChips(isDine, tableId, guestCount);
   const [tapeOpen, setTapeOpen] = useState(false);
 
   const changeOrderType = async (t: PosOrderType) => {
@@ -268,21 +220,6 @@ export default function RightBill(props: RightBillProps) {
       await posApi.updateOrderType(orderId, t);
       onOrderType(t);
       await qc.invalidateQueries({ queryKey: ['pos-order', orderId] });
-    } catch (e) {
-      setFatal(posErrorMessage(e).message);
-    }
-  };
-
-  const assignTable = async (id: number) => {
-    if (orderId == null) {
-      setTableId(id);
-      return;
-    }
-    try {
-      await posApi.assignTable(id, orderId);
-      setTableId(id);
-      await qc.invalidateQueries({ queryKey: ['pos-tables'] });
-      setMetaOpen(false);
     } catch (e) {
       setFatal(posErrorMessage(e).message);
     }
@@ -356,40 +293,34 @@ export default function RightBill(props: RightBillProps) {
     <div className="flex flex-col h-full min-h-0">
       <div className="shrink-0">
         <OrderTypeStrip tabs={tabs} orderType={orderType} onOrderType={changeOrderType} />
-        {(isDine || orderId == null) && (
-          <div className="flex items-stretch gap-1 px-2 pb-1 min-h-[44px] border-b border-[var(--pos-border)]">
-            <ul className="flex-1 min-w-0 flex flex-wrap items-center gap-x-2" aria-label="Order details">
-              {chips.map((c) => (
-                <li key={c.key} className="shrink-0 max-w-[9rem] truncate text-xs text-zinc-700">
-                  <span className="text-zinc-500">{c.label}</span>{' '}
-                  <span className="font-semibold tabular-nums">{c.value}</span>
-                </li>
-              ))}
-            </ul>
-            <button
-              type="button"
-              onClick={() => setMetaOpen(true)}
-              className="shrink-0 min-h-[44px] px-3 rounded-lg border border-zinc-200 bg-white text-xs font-bold hover:border-zinc-400"
-            >
-              Details
-            </button>
+        {isDine && (
+          <div className="px-2 py-1.5 space-y-1.5 border-b border-[var(--pos-border)] bg-[var(--pos-panel)]">
+            <div className="flex gap-2 items-center">
+              <span id="pos-table-label" className="text-xs font-bold w-14 shrink-0 text-zinc-600">Table</span>
+              <div className="flex-1 flex gap-1 min-w-0" role="group" aria-labelledby="pos-table-label">
+                <button type="button" aria-label="Decrease table number" onClick={() => setTableId(Math.max(0, tableId - 1))} disabled={orderId != null || tableId <= 0} className="w-11 h-11 min-h-[44px] min-w-[44px] rounded-lg border border-zinc-200 bg-white grid place-items-center disabled:opacity-50 shrink-0">−</button>
+                <input id="pos-table" type="text" inputMode="numeric" pattern="[0-9]*" value={tableId || ''} disabled={orderId != null} onChange={e => setTableId(Math.max(0, Math.min(99, parseInt(e.target.value) || 0)))} placeholder="—" aria-label="Table number" className="flex-1 min-w-0 h-11 min-h-[44px] rounded-lg border border-zinc-200 bg-white text-center text-sm font-bold tabular-nums focus:outline-none focus:border-[var(--pos-accent,#b91c1c)] disabled:opacity-60" />
+                <button type="button" aria-label="Increase table number" onClick={() => setTableId(Math.min(99, tableId + 1))} disabled={orderId != null} className="w-11 h-11 min-h-[44px] min-w-[44px] rounded-lg border border-zinc-200 bg-white grid place-items-center disabled:opacity-50 shrink-0">+</button>
+              </div>
+            </div>
+            <div className="flex gap-2 items-center">
+              <span id="pos-guests-label" className="text-xs font-bold w-14 shrink-0 text-zinc-600">Guests</span>
+              <div className="flex-1 flex gap-1 items-center min-w-0" role="group" aria-labelledby="pos-guests-label">
+                <button type="button" aria-label="Decrease guests" disabled={orderId != null || (guestCount ?? 1) <= 1} onClick={() => setGuestCount(Math.max(1, (guestCount ?? 1) - 1))} className="w-11 h-11 min-h-[44px] min-w-[44px] rounded-lg border border-zinc-200 bg-white grid place-items-center disabled:opacity-50 shrink-0">−</button>
+                <input id="pos-guests" type="text" inputMode="numeric" pattern="[0-9]*" value={guestCount} disabled={orderId != null} onChange={e => setGuestCount(Math.max(1, Math.min(50, parseInt(e.target.value) || 1)))} aria-label="Guest count" className="flex-1 min-w-0 h-11 min-h-[44px] rounded-lg border border-zinc-200 bg-white text-center text-sm font-bold tabular-nums focus:outline-none focus:border-[var(--pos-accent,#b91c1c)] disabled:opacity-60" />
+                <button type="button" aria-label="Increase guests" disabled={orderId != null || (guestCount ?? 1) >= 50} onClick={() => setGuestCount(Math.min(50, (guestCount ?? 1) + 1))} className="w-11 h-11 min-h-[44px] min-w-[44px] rounded-lg border border-zinc-200 bg-white grid place-items-center disabled:opacity-50 shrink-0">+</button>
+              </div>
+            </div>
+            {orderId != null && (
+              <p role="note" className="text-xs text-zinc-500">Table and guests are fixed after saving.</p>
+            )}
           </div>
         )}
         <CustomerQuickAdd
-          cfg={cfg} orderType={orderType} isDine={isDine}
+          cfg={cfg} orderType={orderType}
           customer={customer} setCustomer={setCustomer}
           locked={orderId != null}
         />
-        <Modal open={metaOpen} onClose={() => setMetaOpen(false)} title="Order details" size="sm">
-          <MetaSheet
-            cfg={cfg} orderType={orderType} isDine={isDine}
-            tableId={tableId} setTableId={setTableId}
-            guestCount={guestCount} setGuestCount={setGuestCount}
-            customer={customer} setCustomer={setCustomer}
-            locked={orderId != null} outletId={outletId} orderId={orderId}
-            onAssignTable={assignTable}
-          />
-        </Modal>
         <div className="px-2 py-1.5 bg-zinc-900 text-white text-2xs font-bold tracking-wider">
           ITEMS ({order ? ((order.items ?? []).length) : cart.length})
         </div>

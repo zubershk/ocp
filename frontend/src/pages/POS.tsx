@@ -369,7 +369,7 @@ const canDiscount = ['owner', 'manager'].includes(role);
             orderType={orderType} onOrderType={(t: PosOrderType)=>{setOrderType(t); if(t!=='dine_in') setTableId(0);}}
             tableId={tableId} setTableId={setTableId} guestCount={guestCount} setGuestCount={setGuestCount}
             customer={customer} setCustomer={setCustomer}
-            cart={cart} order={order} orderId={orderId} outletId={outletId}
+            cart={cart} order={order} orderId={orderId}
             containerCharge={containerCharge} setContainerCharge={setContainerCharge}
             tip={tip} setTip={setTip}
             isComplimentary={isComplimentary} setIsComplimentary={setIsComplimentary}
