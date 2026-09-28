@@ -45,6 +45,10 @@ function saveJSON(key: string, value: unknown): void {
   } catch {}
 }
 
+function prefersReducedMotion(): boolean {
+  return typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
 export default function POS() {
   const [authed, setAuthed] = useState(() => getAdminKey().length > 0);
   const [outletId, setOutletId] = useState<number | null>(() => getPosOutletId());
@@ -182,7 +186,7 @@ const canDiscount = ['owner', 'manager'].includes(role);
       title: `${Math.min(20, line.quantity)}× ${line.name} added`,
       action: {
         label: 'View bill',
-        onClick: () => document.getElementById('pos-bill')?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+        onClick: () => document.getElementById('pos-bill')?.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth', block: 'start' }),
       },
     });
   }, [toast]);
@@ -191,7 +195,7 @@ const canDiscount = ['owner', 'manager'].includes(role);
   useEffect(() => {
     if (lastAddedKey == null) return;
     const t = requestAnimationFrame(() => {
-      lineRefs.current.get(lastAddedKey)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      lineRefs.current.get(lastAddedKey)?.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth', block: 'nearest' });
     });
     return () => cancelAnimationFrame(t);
   }, [cart, lastAddedKey]);
@@ -365,7 +369,7 @@ const canDiscount = ['owner', 'manager'].includes(role);
             orderType={orderType} onOrderType={(t: PosOrderType)=>{setOrderType(t); if(t!=='dine_in') setTableId(0);}}
             tableId={tableId} setTableId={setTableId} guestCount={guestCount} setGuestCount={setGuestCount}
             customer={customer} setCustomer={setCustomer}
-            cart={cart} order={order} orderId={orderId}
+            cart={cart} order={order} orderId={orderId} outletId={outletId}
             containerCharge={containerCharge} setContainerCharge={setContainerCharge}
             tip={tip} setTip={setTip}
             isComplimentary={isComplimentary} setIsComplimentary={setIsComplimentary}

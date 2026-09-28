@@ -239,7 +239,7 @@ export default function MenuPanel({
                       >
                         <Minus size={15} />
                       </button>
-                      <span className="w-6 text-center font-black tabular-nums" aria-live="polite">{inCart}</span>
+                      <span className="w-6 text-center font-black tabular-nums">{inCart}</span>
                       <button
                         type="button"
                         aria-label={`Increase ${item.name}`}

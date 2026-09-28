@@ -255,7 +255,7 @@ export default function ItemCustomizer({
             >
               <Minus size={18} />
             </button>
-            <span className="w-10 text-center text-xl font-black tabular-nums" aria-live="polite">{qty}</span>
+            <span className="w-10 text-center text-xl font-black tabular-nums">{qty}</span>
             <button
               type="button"
               aria-label="Increase quantity"

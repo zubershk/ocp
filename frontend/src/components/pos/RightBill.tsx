@@ -5,6 +5,9 @@ import Input from '../ui/Input';
 import { Modal } from '../ui/Modal';
 import CheckoutPanel from './CheckoutPanel';
 import DiscountList from './DiscountList';
+import OrderTypeStrip from './OrderTypeStrip';
+import TablePicker from './TablePicker';
+import { buildMetaChips, shouldShowField } from './billRules';
 import type { POSConfig } from '../../hooks/usePosConfig';
 import { formatINR, posApi, posErrorMessage, toRupees, type PosOrder, type PosOrderType, type PosPayMethod } from '../../services/posService';
 import type { CartLine, CustomerInfo, RecordedPayment } from './types';
@@ -23,6 +26,7 @@ export interface RightBillProps {
   cart: CartLine[];
   order: PosOrder | undefined;
   orderId: number | null;
+  outletId: number | null;
   containerCharge: number;
   setContainerCharge: (n: number) => void;
   tip: number;
@@ -57,21 +61,7 @@ export interface RightBillProps {
   notice: string | null;
 }
 
-function OrderTypeTabs({ tabs, orderType, onOrderType }: {
-  tabs: POSConfig['order_types'];
-  orderType: PosOrderType;
-  onOrderType: (t: PosOrderType) => void;
-}) {
-  return (
-    <div role="tablist" aria-label="Order type" className="grid border-b border-[var(--pos-border)] text-xs font-bold" style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0,1fr))` }}>
-      {tabs.map((ot) => (
-        <button key={ot.key} type="button" role="tab" aria-selected={orderType === ot.key} onClick={() => onOrderType(ot.key as PosOrderType)} className={`h-11 min-h-[44px] px-1 truncate ${orderType === ot.key ? 'bg-[var(--pos-panel)] border-b-2 border-[var(--pos-accent)] text-[var(--pos-accent)]' : 'text-zinc-500'}`}>{ot.label}</button>
-      ))}
-    </div>
-  );
-}
-
-function CustomerSection({ cfg, orderType, isDine, tableId, setTableId, guestCount, setGuestCount, customer, setCustomer }: {
+function MetaSheet({ cfg, orderType, isDine, tableId, setTableId, guestCount, setGuestCount, customer, setCustomer, locked, outletId, orderId, onAssignTable }: {
   cfg: POSConfig;
   orderType: PosOrderType;
   isDine: boolean;
@@ -81,46 +71,39 @@ function CustomerSection({ cfg, orderType, isDine, tableId, setTableId, guestCou
   setGuestCount: (n: number) => void;
   customer: CustomerInfo;
   setCustomer: (c: CustomerInfo) => void;
+  locked: boolean;
+  outletId: number | null;
+  orderId: number | null;
+  onAssignTable: (id: number) => void;
 }) {
   return (
-    <div className="p-3 space-y-3 border-b border-[var(--pos-border)] bg-[var(--pos-panel)]">
+    <div className="space-y-4">
       {isDine && (
         <div className="space-y-2">
-          <div className="flex gap-2 items-center">
-            <label htmlFor="pos-table" className="text-xs font-bold w-16 shrink-0">Table No</label>
-            <div className="flex-1 flex gap-1 min-w-0">
-              <button type="button" aria-label="Decrease table number" onClick={() => setTableId(Math.max(0, tableId - 1))} disabled={tableId <= 0} className="w-11 h-11 min-h-[44px] min-w-[44px] rounded border bg-white disabled:opacity-50 grid place-items-center shrink-0">−</button>
-              <input id="pos-table" type="number" inputMode="numeric" min={0} value={tableId || ''} onChange={e => setTableId(Math.max(0, parseInt(e.target.value) || 0))} placeholder="-" className="flex-1 min-w-0 h-11 min-h-[44px] rounded border bg-white text-center text-sm focus:outline-none focus:border-[var(--pos-accent)]" />
-              <button type="button" aria-label="Increase table number" onClick={() => setTableId(Math.min(99, tableId + 1))} className="w-11 h-11 min-h-[44px] min-w-[44px] rounded border bg-white grid place-items-center shrink-0">+</button>
-            </div>
-          </div>
-          <div className="flex gap-2 items-center">
-            <label htmlFor="pos-guests" className="text-xs font-bold w-16 shrink-0">Guests</label>
-            <div className="flex-1 flex gap-1 items-center min-w-0">
-              <button type="button" aria-label="Decrease guests" disabled={(guestCount ?? 1) <= 1} onClick={() => setGuestCount(Math.max(1, (guestCount ?? 1) - 1))} className="w-11 h-11 min-h-[44px] min-w-[44px] rounded border bg-white grid place-items-center disabled:opacity-50 shrink-0">−</button>
-              <input id="pos-guests" type="number" min={1} max={50} value={guestCount} onChange={e => setGuestCount(Math.max(1, Math.min(50, parseInt(e.target.value) || 1)))} className="w-14 h-11 min-h-[44px] rounded border bg-white text-center text-sm shrink-0 focus:outline-none focus:border-[var(--pos-accent)]" />
-              <button type="button" aria-label="Increase guests" disabled={(guestCount ?? 1) >= 50} onClick={() => setGuestCount(Math.min(50, (guestCount ?? 1) + 1))} className="w-11 h-11 min-h-[44px] min-w-[44px] rounded border bg-white grid place-items-center disabled:opacity-50 shrink-0">+</button>
-            </div>
-          </div>
+          <div className="text-xs font-bold">Table</div>
+          <TablePicker selected={tableId} onSelect={locked && orderId != null ? onAssignTable : setTableId} outletId={outletId} />
         </div>
       )}
-      <fieldset className="space-y-2">
+      <div className="flex gap-2 items-center">
+        <label htmlFor="pos-guests" className="text-xs font-bold w-16 shrink-0">Guests</label>
+        <div className="flex-1 flex gap-1 items-center min-w-0">
+          <button type="button" aria-label="Decrease guests" disabled={locked || (guestCount ?? 1) <= 1} onClick={() => setGuestCount(Math.max(1, (guestCount ?? 1) - 1))} className="w-11 h-11 min-h-[44px] min-w-[44px] rounded border bg-white grid place-items-center disabled:opacity-50 shrink-0">−</button>
+          <input id="pos-guests" type="text" inputMode="numeric" pattern="[0-9]*" value={guestCount} disabled={locked} onChange={e => setGuestCount(Math.max(1, Math.min(50, parseInt(e.target.value) || 1)))} className="w-14 h-11 min-h-[44px] rounded border bg-white text-center text-sm tabular-nums shrink-0 focus:outline-none focus:border-[var(--pos-accent)] disabled:opacity-50" />
+          <button type="button" aria-label="Increase guests" disabled={locked || (guestCount ?? 1) >= 50} onClick={() => setGuestCount(Math.min(50, (guestCount ?? 1) + 1))} className="w-11 h-11 min-h-[44px] min-w-[44px] rounded border bg-white grid place-items-center disabled:opacity-50 shrink-0">+</button>
+        </div>
+      </div>
+      <fieldset className="space-y-2" disabled={locked}>
         <legend className="sr-only">Customer details</legend>
         {shouldShowField(cfg, orderType, 'phone') && (<Input id="pos-phone" label={`Mobile${cfg.customer_fields?.phone?.required ? ' *' : ''}`} type="tel" inputMode="numeric" autoComplete="tel" maxLength={15} required={!!cfg.customer_fields?.phone?.required} aria-required={!!cfg.customer_fields?.phone?.required} value={customer.phone} onChange={e => setCustomer({ ...customer, phone: e.target.value.replace(/[^0-9+\- ]/g, '') })} placeholder="Mobile No." className="h-11 min-h-[44px]" />)}
         {shouldShowField(cfg, orderType, 'name') && (<Input id="pos-name" label={`Name${cfg.customer_fields?.name?.required ? ' *' : ''}`} type="text" autoComplete="name" value={customer.name} onChange={e => setCustomer({ ...customer, name: e.target.value })} placeholder="Name" required={!!cfg.customer_fields?.name?.required} aria-required={!!cfg.customer_fields?.name?.required} className="h-11 min-h-[44px]" />)}
         {shouldShowField(cfg, orderType, 'address') && (<Input id="pos-addr" label={`Address${cfg.customer_fields?.address?.required ? ' *' : ''}`} type="text" autoComplete="street-address" value={customer.address} onChange={e => setCustomer({ ...customer, address: e.target.value })} placeholder="Address" required={!!cfg.customer_fields?.address?.required} aria-required={!!cfg.customer_fields?.address?.required} className="h-11 min-h-[44px]" />)}
         {shouldShowField(cfg, orderType, 'locality') && (<Input id="pos-locality" label={`Locality${cfg.customer_fields?.locality?.required ? ' *' : ''}`} type="text" value={customer.locality} onChange={e => setCustomer({ ...customer, locality: e.target.value })} placeholder="Locality" required={!!cfg.customer_fields?.locality?.required} aria-required={!!cfg.customer_fields?.locality?.required} className="h-11 min-h-[44px]" />)}
       </fieldset>
+      {locked && (
+        <p role="note" className="text-xs text-zinc-500">Guests and customer details are fixed after saving. Table changes go through the table list above.</p>
+      )}
     </div>
   );
-}
-
-function shouldShowField(cfg: POSConfig, orderType: PosOrderType, key: string): boolean {
-  const f = cfg.customer_fields?.[key];
-  if (!f) return true;
-  if (!f.visible) return false;
-  if (!f.for || f.for.length === 0) return true;
-  return f.for.includes(orderType);
 }
 
 function CartLines({ order, cart, onQty, onRequestRemove, onRequestClear, lineRefs, pulseKey }: {
@@ -167,7 +150,7 @@ function CartLines({ order, cart, onQty, onRequestRemove, onRequestClear, lineRe
           )}
           <div className="flex items-center gap-1">
             <button type="button" aria-label={`Decrease ${l.name}`} onClick={() => onQty(l.key, -1)} disabled={l.quantity <= 1} className="w-11 h-11 min-h-[44px] min-w-[44px] rounded border grid place-items-center disabled:opacity-50 shrink-0">−</button>
-            <span className="w-6 text-center shrink-0" aria-live="polite">{l.quantity}</span>
+            <span className="w-6 text-center shrink-0">{l.quantity}</span>
             <button type="button" aria-label={`Increase ${l.name}`} onClick={() => onQty(l.key, 1)} disabled={l.quantity >= 20} className="w-11 h-11 min-h-[44px] min-w-[44px] rounded border bg-zinc-900 text-white disabled:opacity-50 grid place-items-center shrink-0">+</button>
             <button type="button" aria-label={`Remove ${l.name}`} onClick={() => onRequestRemove(l.key, l.name)} className="w-11 h-11 min-h-[44px] min-w-[44px] ml-auto rounded border border-red-200 text-red-600 grid place-items-center text-lg shrink-0">×</button>
           </div>
@@ -190,7 +173,7 @@ function CartLines({ order, cart, onQty, onRequestRemove, onRequestClear, lineRe
 }
 
 export default function RightBill(props: RightBillProps) {
-  const { config, activeOrderTypes, orderType, onOrderType, tableId, setTableId, guestCount, setGuestCount, customer, setCustomer, cart, order, orderId, containerCharge, setContainerCharge, tip, setTip, isComplimentary, setIsComplimentary, isAdvance, setIsAdvance, advanceAt, setAdvanceAt, onQty, onCreate, creating, canCreate, payments, duePaise, onPaid, onCompleted, onHold, onCancel, onModify, onReceipt, onSavePrint, canPay, canDiscount, lineRefs, pulseKey, onRequestRemove, onRequestClear, fatal, setFatal, notice } = props;
+  const { config, activeOrderTypes, orderType, onOrderType, tableId, setTableId, guestCount, setGuestCount, customer, setCustomer, cart, order, orderId, containerCharge, setContainerCharge, tip, setTip, isComplimentary, setIsComplimentary, isAdvance, setIsAdvance, advanceAt, setAdvanceAt, onQty, onCreate, creating, canCreate, payments, duePaise, onPaid, onCompleted, onHold, onCancel, onModify, onReceipt, onSavePrint, canPay, canDiscount, lineRefs, pulseKey, onRequestRemove, onRequestClear, fatal, setFatal, notice, outletId } = props;
   const cfg = config;
   const currency = cfg.ui?.currency_symbol || '₹';
   // Display-only estimates for immediate UI feedback (quantity/addon/cart edits).
@@ -223,6 +206,38 @@ export default function RightBill(props: RightBillProps) {
   const isPaid = hasOrder && duePaise === 0;
   const bogoEnabled = cfg.features?.bogo === true;
   const kotEnabled = cfg.features?.kot === true;
+  const [metaOpen, setMetaOpen] = useState(false);
+  const chips = buildMetaChips(cfg, orderType, isDine, tableId, guestCount, customer);
+
+  const changeOrderType = async (t: PosOrderType) => {
+    if (t === orderType) return;
+    if (orderId == null) {
+      onOrderType(t);
+      return;
+    }
+    try {
+      await posApi.updateOrderType(orderId, t);
+      onOrderType(t);
+      await qc.invalidateQueries({ queryKey: ['pos-order', orderId] });
+    } catch (e) {
+      setFatal(posErrorMessage(e).message);
+    }
+  };
+
+  const assignTable = async (id: number) => {
+    if (orderId == null) {
+      setTableId(id);
+      return;
+    }
+    try {
+      await posApi.assignTable(id, orderId);
+      setTableId(id);
+      await qc.invalidateQueries({ queryKey: ['pos-tables'] });
+      setMetaOpen(false);
+    } catch (e) {
+      setFatal(posErrorMessage(e).message);
+    }
+  };
 
   const requestPay = (method?: PosPayMethod) => {
     if (!hasOrder) {
@@ -291,15 +306,49 @@ export default function RightBill(props: RightBillProps) {
   return (
     <div className="flex flex-col h-full min-h-0">
       <div className="shrink-0">
-        <OrderTypeTabs tabs={tabs} orderType={orderType} onOrderType={onOrderType} />
-        {(isDine || shouldShowField(cfg, orderType, 'phone') || shouldShowField(cfg, orderType, 'name') || shouldShowField(cfg, orderType, 'address') || shouldShowField(cfg, orderType, 'locality')) && (
-          <CustomerSection cfg={cfg} orderType={orderType} isDine={isDine} tableId={tableId} setTableId={setTableId} guestCount={guestCount} setGuestCount={setGuestCount} customer={customer} setCustomer={setCustomer} />
+        <OrderTypeStrip tabs={tabs} orderType={orderType} onOrderType={changeOrderType} />
+        {(isDine || chips.length > 0) && (
+          <div className="flex items-stretch gap-1 px-2 pb-1 min-h-[44px] border-b border-[var(--pos-border)]">
+            <ul className="flex-1 min-w-0 flex flex-wrap items-center gap-x-2" aria-label="Order details">
+              {chips.length === 0 && (
+                <li className="shrink-0 max-w-[9rem] truncate text-xs text-zinc-500">Table —</li>
+              )}
+              {chips.map((c) => (
+                <li key={c.key} className="shrink-0 max-w-[9rem] truncate text-xs text-zinc-700">
+                  <span className="text-zinc-500">{c.label}</span>{' '}
+                  <span className="font-semibold tabular-nums">{c.value}</span>
+                </li>
+              ))}
+            </ul>
+            <button
+              type="button"
+              onClick={() => setMetaOpen(true)}
+              className="shrink-0 min-h-[44px] px-3 rounded-lg border border-zinc-200 bg-white text-xs font-bold hover:border-zinc-400"
+            >
+              Edit
+            </button>
+          </div>
         )}
+        <Modal open={metaOpen} onClose={() => setMetaOpen(false)} title="Order details" size="sm">
+          <MetaSheet
+            cfg={cfg} orderType={orderType} isDine={isDine}
+            tableId={tableId} setTableId={setTableId}
+            guestCount={guestCount} setGuestCount={setGuestCount}
+            customer={customer} setCustomer={setCustomer}
+            locked={orderId != null} outletId={outletId} orderId={orderId}
+            onAssignTable={assignTable}
+          />
+        </Modal>
         <div className="px-2 py-1.5 bg-zinc-900 text-white text-2xs font-bold tracking-wider">
           ITEMS ({order ? ((order.items ?? []).length) : cart.length})
         </div>
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto">
+      {(cart.length > 0 || orderId != null) && (
+        <p role="status" aria-live="polite" className="sr-only">
+          {order ? (order.items ?? []).length : cart.length} items, {order ? formatINR(order.total) : `${currency}${displaySubtotal.toFixed(2)} estimated`}
+        </p>
+      )}
       <CartLines order={order} cart={cart} onQty={onQty} onRequestRemove={onRequestRemove} onRequestClear={onRequestClear} lineRefs={lineRefs} pulseKey={pulseKey} />
       {orderId == null ? (
       <>
@@ -400,7 +449,7 @@ export default function RightBill(props: RightBillProps) {
           </button>
         </div>
 
-        <div className="flex items-center justify-center gap-2 border-t px-2 py-1.5 shrink-0" role="status" aria-live="polite">
+        <div className="flex items-center justify-center gap-2 border-t px-2 py-1.5 shrink-0">
           {isPaid ? (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 border border-emerald-300 text-emerald-800 text-xs font-bold px-3 py-1">Paid</span>
           ) : (
