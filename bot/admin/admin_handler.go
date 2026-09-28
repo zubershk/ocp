@@ -1212,7 +1212,7 @@ func (h *AdminHandler) CompletePOSOrder(c *gin.Context) {
 		return
 	}
 	if err := h.posOrderService.CompleteOrder(id, c.GetInt("restaurantID"), c.GetInt("outletID")); err != nil {
-		if errors.Is(err, services.ErrOrderHasDue) || errors.Is(err, services.ErrInvalidOrderTransition) || errors.Is(err, services.ErrOrderNotFound) || errors.Is(err, services.ErrOrderTenantMismatch) {
+		if errors.Is(err, services.ErrOrderHasDue) || errors.Is(err, services.ErrOrderOverpaid) || errors.Is(err, services.ErrInvalidOrderTransition) || errors.Is(err, services.ErrOrderNotFound) || errors.Is(err, services.ErrOrderTenantMismatch) {
 			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 			return
 		}
@@ -1276,7 +1276,7 @@ func (h *AdminHandler) TakePaymentPOSOrder(c *gin.Context) {
 	}
 	restaurantID := c.GetInt("restaurantID")
 	outletID := c.GetInt("outletID")
-	paymentID, replayed, duePaise, err := h.posOrderService.TakePayment(id, restaurantID, outletID, req.Method, req.Amount, req.Tendered, req.Reference, receivedBy, key)
+	paymentID, replayed, duePaise, overpaidPaise, err := h.posOrderService.TakePayment(id, restaurantID, outletID, req.Method, req.Amount, req.Tendered, req.Reference, receivedBy, key)
 	if err != nil {
 		if errors.Is(err, services.ErrIdempotencyKeyTooLong) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "idempotency key exceeds 120 characters"})
@@ -1293,7 +1293,7 @@ func (h *AdminHandler) TakePaymentPOSOrder(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"payment_id": paymentID, "replayed": replayed, "due_paise": duePaise})
+	c.JSON(http.StatusOK, gin.H{"payment_id": paymentID, "replayed": replayed, "due_paise": duePaise, "overpaid_paise": overpaidPaise})
 }
 
 // RefundPOSOrder records a refund for a POS order payment.

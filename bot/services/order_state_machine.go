@@ -70,6 +70,11 @@ var ErrPaymentExceedsDue = errors.New("payment amount exceeds due")
 // has ledger payments. Cancel must not silently orphan money; refund first.
 var ErrOrderHasPayments = errors.New("order has payments, refund before cancel")
 
+// ErrOrderOverpaid is returned when completing an order whose ledger
+// holds more than the total. Overpayment is a distinct financial
+// invariant from outstanding due: it needs a refund, not a payment.
+var ErrOrderOverpaid = errors.New("order is overpaid, refund before complete")
+
 // orderTransitions is the single source of truth for status moves.
 var orderTransitions = map[string]map[string]bool{
 	OrderStatusDraft: {
