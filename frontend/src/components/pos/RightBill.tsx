@@ -61,16 +61,12 @@ export interface RightBillProps {
   notice: string | null;
 }
 
-function MetaSheet({ cfg, orderType, isDine, tableId, setTableId, guestCount, setGuestCount, customer, setCustomer, locked, outletId, orderId, onAssignTable }: {
-  cfg: POSConfig;
-  orderType: PosOrderType;
+function MetaSheet({ isDine, tableId, setTableId, guestCount, setGuestCount, locked, outletId, orderId, onAssignTable }: {
   isDine: boolean;
   tableId: number;
   setTableId: (n: number) => void;
   guestCount: number;
   setGuestCount: (n: number) => void;
-  customer: CustomerInfo;
-  setCustomer: (c: CustomerInfo) => void;
   locked: boolean;
   outletId: number | null;
   orderId: number | null;
@@ -92,15 +88,58 @@ function MetaSheet({ cfg, orderType, isDine, tableId, setTableId, guestCount, se
           <button type="button" aria-label="Increase guests" disabled={locked || (guestCount ?? 1) >= 50} onClick={() => setGuestCount(Math.min(50, (guestCount ?? 1) + 1))} className="w-11 h-11 min-h-[44px] min-w-[44px] rounded border bg-white grid place-items-center disabled:opacity-50 shrink-0">+</button>
         </div>
       </div>
-      <fieldset className="space-y-2" disabled={locked}>
-        <legend className="sr-only">Customer details</legend>
-        {shouldShowField(cfg, orderType, 'phone') && (<Input id="pos-phone" label={`Mobile${cfg.customer_fields?.phone?.required ? ' *' : ''}`} type="tel" inputMode="numeric" autoComplete="tel" maxLength={15} required={!!cfg.customer_fields?.phone?.required} aria-required={!!cfg.customer_fields?.phone?.required} value={customer.phone} onChange={e => setCustomer({ ...customer, phone: e.target.value.replace(/[^0-9+\- ]/g, '') })} placeholder="Mobile No." className="h-11 min-h-[44px]" />)}
-        {shouldShowField(cfg, orderType, 'name') && (<Input id="pos-name" label={`Name${cfg.customer_fields?.name?.required ? ' *' : ''}`} type="text" autoComplete="name" value={customer.name} onChange={e => setCustomer({ ...customer, name: e.target.value })} placeholder="Name" required={!!cfg.customer_fields?.name?.required} aria-required={!!cfg.customer_fields?.name?.required} className="h-11 min-h-[44px]" />)}
-        {shouldShowField(cfg, orderType, 'address') && (<Input id="pos-addr" label={`Address${cfg.customer_fields?.address?.required ? ' *' : ''}`} type="text" autoComplete="street-address" value={customer.address} onChange={e => setCustomer({ ...customer, address: e.target.value })} placeholder="Address" required={!!cfg.customer_fields?.address?.required} aria-required={!!cfg.customer_fields?.address?.required} className="h-11 min-h-[44px]" />)}
-        {shouldShowField(cfg, orderType, 'locality') && (<Input id="pos-locality" label={`Locality${cfg.customer_fields?.locality?.required ? ' *' : ''}`} type="text" value={customer.locality} onChange={e => setCustomer({ ...customer, locality: e.target.value })} placeholder="Locality" required={!!cfg.customer_fields?.locality?.required} aria-required={!!cfg.customer_fields?.locality?.required} className="h-11 min-h-[44px]" />)}
-      </fieldset>
       {locked && (
-        <p role="note" className="text-xs text-zinc-500">Guests and customer details are fixed after saving. Table changes go through the table list above.</p>
+        <p role="note" className="text-xs text-zinc-500">Guests are fixed after saving. Table changes go through the table list above.</p>
+      )}
+    </div>
+  );
+}
+
+function CustomerQuickAdd({ cfg, orderType, customer, setCustomer, locked }: {
+  cfg: POSConfig;
+  orderType: PosOrderType;
+  customer: CustomerInfo;
+  setCustomer: (c: CustomerInfo) => void;
+  locked: boolean;
+}) {
+  const fields = ([
+    { key: 'name', label: 'Name', autoComplete: 'name' },
+    { key: 'phone', label: 'Mobile', autoComplete: 'tel' },
+    { key: 'address', label: 'Address', autoComplete: 'street-address' },
+    { key: 'locality', label: 'Locality', autoComplete: undefined },
+  ] as const).filter((f) => shouldShowField(cfg, orderType, f.key));
+  if (fields.length === 0) return null;
+  return (
+    <div className="px-2 py-1.5 border-b border-[var(--pos-border)] bg-[var(--pos-panel)]">
+      <div className="grid grid-cols-2 gap-1.5" role="group" aria-label="Customer details">
+        {fields.map((f) => {
+          const required = !!cfg.customer_fields?.[f.key]?.required;
+          return (
+            <label key={f.key} className="min-w-0 text-xs font-bold text-zinc-600">
+              <span className="block truncate px-0.5">{f.label}{required ? ' *' : ''}</span>
+              <input
+                id={`pos-${f.key}`}
+                type={f.key === 'phone' ? 'tel' : 'text'}
+                inputMode={f.key === 'phone' ? 'numeric' : undefined}
+                autoComplete={f.autoComplete}
+                maxLength={f.key === 'phone' ? 15 : undefined}
+                required={required}
+                aria-required={required}
+                disabled={locked}
+                value={customer[f.key]}
+                onChange={(e) => setCustomer({
+                  ...customer,
+                  [f.key]: f.key === 'phone' ? e.target.value.replace(/[^0-9+\- ]/g, '') : e.target.value,
+                })}
+                placeholder={f.label}
+                className="mt-0.5 w-full h-11 min-h-[44px] rounded-lg border border-zinc-200 bg-white px-2.5 text-sm font-medium focus:outline-none focus:border-[var(--pos-accent)] disabled:opacity-60"
+              />
+            </label>
+          );
+        })}
+      </div>
+      {locked && (
+        <p role="note" className="mt-1 text-xs text-zinc-500">Customer details are fixed after saving.</p>
       )}
     </div>
   );
@@ -329,12 +368,16 @@ export default function RightBill(props: RightBillProps) {
             </button>
           </div>
         )}
-        <Modal open={metaOpen} onClose={() => setMetaOpen(false)} title="Order details" size="sm">
+        <CustomerQuickAdd
+          cfg={cfg} orderType={orderType}
+          customer={customer} setCustomer={setCustomer}
+          locked={orderId != null}
+        />
+        <Modal open={metaOpen} onClose={() => setMetaOpen(false)} title="Table & guests" size="sm">
           <MetaSheet
-            cfg={cfg} orderType={orderType} isDine={isDine}
+            isDine={isDine}
             tableId={tableId} setTableId={setTableId}
             guestCount={guestCount} setGuestCount={setGuestCount}
-            customer={customer} setCustomer={setCustomer}
             locked={orderId != null} outletId={outletId} orderId={orderId}
             onAssignTable={assignTable}
           />
