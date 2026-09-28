@@ -30,6 +30,7 @@ export interface PosMenuItem {
 }
 
 export interface PosOrderItem {
+  id?: number;
   menu_item_id: number;
   name: string;
   quantity: number;
@@ -37,6 +38,8 @@ export interface PosOrderItem {
   size?: string;
   crust?: string;
   line_total: number;
+  subtotal?: number;
+  addons?: { group_id: number; menu_item_id: number; name: string; price: number }[];
 }
 
 export interface PosOrder {
@@ -56,8 +59,13 @@ export interface PosOrder {
   items?: PosOrderItem[];
   source?: string;
   table_id?: number;
+  guest_count?: number;
   discount_id?: number;
   tax_amount?: number;
+  container_charge?: number;
+  tip_amount?: number;
+  is_complimentary?: boolean;
+  advance_at?: string;
 }
 
 export interface PosTable {
