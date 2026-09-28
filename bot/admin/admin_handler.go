@@ -1082,6 +1082,27 @@ func (h *AdminHandler) GetPOSOrder(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"order": order})
 }
 
+// GetPOSOrderPayments returns the server-authoritative payment ledger of
+// an order: rows plus paid/refunded/due/overpaid in paise. Read-only; the
+// POST/complete paths revalidate under the order lock.
+func (h *AdminHandler) GetPOSOrderPayments(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid ID"})
+		return
+	}
+	summary, err := h.posOrderService.GetPaymentLedger(id, c.GetInt("restaurantID"), c.GetInt("outletID"))
+	if err != nil {
+		if errors.Is(err, services.ErrOrderNotFound) || errors.Is(err, services.ErrOrderTenantMismatch) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "order not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ledger": summary})
+}
+
 // UpdatePOSOrder updates a mutable POS order's fulfillment type.
 // Body: {order_type: dine_in | takeaway | delivery}.
 func (h *AdminHandler) UpdatePOSOrder(c *gin.Context) {
