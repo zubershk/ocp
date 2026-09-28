@@ -51,6 +51,19 @@ func paiseToRupees(paise int64) float64 {
 	return float64(paise) / 100
 }
 
+// applyCharges folds operator-entered charges into the payable total.
+// subtotal/discount/tax come from ComputeTotalsFromLines; container and
+// tip are operator-entered rupees converted to paise by the caller.
+// Complimentary zeroes the payable amount: the discount absorbs the full
+// subtotal and tax is cleared, so orders.total and the ledger due agree.
+// Pure: unit-testable without a database.
+func applyCharges(subtotalPaise, discountPaise, taxPaise, containerPaise, tipPaise int64, complimentary bool) (discountPaiseOut, taxPaiseOut, totalPaise int64) {
+	if complimentary {
+		return subtotalPaise, 0, 0
+	}
+	return discountPaise, taxPaise, subtotalPaise-discountPaise+taxPaise+containerPaise+tipPaise
+}
+
 // dbQuerier is satisfied by both *sql.DB and *sql.Tx, so total
 // recalculation can run inside a caller's transaction (creation) or
 // in its own (discount apply/remove).
@@ -101,8 +114,10 @@ func loadDiscountForRecalc(q dbQuerier, discountID sql.NullInt64, orderRestauran
 
 // RecalculateOrderTotals recomputes an order's subtotal, discount,
 // tax, and total from menu-authoritative prices and persists them.
-// Frozen (completed/cancelled) orders are rejected: history must not
-// change. Returns the canonical summary in paise.
+// Operator-entered container charge and tip fold into the payable
+// total; a complimentary order zeroes it. Frozen (completed/cancelled)
+// orders are rejected: history must not change.
+// Returns the canonical summary in paise.
 func RecalculateOrderTotals(orderID, restaurantID int) (PriceSummary, error) {
 	return recalculateOrderTotalsTx(database.DB, orderID, restaurantID)
 }
@@ -115,9 +130,11 @@ func recalculateOrderTotalsTx(q dbQuerier, orderID, restaurantID int) (PriceSumm
 
 	var discountID sql.NullInt64
 	var status string
+	var containerCharge, tipAmount float64
+	var isComplimentary bool
 	err := q.QueryRow(
-		`SELECT discount_id, status FROM orders WHERE id = $1 AND restaurant_id = $2`,
-		orderID, restaurantID).Scan(&discountID, &status)
+		`SELECT discount_id, status, COALESCE(container_charge, 0), COALESCE(tip_amount, 0), COALESCE(is_complimentary, false) FROM orders WHERE id = $1 AND restaurant_id = $2`,
+		orderID, restaurantID).Scan(&discountID, &status, &containerCharge, &tipAmount, &isComplimentary)
 	if err == sql.ErrNoRows {
 		return summary, ErrOrderNotFound
 	}
@@ -199,6 +216,7 @@ func recalculateOrderTotalsTx(q dbQuerier, orderID, restaurantID int) (PriceSumm
 	taxPercentPaise := int64(taxPercent * 100) // 5% -> 500
 
 	discountPaise, taxPaise, totalPaise := ComputeTotalsFromLines(subtotalPaise, dType, dValue, taxPercentPaise)
+	discountPaise, taxPaise, totalPaise = applyCharges(subtotalPaise, discountPaise, taxPaise, rounding(containerCharge), rounding(tipAmount), isComplimentary)
 
 	_, err = q.Exec(`
 		UPDATE orders
