@@ -61,12 +61,16 @@ export interface RightBillProps {
   notice: string | null;
 }
 
-function MetaSheet({ isDine, tableId, setTableId, guestCount, setGuestCount, locked, outletId, orderId, onAssignTable }: {
+function MetaSheet({ cfg, orderType, isDine, tableId, setTableId, guestCount, setGuestCount, customer, setCustomer, locked, outletId, orderId, onAssignTable }: {
+  cfg: POSConfig;
+  orderType: PosOrderType;
   isDine: boolean;
   tableId: number;
   setTableId: (n: number) => void;
   guestCount: number;
   setGuestCount: (n: number) => void;
+  customer: CustomerInfo;
+  setCustomer: (c: CustomerInfo) => void;
   locked: boolean;
   outletId: number | null;
   orderId: number | null;
@@ -80,6 +84,13 @@ function MetaSheet({ isDine, tableId, setTableId, guestCount, setGuestCount, loc
           <TablePicker selected={tableId} onSelect={locked && orderId != null ? onAssignTable : setTableId} outletId={outletId} />
         </div>
       )}
+      {(shouldShowField(cfg, orderType, 'address') || shouldShowField(cfg, orderType, 'locality')) && (
+        <fieldset className="space-y-2" disabled={locked}>
+          <legend className="text-xs font-bold">Delivery address</legend>
+          {shouldShowField(cfg, orderType, 'address') && (<Input id="pos-addr" label={`Address${cfg.customer_fields?.address?.required ? ' *' : ''}`} type="text" autoComplete="street-address" value={customer.address} onChange={e => setCustomer({ ...customer, address: e.target.value })} placeholder="Address" required={!!cfg.customer_fields?.address?.required} aria-required={!!cfg.customer_fields?.address?.required} className="h-11 min-h-[44px]" />)}
+          {shouldShowField(cfg, orderType, 'locality') && (<Input id="pos-locality" label={`Locality${cfg.customer_fields?.locality?.required ? ' *' : ''}`} type="text" value={customer.locality} onChange={e => setCustomer({ ...customer, locality: e.target.value })} placeholder="Locality" required={!!cfg.customer_fields?.locality?.required} aria-required={!!cfg.customer_fields?.locality?.required} className="h-11 min-h-[44px]" />)}
+        </fieldset>
+      )}
       <div className="flex gap-2 items-center">
         <label htmlFor="pos-guests" className="text-xs font-bold w-16 shrink-0">Guests</label>
         <div className="flex-1 flex gap-1 items-center min-w-0">
@@ -89,7 +100,7 @@ function MetaSheet({ isDine, tableId, setTableId, guestCount, setGuestCount, loc
         </div>
       </div>
       {locked && (
-        <p role="note" className="text-xs text-zinc-500">Guests are fixed after saving. Table changes go through the table list above.</p>
+        <p role="note" className="text-xs text-zinc-500">Guests and address are fixed after saving. Table changes go through the table list above.</p>
       )}
     </div>
   );
@@ -106,10 +117,7 @@ function CustomerQuickAdd({ cfg, orderType, isDine, customer, setCustomer, locke
   const fields = ([
     { key: 'name', label: 'Name', autoComplete: 'name' },
     { key: 'phone', label: 'Mobile', autoComplete: 'tel' },
-    { key: 'address', label: 'Address', autoComplete: 'street-address' },
-    { key: 'locality', label: 'Locality', autoComplete: undefined },
-  ] as const).filter((f) => f.key === 'phone' ? (isDine || shouldShowField(cfg, orderType, f.key)) : shouldShowField(cfg, orderType, f.key));
-  if (fields.length === 0) return null;
+  ] as const);
   return (
     <div className="px-2 py-1.5 border-b border-[var(--pos-border)] bg-[var(--pos-panel)]">
       <div className="grid grid-cols-2 gap-1.5" role="group" aria-label="Customer details">
@@ -248,7 +256,7 @@ export default function RightBill(props: RightBillProps) {
   const kotEnabled = cfg.features?.kot === true;
   const [metaOpen, setMetaOpen] = useState(false);
   const chips = buildMetaChips(isDine, tableId, guestCount);
-  const [tapeOpen, setTapeOpen] = useState(true);
+  const [tapeOpen, setTapeOpen] = useState(false);
 
   const changeOrderType = async (t: PosOrderType) => {
     if (t === orderType) return;
@@ -348,7 +356,7 @@ export default function RightBill(props: RightBillProps) {
     <div className="flex flex-col h-full min-h-0">
       <div className="shrink-0">
         <OrderTypeStrip tabs={tabs} orderType={orderType} onOrderType={changeOrderType} />
-        {isDine && (
+        {(isDine || orderId == null) && (
           <div className="flex items-stretch gap-1 px-2 pb-1 min-h-[44px] border-b border-[var(--pos-border)]">
             <ul className="flex-1 min-w-0 flex flex-wrap items-center gap-x-2" aria-label="Order details">
               {chips.map((c) => (
@@ -363,7 +371,7 @@ export default function RightBill(props: RightBillProps) {
               onClick={() => setMetaOpen(true)}
               className="shrink-0 min-h-[44px] px-3 rounded-lg border border-zinc-200 bg-white text-xs font-bold hover:border-zinc-400"
             >
-              Edit
+              Details
             </button>
           </div>
         )}
@@ -372,11 +380,12 @@ export default function RightBill(props: RightBillProps) {
           customer={customer} setCustomer={setCustomer}
           locked={orderId != null}
         />
-        <Modal open={metaOpen} onClose={() => setMetaOpen(false)} title="Table & guests" size="sm">
+        <Modal open={metaOpen} onClose={() => setMetaOpen(false)} title="Order details" size="sm">
           <MetaSheet
-            isDine={isDine}
+            cfg={cfg} orderType={orderType} isDine={isDine}
             tableId={tableId} setTableId={setTableId}
             guestCount={guestCount} setGuestCount={setGuestCount}
+            customer={customer} setCustomer={setCustomer}
             locked={orderId != null} outletId={outletId} orderId={orderId}
             onAssignTable={assignTable}
           />
@@ -487,24 +496,27 @@ export default function RightBill(props: RightBillProps) {
           {notice && <div role="status" aria-live="polite" aria-atomic="true" className="mt-1.5 rounded border border-amber-200 bg-amber-50 p-2 text-xs">{notice}</div>}
         </div>
 
+        {hasOrder && (
         <div className="grid grid-cols-3 @[380px]:grid-cols-5 border-t border-l border-zinc-200 shrink-0" role="group" aria-label="Payment methods">
-          <button type="button" onClick={() => requestPay('cash')} disabled={!hasOrder || !canPay} title={!hasOrder ? 'Save the order first' : (!canPay ? 'Pay needs a manager key' : 'Pay with cash')} className="min-h-[44px] px-1 py-1 text-[11px] font-bold inline-flex flex-col items-center justify-center gap-0.5 bg-emerald-50 text-emerald-900 border-b border-r border-zinc-200 disabled:opacity-40">
+          <button type="button" onClick={() => requestPay('cash')} disabled={!canPay} title={!canPay ? 'Pay needs a manager key' : 'Pay with cash'} className="min-h-[44px] px-1 py-1 text-[11px] font-bold inline-flex flex-col items-center justify-center gap-0.5 bg-emerald-50 text-emerald-900 border-b border-r border-zinc-200 disabled:opacity-40">
             <Banknote size={16} aria-hidden /><span>Cash</span>
           </button>
-          <button type="button" onClick={() => requestPay('card')} disabled={!hasOrder || !canPay} title={!hasOrder ? 'Save the order first' : (!canPay ? 'Pay needs a manager key' : 'Pay with card')} className="min-h-[44px] px-1 py-1 text-[11px] font-bold inline-flex flex-col items-center justify-center gap-0.5 bg-white text-zinc-700 border-b border-r border-zinc-200 disabled:opacity-40">
+          <button type="button" onClick={() => requestPay('card')} disabled={!canPay} title={!canPay ? 'Pay needs a manager key' : 'Pay with card'} className="min-h-[44px] px-1 py-1 text-[11px] font-bold inline-flex flex-col items-center justify-center gap-0.5 bg-white text-zinc-700 border-b border-r border-zinc-200 disabled:opacity-40">
             <CreditCard size={16} aria-hidden /><span>Card</span>
           </button>
           <button type="button" disabled title="Due is a status, not a payment method" className="min-h-[44px] px-1 py-1 text-[11px] font-bold inline-flex flex-col items-center justify-center gap-0.5 bg-white text-zinc-400 border-b border-r border-zinc-200 disabled:opacity-60">
             <ReceiptText size={16} aria-hidden /><span>Due</span>
           </button>
-          <button type="button" onClick={() => requestPay('other')} disabled={!hasOrder || !canPay} title={!hasOrder ? 'Save the order first' : (!canPay ? 'Pay needs a manager key' : 'Pay with another method')} className="min-h-[44px] px-1 py-1 text-[11px] font-bold inline-flex flex-col items-center justify-center gap-0.5 bg-white text-zinc-700 border-b border-r border-zinc-200 disabled:opacity-40">
+          <button type="button" onClick={() => requestPay('other')} disabled={!canPay} title={!canPay ? 'Pay needs a manager key' : 'Pay with another method'} className="min-h-[44px] px-1 py-1 text-[11px] font-bold inline-flex flex-col items-center justify-center gap-0.5 bg-white text-zinc-700 border-b border-r border-zinc-200 disabled:opacity-40">
             <Wallet size={16} aria-hidden /><span>Other</span>
           </button>
-          <button type="button" onClick={() => requestPay()} disabled={!hasOrder || !canPay} title={!hasOrder ? 'Save the order first' : 'More payment methods'} className="min-h-[44px] px-1 py-1 text-[11px] font-bold inline-flex flex-col items-center justify-center gap-0.5 bg-white text-zinc-700 border-b border-r border-zinc-200 disabled:opacity-40">
+          <button type="button" onClick={() => requestPay()} disabled={!canPay} title={!canPay ? 'Pay needs a manager key' : 'More payment methods'} className="min-h-[44px] px-1 py-1 text-[11px] font-bold inline-flex flex-col items-center justify-center gap-0.5 bg-white text-zinc-700 border-b border-r border-zinc-200 disabled:opacity-40">
             <ChevronUp size={16} aria-hidden /><span>More</span>
           </button>
         </div>
+        )}
 
+        {hasOrder && (
         <div className="flex items-center justify-center gap-2 border-t px-2 py-1.5 shrink-0">
           {isPaid ? (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 border border-emerald-300 text-emerald-800 text-xs font-bold px-3 py-1">Paid</span>
@@ -514,22 +526,24 @@ export default function RightBill(props: RightBillProps) {
             </span>
           )}
         </div>
+        )}
 
+        {orderId == null ? (
+        <div className="p-2 border-t shrink-0">
+          <button type="button" disabled={!canCreate || creating} onClick={onCreate} aria-busy={creating} title="Save this sale as an order" className="w-full h-12 min-h-[48px] rounded-xl bg-[var(--pos-accent,#b91c1c)] text-white text-sm font-black disabled:opacity-50">
+            {creating ? 'Creating order…' : 'Save'}
+          </button>
+        </div>
+        ) : (
         <div className="relative border-t shrink-0">
         <div className="flex items-center gap-1 overflow-x-auto p-2" role="group" aria-label="Bill actions">
-          {orderId == null ? (
-            <button type="button" disabled={!canCreate || creating} onClick={onCreate} aria-busy={creating} title="Save this sale as an order" className="h-11 min-h-[44px] px-3 rounded-lg bg-[var(--pos-accent,#b91c1c)] text-white text-xs font-bold shrink-0 disabled:opacity-50">
-              {creating ? 'Creating order…' : 'Save'}
-            </button>
-          ) : (
-            <button type="button" disabled title="Order already saved" className="h-11 min-h-[44px] px-3 rounded-lg bg-zinc-100 border border-zinc-200 text-zinc-500 text-xs font-bold shrink-0 disabled:opacity-60">
-              Save
-            </button>
-          )}
-          <button type="button" disabled={!hasOrder} onClick={onSavePrint} title={!hasOrder ? 'Save the order first' : 'Open the receipt and print it'} className="h-11 min-h-[44px] px-3 rounded-lg bg-[var(--pos-accent,#b91c1c)] text-white text-xs font-bold shrink-0 disabled:opacity-50">
+          <button type="button" disabled title="Order already saved" className="h-11 min-h-[44px] px-3 rounded-lg bg-zinc-100 border border-zinc-200 text-zinc-500 text-xs font-bold shrink-0 disabled:opacity-60">
+            Save
+          </button>
+          <button type="button" onClick={onSavePrint} title="Open the receipt and print it" className="h-11 min-h-[44px] px-3 rounded-lg bg-[var(--pos-accent,#b91c1c)] text-white text-xs font-bold shrink-0 disabled:opacity-50">
             Save &amp; Print
           </button>
-          <button type="button" disabled={!hasOrder} onClick={onReceipt} title={!hasOrder ? 'Save the order first' : 'Open the receipt'} className="h-11 min-h-[44px] px-3 rounded-lg bg-white border-2 border-zinc-200 text-zinc-700 text-xs font-bold shrink-0 disabled:opacity-50">
+          <button type="button" onClick={onReceipt} title="Open the receipt" className="h-11 min-h-[44px] px-3 rounded-lg bg-white border-2 border-zinc-200 text-zinc-700 text-xs font-bold shrink-0 disabled:opacity-50">
             Receipt
           </button>
           <button type="button" disabled onClick={handleKot} title={kotEnabled ? 'KOT printing is not wired yet' : 'Enable KOT in Admin → POS Config → Features'} className="h-11 min-h-[44px] px-3 rounded-lg bg-zinc-100 border border-zinc-200 text-zinc-500 text-xs font-bold shrink-0 disabled:opacity-70 inline-flex flex-col items-center justify-center leading-none">
@@ -537,13 +551,14 @@ export default function RightBill(props: RightBillProps) {
             <span className="text-[10px] font-semibold">Not available</span>
           </button>
           {cfg.features?.hold !== false && (
-          <button type="button" disabled={!hasOrder} onClick={onHold} title={!hasOrder ? 'Save the order first' : 'Hold this order'} className="h-11 min-h-[44px] px-3 rounded-lg bg-amber-600 text-white text-xs font-bold shrink-0 disabled:opacity-50">
+          <button type="button" onClick={onHold} title="Hold this order" className="h-11 min-h-[44px] px-3 rounded-lg bg-amber-600 text-white text-xs font-bold shrink-0 disabled:opacity-50">
             Hold
           </button>
           )}
         </div>
         <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-white to-transparent" />
         </div>
+        )}
 
         <Modal open={bogoOpen} onClose={() => setBogoOpen(false)} title="Apply discount (register verifies)" size="sm">
           <div className="space-y-3">
