@@ -135,8 +135,19 @@ function CartLines({ order, cart, onQty, onRequestRemove, onRequestClear, lineRe
   return (
     <div className="p-2 space-y-2 bg-white">
       {order ? (
-        (order.items ?? []).length ? (order.items ?? []).map((it: any) => (
-          <div key={it.id} className="flex justify-between text-sm border-b py-1.5"><span>{it.quantity}× {it.name} {it.size ? `(${it.size})` : ''}{it.addons_snapshot && JSON.parse(it.addons_snapshot || '[]').length ? ` +${JSON.parse(it.addons_snapshot).length} addon` : ''}</span><span>₹{it.line_total ?? it.subtotal}</span></div>
+        (order.items ?? []).length ? (order.items ?? []).map((it) => (
+          <div key={it.id} className="border-b py-1.5 text-sm min-w-0">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="flex-1 min-w-0 truncate">{it.quantity}× {it.name}</span>
+              <span className="shrink-0 font-bold tabular-nums">₹{(it.line_total ?? it.subtotal).toFixed(2)}</span>
+            </div>
+            {(it.size || it.crust) && (
+              <div className="text-xs text-zinc-500 truncate">{[it.size, it.crust].filter(Boolean).join(' · ')}</div>
+            )}
+            {(it.addons?.length ?? 0) > 0 && (
+              <div className="text-xs text-zinc-500 truncate" title={(it.addons ?? []).map((a) => a.name).join(', ')}>{(it.addons ?? []).map((a) => a.name).join(', ')}</div>
+            )}
+          </div>
         )) : <div className="grid place-items-center py-8 text-center" role="status"><div className="text-sm font-bold">No Item Selected</div><div className="text-xs text-zinc-500">Please Select Item from Left Menu</div></div>
       ) : cart.length ? cart.map((l) => (
         <div
@@ -145,9 +156,15 @@ function CartLines({ order, cart, onQty, onRequestRemove, onRequestClear, lineRe
           className={`border rounded p-1.5 text-sm min-w-0 space-y-1.5 transition-colors ${pulseKey === l.key ? 'border-[var(--pos-accent)] bg-amber-50' : ''}`}
         >
           <div className="flex items-center gap-2 min-w-0">
-            <span className="flex-1 min-w-0 truncate" title={`${l.name}${l.addons?.length ? ` + ${l.addons.map((a) => a.name).join(', ')}` : ''}`}>{l.name} {l.size ? `(${l.size})` : ''}{l.addons?.length ? ` +${l.addons.length}` : ''}</span>
+            <span className="flex-1 min-w-0 truncate" title={l.name}>{l.quantity}× {l.name}</span>
             <span className="shrink-0 text-xs font-bold tabular-nums">₹{((l.unitPaise ?? 0) * l.quantity / 100).toFixed(2)}</span>
           </div>
+          {(l.size || l.crustName) && (
+            <div className="text-xs text-zinc-500 truncate">{[l.size, l.crustName].filter(Boolean).join(' · ')}</div>
+          )}
+          {(l.addons?.length ?? 0) > 0 && (
+            <div className="text-xs text-zinc-500 truncate" title={(l.addons ?? []).map((a) => a.name).join(', ')}>{(l.addons ?? []).map((a) => a.name).join(', ')}</div>
+          )}
           <div className="flex items-center gap-1">
             <button type="button" aria-label={`Decrease ${l.name}`} onClick={() => onQty(l.key, -1)} disabled={l.quantity <= 1} className="w-11 h-11 min-h-[44px] min-w-[44px] rounded border grid place-items-center disabled:opacity-50 shrink-0">−</button>
             <span className="w-6 text-center shrink-0" aria-live="polite">{l.quantity}</span>
@@ -183,8 +200,6 @@ export default function RightBill(props: RightBillProps) {
   const displaySubtotal = order ? order.subtotal : cart.reduce((s, l) => s + (l.unitPaise ?? 0) * l.quantity, 0) / 100;
   const displayDiscount = order?.discount ?? 0;
   const displayTax = order?.tax_amount ?? 0;
-  const displayTotal = order ? order.total : displaySubtotal;
-  const displayRoundOff = 0;
   const displayPaid = payments.reduce((s, p) => s + (p.amountPaise > 0 ? p.amountPaise : 0), 0) / 100;
   const displayChange = Math.max(0, displayPaid - (order ? order.total : displaySubtotal));
   const tabs = activeOrderTypes?.length ? activeOrderTypes : cfg.order_types.filter((o) => o.active);
@@ -196,7 +211,6 @@ export default function RightBill(props: RightBillProps) {
     discount: displayDiscount,
     container: containerCharge,
     tax: displayTax,
-    round_off: displayRoundOff,
     customer_paid: displayPaid,
     return_to_customer: displayChange,
     tip,
@@ -208,7 +222,6 @@ export default function RightBill(props: RightBillProps) {
   const hasOrder = orderId != null;
   const isPaid = hasOrder && duePaise === 0;
   const bogoEnabled = cfg.features?.bogo === true;
-  const splitEnabled = cfg.features?.split_bill === true;
   const kotEnabled = cfg.features?.kot === true;
 
   const requestPay = (method?: PosPayMethod) => {
@@ -266,14 +279,6 @@ export default function RightBill(props: RightBillProps) {
     }
   };
 
-  const handleSplit = () => {
-    if (!splitEnabled) {
-      setFatal('Enable Split in Admin → POS Config → Features.');
-      return;
-    }
-    setFatal('Split billing needs the PR 4 promotion model; use one bill for now.');
-  };
-
   const handleKot = () => {
     if (!kotEnabled) {
       setFatal('Enable KOT in Admin → POS Config → Features.');
@@ -297,18 +302,22 @@ export default function RightBill(props: RightBillProps) {
       <div className="flex-1 min-h-0 overflow-y-auto">
       <CartLines order={order} cart={cart} onQty={onQty} onRequestRemove={onRequestRemove} onRequestClear={onRequestClear} lineRefs={lineRefs} pulseKey={pulseKey} />
       {orderId == null ? (
-      <div className="border-t">
+      <>
+      <dl className="border-t">
         {billRows.map((br) => {
+          // Round Off has no server computation behind it — never render it.
+          if (br.key === 'round_off') return null;
           const val = rowValues[br.key] ?? 0;
           const isDiscount = br.key === 'discount';
           if (br.key === 'tip' && cfg.charges && cfg.charges.tip_enabled === false) return null;
           return (
             <div key={br.key} className="grid grid-cols-[1fr_80px] gap-2 px-3 py-1.5 text-xs odd:bg-zinc-100 even:bg-white border-b">
-              <span className="font-medium">{br.label} {br.key === 'discount' && <span className="text-2xs text-zinc-500"> (after order)</span>}</span>
-              <span className="text-right tabular-nums">{isDiscount ? `(${currency}${Number(val).toFixed(2)})` : `${currency}${Number(val).toFixed(2)}`}</span>
+              <dt className="font-medium">{br.label} {br.key === 'discount' && <span className="text-2xs text-zinc-500"> (after order)</span>}</dt>
+              <dd className="text-right tabular-nums">{isDiscount ? `(${currency}${Number(val).toFixed(2)})` : `${currency}${Number(val).toFixed(2)}`}</dd>
             </div>
           );
         })}
+        </dl>
         <div className="grid grid-cols-1 @[360px]:grid-cols-2 gap-2 p-2 bg-white">
           {billRows.find((b) => b.key === 'container') && (
             <label htmlFor="pos-container" className="flex items-center gap-1 text-xs">{billRows.find((b) => b.key === 'container')?.label || 'Container'} <input id="pos-container" type="number" inputMode="numeric" min={0} value={containerCharge} onChange={e => setContainerCharge(Math.max(0, parseFloat(e.target.value) || 0))} className="ml-auto w-16 h-11 min-h-[44px] rounded border px-1 text-right focus:outline-none focus:border-[var(--pos-accent)]" /></label>
@@ -317,36 +326,54 @@ export default function RightBill(props: RightBillProps) {
             <label htmlFor="pos-tip" className="flex items-center gap-1 text-xs">{billRows.find((b) => b.key === 'tip')?.label || 'Tip'} <input id="pos-tip" type="number" inputMode="numeric" min={0} value={tip} onChange={e => setTip(Math.max(0, parseFloat(e.target.value) || 0))} className="ml-auto w-16 h-11 min-h-[44px] rounded border px-1 text-right focus:outline-none focus:border-[var(--pos-accent)]" /></label>
           )}
         </div>
-      </div>
+      </>
       ) : null}
-      <div className="border-t bg-white">
+      {orderId != null ? (
+        <CheckoutPanel
+          orderId={orderId}
+          payments={payments}
+          duePaise={duePaise}
+          payRequest={payRequest}
+          compact
+          onPaid={onPaid}
+          onCompleted={onCompleted}
+          onHold={onHold}
+          onCancel={onCancel}
+          onModify={onModify}
+          onReceipt={onReceipt}
+          canPay={canPay}
+          canDiscount={canDiscount}
+        />
+      ) : null}
+      </div>
+      <div className="border-t bg-white shrink-0">
         <div className="px-2 pt-2 shrink-0">
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex flex-1 flex-wrap items-center gap-1" role="group" aria-label="Offer actions">
               <button
                 type="button"
                 onClick={handleBogo}
-                title={bogoEnabled ? 'Apply the active BOGO discount' : 'Enable BOGO in Admin → POS Config → Features'}
+                title={bogoEnabled ? 'Apply a discount' : 'Offer discounts at the register (Admin → POS Config → Features)'}
                 className={`h-11 min-h-[44px] px-2.5 rounded-lg border text-xs font-bold shrink-0 ${bogoEnabled ? 'bg-amber-100 border-amber-300 text-amber-900' : 'bg-zinc-100 border-zinc-200 text-zinc-600'}`}
               >
-                Bogo Offer
+                Discount
               </button>
               <button
                 type="button"
-                onClick={handleSplit}
-                title={splitEnabled ? 'Split billing needs the PR 4 promotion model' : 'Enable Split in Admin → POS Config → Features'}
-                className={`h-11 min-h-[44px] px-2.5 rounded-lg border text-xs font-bold shrink-0 ${splitEnabled ? 'bg-zinc-900 border-zinc-900 text-white' : 'bg-zinc-100 border-zinc-200 text-zinc-600'}`}
+                disabled
+                title="Splitting one bill across guests is not supported yet. Record one bill per guest."
+                className="h-11 min-h-[44px] px-2.5 rounded-lg border text-xs font-bold shrink-0 bg-zinc-100 border-zinc-200 text-zinc-500 disabled:opacity-70"
               >
                 Split
               </button>
-              {cfg.features?.advance_order !== false && (
+              {orderId == null && cfg.features?.advance_order !== false && (
                 <button type="button" onClick={() => setIsAdvance((v: boolean) => !v)} aria-pressed={isAdvance} aria-expanded={isAdvance} aria-controls="advance-at" className={`h-11 min-h-[44px] px-2.5 rounded-lg border text-xs font-bold shrink-0 ${isAdvance ? 'bg-blue-100 border-blue-300 text-blue-900' : 'bg-zinc-100 border-zinc-200 text-zinc-700'}`}>Advance Order</button>
               )}
-              {cfg.features?.complimentary !== false && (
+              {orderId == null && cfg.features?.complimentary !== false && (
                 <label className="flex items-center gap-1.5 text-xs font-semibold text-zinc-700 shrink-0 px-1"><input type="checkbox" checked={isComplimentary} onChange={e => setIsComplimentary(e.target.checked)} className="h-4 w-4 accent-[var(--pos-accent)]" />Complimentary</label>
               )}
             </div>
-            <span className="ml-auto whitespace-nowrap text-sm font-black tabular-nums shrink-0">Total {isComplimentary ? `${currency}0.00` : `${currency}${(displayTotal + containerCharge + tip).toFixed(2)}`}</span>
+            <span className="ml-auto whitespace-nowrap text-sm font-black tabular-nums shrink-0">Total {order ? formatINR(order.total) : `${currency}${displaySubtotal.toFixed(2)}`}</span>
           </div>
           {isAdvance && cfg.features?.advance_order !== false && (
             <Input id="advance-at" label="Advance time" type="datetime-local" value={advanceAt} min={nowLocal} onChange={e => setAdvanceAt(e.target.value)} aria-label="Advance order time" className="h-11 min-h-[44px] text-xs" />
@@ -404,36 +431,18 @@ export default function RightBill(props: RightBillProps) {
             <span>KOT</span>
             <span className="text-[10px] font-semibold">Not available</span>
           </button>
+          {cfg.features?.hold !== false && (
           <button type="button" disabled={!hasOrder} onClick={onHold} title={!hasOrder ? 'Save the order first' : 'Hold this order'} className="h-11 min-h-[44px] px-3 rounded-lg bg-amber-600 text-white text-xs font-bold shrink-0 disabled:opacity-50">
             Hold
           </button>
+          )}
         </div>
         <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-white to-transparent" />
         </div>
 
-        {orderId != null ? (
-          <div className="border-t">
-            <CheckoutPanel
-              orderId={orderId}
-              payments={payments}
-              duePaise={duePaise}
-              payRequest={payRequest}
-              compact
-              onPaid={onPaid}
-              onCompleted={onCompleted}
-              onHold={onHold}
-              onCancel={onCancel}
-              onModify={onModify}
-              onReceipt={onReceipt}
-              canPay={canPay}
-              canDiscount={canDiscount}
-            />
-          </div>
-        ) : null}
-
-        <Modal open={bogoOpen} onClose={() => setBogoOpen(false)} title="BOGO offer (register verifies)" size="sm">
+        <Modal open={bogoOpen} onClose={() => setBogoOpen(false)} title="Apply discount (register verifies)" size="sm">
           <div className="space-y-3">
-            <p className="text-xs text-zinc-500">Choose the active BOGO promotion. The register verifies eligibility.</p>
+            <p className="text-xs text-zinc-500">Choose a discount. The register checks the rule.</p>
             <DiscountList
               busy={bogoBusy}
               onPick={applyBogo}
@@ -441,7 +450,6 @@ export default function RightBill(props: RightBillProps) {
             />
           </div>
         </Modal>
-      </div>
       </div>
     </div>
   );

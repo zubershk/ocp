@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { PauseCircle, PlusCircle, ReceiptText } from 'lucide-react';
-import Button from '../components/ui/Button';
 import { adminFetch, getAdminKey } from '../services/api';
 import {
   posApi,
@@ -14,15 +12,11 @@ import {
 import PosAuthGate from '../components/pos/PosAuthGate';
 import PosHeader from '../components/pos/PosHeader';
 import MenuPanel from '../components/pos/MenuPanel';
-import TablePicker from '../components/pos/TablePicker';
-import CartPanel from '../components/pos/CartPanel';
-import CheckoutPanel from '../components/pos/CheckoutPanel';
 import HoldDrawer from '../components/pos/HoldDrawer';
 import { usePosConfig } from '../hooks/usePosConfig';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import CategoryColumn from '../components/pos/CategoryColumn';
 import RightBill from '../components/pos/RightBill';
-import Input from '../components/ui/Input';
 import { useToast } from '../context/ToastContext';
 import ReceiptModal from '../components/pos/ReceiptModal';
 import type { CartLine, CustomerInfo, HeldOrder, RecordedPayment } from '../components/pos/types';

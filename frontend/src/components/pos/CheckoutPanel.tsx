@@ -210,6 +210,7 @@ export default function CheckoutPanel({
       <div className="flex items-center gap-2 flex-wrap">
         <h2 className="font-black text-lg">Order {order ? `#${order.order_number}` : `#${orderId}`}</h2>
         {order && <Badge variant={statusVariant[order.status] ?? 'neutral'}><span className="uppercase tracking-wide">{statusLabel(order.status)}</span></Badge>}
+        {order?.is_complimentary === true && <Badge variant="neutral"><span className="uppercase tracking-wide">Complimentary</span></Badge>}
         <button type="button" onClick={() => orderQuery.refetch()} className="ml-auto text-xs font-bold text-zinc-400 hover:text-zinc-700">Refresh</button>
       </div>
 
