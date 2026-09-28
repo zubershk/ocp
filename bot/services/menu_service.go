@@ -322,10 +322,16 @@ func (s *OrderService) CreateOrder(order *models.Order) error {
 
 func (s *OrderService) GetOrderByID(id, restaurantID int) (*models.Order, error) {
 	var order models.Order
+	var advanceAt sql.NullTime
 	err := database.DB.QueryRow(`
-		SELECT id, order_number, customer_name, customer_phone, order_type, COALESCE(address,''), COALESCE(landmark,''), payment_method, subtotal, delivery_fee, discount, total, status, created_at, updated_at
+		SELECT id, order_number, customer_name, customer_phone, order_type, COALESCE(address,''), COALESCE(landmark,''), payment_method, subtotal, delivery_fee, discount, total, status, created_at, updated_at,
+			tax_amount, discount_id, source, table_id, guest_count, container_charge, tip_amount, is_complimentary, advance_at
 		FROM orders WHERE id = $1 AND restaurant_id = $2
-	`, id, ResolveRestaurant(restaurantID)).Scan(&order.ID, &order.OrderNumber, &order.CustomerName, &order.CustomerPhone, &order.OrderType, &order.Address, &order.Landmark, &order.PaymentMethod, &order.Subtotal, &order.DeliveryFee, &order.Discount, &order.Total, &order.Status, &order.CreatedAt, &order.UpdatedAt)
+	`, id, ResolveRestaurant(restaurantID)).Scan(&order.ID, &order.OrderNumber, &order.CustomerName, &order.CustomerPhone, &order.OrderType, &order.Address, &order.Landmark, &order.PaymentMethod, &order.Subtotal, &order.DeliveryFee, &order.Discount, &order.Total, &order.Status, &order.CreatedAt, &order.UpdatedAt,
+		&order.TaxAmount, &order.DiscountID, &order.Source, &order.TableID, &order.GuestCount, &order.ContainerCharge, &order.TipAmount, &order.IsComplimentary, &advanceAt)
+	if advanceAt.Valid {
+		order.AdvanceAt = &advanceAt.Time
+	}
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -335,7 +341,7 @@ func (s *OrderService) GetOrderByID(id, restaurantID int) (*models.Order, error)
 
 	// Load order items
 	rows, err := database.DB.Query(`
-		SELECT id, order_id, menu_item_id, name, quantity, unit_price, options, subtotal, created_at
+		SELECT id, order_id, menu_item_id, name, quantity, unit_price, options, subtotal, created_at, COALESCE(addons_snapshot, '[]'::jsonb)
 		FROM order_items WHERE order_id = $1
 	`, order.ID)
 	if err != nil {
@@ -345,11 +351,12 @@ func (s *OrderService) GetOrderByID(id, restaurantID int) (*models.Order, error)
 
 	for rows.Next() {
 		var item models.OrderItem
-		var optionsJSON []byte
-		if err := rows.Scan(&item.ID, &item.OrderID, &item.MenuItemID, &item.Name, &item.Quantity, &item.UnitPrice, &optionsJSON, &item.Subtotal, &item.CreatedAt); err != nil {
+		var optionsJSON, addonsJSON []byte
+		if err := rows.Scan(&item.ID, &item.OrderID, &item.MenuItemID, &item.Name, &item.Quantity, &item.UnitPrice, &optionsJSON, &item.Subtotal, &item.CreatedAt, &addonsJSON); err != nil {
 			return nil, err
 		}
 		json.Unmarshal(optionsJSON, &item.Options)
+		json.Unmarshal(addonsJSON, &item.Addons)
 		var opts map[string]string
 		if json.Unmarshal(optionsJSON, &opts) == nil {
 			item.Size = opts["size"]
