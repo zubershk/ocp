@@ -53,6 +53,8 @@ export interface RightBillProps {
   onSavePrint: () => void;
   canPay: boolean;
   canDiscount: boolean;
+  canCancel: boolean;
+  canManageTables: boolean;
   lineRefs: React.RefObject<Map<string, HTMLDivElement>>;
   pulseKey: string | null;
   onRequestRemove: (key: string, name: string) => void;
@@ -178,7 +180,7 @@ function CartLines({ order, cart, onQty, onRequestRemove, onRequestClear, lineRe
 }
 
 export default function RightBill(props: RightBillProps) {
-  const { config, activeOrderTypes, orderType, onOrderType, tableId, setTableId, guestCount, setGuestCount, customer, setCustomer, cart, order, orderId, containerCharge, setContainerCharge, tip, setTip, isComplimentary, setIsComplimentary, isAdvance, setIsAdvance, advanceAt, setAdvanceAt, onQty, onCreate, creating, canCreate, payments, duePaise, overpaidPaise, ledgerReady, onPaid, onResyncLedger, onCompleted, onHold, onCancel, onModify, onReceipt, onSavePrint, canPay, canDiscount, lineRefs, pulseKey, onRequestRemove, onRequestClear, fatal, setFatal, notice } = props;
+  const { config, activeOrderTypes, orderType, onOrderType, tableId, setTableId, guestCount, setGuestCount, customer, setCustomer, cart, order, orderId, containerCharge, setContainerCharge, tip, setTip, isComplimentary, setIsComplimentary, isAdvance, setIsAdvance, advanceAt, setAdvanceAt, onQty, onCreate, creating, canCreate, payments, duePaise, overpaidPaise, ledgerReady, onPaid, onResyncLedger, onCompleted, onHold, onCancel, onModify, onReceipt, onSavePrint, canPay, canDiscount, canCancel, canManageTables, lineRefs, pulseKey, onRequestRemove, onRequestClear, fatal, setFatal, notice } = props;
   const cfg = config;
   const currency = cfg.ui?.currency_symbol || '₹';
   // Display-only estimates for immediate UI feedback (quantity/addon/cart edits).
@@ -208,13 +210,33 @@ export default function RightBill(props: RightBillProps) {
   const [bogoOpen, setBogoOpen] = useState(false);
   const [bogoBusy, setBogoBusy] = useState(false);
   const hasOrder = orderId != null;
+  const orderOpen = order == null || ['draft', 'held', 'confirmed'].includes(order.status);
+  const orderMutable = orderId == null || orderOpen;
+  const holdable = orderId != null && (order == null || ['draft', 'confirmed'].includes(order.status));
   const isPaid = hasOrder && ledgerReady && duePaise === 0 && overpaidPaise === 0;
   const bogoEnabled = cfg.features?.bogo === true;
   const kotEnabled = cfg.features?.kot === true;
   const [tapeOpen, setTapeOpen] = useState(false);
 
+  const assignTableId = async (next: number) => {
+    const prev = tableId;
+    setTableId(next);
+    if (orderId == null) return;
+    try {
+      await posApi.assignTable(next, orderId);
+      await qc.invalidateQueries({ queryKey: ['pos-tables'] });
+    } catch (e) {
+      setTableId(prev);
+      setFatal(posErrorMessage(e).message);
+    }
+  };
+
   const changeOrderType = async (t: PosOrderType) => {
     if (t === orderType) return;
+    if (!orderMutable) {
+      setFatal('Frozen order — start a new sale to change the order type.');
+      return;
+    }
     if (orderId == null) {
       onOrderType(t);
       return;
@@ -231,6 +253,10 @@ export default function RightBill(props: RightBillProps) {
   const requestPay = (method?: PosPayMethod) => {
     if (!hasOrder) {
       setFatal('Save the order before collecting payment.');
+      return;
+    }
+    if (!orderMutable) {
+      setFatal('Frozen order — start a new sale to collect payment.');
       return;
     }
     if (!canPay) {
@@ -295,15 +321,15 @@ export default function RightBill(props: RightBillProps) {
   return (
     <div className="flex flex-col h-full min-h-0">
       <div className="shrink-0">
-        <OrderTypeStrip tabs={tabs} orderType={orderType} onOrderType={changeOrderType} />
+        <OrderTypeStrip tabs={tabs} orderType={orderType} onOrderType={changeOrderType} disabled={!orderMutable} />
         {isDine && (
           <div className="px-2 py-1.5 space-y-1.5 border-b border-[var(--pos-border)] bg-[var(--pos-panel)]">
             <div className="flex gap-2 items-center">
               <span id="pos-table-label" className="text-xs font-bold w-14 shrink-0 text-zinc-600">Table</span>
               <div className="flex-1 flex gap-1 min-w-0" role="group" aria-labelledby="pos-table-label">
-                <button type="button" aria-label="Decrease table number" onClick={() => setTableId(Math.max(0, tableId - 1))} disabled={orderId != null || tableId <= 0} className="w-11 h-11 min-h-[44px] min-w-[44px] rounded-lg border border-zinc-200 bg-white grid place-items-center disabled:opacity-50 shrink-0">−</button>
-                <input id="pos-table" type="text" inputMode="numeric" pattern="[0-9]*" value={tableId || ''} disabled={orderId != null} onChange={e => setTableId(Math.max(0, Math.min(99, parseInt(e.target.value) || 0)))} placeholder="—" aria-label="Table number" className="flex-1 min-w-0 h-11 min-h-[44px] rounded-lg border border-zinc-200 bg-white text-center text-sm font-bold tabular-nums focus:outline-none focus:border-[var(--pos-accent,#b91c1c)] disabled:opacity-60" />
-                <button type="button" aria-label="Increase table number" onClick={() => setTableId(Math.min(99, tableId + 1))} disabled={orderId != null} className="w-11 h-11 min-h-[44px] min-w-[44px] rounded-lg border border-zinc-200 bg-white grid place-items-center disabled:opacity-50 shrink-0">+</button>
+                <button type="button" aria-label="Decrease table number" onClick={() => void assignTableId(Math.max(0, tableId - 1))} disabled={(orderId != null && !canManageTables) || tableId <= 0} className="w-11 h-11 min-h-[44px] min-w-[44px] rounded-lg border border-zinc-200 bg-white grid place-items-center disabled:opacity-50 shrink-0">−</button>
+                <input id="pos-table" type="text" inputMode="numeric" pattern="[0-9]*" value={tableId || ''} disabled={orderId != null && !canManageTables} onChange={e => void assignTableId(Math.max(0, Math.min(99, parseInt(e.target.value) || 0)))} placeholder="—" aria-label="Table number" className="flex-1 min-w-0 h-11 min-h-[44px] rounded-lg border border-zinc-200 bg-white text-center text-sm font-bold tabular-nums focus:outline-none focus:border-[var(--pos-accent,#b91c1c)] disabled:opacity-60" />
+                <button type="button" aria-label="Increase table number" onClick={() => void assignTableId(Math.min(99, tableId + 1))} disabled={orderId != null && !canManageTables} className="w-11 h-11 min-h-[44px] min-w-[44px] rounded-lg border border-zinc-200 bg-white grid place-items-center disabled:opacity-50 shrink-0">+</button>
               </div>
             </div>
             <div className="flex gap-2 items-center">
@@ -315,7 +341,7 @@ export default function RightBill(props: RightBillProps) {
               </div>
             </div>
             {orderId != null && (
-              <p role="note" className="text-xs text-zinc-500">Table and guests are fixed after saving.</p>
+              <p role="note" className="text-xs text-zinc-500">{canManageTables ? 'Table changes apply immediately. Guests are fixed after saving.' : 'Table and guests are fixed after saving.'}</p>
             )}
           </div>
         )}
@@ -391,10 +417,11 @@ export default function RightBill(props: RightBillProps) {
           onHold={onHold}
           onCancel={onCancel}
           onModify={onModify}
-          onReceipt={onReceipt}
-          canPay={canPay}
-          canDiscount={canDiscount}
-        />
+              onReceipt={onReceipt}
+              canPay={canPay}
+              canDiscount={canDiscount}
+              canCancel={canCancel}
+            />
       ) : null}
       </div>
       <div className="border-t bg-white shrink-0">
@@ -492,7 +519,7 @@ export default function RightBill(props: RightBillProps) {
             <span className="text-[10px] font-semibold">Not available</span>
           </button>
           {cfg.features?.hold !== false && (
-          <button type="button" onClick={onHold} title="Hold this order" className="h-11 min-h-[44px] px-3 rounded-lg bg-amber-600 text-white text-xs font-bold shrink-0 disabled:opacity-50">
+          <button type="button" onClick={onHold} disabled={!holdable} title={!hasOrder ? 'Save the order first' : (!holdable ? 'Only draft or confirmed orders can be held' : 'Hold this order')} className="h-11 min-h-[44px] px-3 rounded-lg bg-amber-600 text-white text-xs font-bold shrink-0 disabled:opacity-50">
             Hold
           </button>
           )}
