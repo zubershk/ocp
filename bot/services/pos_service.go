@@ -301,11 +301,18 @@ func (s *POSOrderService) createOrderInternal(restaurantID int, outletID int, dr
 		if err := database.DB.QueryRow(`SELECT id FROM orders WHERE restaurant_id=$1 AND idempotency_key=$2`, restaurantID, idempotencyKey).Scan(&existingID); err == nil {
 			var order models.Order
 			var advanceAt sql.NullTime
+			var discountID, tableID sql.NullInt64
 			if err := database.DB.QueryRow(`
 				SELECT id, order_number, customer_name, customer_phone, order_type, address, landmark, payment_method, subtotal, delivery_fee, discount, total, status, created_at, updated_at,
 					tax_amount, discount_id, source, table_id, guest_count, container_charge, tip_amount, is_complimentary, advance_at
 				FROM orders WHERE id=$1 AND restaurant_id=$2`, existingID, restaurantID).Scan(&order.ID, &order.OrderNumber, &order.CustomerName, &order.CustomerPhone, &order.OrderType, &order.Address, &order.Landmark, &order.PaymentMethod, &order.Subtotal, &order.DeliveryFee, &order.Discount, &order.Total, &order.Status, &order.CreatedAt, &order.UpdatedAt,
-				&order.TaxAmount, &order.DiscountID, &order.Source, &order.TableID, &order.GuestCount, &order.ContainerCharge, &order.TipAmount, &order.IsComplimentary, &advanceAt); err == nil {
+				&order.TaxAmount, &discountID, &order.Source, &tableID, &order.GuestCount, &order.ContainerCharge, &order.TipAmount, &order.IsComplimentary, &advanceAt); err == nil {
+				if discountID.Valid {
+					order.DiscountID = int(discountID.Int64)
+				}
+				if tableID.Valid {
+					order.TableID = int(tableID.Int64)
+				}
 				if advanceAt.Valid {
 					order.AdvanceAt = &advanceAt.Time
 				}
@@ -363,11 +370,18 @@ func (s *POSOrderService) createOrderInternal(restaurantID int, outletID int, dr
 				_ = tx.Rollback()
 				var order models.Order
 				var advanceAt3 sql.NullTime
+				var discountID3, tableID3 sql.NullInt64
 				if err3 := database.DB.QueryRow(`
 					SELECT id, order_number, customer_name, customer_phone, order_type, address, landmark, payment_method, subtotal, delivery_fee, discount, total, status, created_at, updated_at,
 						tax_amount, discount_id, source, table_id, guest_count, container_charge, tip_amount, is_complimentary, advance_at
 					FROM orders WHERE id=$1 AND restaurant_id=$2`, existingID, restaurantID).Scan(&order.ID, &order.OrderNumber, &order.CustomerName, &order.CustomerPhone, &order.OrderType, &order.Address, &order.Landmark, &order.PaymentMethod, &order.Subtotal, &order.DeliveryFee, &order.Discount, &order.Total, &order.Status, &order.CreatedAt, &order.UpdatedAt,
-					&order.TaxAmount, &order.DiscountID, &order.Source, &order.TableID, &order.GuestCount, &order.ContainerCharge, &order.TipAmount, &order.IsComplimentary, &advanceAt3); err3 == nil {
+					&order.TaxAmount, &discountID3, &order.Source, &tableID3, &order.GuestCount, &order.ContainerCharge, &order.TipAmount, &order.IsComplimentary, &advanceAt3); err3 == nil {
+					if discountID3.Valid {
+						order.DiscountID = int(discountID3.Int64)
+					}
+					if tableID3.Valid {
+						order.TableID = int(tableID3.Int64)
+					}
 					if advanceAt3.Valid {
 						order.AdvanceAt = &advanceAt3.Time
 					}
