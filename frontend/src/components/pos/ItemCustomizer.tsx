@@ -190,10 +190,17 @@ export default function ItemCustomizer({
               const selected = selectedAddons[g.id] ?? new Set<number>();
               const isSingle = g.selection_type === 'single';
               const helperId = `addon-help-${g.id}`;
+              const unmet = selected.size < g.min_select;
+              const hintText = g.min_select === g.max_select
+                ? `Choose ${g.min_select}`
+                : g.min_select <= 1
+                  ? 'Choose at least 1'
+                  : `Choose ${g.min_select}–${g.max_select}`;
               return (
                 <fieldset key={g.id}>
                   <legend className="text-sm font-bold">{g.name} <span className="ml-2 text-xs font-normal text-blue-500 bg-blue-50 px-2 py-0.5 rounded">{isSingle ? 'Single Add-on Only' : 'Multiple Add-ons'} (Min: {g.min_select}, Max: {g.max_select})</span></legend>
                   <div id={helperId} className="sr-only">Select {g.min_select} to {g.max_select} options. {selected.size} selected.</div>
+                  {unmet && <p role="status" className="text-xs font-semibold text-amber-700 mt-1">{hintText} to continue — {selected.size} selected.</p>}
                   <div className="grid gap-2 mt-2 grid-cols-2 sm:grid-cols-3">
                     {filtered.map(it => {
                       const isSel = selected.has(it.id);
@@ -294,7 +301,8 @@ export default function ItemCustomizer({
                 } as Omit<CartLine, 'key'>);
                 onClose();
               }}
-              className={`w-full h-14 rounded-2xl font-bold text-lg transition-all active:scale-[0.98] sticky bottom-0 ${canAdd ? 'bg-[var(--pos-accent)] hover:bg-[var(--pos-accent-hover)] text-white shadow-lg' : 'bg-zinc-200 text-zinc-500 cursor-not-allowed'}`}
+              aria-describedby={!canAdd ? addonGroups.filter(g => (selectedAddons[g.id]?.size ?? 0) < g.min_select).map(g => `addon-help-${g.id}`).join(' ') || undefined : undefined}
+              className={`w-full h-14 min-h-[56px] rounded-2xl font-bold text-lg transition-all active:scale-[0.98] sticky bottom-0 z-10 ${canAdd ? 'bg-[var(--pos-accent)] hover:bg-[var(--pos-accent-hover)] text-white shadow-lg' : 'bg-zinc-200 text-zinc-500 cursor-not-allowed'}`}
             >
               {canAdd ? 'Save' : 'Select required addons'} {canAdd && estPaise > 0 && `· ${formatPaise(estPaise * qty)}`}
             </button>
