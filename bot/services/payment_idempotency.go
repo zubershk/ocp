@@ -1,6 +1,7 @@
 package services
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
@@ -70,6 +71,11 @@ func ValidatePaymentInput(method string, amountPaise int64) error {
 	if !ValidPaymentMethods[method] {
 		return fmt.Errorf("unsupported payment method %q", method)
 	}
+	return ValidatePaymentAmount(amountPaise)
+}
+
+// ValidatePaymentAmount rejects non-positive amounts. Pure: no DB.
+func ValidatePaymentAmount(amountPaise int64) error {
 	if amountPaise <= 0 {
 		return errors.New("payment amount must be positive")
 	}
@@ -77,6 +83,25 @@ func ValidatePaymentInput(method string, amountPaise int64) error {
 		return errors.New("payment amount too large")
 	}
 	return nil
+}
+
+// isAcceptedPayMethod reports whether method may hit the ledger for the
+// restaurant: a system rail, or an active restaurant-configured method.
+// q is usually the payment transaction so the check serializes with the
+// insert. Inactive or unknown configured keys are rejected.
+func isAcceptedPayMethod(q dbQuerier, method string, restaurantID int) (bool, error) {
+	if ValidPaymentMethods[method] {
+		return true, nil
+	}
+	var active bool
+	err := q.QueryRow(`SELECT active FROM restaurant_payment_methods WHERE restaurant_id=$1 AND key=$2`, restaurantID, method).Scan(&active)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return active, nil
 }
 
 // ValidatePaymentReference rejects oversized references stored in the ledger.

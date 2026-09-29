@@ -3,6 +3,7 @@ package services
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"sync"
 
 	"orangecheesepizza/bot/database"
@@ -60,6 +61,34 @@ type POSFeatures struct {
 	Hold         bool `json:"hold"`
 }
 
+var validPOSFeatureKeys = map[string]bool{
+	"bogo": true, "split_bill": true, "complimentary": true,
+	"advance_order": true, "kot": true, "hold": true,
+}
+
+var posIconRe = regexp.MustCompile(`^[a-z0-9_-]{1,40}$`)
+
+// UnmarshalJSON rejects unknown feature keys instead of silently
+// dropping them: a typo'd flag must fail the save, not vanish.
+func (f *POSFeatures) UnmarshalJSON(data []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	for k := range raw {
+		if !validPOSFeatureKeys[k] {
+			return fmt.Errorf("unknown pos feature %q", k)
+		}
+	}
+	type alias POSFeatures
+	var a alias
+	if err := json.Unmarshal(data, &a); err != nil {
+		return err
+	}
+	*f = POSFeatures(a)
+	return nil
+}
+
 type POSUI struct {
 	HeaderTitle   string `json:"header_title"`
 	CurrencySymbol string `json:"currency_symbol"`
@@ -98,9 +127,8 @@ func defaultPOSConfig() *POSConfig {
 			{Key: "subtotal", Label: "Sub Total", Visible: true},
 			{Key: "discount", Label: "Discount", Visible: true},
 			{Key: "container", Label: "Container Charge", Visible: true, Editable: true},
-			{Key: "tax", Label: "Tax", Visible: true},
-			{Key: "round_off", Label: "Round Off", Visible: true},
-			{Key: "customer_paid", Label: "Customer Paid", Visible: true},
+		{Key: "tax", Label: "Tax", Visible: true},
+		{Key: "customer_paid", Label: "Customer Paid", Visible: true},
 			{Key: "return_to_customer", Label: "Return to Customer", Visible: true},
 			{Key: "tip", Label: "Tip", Visible: true, Editable: true},
 		},
@@ -158,6 +186,12 @@ func validatePOSConfig(cfg *POSConfig) error {
 		keys[o.Key] = true
 		if len(o.Label) == 0 || len(o.Label) > 40 {
 			return fmt.Errorf("order_type label 1..40")
+		}
+		if len(o.Short) > 24 {
+			return fmt.Errorf("order_type short max 24")
+		}
+		if o.Icon != "" && !posIconRe.MatchString(o.Icon) {
+			return fmt.Errorf("order_type icon must be 1..40 lowercase alphanumeric, dash or underscore")
 		}
 	}
 	if len(cfg.SizeMeta) == 0 || len(cfg.SizeMeta) > 5 {

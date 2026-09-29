@@ -1077,7 +1077,7 @@ func (s *POSOrderService) TakePayment(orderID, restaurantID, outletID int, metho
 	if err != nil {
 		return 0, false, 0, 0, err
 	}
-	if err := ValidatePaymentInput(method, amountPaise); err != nil {
+	if err := ValidatePaymentAmount(amountPaise); err != nil {
 		return 0, false, 0, 0, err
 	}
 	if err := ValidatePaymentReference(reference); err != nil {
@@ -1108,6 +1108,17 @@ func (s *POSOrderService) TakePayment(orderID, restaurantID, outletID int, metho
 	}
 	if orderRestaurantID != restaurantID || orderOutletID != outletID {
 		return 0, false, 0, 0, ErrOrderTenantMismatch
+	}
+	// Method acceptance runs inside the order lock against live config:
+	// system rails plus active restaurant-configured methods.
+	if !ValidPaymentMethods[method] {
+		accepted, aerr := isAcceptedPayMethod(tx, method, restaurantID)
+		if aerr != nil {
+			return 0, false, 0, 0, aerr
+		}
+		if !accepted {
+			return 0, false, 0, 0, fmt.Errorf("unsupported payment method %q", method)
+		}
 	}
 	if !CanAcceptPayment(status) {
 		return 0, false, 0, 0, fmt.Errorf("%w: cannot take payment on %q order", ErrInvalidOrderTransition, status)
