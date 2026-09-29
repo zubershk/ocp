@@ -185,12 +185,12 @@ func TestStagingCashierFlow(t *testing.T) {
 	}
 
 	// 5. Split payment: 500 cash + 539.50 UPI = 1039.50, due 0.
-	payCash, _, due, err := svc.TakePayment(order.ID, st.restID, st.outID, "cash", 50000, 50000, "stg-cash", st.userID, "stg-k1-"+st.suffix)
+	payCash, _, due, _, err := svc.TakePayment(order.ID, st.restID, st.outID, "cash", 50000, 50000, "stg-cash", st.userID, "stg-k1-"+st.suffix)
 	if err != nil || due != 53950 {
 		t.Fatalf("cash pay: due=%d err=%v", due, err)
 	}
 	_ = payCash
-	payUPI, _, due, err := svc.TakePayment(order.ID, st.restID, st.outID, "upi", 53950, 53950, "stg-upi", st.userID, "stg-k2-"+st.suffix)
+	payUPI, _, due, _, err := svc.TakePayment(order.ID, st.restID, st.outID, "upi", 53950, 53950, "stg-upi", st.userID, "stg-k2-"+st.suffix)
 	if err != nil || due != 0 {
 		t.Fatalf("upi pay: due=%d err=%v", due, err)
 	}
@@ -202,7 +202,7 @@ func TestStagingCashierFlow(t *testing.T) {
 	for name, fn := range map[string]func() error{
 		"complete again": func() error { return svc.CompleteOrder(order.ID, st.restID, st.outID) },
 		"pay completed": func() error {
-			_, _, _, err := svc.TakePayment(order.ID, st.restID, st.outID, "cash", 100, 100, "", st.userID, "")
+			_, _, _, _, err := svc.TakePayment(order.ID, st.restID, st.outID, "cash", 100, 100, "", st.userID, "")
 			return err
 		},
 		"hold completed": func() error { _, err := svc.HoldOrder(order.ID, st.restID, st.outID, st.userID, "x"); return err },
@@ -244,11 +244,11 @@ func TestStagingPaymentIdempotency(t *testing.T) {
 		t.Fatalf("create: %v", err)
 	}
 	key := "idem-pay-" + st.suffix
-	p1, replayed, _, err := svc.TakePayment(order.ID, st.restID, st.outID, "cash", 20000, 20000, "", st.userID, key)
+	p1, replayed, _, _, err := svc.TakePayment(order.ID, st.restID, st.outID, "cash", 20000, 20000, "", st.userID, key)
 	if err != nil || replayed {
 		t.Fatalf("first payment: id=%d replayed=%v err=%v", p1, replayed, err)
 	}
-	p2, replayed, _, err := svc.TakePayment(order.ID, st.restID, st.outID, "cash", 20000, 20000, "", st.userID, key)
+	p2, replayed, _, _, err := svc.TakePayment(order.ID, st.restID, st.outID, "cash", 20000, 20000, "", st.userID, key)
 	if err != nil || !replayed || p2 != p1 {
 		t.Fatalf("replay must return original: id=%d replayed=%v err=%v", p2, replayed, err)
 	}
@@ -282,13 +282,13 @@ func TestStagingTenantIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	pay, _, _, err := svc.TakePayment(order.ID, a.restID, a.outID, "cash", 20000, 20000, "", a.userID, "")
+	pay, _, _, _, err := svc.TakePayment(order.ID, a.restID, a.outID, "cash", 20000, 20000, "", a.userID, "")
 	if err != nil {
 		t.Fatalf("pay: %v", err)
 	}
 
 	// Restaurant B credentials must not move Restaurant A money.
-	if _, _, _, err := svc.TakePayment(order.ID, b.restID, b.outID, "cash", 100, 100, "", b.userID, ""); err == nil ||
+	if _, _, _, _, err := svc.TakePayment(order.ID, b.restID, b.outID, "cash", 100, 100, "", b.userID, ""); err == nil ||
 		!strings.Contains(err.Error(), "current restaurant/outlet") {
 		t.Fatalf("cross-restaurant payment must fail, got %v", err)
 	}
@@ -308,7 +308,7 @@ func TestStagingTenantIsolation(t *testing.T) {
 		t.Fatal("foreign discount must be rejected")
 	}
 	// Outlet boundary inside one restaurant.
-	if _, _, _, err := svc.TakePayment(order.ID, a.restID, a.out2ID, "cash", 100, 100, "", a.userID, ""); err == nil {
+	if _, _, _, _, err := svc.TakePayment(order.ID, a.restID, a.out2ID, "cash", 100, 100, "", a.userID, ""); err == nil {
 		t.Fatal("cross-outlet payment must fail")
 	}
 }
@@ -457,7 +457,7 @@ func TestStagingStateMachine(t *testing.T) {
 			t.Fatalf("%s: expected ErrInvalidOrderTransition, got %v", name, err)
 		}
 	}
-	if _, _, _, err := svc.TakePayment(order.ID, st.restID, st.outID, "cash", 100, 100, "", st.userID, ""); !errors.Is(err, ErrInvalidOrderTransition) {
+	if _, _, _, _, err := svc.TakePayment(order.ID, st.restID, st.outID, "cash", 100, 100, "", st.userID, ""); !errors.Is(err, ErrInvalidOrderTransition) {
 		t.Fatalf("pay cancelled: expected ErrInvalidOrderTransition, got %v", err)
 	}
 }

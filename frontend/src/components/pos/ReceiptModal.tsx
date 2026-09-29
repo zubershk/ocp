@@ -120,11 +120,26 @@ export default function ReceiptModal({
                   <dd>{formatINR(order.tax_amount ?? 0)}</dd>
                 </div>
               )}
+              {(order.container_charge ?? 0) > 0 && (
+                <div className="flex justify-between">
+                  <dt>Container</dt>
+                  <dd>{formatINR(order.container_charge ?? 0)}</dd>
+                </div>
+              )}
+              {(order.tip_amount ?? 0) > 0 && (
+                <div className="flex justify-between">
+                  <dt>Tip</dt>
+                  <dd>{formatINR(order.tip_amount ?? 0)}</dd>
+                </div>
+              )}
               <div className="flex justify-between font-bold text-base">
                 <dt>Total</dt>
                 <dd>{formatINR(order.total)}</dd>
               </div>
             </dl>
+            {order.is_complimentary === true && (
+              <p className="mt-1.5 text-center text-xs font-bold text-emerald-700">Complimentary — no charge.</p>
+            )}
             {payments.length > 0 && (
               <>
                 <hr className="my-2 border-dashed" />
@@ -138,7 +153,7 @@ export default function ReceiptModal({
                 </ul>
               </>
             )}
-            <div className="text-center text-xs text-zinc-400 mt-2">Server-calculated totals · Thank you!</div>
+            <div className="text-center text-xs text-zinc-400 mt-2">Order totals are server-calculated · Thank you!</div>
           </div>
 
           <div className="flex gap-1.5 mt-3 print:hidden">

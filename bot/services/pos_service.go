@@ -535,7 +535,7 @@ func resolveAddonsSnapshot(tx *sql.Tx, item DraftItem, restaurantID int) ([]map[
 			_ = tx.QueryRow(`SELECT price FROM menu_items WHERE id=$1`, ad.MenuItemID).Scan(&price)
 		}
 		out = append(out, map[string]interface{}{
-			"group": gi.name, "group_id": gi.id, "item": itName, "item_id": ad.MenuItemID, "quantity": 1, "price": price,
+			"group_id": gi.id, "menu_item_id": ad.MenuItemID, "name": itName, "quantity": 1, "price": price,
 		})
 	}
 	if out == nil {
@@ -718,10 +718,7 @@ func ledgerDueTx(tx *sql.Tx, orderID int, totalRupees float64) (paidPaise, refun
 	}
 	paidPaise = paiseFromDecimal(paidRupees)
 	refundedPaise = paiseFromDecimal(refundedRupees)
-	duePaise = totalPaise - paidPaise + refundedPaise
-	if duePaise < 0 {
-		duePaise = 0
-	}
+	duePaise, _ = splitDue(totalPaise, paidPaise, refundedPaise)
 	return paidPaise, refundedPaise, duePaise, nil
 }
 
@@ -845,9 +842,12 @@ func (s *POSOrderService) CompleteOrder(orderID, restaurantID, outletID int) err
 	if err := RequireTransition(status, OrderStatusCompleted); err != nil {
 		return err
 	}
-	_, _, duePaise, err := ledgerDueTx(tx, orderID, totalRupees)
+	paidPaise, refundedPaise, duePaise, err := ledgerDueTx(tx, orderID, totalRupees)
 	if err != nil {
 		return fmt.Errorf("failed to compute due: %w", err)
+	}
+	if _, overpaidPaise := splitDue(rounding(totalRupees), paidPaise, refundedPaise); overpaidPaise > 0 {
+		return fmt.Errorf("%w: %d paise overpaid", ErrOrderOverpaid, overpaidPaise)
 	}
 	if duePaise > 0 {
 		return fmt.Errorf("%w: %d paise still due", ErrOrderHasDue, duePaise)
@@ -948,9 +948,100 @@ func (s *POSOrderService) ListHeldOrders(restaurantID, outletID int) ([]HeldOrde
 	return out, rows.Err()
 }
 
+// LedgerPayment is one order_payments row in paise for API consumers.
+type LedgerPayment struct {
+	ID            int       `json:"id"`
+	Method        string    `json:"method"`
+	AmountPaise   int64     `json:"amount_paise"`
+	TenderedPaise int64     `json:"tendered_paise"`
+	Reference     string    `json:"reference"`
+	RefundOf      *int      `json:"refund_of,omitempty"`
+	CreatedAt     time.Time `json:"created_at"`
+}
+
+// LedgerSummary is the server-authoritative payment state of an order.
+type LedgerSummary struct {
+	Payments      []LedgerPayment `json:"payments"`
+	TotalPaise    int64           `json:"total_paise"`
+	PaidPaise     int64           `json:"paid_paise"`
+	RefundedPaise int64           `json:"refunded_paise"`
+	DuePaise      int64           `json:"due_paise"`
+	OverpaidPaise int64           `json:"overpaid_paise"`
+}
+
+// GetPaymentLedger returns the server-authoritative payment state of an
+// order. Read-only: no lock is taken, so a concurrent writer may
+// interleave between this read and a later POST. Callers revalidate on
+// TakePayment/CompleteOrder, which lock the order row.
+func (s *POSOrderService) GetPaymentLedger(orderID, restaurantID, outletID int) (*LedgerSummary, error) {
+	var totalRupees float64
+	var orderRestaurantID, orderOutletID int
+	err := database.DB.QueryRow(
+		`SELECT restaurant_id, outlet_id, total FROM orders WHERE id = $1`,
+		orderID).Scan(&orderRestaurantID, &orderOutletID, &totalRupees)
+	if err == sql.ErrNoRows {
+		return nil, ErrOrderNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	if orderRestaurantID != restaurantID || orderOutletID != outletID {
+		return nil, ErrOrderTenantMismatch
+	}
+	var paidRupees, refundedRupees float64
+	if err := database.DB.QueryRow(
+		`SELECT COALESCE(SUM(amount), 0) FROM order_payments WHERE order_id = $1 AND amount > 0`, orderID).Scan(&paidRupees); err != nil {
+		return nil, fmt.Errorf("failed to sum payments: %w", err)
+	}
+	if err := database.DB.QueryRow(
+		`SELECT COALESCE(SUM(ABS(amount)), 0) FROM order_payments WHERE order_id = $1 AND amount < 0`, orderID).Scan(&refundedRupees); err != nil {
+		return nil, fmt.Errorf("failed to sum refunds: %w", err)
+	}
+	totalPaise := rounding(totalRupees)
+	paidPaise := paiseFromDecimal(paidRupees)
+	refundedPaise := paiseFromDecimal(refundedRupees)
+	duePaise, overpaidPaise := splitDue(totalPaise, paidPaise, refundedPaise)
+
+	rows, err := database.DB.Query(
+		`SELECT id, method, amount, tendered, reference, refund_of, created_at
+		 FROM order_payments WHERE order_id = $1 ORDER BY id`, orderID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []LedgerPayment{}
+	for rows.Next() {
+		var p LedgerPayment
+		var amountRupees, tenderedRupees float64
+		var refundOf sql.NullInt64
+		if err := rows.Scan(&p.ID, &p.Method, &amountRupees, &tenderedRupees, &p.Reference, &refundOf, &p.CreatedAt); err != nil {
+			return nil, err
+		}
+		p.AmountPaise = paiseFromDecimal(amountRupees)
+		p.TenderedPaise = paiseFromDecimal(tenderedRupees)
+		if refundOf.Valid {
+			v := int(refundOf.Int64)
+			p.RefundOf = &v
+		}
+		out = append(out, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return &LedgerSummary{
+		Payments:      out,
+		TotalPaise:    totalPaise,
+		PaidPaise:     paidPaise,
+		RefundedPaise: refundedPaise,
+		DuePaise:      duePaise,
+		OverpaidPaise: overpaidPaise,
+	}, nil
+}
+
 // TakePayment records a payment against an order. Returns the payment ID,
 // whether the call replayed an earlier operation (same idempotency key),
-// and the remaining due amount (paise). Append-only: never update a row.
+// the remaining due amount (paise), and any overpaid excess (paise).
+// Append-only: never update a row.
 //
 // Server-authoritative lifecycle, in strict order:
 //
@@ -967,26 +1058,26 @@ func (s *POSOrderService) ListHeldOrders(restaurantID, outletID int) ([]HeldOrde
 // ledger row carries the same tenant so cross-tenant payments are
 // impossible even if a caller forges IDs. Confirm and payment stay
 // separate: TakePayment never confirms or completes.
-func (s *POSOrderService) TakePayment(orderID, restaurantID, outletID int, method string, amountPaise int64, tenderedPaise int64, reference string, receivedBy int, idempotencyKey string) (paymentID int, replayed bool, duePaise int64, err error) {
+func (s *POSOrderService) TakePayment(orderID, restaurantID, outletID int, method string, amountPaise int64, tenderedPaise int64, reference string, receivedBy int, idempotencyKey string) (paymentID int, replayed bool, duePaise int64, overpaidPaise int64, err error) {
 	key, err := NormalizeIdempotencyKey(idempotencyKey)
 	if err != nil {
-		return 0, false, 0, err
+		return 0, false, 0, 0, err
 	}
 	if err := ValidatePaymentInput(method, amountPaise); err != nil {
-		return 0, false, 0, err
+		return 0, false, 0, 0, err
 	}
 	if err := ValidatePaymentReference(reference); err != nil {
-		return 0, false, 0, err
+		return 0, false, 0, 0, err
 	}
 	if tenderedPaise < 0 {
-		return 0, false, 0, fmt.Errorf("tendered amount cannot be negative")
+		return 0, false, 0, 0, fmt.Errorf("tendered amount cannot be negative")
 	}
 	if tenderedPaise > 10_000_000_00 {
-		return 0, false, 0, fmt.Errorf("tendered amount too large")
+		return 0, false, 0, 0, fmt.Errorf("tendered amount too large")
 	}
 	tx, err := database.DB.Begin()
 	if err != nil {
-		return 0, false, 0, fmt.Errorf("tx begin failed: %w", err)
+		return 0, false, 0, 0, fmt.Errorf("tx begin failed: %w", err)
 	}
 	defer tx.Rollback()
 	var status string
@@ -996,16 +1087,16 @@ func (s *POSOrderService) TakePayment(orderID, restaurantID, outletID int, metho
 		`SELECT status, restaurant_id, outlet_id, total FROM orders WHERE id = $1 FOR UPDATE`,
 		orderID).Scan(&status, &orderRestaurantID, &orderOutletID, &totalRupees)
 	if err == sql.ErrNoRows {
-		return 0, false, 0, ErrOrderNotFound
+		return 0, false, 0, 0, ErrOrderNotFound
 	}
 	if err != nil {
-		return 0, false, 0, err
+		return 0, false, 0, 0, err
 	}
 	if orderRestaurantID != restaurantID || orderOutletID != outletID {
-		return 0, false, 0, ErrOrderTenantMismatch
+		return 0, false, 0, 0, ErrOrderTenantMismatch
 	}
 	if !CanAcceptPayment(status) {
-		return 0, false, 0, fmt.Errorf("%w: cannot take payment on %q order", ErrInvalidOrderTransition, status)
+		return 0, false, 0, 0, fmt.Errorf("%w: cannot take payment on %q order", ErrInvalidOrderTransition, status)
 	}
 	// Idempotency BEFORE due validation: a retry after commit-but-no-response
 	// must replay, not 409.
@@ -1015,31 +1106,35 @@ func (s *POSOrderService) TakePayment(orderID, restaurantID, outletID int, metho
 			`SELECT id FROM order_payments WHERE idempotency_key = $1 AND order_id = $2`,
 			key, orderID).Scan(&existing)
 		if err == nil && existing > 0 {
-			_, _, due, err := ledgerDueTx(tx, orderID, totalRupees)
+			paid, refunded, due, err := ledgerDueTx(tx, orderID, totalRupees)
 			if err != nil {
-				return 0, false, 0, fmt.Errorf("failed to compute due: %w", err)
+				return 0, false, 0, 0, fmt.Errorf("failed to compute due: %w", err)
 			}
 			if err := tx.Commit(); err != nil {
-				return 0, false, 0, err
+				return 0, false, 0, 0, err
 			}
-			return existing, true, due, nil
+			_, overpaid := splitDue(rounding(totalRupees), paid, refunded)
+			return existing, true, due, overpaid, nil
 		}
 		if err != nil && err != sql.ErrNoRows {
-			return 0, false, 0, err
+			return 0, false, 0, 0, err
 		}
 	}
 	_, _, due, err := ledgerDueTx(tx, orderID, totalRupees)
 	if err != nil {
-		return 0, false, 0, fmt.Errorf("failed to compute due: %w", err)
+		return 0, false, 0, 0, fmt.Errorf("failed to compute due: %w", err)
 	}
 	if amountPaise > due {
-		return 0, false, 0, fmt.Errorf("%w: amount %d paise exceeds due %d paise", ErrPaymentExceedsDue, amountPaise, due)
+		// Overpayment is rejected at take-payment time; overpaid state can
+		// still arise later (discount/complimentary after payment) and is
+		// surfaced by GetPaymentLedger and enforced by CompleteOrder.
+		return 0, false, 0, 0, fmt.Errorf("%w: amount %d paise exceeds due %d paise", ErrPaymentExceedsDue, amountPaise, due)
 	}
 	// SAVEPOINT keeps the order lock: a failed INSERT poisons only the
 	// savepoint, not the transaction, so the replay lookup + due stay
 	// serialized on the locked order row.
 	if _, serr := tx.Exec(`SAVEPOINT sp_payment_insert`); serr != nil {
-		return 0, false, 0, serr
+		return 0, false, 0, 0, serr
 	}
 	var id int
 	err = tx.QueryRow(`
@@ -1051,35 +1146,37 @@ func (s *POSOrderService) TakePayment(orderID, restaurantID, outletID int, metho
 	if err != nil {
 		if key != "" && IsUniqueViolation(err, "uq_order_payments_idempotency") {
 			if _, rserr := tx.Exec(`ROLLBACK TO SAVEPOINT sp_payment_insert`); rserr != nil {
-				return 0, false, 0, rserr
+				return 0, false, 0, 0, rserr
 			}
 			var existing int
 			if serr := tx.QueryRow(
 				`SELECT id FROM order_payments WHERE idempotency_key = $1 AND order_id = $2`,
 				key, orderID).Scan(&existing); serr == nil && existing > 0 {
-				_, _, dueAfter, derr := ledgerDueTx(tx, orderID, totalRupees)
+				paid, refunded, dueAfter, derr := ledgerDueTx(tx, orderID, totalRupees)
 				if derr != nil {
-					return 0, false, 0, fmt.Errorf("failed to compute due: %w", derr)
+					return 0, false, 0, 0, fmt.Errorf("failed to compute due: %w", derr)
 				}
 				if err := tx.Commit(); err != nil {
-					return 0, false, 0, err
+					return 0, false, 0, 0, err
 				}
-				return existing, true, dueAfter, nil
+				_, overpaid := splitDue(rounding(totalRupees), paid, refunded)
+				return existing, true, dueAfter, overpaid, nil
 			}
 		}
-		return 0, false, 0, err
+		return 0, false, 0, 0, err
 	}
 	if _, serr := tx.Exec(`RELEASE SAVEPOINT sp_payment_insert`); serr != nil {
-		return 0, false, 0, serr
+		return 0, false, 0, 0, serr
 	}
-	_, _, dueAfter, err := ledgerDueTx(tx, orderID, totalRupees)
+	paid, refunded, dueAfter, err := ledgerDueTx(tx, orderID, totalRupees)
 	if err != nil {
-		return 0, false, 0, fmt.Errorf("failed to compute due: %w", err)
+		return 0, false, 0, 0, fmt.Errorf("failed to compute due: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
-		return 0, false, 0, err
+		return 0, false, 0, 0, err
 	}
-	return id, false, dueAfter, nil
+	_, overpaid := splitDue(rounding(totalRupees), paid, refunded)
+	return id, false, dueAfter, overpaid, nil
 }
 
 // ComputeDueFromLedger calculates paid, refunded, and due from the order_payments

@@ -106,6 +106,25 @@ export interface PosOutlet {
   active: boolean;
 }
 
+export interface LedgerPaymentRow {
+  id: number;
+  method: string;
+  amount_paise: number;
+  tendered_paise: number;
+  reference: string;
+  refund_of?: number | null;
+  created_at: string;
+}
+
+export interface LedgerSummary {
+  payments: LedgerPaymentRow[];
+  total_paise: number;
+  paid_paise: number;
+  refunded_paise: number;
+  due_paise: number;
+  overpaid_paise: number;
+}
+
 // Raw backend shapes (Go structs without json tags marshal capitalized keys).
 interface RawTable {
   ID: number;
@@ -319,6 +338,9 @@ export const posApi = {
   getHeldOrders: () =>
     posFetch<{ held: { id: number; order_number: string; total: number; order_type: string; created_at: string }[] }>('/admin/pos/held').then((r) => r.held ?? []),
 
+  getLedger: (orderId: number) =>
+    posFetch<{ ledger: LedgerSummary }>(`/admin/pos/orders/${orderId}/payments`).then((r) => r.ledger),
+
   completeOrder: (id: number) =>
     posFetch<{ completed: boolean }>(`/admin/pos/orders/${id}/complete`, { method: 'POST' }),
 
@@ -326,7 +348,7 @@ export const posApi = {
     posFetch<{ cancelled: boolean }>(`/admin/pos/orders/${id}/cancel`, { method: 'POST' }),
 
   takePayment: (orderId: number, input: { method: PosPayMethod; amountPaise: number; tenderedPaise: number; reference?: string }, idempotencyKey: string) =>
-    posFetch<{ payment_id: number; replayed: boolean; due_paise: number }>(
+    posFetch<{ payment_id: number; replayed: boolean; due_paise: number; overpaid_paise: number }>(
       `/admin/pos/orders/${orderId}/payments`,
       {
         method: 'POST',
