@@ -1082,6 +1082,27 @@ func (h *AdminHandler) GetPOSOrder(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"order": order})
 }
 
+// GetPOSOrderPayments returns the server-authoritative payment ledger of
+// an order: rows plus paid/refunded/due/overpaid in paise. Read-only; the
+// POST/complete paths revalidate under the order lock.
+func (h *AdminHandler) GetPOSOrderPayments(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid ID"})
+		return
+	}
+	summary, err := h.posOrderService.GetPaymentLedger(id, c.GetInt("restaurantID"), c.GetInt("outletID"))
+	if err != nil {
+		if errors.Is(err, services.ErrOrderNotFound) || errors.Is(err, services.ErrOrderTenantMismatch) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "order not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ledger": summary})
+}
+
 // UpdatePOSOrder updates a mutable POS order's fulfillment type.
 // Body: {order_type: dine_in | takeaway | delivery}.
 func (h *AdminHandler) UpdatePOSOrder(c *gin.Context) {
@@ -1191,7 +1212,7 @@ func (h *AdminHandler) CompletePOSOrder(c *gin.Context) {
 		return
 	}
 	if err := h.posOrderService.CompleteOrder(id, c.GetInt("restaurantID"), c.GetInt("outletID")); err != nil {
-		if errors.Is(err, services.ErrOrderHasDue) || errors.Is(err, services.ErrInvalidOrderTransition) || errors.Is(err, services.ErrOrderNotFound) || errors.Is(err, services.ErrOrderTenantMismatch) {
+		if errors.Is(err, services.ErrOrderHasDue) || errors.Is(err, services.ErrOrderOverpaid) || errors.Is(err, services.ErrInvalidOrderTransition) || errors.Is(err, services.ErrOrderNotFound) || errors.Is(err, services.ErrOrderTenantMismatch) {
 			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 			return
 		}
@@ -1255,7 +1276,7 @@ func (h *AdminHandler) TakePaymentPOSOrder(c *gin.Context) {
 	}
 	restaurantID := c.GetInt("restaurantID")
 	outletID := c.GetInt("outletID")
-	paymentID, replayed, duePaise, err := h.posOrderService.TakePayment(id, restaurantID, outletID, req.Method, req.Amount, req.Tendered, req.Reference, receivedBy, key)
+	paymentID, replayed, duePaise, overpaidPaise, err := h.posOrderService.TakePayment(id, restaurantID, outletID, req.Method, req.Amount, req.Tendered, req.Reference, receivedBy, key)
 	if err != nil {
 		if errors.Is(err, services.ErrIdempotencyKeyTooLong) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "idempotency key exceeds 120 characters"})
@@ -1272,7 +1293,7 @@ func (h *AdminHandler) TakePaymentPOSOrder(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"payment_id": paymentID, "replayed": replayed, "due_paise": duePaise})
+	c.JSON(http.StatusOK, gin.H{"payment_id": paymentID, "replayed": replayed, "due_paise": duePaise, "overpaid_paise": overpaidPaise})
 }
 
 // RefundPOSOrder records a refund for a POS order payment.

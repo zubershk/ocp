@@ -222,7 +222,7 @@ func TestStagingPOSRoleMatrix(t *testing.T) {
 	}
 
 	// Refunds: manager yes, cashier no.
-	payID, _, _, err := pos.TakePayment(payOrder, ocpRest, ocpOut, "upi", 5000, 5000, "stg-role-upi", 0, "")
+	payID, _, _, _, err := pos.TakePayment(payOrder, ocpRest, ocpOut, "upi", 5000, 5000, "stg-role-upi", 0, "")
 	if err != nil {
 		t.Fatalf("fixture payment: %v", err)
 	}

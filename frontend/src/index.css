@@ -533,6 +533,12 @@
   border-radius: 0.5rem;
 }
 
+/* Visible keyboard focus everywhere in POS: one accent ring per control */
+.pos :focus-visible {
+  outline: 2px solid var(--pos-accent, #b91c1c);
+  outline-offset: 1px;
+}
+
 /* Fresh-order arrival pulse */
 @keyframes order-arrive {
   0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.55); }

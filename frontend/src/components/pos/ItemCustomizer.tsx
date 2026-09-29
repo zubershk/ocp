@@ -109,11 +109,11 @@ export default function ItemCustomizer({
   return (
     <Modal open onClose={onClose} title={item.name} size={addonGroups.length ? "lg" : "md"}>
       <div className="space-y-5">
-        {categoryName && <div className="text-xs font-bold uppercase tracking-wider text-zinc-400 -mt-2">{categoryName}</div>}
+        {categoryName && <div className="text-xs font-bold uppercase tracking-wider text-zinc-600 -mt-2">{categoryName}</div>}
 
         {sizes.length > 1 && (
           <div>
-            <div className="text-xs font-bold uppercase tracking-wider text-zinc-500 mb-2">Variation</div>
+            <div className="text-xs font-bold uppercase tracking-wider text-zinc-600 mb-2">Variation</div>
             <div className="grid grid-cols-3 gap-2">
               {sizes.map((s) => {
                 const isSel = size === s;
@@ -128,7 +128,7 @@ export default function ItemCustomizer({
                     onClick={() => setSize(s)}
                     aria-pressed={isSel}
                     aria-label={`Size ${label} ${inches} price ${currency}${unitRupees(item, s)}`}
-                    className={`h-16 rounded font-bold border-2 transition-all capitalize active:scale-[0.97] flex flex-col items-center justify-center gap-0.5 ${isSel ? 'bg-[var(--pos-accent)] text-white border-[var(--pos-accent)]' : 'bg-zinc-800 text-white border-zinc-800 hover:bg-zinc-700'}`}
+                    className={`h-16 rounded font-bold border-2 transition-all capitalize active:scale-[0.97] flex flex-col items-center justify-center gap-0.5 ${isSel ? 'bg-[var(--pos-accent,#b91c1c)] text-white border-[var(--pos-accent,#b91c1c)]' : 'bg-zinc-800 text-white border-zinc-800 hover:bg-zinc-700'}`}
                   >
                     <span className="text-xs font-bold">{label} [{inches}]</span>
                     <span className="text-sm font-bold">{currency}{unitRupees(item, s)}</span>
@@ -141,7 +141,7 @@ export default function ItemCustomizer({
 
         {optionsNest && (
           <div>
-            <div className="text-xs font-bold uppercase tracking-wider text-zinc-500 mb-2">Crust</div>
+            <div className="text-xs font-bold uppercase tracking-wider text-zinc-600 mb-2">Crust</div>
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
@@ -198,7 +198,7 @@ export default function ItemCustomizer({
                   : `Choose ${g.min_select}–${g.max_select}`;
               return (
                 <fieldset key={g.id}>
-                  <legend className="text-sm font-bold">{g.name} <span className="ml-2 text-xs font-normal text-blue-500 bg-blue-50 px-2 py-0.5 rounded">{isSingle ? 'Single Add-on Only' : 'Multiple Add-ons'} (Min: {g.min_select}, Max: {g.max_select})</span></legend>
+                  <legend className="text-sm font-bold">{g.name} <span className="ml-2 text-xs font-normal text-blue-700 bg-blue-50 px-2 py-0.5 rounded">{isSingle ? 'Single Add-on Only' : 'Multiple Add-ons'} (Min: {g.min_select}, Max: {g.max_select})</span></legend>
                   <div id={helperId} className="sr-only">Select {g.min_select} to {g.max_select} options. {selected.size} selected.</div>
                   {unmet && <p role="status" className="text-xs font-semibold text-amber-700 mt-1">{hintText} to continue — {selected.size} selected.</p>}
                   <div className="grid gap-2 mt-2 grid-cols-2 sm:grid-cols-3">
@@ -228,7 +228,7 @@ export default function ItemCustomizer({
                               return next;
                             });
                           }}
-                          className={`p-3 rounded border-2 text-left transition-all flex flex-col gap-1 min-h-[80px] ${isSel ? 'border-[var(--pos-accent)] bg-[var(--pos-accent)] text-white' : 'border-zinc-200 bg-white hover:border-zinc-300'} ${!canSelect ? 'opacity-50 cursor-not-allowed' : 'active:scale-[0.97]'}`}
+                          className={`p-3 rounded border-2 text-left transition-all flex flex-col gap-1 min-h-[80px] ${isSel ? 'border-[var(--pos-accent,#b91c1c)] bg-[var(--pos-accent,#b91c1c)] text-white' : 'border-zinc-200 bg-white hover:border-zinc-300'} ${!canSelect ? 'opacity-50 cursor-not-allowed' : 'active:scale-[0.97]'}`}
                         >
                           <span className="text-xs font-medium leading-tight line-clamp-2">{it.name}</span>
                           <span className="text-sm font-bold">₹{it.price}</span>
@@ -244,7 +244,7 @@ export default function ItemCustomizer({
         ) : null}
 
         <div className="flex items-center justify-between">
-          <div className="text-xs font-bold uppercase tracking-wider text-zinc-500">Quantity</div>
+          <div className="text-xs font-bold uppercase tracking-wider text-zinc-600">Quantity</div>
           <div className="inline-flex items-center gap-2">
             <button
               type="button"
@@ -255,7 +255,7 @@ export default function ItemCustomizer({
             >
               <Minus size={18} />
             </button>
-            <span className="w-10 text-center text-xl font-black tabular-nums" aria-live="polite">{qty}</span>
+            <span className="w-10 text-center text-xl font-black tabular-nums">{qty}</span>
             <button
               type="button"
               aria-label="Increase quantity"
@@ -302,7 +302,7 @@ export default function ItemCustomizer({
                 onClose();
               }}
               aria-describedby={!canAdd ? addonGroups.filter(g => (selectedAddons[g.id]?.size ?? 0) < g.min_select).map(g => `addon-help-${g.id}`).join(' ') || undefined : undefined}
-              className={`w-full h-14 min-h-[56px] rounded-2xl font-bold text-lg transition-all active:scale-[0.98] sticky bottom-0 z-10 ${canAdd ? 'bg-[var(--pos-accent)] hover:bg-[var(--pos-accent-hover)] text-white shadow-lg' : 'bg-zinc-200 text-zinc-500 cursor-not-allowed'}`}
+              className={`w-full h-14 min-h-[56px] rounded-2xl font-bold text-lg transition-all active:scale-[0.98] sticky bottom-0 z-10 ${canAdd ? 'bg-[var(--pos-accent,#b91c1c)] hover:bg-[var(--pos-accent-hover,#991b1b)] text-white shadow-lg' : 'bg-zinc-200 text-zinc-700 cursor-not-allowed'}`}
             >
               {canAdd ? 'Save' : 'Select required addons'} {canAdd && estPaise > 0 && `· ${formatPaise(estPaise * qty)}`}
             </button>

@@ -33,7 +33,7 @@ export default function PosHeader({ outletId, onOutlet, operator, role, heldCoun
     <header className="sticky top-0 z-40 bg-[var(--pos-header)] text-[var(--pos-header-fg)] border-b border-[var(--pos-header-border)] shadow-sm">
       <div className="px-3 sm:px-5 h-14 flex items-center gap-2 sm:gap-3">
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-9 h-9 rounded-lg bg-[var(--pos-accent)] grid place-items-center shrink-0 font-black text-white" aria-hidden>
+          <div className="w-9 h-9 rounded-lg bg-[var(--pos-accent,#b91c1c)] grid place-items-center shrink-0 font-black text-white" aria-hidden>
             CP
           </div>
           <div className="min-w-0 hidden sm:block">
@@ -59,9 +59,9 @@ export default function PosHeader({ outletId, onOutlet, operator, role, heldCoun
           <button type="button" onClick={onHeld} aria-label={`Held orders${heldCount > 0 ? `, ${heldCount} held` : ''}`} className="h-11 min-h-[44px] px-2 sm:px-3 rounded-lg bg-white border border-zinc-200 hover:bg-zinc-50 font-semibold text-xs inline-flex items-center gap-1.5 shrink-0">
             <PauseCircle size={14} aria-hidden />
             <span className="hidden min-[420px]:inline">Held</span>
-            {heldCount > 0 && <span className="min-w-5 h-5 px-1 rounded-full bg-[var(--pos-accent)] text-white text-xs font-bold grid place-items-center tabular-nums">{heldCount}</span>}
+            {heldCount > 0 && <span className="min-w-5 h-5 px-1 rounded-full bg-[var(--pos-accent,#b91c1c)] text-white text-xs font-bold grid place-items-center tabular-nums">{heldCount}</span>}
           </button>
-          <button type="button" onClick={onNewSale} className="h-11 min-h-[44px] px-3 sm:px-4 rounded-lg bg-[var(--pos-accent)] hover:bg-[var(--pos-accent-hover)] text-white font-bold text-xs inline-flex items-center gap-1.5 active:scale-95 shrink-0">
+          <button type="button" onClick={onNewSale} className="h-11 min-h-[44px] px-3 sm:px-4 rounded-lg bg-[var(--pos-accent,#b91c1c)] hover:bg-[var(--pos-accent-hover,#991b1b)] text-white font-bold text-xs inline-flex items-center gap-1.5 active:scale-95 shrink-0">
             <Plus size={14} aria-hidden />
             <span className="hidden min-[420px]:inline">New Order</span>
             <span className="min-[420px]:hidden">New</span>

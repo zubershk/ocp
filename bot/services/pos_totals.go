@@ -51,6 +51,17 @@ func paiseToRupees(paise int64) float64 {
 	return float64(paise) / 100
 }
 
+// splitDue derives the collectible due and the overpaid excess from the
+// ledger figures. due clamps at zero; overpaid preserves the negative
+// tail so callers can distinguish Paid from Overpaid. Pure.
+func splitDue(totalPaise, paidPaise, refundedPaise int64) (duePaise, overpaidPaise int64) {
+	net := totalPaise - paidPaise + refundedPaise
+	if net < 0 {
+		return 0, -net
+	}
+	return net, 0
+}
+
 // applyCharges folds operator-entered charges into the payable total.
 // subtotal/discount/tax come from ComputeTotalsFromLines; container and
 // tip are operator-entered rupees converted to paise by the caller.

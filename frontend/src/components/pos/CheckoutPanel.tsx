@@ -13,6 +13,7 @@ import {
   toPaise,
   toRupees,
   newIdempotencyKey,
+  type LedgerSummary,
   type PosOrder,
   type PosPayMethod,
 } from '../../services/posService';
@@ -55,6 +56,9 @@ export default function CheckoutPanel({
   orderId,
   payments,
   duePaise,
+  overpaidPaise,
+  ledgerReady,
+  onResyncLedger,
   payRequest,
   compact,
   onPaid,
@@ -69,9 +73,12 @@ export default function CheckoutPanel({
   orderId: number;
   payments: RecordedPayment[];
   duePaise: number | null;
+  overpaidPaise: number;
+  ledgerReady: boolean;
+  onResyncLedger: (id: number) => Promise<LedgerSummary | null>;
   payRequest: { key: number; method?: PosPayMethod } | null;
   compact?: boolean;
-  onPaid: (p: RecordedPayment, duePaise: number) => void;
+  onPaid: (p: RecordedPayment, duePaise: number, overpaidPaise: number) => void;
   onCompleted: () => void;
   onHold: () => void;
   onCancel: () => void;
@@ -104,6 +111,7 @@ export default function CheckoutPanel({
   const [paying, setPaying] = useState(false);
   const [payErr, setPayErr] = useState<string | null>(null);
   const [payKey, setPayKey] = useState(() => newIdempotencyKey());
+  const [payDue, setPayDue] = useState<number | null>(null);
   const [discOpen, setDiscOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -115,19 +123,26 @@ export default function CheckoutPanel({
       setNotice('Pay needs a manager key.');
       return;
     }
-    if (payRequest.method) setMethod(payRequest.method);
-    setPayKey(newIdempotencyKey());
-    setTendered('');
-    setPayErr(null);
-    setPayOpen(true);
+    void (async () => {
+      const ledger = await onResyncLedger(orderId);
+      setPayDue(ledger?.due_paise ?? due);
+      if (payRequest.method) setMethod(payRequest.method);
+      setPayKey(newIdempotencyKey());
+      setTendered('');
+      setPayErr(null);
+      setPayOpen(true);
+    })();
   }, [payRequest, orderOpen, canPay]);
 
-  const dueRupees = toRupees(due);
-  const tenderedPaise = tendered.trim() === '' ? due : Math.round(Number(tendered) * 100);
-  const changePaise = method === 'cash' ? tenderedPaise - due : 0;
-  const validTender = Number.isFinite(tenderedPaise) && (method !== 'cash' || tenderedPaise >= due || tendered.trim() === '');
+  const collectPaise = payDue ?? due;
+  const dueRupees = toRupees(collectPaise);
+  const tenderedPaise = tendered.trim() === '' ? collectPaise : Math.round(Number(tendered) * 100);
+  const changePaise = method === 'cash' ? tenderedPaise - collectPaise : 0;
+  const validTender = Number.isFinite(tenderedPaise) && (method !== 'cash' || tenderedPaise >= collectPaise || tendered.trim() === '');
 
-  const openPay = () => {
+  const openPay = async () => {
+    const ledger = await onResyncLedger(orderId);
+    setPayDue(ledger?.due_paise ?? due);
     setPayKey(newIdempotencyKey());
     setTendered('');
     setPayErr(null);
@@ -142,12 +157,13 @@ export default function CheckoutPanel({
     try {
       const r = await posApi.takePayment(
         orderId,
-        { method, amountPaise: due, tenderedPaise },
+        { method, amountPaise: collectPaise, tenderedPaise },
         payKey,
       );
       onPaid(
-        { paymentId: r.payment_id, method, amountPaise: due, reference: '', replayed: r.replayed, at: new Date().toISOString() },
+        { paymentId: r.payment_id, method, amountPaise: collectPaise, reference: '', replayed: r.replayed, at: new Date().toISOString() },
         r.due_paise,
+        r.overpaid_paise ?? 0,
       );
       setPayOpen(false);
     } catch (e) {
@@ -168,6 +184,12 @@ export default function CheckoutPanel({
     setBusy('complete');
     setNotice(null);
     try {
+      const ledger = await onResyncLedger(orderId);
+      const overpaid = ledger?.overpaid_paise ?? overpaidPaise;
+      if (overpaid > 0) {
+        setNotice(`Overpaid ${formatINR(toRupees(overpaid))} — refund before completing.`);
+        return;
+      }
       await posApi.completeOrder(orderId);
       onCompleted();
     } catch (e) {
@@ -294,8 +316,15 @@ export default function CheckoutPanel({
               {paidPaise > 0 && <span className="tabular-nums text-xs">Paid {formatINR(toRupees(paidPaise))}</span>}
             </div>
             <div className={compact ? 'font-black text-3xl tabular-nums mt-0.5' : 'font-black text-4xl tabular-nums mt-0.5'}>{formatINR(dueRupees)}</div>
-            {orderOpen && (
-              due === 0 ? (
+            {!ledgerReady && (
+              <p role="status" className="mt-2 text-sm font-semibold opacity-80">Syncing payment status…</p>
+            )}
+            {orderOpen && ledgerReady && (
+              overpaidPaise > 0 ? (
+                <div role="alert" className={compact ? 'mt-2 rounded-2xl bg-white text-amber-700 font-bold text-sm px-3 py-2.5' : 'mt-3 rounded-2xl bg-white text-amber-700 font-bold px-3 py-2.5'}>
+                  Overpaid {formatINR(toRupees(overpaidPaise))} — refund before completing.
+                </div>
+              ) : due === 0 ? (
                 <button
                   type="button"
                   onClick={complete}
@@ -309,7 +338,7 @@ export default function CheckoutPanel({
                   type="button"
                   onClick={openPay}
                   disabled={!canPay}
-                  className={compact ? 'mt-2 w-full h-12 rounded-2xl bg-[var(--pos-accent)] hover:bg-[var(--pos-accent-hover)] font-black text-base transition-all active:scale-[0.98] disabled:opacity-40' : 'mt-3 w-full h-14 rounded-2xl bg-[var(--pos-accent)] hover:bg-[var(--pos-accent-hover)] font-black text-lg transition-all active:scale-[0.98] disabled:opacity-40'}
+                  className={compact ? 'mt-2 w-full h-12 rounded-2xl bg-[var(--pos-accent,#b91c1c)] hover:bg-[var(--pos-accent-hover,#991b1b)] font-black text-base transition-all active:scale-[0.98] disabled:opacity-40' : 'mt-3 w-full h-14 rounded-2xl bg-[var(--pos-accent,#b91c1c)] hover:bg-[var(--pos-accent-hover,#991b1b)] font-black text-lg transition-all active:scale-[0.98] disabled:opacity-40'}
                 >
                   {canPay ? 'Pay' : 'Pay (manager key required)'}
                 </button>
@@ -379,7 +408,7 @@ export default function CheckoutPanel({
             type="button"
             onClick={submitPayment}
             disabled={paying || !validTender}
-            className="w-full h-14 rounded-2xl bg-[var(--pos-accent)] hover:bg-[var(--pos-accent-hover)] disabled:bg-zinc-200 disabled:text-zinc-400 text-white font-black text-lg transition-all active:scale-[0.98]"
+            className="w-full h-14 rounded-2xl bg-[var(--pos-accent,#b91c1c)] hover:bg-[var(--pos-accent-hover,#991b1b)] disabled:bg-zinc-200 disabled:text-zinc-400 text-white font-black text-lg transition-all active:scale-[0.98]"
           >
             {paying ? 'Processing payment…' : `Record ${method.toUpperCase()} ${formatINR(dueRupees)}`}
           </button>
