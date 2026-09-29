@@ -29,7 +29,6 @@ const DEFAULT_POS_CONFIG: POSConfig = {
     { key: 'discount', label: 'Discount', visible: true },
     { key: 'container', label: 'Container Charge', visible: true, editable: true },
     { key: 'tax', label: 'Tax', visible: true },
-    { key: 'round_off', label: 'Round Off', visible: true },
     { key: 'customer_paid', label: 'Customer Paid', visible: true },
     { key: 'return_to_customer', label: 'Return to Customer', visible: true },
     { key: 'tip', label: 'Tip', visible: true, editable: true },
@@ -96,11 +95,20 @@ export default function AdminPosConfig() {
           <h2 className="font-semibold">Order Types</h2>
           {local.order_types.map((o, i) => (
             <div key={o.key} className="flex gap-2 items-center">
-              <Input value={o.label} onChange={e => { const v = [...local.order_types]; v[i] = { ...o, label: e.target.value }; setLocal({ ...local, order_types: v }); }} placeholder="Label" className="flex-1" />
+              <Input value={o.label} onChange={e => { const v = [...local.order_types]; v[i] = { ...o, label: e.target.value }; setLocal({ ...local, order_types: v }); }} placeholder="Label" className="flex-1" maxLength={40} />
+              <Input value={o.short} onChange={e => { const v = [...local.order_types]; v[i] = { ...o, short: e.target.value }; setLocal({ ...local, order_types: v }); }} placeholder="Short" title="Short label for narrow bill columns (max 24)" className="w-24" maxLength={24} />
+              <select value={o.icon} onChange={e => { const v = [...local.order_types]; v[i] = { ...o, icon: e.target.value }; setLocal({ ...local, order_types: v }); }} title="Bill icon" className="px-2 py-2.5 rounded-xl border bg-white text-sm">
+                {['utensils', 'bike', 'bag', 'scooter', 'car', 'phone', 'qr', 'store', 'circle'].map((ic) => (
+                  <option key={ic} value={ic}>{ic}</option>
+                ))}
+                {!['utensils', 'bike', 'bag', 'scooter', 'car', 'phone', 'qr', 'store', 'circle'].includes(o.icon) && (
+                  <option value={o.icon}>{o.icon} (custom)</option>
+                )}
+              </select>
               <label className="flex items-center gap-1 text-xs"><input type="checkbox" checked={o.active} onChange={e => { const v = [...local.order_types]; v[i] = { ...o, active: e.target.checked }; setLocal({ ...local, order_types: v }); }} /> Active</label>
             </div>
           ))}
-          <p className="text-xs text-muted-foreground">Keys: {local.order_types.map(o => o.key).join(', ')} — add/remove via JSON for now; UI for add will come in PR 3.</p>
+          <p className="text-xs text-muted-foreground">Keys: {local.order_types.map(o => o.key).join(', ')} — keys are fixed; labels, short labels and icons are editable.</p>
         </CardContent>
       </Card>
 
@@ -154,14 +162,14 @@ export default function AdminPosConfig() {
 
       <Card>
         <CardContent className="p-6 space-y-4">
-          <h2 className="font-semibold">Features (flags only — behavior in PR 4)</h2>
+          <h2 className="font-semibold">Features</h2>
           {Object.entries(local.features).map(([k, v]) => (
             <label key={k} className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={!!v} onChange={e => setLocal({ ...local, features: { ...local.features, [k]: e.target.checked } })} />
               {k}
             </label>
           ))}
-          <p className="text-xs text-muted-foreground">Bogo/Split are flags only now. Dedicated promotion models come in PR 4.</p>
+          <p className="text-xs text-muted-foreground">Bogo gates the register discount button; Split and KOT render as explained placeholders until their workflows exist. Unknown feature keys are rejected on save.</p>
         </CardContent>
       </Card>
 
