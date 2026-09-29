@@ -123,6 +123,14 @@ type Order struct {
 	TableID    int     `json:"table_id,omitempty"`    // dine-in table; 0 = none
 	DiscountID int     `json:"discount_id,omitempty"` // applied discount; 0 = none
 	TaxAmount  float64 `json:"tax_amount,omitempty"`  // computed tax (0 = tax-inclusive pricing)
+
+	// POS bill fields (039). Returned by the POS read model so the bill
+	// can render recorded charges without re-deriving them.
+	GuestCount      int        `json:"guest_count,omitempty"`
+	ContainerCharge float64    `json:"container_charge,omitempty"`
+	TipAmount       float64    `json:"tip_amount,omitempty"`
+	IsComplimentary bool       `json:"is_complimentary,omitempty"`
+	AdvanceAt       *time.Time `json:"advance_at,omitempty"`
 }
 
 type OrderItem struct {
@@ -139,6 +147,16 @@ type OrderItem struct {
 	Size      string  `json:"size,omitempty"`
 	Crust     string  `json:"crust,omitempty"`
 	LineTotal float64 `json:"line_total"`
+	// Frozen addon snapshot (name/price per addon) for dense bill lines.
+	Addons []OrderAddon `json:"addons,omitempty"`
+}
+
+// OrderAddon is one entry of order_items.addons_snapshot.
+type OrderAddon struct {
+	GroupID    int     `json:"group_id"`
+	MenuItemID int     `json:"menu_item_id"`
+	Name       string  `json:"name"`
+	Price      float64 `json:"price"`
 }
 
 type OrderEvent struct {

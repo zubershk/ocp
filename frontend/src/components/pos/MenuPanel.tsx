@@ -176,7 +176,7 @@ export default function MenuPanel({
 
       {/* Grid */}
       {menuQuery.isLoading ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3" role="status" aria-live="polite" aria-busy="true">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3" role="status" aria-live="polite" aria-busy="true">
           {Array.from({ length: 8 }).map((_, i) => (
             <Skeleton key={i} className="h-40 rounded-2xl" />
           ))}
@@ -194,9 +194,9 @@ export default function MenuPanel({
           <div className="text-sm">Try another search or category.</div>
         </div>
       ) : (
-        <ul className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 overflow-y-auto flex-1 min-h-0 pb-3">
+        <ul className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2 overflow-y-auto flex-1 min-h-0 pb-3">
           {items.map((item) => {
-            const inCart = qtyByKey.get(`${item.id}|regular|`) ?? 0;
+            const inCart = qtyByKey.get(cartLineKey(item.id, 'regular', '')) ?? 0;
             const simple = isSimple(item);
             const hasCart = inCart > 0;
             return (

@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Banknote, CreditCard, Pause, QrCode, ReceiptText, Tag, Undo2, XCircle } from 'lucide-react';
 import { Modal } from '../ui/Modal';
 import Badge from '../ui/Badge';
 import Input from '../ui/Input';
 import Skeleton from '../ui/Skeleton';
+import DiscountList from './DiscountList';
 import {
   posApi,
   posErrorMessage,
@@ -54,6 +55,8 @@ export default function CheckoutPanel({
   orderId,
   payments,
   duePaise,
+  payRequest,
+  compact,
   onPaid,
   onCompleted,
   onHold,
@@ -66,6 +69,8 @@ export default function CheckoutPanel({
   orderId: number;
   payments: RecordedPayment[];
   duePaise: number | null;
+  payRequest: { key: number; method?: PosPayMethod } | null;
+  compact?: boolean;
   onPaid: (p: RecordedPayment, duePaise: number) => void;
   onCompleted: () => void;
   onHold: () => void;
@@ -102,6 +107,20 @@ export default function CheckoutPanel({
   const [discOpen, setDiscOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (payRequest == null) return;
+    if (!orderOpen) return;
+    if (!canPay) {
+      setNotice('Pay needs a manager key.');
+      return;
+    }
+    if (payRequest.method) setMethod(payRequest.method);
+    setPayKey(newIdempotencyKey());
+    setTendered('');
+    setPayErr(null);
+    setPayOpen(true);
+  }, [payRequest, orderOpen, canPay]);
 
   const dueRupees = toRupees(due);
   const tenderedPaise = tendered.trim() === '' ? due : Math.round(Number(tendered) * 100);
@@ -186,11 +205,12 @@ export default function CheckoutPanel({
   };
 
   return (
-    <div className="flex flex-col min-h-0 h-full gap-3">
+    <div className={compact ? 'flex flex-col gap-2 p-2' : 'flex flex-col min-h-0 h-full gap-3'}>
       {/* Header */}
       <div className="flex items-center gap-2 flex-wrap">
         <h2 className="font-black text-lg">Order {order ? `#${order.order_number}` : `#${orderId}`}</h2>
         {order && <Badge variant={statusVariant[order.status] ?? 'neutral'}><span className="uppercase tracking-wide">{statusLabel(order.status)}</span></Badge>}
+        {order?.is_complimentary === true && <Badge variant="neutral"><span className="uppercase tracking-wide">Complimentary</span></Badge>}
         <button type="button" onClick={() => orderQuery.refetch()} className="ml-auto text-xs font-bold text-zinc-400 hover:text-zinc-700">Refresh</button>
       </div>
 
@@ -205,7 +225,8 @@ export default function CheckoutPanel({
         )
       ) : (
         <>
-          {/* Items (server-verified) */}
+          {/* Items (server-verified) — skipped in compact bill-flow mode; the bill already lists items */}
+          {!compact && (
           <ul className="space-y-1.5 overflow-y-auto max-h-44 pr-0.5">
             {(order.items ?? []).map((it, i) => (
               <li key={i} className="flex justify-between gap-2 text-sm bg-zinc-50 rounded-xl px-3 py-2">
@@ -217,6 +238,7 @@ export default function CheckoutPanel({
               </li>
             ))}
           </ul>
+          )}
 
           {/* Totals: server-authoritative */}
           <dl className="rounded-2xl border border-zinc-100 p-3 space-y-1 text-sm tabular-nums">
@@ -239,11 +261,8 @@ export default function CheckoutPanel({
           )}
           {notice && <div className="rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold px-3 py-2">{notice}</div>}
 
-          {/* Actions */}
+          {/* Actions — compact bill-flow mode keeps Discount/Modify + Cancel; Hold/Receipt live in the bill action row */}
           <div className="grid grid-cols-2 gap-2">
-            <button type="button" onClick={onHold} disabled={!orderOpen} className="h-11 rounded-xl border-2 border-zinc-200 bg-white font-bold text-sm inline-flex items-center justify-center gap-1.5 hover:border-zinc-400 disabled:opacity-40 active:scale-[0.98]">
-              <Pause size={15} /> Hold
-            </button>
             {canDiscount ? (
               <button type="button" onClick={() => setDiscOpen(true)} disabled={!orderOpen} className="h-11 rounded-xl border-2 border-zinc-200 bg-white font-bold text-sm inline-flex items-center justify-center gap-1.5 hover:border-zinc-400 disabled:opacity-40 active:scale-[0.98]">
                 <Tag size={15} /> Discount
@@ -256,25 +275,32 @@ export default function CheckoutPanel({
             <button type="button" onClick={onCancel} disabled={!orderOpen} className="h-11 rounded-xl border-2 border-zinc-200 bg-white font-bold text-sm inline-flex items-center justify-center gap-1.5 text-red-600 hover:border-red-300 hover:bg-red-50 disabled:opacity-40 active:scale-[0.98]">
               <XCircle size={15} /> Cancel
             </button>
-            <button type="button" onClick={onReceipt} className="h-11 rounded-xl border-2 border-zinc-200 bg-white font-bold text-sm inline-flex items-center justify-center gap-1.5 hover:border-zinc-400 active:scale-[0.98]">
-              <ReceiptText size={15} /> Receipt
-            </button>
+            {!compact && (
+              <>
+                <button type="button" onClick={onHold} disabled={!orderOpen} className="h-11 rounded-xl border-2 border-zinc-200 bg-white font-bold text-sm inline-flex items-center justify-center gap-1.5 hover:border-zinc-400 disabled:opacity-40 active:scale-[0.98]">
+                  <Pause size={15} /> Hold
+                </button>
+                <button type="button" onClick={onReceipt} className="h-11 rounded-xl border-2 border-zinc-200 bg-white font-bold text-sm inline-flex items-center justify-center gap-1.5 hover:border-zinc-400 active:scale-[0.98]">
+                  <ReceiptText size={15} /> Receipt
+                </button>
+              </>
+            )}
           </div>
 
           {/* Payment / complete */}
-          <div className={`mt-auto rounded-3xl p-4 text-white ${due === 0 ? 'bg-emerald-600' : 'bg-zinc-950'}`}>
+          <div className={compact ? `rounded-2xl p-3 text-white ${due === 0 ? 'bg-emerald-600' : 'bg-zinc-950'}` : `mt-auto rounded-3xl p-4 text-white ${due === 0 ? 'bg-emerald-600' : 'bg-zinc-950'}`}>
             <div className="flex items-center justify-between text-sm font-semibold opacity-80">
               <span>{due === 0 ? 'Fully paid' : 'Amount due'}</span>
               {paidPaise > 0 && <span className="tabular-nums text-xs">Paid {formatINR(toRupees(paidPaise))}</span>}
             </div>
-            <div className="font-black text-4xl tabular-nums mt-0.5">{formatINR(dueRupees)}</div>
+            <div className={compact ? 'font-black text-3xl tabular-nums mt-0.5' : 'font-black text-4xl tabular-nums mt-0.5'}>{formatINR(dueRupees)}</div>
             {orderOpen && (
               due === 0 ? (
                 <button
                   type="button"
                   onClick={complete}
                   disabled={busy === 'complete'}
-                  className="mt-3 w-full h-14 rounded-2xl bg-white text-emerald-700 font-black text-lg transition-all active:scale-[0.98] disabled:opacity-60"
+                  className={compact ? 'mt-2 w-full h-12 rounded-2xl bg-white text-emerald-700 font-black text-base transition-all active:scale-[0.98] disabled:opacity-60' : 'mt-3 w-full h-14 rounded-2xl bg-white text-emerald-700 font-black text-lg transition-all active:scale-[0.98] disabled:opacity-60'}
                 >
                   {busy === 'complete' ? 'Completing…' : 'Complete order'}
                 </button>
@@ -283,7 +309,7 @@ export default function CheckoutPanel({
                   type="button"
                   onClick={openPay}
                   disabled={!canPay}
-                  className="mt-3 w-full h-14 rounded-2xl bg-[var(--pos-accent)] hover:bg-[var(--pos-accent-hover)] font-black text-lg transition-all active:scale-[0.98] disabled:opacity-40"
+                  className={compact ? 'mt-2 w-full h-12 rounded-2xl bg-[var(--pos-accent)] hover:bg-[var(--pos-accent-hover)] font-black text-base transition-all active:scale-[0.98] disabled:opacity-40' : 'mt-3 w-full h-14 rounded-2xl bg-[var(--pos-accent)] hover:bg-[var(--pos-accent-hover)] font-black text-lg transition-all active:scale-[0.98] disabled:opacity-40'}
                 >
                   {canPay ? 'Pay' : 'Pay (manager key required)'}
                 </button>
@@ -373,28 +399,4 @@ export default function CheckoutPanel({
   );
 }
 
-function DiscountList({ busy, onPick, onRemove }: { busy: boolean; onPick: (id: number) => void; onRemove: (() => void) | null }) {
-  const q = useQuery({ queryKey: ['pos-discounts'], queryFn: posApi.getDiscounts, staleTime: 30_000, retry: 1 });
-  if (q.isLoading) return <div className="space-y-2" role="status" aria-live="polite" aria-busy="true">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-12 rounded-xl" />)}</div>;
-  if (q.isError) return <div className="rounded-xl bg-red-50 p-3 text-sm text-red-700 font-medium" role="alert">Couldn't load discounts. <button type="button" className="font-bold underline" onClick={() => q.refetch()}>Retry</button></div>;
-  return (
-    <ul className="space-y-2">
-      {onRemove && (
-        <li>
-          <button type="button" disabled={busy} onClick={onRemove} className="w-full h-12 rounded-xl border-2 border-red-200 text-red-700 font-bold hover:bg-red-50 active:scale-[0.98] disabled:opacity-50">
-            Remove current discount
-          </button>
-        </li>
-      )}
-      {(q.data ?? []).length === 0 && <p className="text-sm text-zinc-500 text-center py-3">No active discounts.</p>}
-      {(q.data ?? []).map((d) => (
-        <li key={d.id}>
-          <button type="button" disabled={busy} onClick={() => onPick(d.id)} className="w-full h-12 rounded-xl border-2 border-zinc-200 font-bold px-3 flex items-center justify-between hover:border-zinc-400 active:scale-[0.98] disabled:opacity-50">
-            <span>{d.name}</span>
-            <span className="text-zinc-500 text-sm">{d.type === 'percent' ? `${d.value / 100}%` : formatINR(toRupees(d.value))} off</span>
-          </button>
-        </li>
-      ))}
-    </ul>
-  );
-}
+

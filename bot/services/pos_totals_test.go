@@ -44,6 +44,22 @@ func TestComputeTotalsNoDiscount(t *testing.T) {
 	}
 }
 
+func TestApplyChargesNormal(t *testing.T) {
+	// subtotal=1000, discount=100, tax=90, container=50, tip=20 → total=1060.
+	disc, tax, total := applyCharges(1000, 100, 90, 50, 20, false)
+	if disc != 100 || tax != 90 || total != 1060 {
+		t.Fatalf("unexpected charged totals: disc=%d tax=%d total=%d", disc, tax, total)
+	}
+}
+
+func TestApplyChargesComplimentary(t *testing.T) {
+	// Same inputs, complimentary → discount absorbs subtotal, tax cleared, total zero.
+	disc, tax, total := applyCharges(1000, 100, 90, 50, 20, true)
+	if disc != 1000 || tax != 0 || total != 0 {
+		t.Fatalf("unexpected complimentary totals: disc=%d tax=%d total=%d", disc, tax, total)
+	}
+}
+
 func TestPaiseToRupees(t *testing.T) {
 	if got := paiseToRupees(94500); got != 945.0 {
 		t.Fatalf("expected 945.0, got %v", got)
