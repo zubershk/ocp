@@ -59,6 +59,8 @@ export default function POS() {
   const [held, setHeld] = useState<HeldOrder[]>([]);
   const [payments, setPayments] = useState<RecordedPayment[]>([]);
   const [duePaise, setDuePaise] = useState<number | null>(null);
+  const [overpaidPaise, setOverpaidPaise] = useState(0);
+  const [ledgerReady, setLedgerReady] = useState(true);
   const [creating, setCreating] = useState(false);
   const [holding, setHolding] = useState(false);
   const [cancelling, setCancelling] = useState(false);
@@ -141,17 +143,39 @@ const canDiscount = ['owner', 'manager'].includes(role);
   useEffect(() => { saveJSON(heldKey(outletId), held); }, [outletId, held]);
   useEffect(() => { setOrderId(loadJSON<number | null>(orderKey(outletId), null)); }, [outletId]);
   useEffect(() => { if (orderId != null) saveJSON(orderKey(outletId), orderId); }, [orderId, outletId]);
+  // Authoritative payment state comes from the server ledger, never from
+  // local arithmetic. localStorage is recovery only, overwritten on resync.
+  const resyncLedger = useCallback(async (id: number) => {
+    try {
+      const ledger = await posApi.getLedger(id);
+      const mapped: RecordedPayment[] = (ledger.payments ?? []).map((p) => ({
+        paymentId: p.id, method: p.method, amountPaise: p.amount_paise,
+        reference: p.reference ?? '', replayed: false, at: p.created_at,
+      }));
+      setPayments(mapped);
+      setDuePaise(ledger.due_paise);
+      setOverpaidPaise(ledger.overpaid_paise);
+      setLedgerReady(true);
+      return ledger;
+    } catch (e) {
+      setLedgerReady(false);
+      setNotice(posErrorMessage(e as Error).message);
+      return null;
+    }
+  }, []);
   useEffect(() => {
-    if (orderId == null) { setPayments([]); setDuePaise(null); return; }
-    const saved = loadJSON<{ due: number | null; payments: RecordedPayment[] }>(PAYMENTS_KEY(orderId), { due: null, payments: [] });
-    setPayments(saved.payments); setDuePaise(saved.due ?? null);
-  }, [orderId]);
-  useEffect(() => { if (orderId != null) saveJSON(PAYMENTS_KEY(orderId), { due: duePaise, payments }); }, [orderId, duePaise, payments]);
+    if (orderId == null) { setPayments([]); setDuePaise(null); setOverpaidPaise(0); setLedgerReady(true); return; }
+    const saved = loadJSON<{ due: number | null; overpaid: number; payments: RecordedPayment[] }>(PAYMENTS_KEY(orderId), { due: null, overpaid: 0, payments: [] });
+    setPayments(saved.payments); setDuePaise(saved.due ?? null); setOverpaidPaise(saved.overpaid ?? 0);
+    setLedgerReady(false);
+    void resyncLedger(orderId);
+  }, [orderId, resyncLedger]);
+  useEffect(() => { if (orderId != null) saveJSON(PAYMENTS_KEY(orderId), { due: duePaise, overpaid: overpaidPaise, payments }); }, [orderId, duePaise, overpaidPaise, payments]);
 
   const resetSale = useCallback(() => {
     // Hardening: clear both order and ledger together (P0 leak fix)
     const prevOrderId = orderId;
-    setCart([]); setOrderType('dine_in'); setTableId(0); setOrderId(null); setPayments([]); setDuePaise(null);
+    setCart([]); setOrderType('dine_in'); setTableId(0); setOrderId(null); setPayments([]); setDuePaise(null); setOverpaidPaise(0); setLedgerReady(true);
     setCustomer({ phone: '', name: '', address: '', locality: '' }); setContainerCharge(0); setTip(0); setIsComplimentary(false); setIsAdvance(false); setAdvanceAt(''); setGuestCount(1); setNotice(null);
     try {
       localStorage.removeItem(`ocp_pos_order:${outletId ?? 'default'}`);
@@ -160,7 +184,7 @@ const canDiscount = ['owner', 'manager'].includes(role);
   }, [outletId, orderId]);
 
   const openOrder = useCallback((id: number, totalRupees: number) => {
-    setOrderId(id); setPayments([]); setDuePaise(toPaise(totalRupees)); queryClient.invalidateQueries({ queryKey: ['pos-tables'] });
+    setOrderId(id); setPayments([]); setDuePaise(toPaise(totalRupees)); setOverpaidPaise(0); setLedgerReady(true); queryClient.invalidateQueries({ queryKey: ['pos-tables'] });
   }, [queryClient]);
 
   const addLine = useCallback((line: Omit<CartLine, 'key'>) => {
@@ -378,8 +402,9 @@ const canDiscount = ['owner', 'manager'].includes(role);
             onCreate={createOrder} creating={creating} canCreate={cart.length>0}
             // checkout props — live CheckoutPanel once the order exists
             payments={payments} duePaise={duePaise ?? (order ? toPaise(order.total) : 0)}
-            onPaid={(p: RecordedPayment,due: number)=>{setPayments((prev: RecordedPayment[])=>[...prev,p]); setDuePaise(due);}}
+            onPaid={(p: RecordedPayment,due: number,overpaid: number)=>{setPayments((prev: RecordedPayment[])=>[...prev,p]); setDuePaise(due); setOverpaidPaise(overpaid);}}
             onCompleted={()=>{queryClient.invalidateQueries({queryKey:['pos-order',orderId]}); setReceiptOpen(true);}}
+            overpaidPaise={overpaidPaise} ledgerReady={ledgerReady} onResyncLedger={resyncLedger}
             onHold={async()=>{ if(orderId==null) return; setHolding(true); try{await posApi.holdOrder(orderId); const d=await posApi.getOrder(orderId); setHeld((prev: HeldOrder[])=>[{id:d.id,orderNumber:d.order_number,total:d.total,at:new Date().toISOString()},...prev].slice(0,20)); resetSale(); setNotice(`Order #${d.order_number} held.`);}catch(e){setNotice(posErrorMessage(e as Error).message);}finally{setHolding(false);}}}
             onCancel={async()=>{ if(orderId==null) return; setPendingConfirm({ kind: 'cancel' }); }}
             onModify={()=>{ setNotice('To change items, cancel this order and start a new sale.'); }}
