@@ -129,6 +129,25 @@ func safeError(err error) string {
 	return "internal error"
 }
 
+// posStatusError maps POS domain errors to HTTP statuses: absent resources
+// are 404, state/financial conflicts are 409, everything else is 500.
+// Callers surface err.Error() for 4xx (safe, human-readable) and safeError
+// for 500s.
+func posStatusError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, services.ErrOrderNotFound) || errors.Is(err, services.ErrOrderTenantMismatch):
+		c.JSON(http.StatusNotFound, gin.H{"error": "order not found"})
+	case errors.Is(err, services.ErrInvalidOrderTransition) ||
+		errors.Is(err, services.ErrOrderHasDue) ||
+		errors.Is(err, services.ErrOrderOverpaid) ||
+		errors.Is(err, services.ErrOrderHasPayments) ||
+		errors.Is(err, services.ErrPaymentExceedsDue):
+		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+	default:
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
+	}
+}
+
 func (h *AdminHandler) RequireAdminKey() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		apiKey := c.GetHeader("X-Admin-Key")
@@ -1119,7 +1138,7 @@ func (h *AdminHandler) UpdatePOSOrder(c *gin.Context) {
 		return
 	}
 	if err := h.posOrderService.UpdateOrder(id, c.GetInt("restaurantID"), c.GetInt("outletID"), req.OrderType); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
+		posStatusError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"updated": true})
@@ -1158,7 +1177,7 @@ func (h *AdminHandler) ResumePOSOrder(c *gin.Context) {
 	}
 	err = h.posOrderService.ResumeOrder(id, c.GetInt("restaurantID"), c.GetInt("outletID"))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
+		posStatusError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"resumed": true})
@@ -1422,7 +1441,7 @@ func (h *AdminHandler) RemovePOSDiscount(c *gin.Context) {
 	}
 	err = services.RemoveDiscountFromOrder(orderID, c.GetInt("restaurantID"), c.GetInt("outletID"))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
+		posStatusError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"removed": true})
