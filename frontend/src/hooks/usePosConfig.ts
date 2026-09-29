@@ -31,7 +31,6 @@ const DEFAULT_POS_CONFIG: POSConfig = {
     { key: 'discount', label: 'Discount', visible: true },
     { key: 'container', label: 'Container Charge', visible: true, editable: true },
     { key: 'tax', label: 'Tax', visible: true },
-    { key: 'round_off', label: 'Round Off', visible: true },
     { key: 'customer_paid', label: 'Customer Paid', visible: true },
     { key: 'return_to_customer', label: 'Return to Customer', visible: true },
     { key: 'tip', label: 'Tip', visible: true, editable: true },
