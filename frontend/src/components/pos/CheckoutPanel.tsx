@@ -69,6 +69,7 @@ export default function CheckoutPanel({
   onReceipt,
   canPay,
   canDiscount,
+  canCancel,
 }: {
   orderId: number;
   payments: RecordedPayment[];
@@ -86,6 +87,7 @@ export default function CheckoutPanel({
   onReceipt: () => void;
   canPay: boolean;
   canDiscount: boolean;
+  canCancel: boolean;
 }) {
   const orderQuery = useQuery({
     queryKey: ['pos-order', orderId],
@@ -294,7 +296,7 @@ export default function CheckoutPanel({
                 <Undo2 size={15} /> Modify items
               </button>
             )}
-            <button type="button" onClick={onCancel} disabled={!orderOpen} className="h-11 rounded-xl border-2 border-zinc-200 bg-white font-bold text-sm inline-flex items-center justify-center gap-1.5 text-red-600 hover:border-red-300 hover:bg-red-50 disabled:opacity-40 active:scale-[0.98]">
+            <button type="button" onClick={onCancel} disabled={!orderOpen || !canCancel} title={!canCancel ? 'Cancelling requires a manager' : 'Cancel this order'} className="h-11 rounded-xl border-2 border-zinc-200 bg-white font-bold text-sm inline-flex items-center justify-center gap-1.5 text-red-600 hover:border-red-300 hover:bg-red-50 disabled:opacity-40 active:scale-[0.98]">
               <XCircle size={15} /> Cancel
             </button>
             {!compact && (

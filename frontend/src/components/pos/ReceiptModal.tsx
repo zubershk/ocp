@@ -163,7 +163,7 @@ export default function ReceiptModal({
             <Badge variant="neutral">{order.status}</Badge>
           </div>
 
-          {canRefund && order.status === 'completed' && payments.length > 0 && (
+          {canRefund && payments.length > 0 && (
             <div className="mt-3 rounded-2xl border border-zinc-200 p-3 print:hidden">
               <div className="text-xs font-bold uppercase tracking-wider text-zinc-500 mb-1.5">Refund a payment</div>
               {refundId == null ? (
