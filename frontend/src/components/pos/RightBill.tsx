@@ -8,7 +8,7 @@ import DiscountList from './DiscountList';
 import OrderTypeStrip from './OrderTypeStrip';
 import { shouldShowField } from './billRules';
 import type { POSConfig } from '../../hooks/usePosConfig';
-import { formatINR, posApi, posErrorMessage, toRupees, type PosOrder, type PosOrderType, type PosPayMethod } from '../../services/posService';
+import { formatINR, posApi, posErrorMessage, toRupees, type LedgerSummary, type PosOrder, type PosOrderType, type PosPayMethod } from '../../services/posService';
 import type { CartLine, CustomerInfo, RecordedPayment } from './types';
 
 export interface RightBillProps {
@@ -41,7 +41,10 @@ export interface RightBillProps {
   canCreate: boolean;
   payments: RecordedPayment[];
   duePaise: number | null;
-  onPaid: (p: RecordedPayment, duePaise: number) => void;
+  overpaidPaise: number;
+  ledgerReady: boolean;
+  onPaid: (p: RecordedPayment, duePaise: number, overpaidPaise: number) => void;
+  onResyncLedger: (id: number) => Promise<LedgerSummary | null>;
   onCompleted: () => void;
   onHold: () => void;
   onCancel: () => void;
@@ -175,7 +178,7 @@ function CartLines({ order, cart, onQty, onRequestRemove, onRequestClear, lineRe
 }
 
 export default function RightBill(props: RightBillProps) {
-  const { config, activeOrderTypes, orderType, onOrderType, tableId, setTableId, guestCount, setGuestCount, customer, setCustomer, cart, order, orderId, containerCharge, setContainerCharge, tip, setTip, isComplimentary, setIsComplimentary, isAdvance, setIsAdvance, advanceAt, setAdvanceAt, onQty, onCreate, creating, canCreate, payments, duePaise, onPaid, onCompleted, onHold, onCancel, onModify, onReceipt, onSavePrint, canPay, canDiscount, lineRefs, pulseKey, onRequestRemove, onRequestClear, fatal, setFatal, notice } = props;
+  const { config, activeOrderTypes, orderType, onOrderType, tableId, setTableId, guestCount, setGuestCount, customer, setCustomer, cart, order, orderId, containerCharge, setContainerCharge, tip, setTip, isComplimentary, setIsComplimentary, isAdvance, setIsAdvance, advanceAt, setAdvanceAt, onQty, onCreate, creating, canCreate, payments, duePaise, overpaidPaise, ledgerReady, onPaid, onResyncLedger, onCompleted, onHold, onCancel, onModify, onReceipt, onSavePrint, canPay, canDiscount, lineRefs, pulseKey, onRequestRemove, onRequestClear, fatal, setFatal, notice } = props;
   const cfg = config;
   const currency = cfg.ui?.currency_symbol || '₹';
   // Display-only estimates for immediate UI feedback (quantity/addon/cart edits).
@@ -205,7 +208,7 @@ export default function RightBill(props: RightBillProps) {
   const [bogoOpen, setBogoOpen] = useState(false);
   const [bogoBusy, setBogoBusy] = useState(false);
   const hasOrder = orderId != null;
-  const isPaid = hasOrder && duePaise === 0;
+  const isPaid = hasOrder && ledgerReady && duePaise === 0 && overpaidPaise === 0;
   const bogoEnabled = cfg.features?.bogo === true;
   const kotEnabled = cfg.features?.kot === true;
   const [tapeOpen, setTapeOpen] = useState(false);
@@ -374,12 +377,15 @@ export default function RightBill(props: RightBillProps) {
       </>
       ) : null}
       {orderId != null ? (
-        <CheckoutPanel
-          orderId={orderId}
-          payments={payments}
-          duePaise={duePaise}
-          payRequest={payRequest}
-          compact
+            <CheckoutPanel
+              orderId={orderId}
+              payments={payments}
+              duePaise={duePaise}
+              overpaidPaise={overpaidPaise}
+              ledgerReady={ledgerReady}
+              onResyncLedger={onResyncLedger}
+              payRequest={payRequest}
+              compact
           onPaid={onPaid}
           onCompleted={onCompleted}
           onHold={onHold}
@@ -449,7 +455,11 @@ export default function RightBill(props: RightBillProps) {
 
         {hasOrder && (
         <div className="flex items-center justify-center gap-2 border-t px-2 py-1.5 shrink-0">
-          {isPaid ? (
+          {!ledgerReady ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-zinc-100 border border-zinc-200 text-zinc-500 text-xs font-bold px-3 py-1">Syncing payment status…</span>
+          ) : overpaidPaise > 0 ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 border border-amber-300 text-amber-800 text-xs font-bold px-3 py-1">Overpaid {formatINR(toRupees(overpaidPaise))}</span>
+          ) : isPaid ? (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 border border-emerald-300 text-emerald-800 text-xs font-bold px-3 py-1">Paid</span>
           ) : (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-zinc-100 border border-zinc-200 text-zinc-600 text-xs font-bold px-3 py-1">
