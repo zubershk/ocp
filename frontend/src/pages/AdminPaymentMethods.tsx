@@ -59,7 +59,7 @@ export default function AdminPaymentMethods() {
             <Input value={icon} onChange={e => setIcon(e.target.value)} placeholder="icon cash/phone/card" maxLength={40} />
             <Button onClick={() => createMut.mutate({ key, label, icon, active: true, sort_order: methods.length })} disabled={createMut.isPending || !key || !label}>Create</Button>
           </div>
-          <p className="text-xs text-muted-foreground">System rails (<code>cash, upi, card, online</code>) are <code>is_system=true</code> (cannot delete, can toggle active/label/icon/sort).</p>
+          <p className="text-xs text-muted-foreground">System rails (<code>cash, upi, card, online</code>) are <code>is_system=true</code> (cannot delete, can toggle active/label/icon/sort). Active custom methods are accepted by the payment ledger.</p>
         </CardContent>
       </Card>
       <Card>
