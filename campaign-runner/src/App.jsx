@@ -933,7 +933,9 @@ function MediaView() {
   };
 
   const copyUrl = (url) => {
-    navigator.clipboard.writeText(`${window.location.origin}${url}`);
+    navigator.clipboard.writeText(`${window.location.origin}${url}`)
+      .then(() => toast('URL copied to clipboard', 'success'))
+      .catch(() => toast('Copy failed'));
   };
 
   return (
