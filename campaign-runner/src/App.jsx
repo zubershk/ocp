@@ -7,7 +7,11 @@ import StatisticsWithStatus from './components/statistics-with-status';
 const API = '';
 
 function getAdminKey() {
-  try { return localStorage.getItem('ocp_campaign_admin_key') || ''; } catch { return ''; }
+  try {
+    const saved = localStorage.getItem('ocp_campaign_admin_key');
+    if (saved) return saved;
+  } catch { /* ignore */ }
+  try { return import.meta.env?.VITE_CAMPAIGN_ADMIN_KEY || ''; } catch { return ''; }
 }
 
 async function api(path, opts = {}) {
