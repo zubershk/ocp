@@ -556,31 +556,105 @@ function DashboardView() {
 // CUSTOMERS
 // ═══════════════════════════════════════════
 function CustomersView() {
+  const { confirm, toast } = useDialog();
   const [customers, setCustomers] = useState([]);
   const [tags, setTags] = useState([]);
   const [search, setSearch] = useState('');
-  const [tagFilter, setTagFilter] = useState('all');
+  const [selectedTags, setSelectedTags] = useState([]);
+  const [tagMode, setTagMode] = useState('any');
+  const [showTagPicker, setShowTagPicker] = useState(false);
+  const [sourceFilter, setSourceFilter] = useState('all');
+  const [preset, setPreset] = useState('all');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+  const [year, setYear] = useState('');
+  const [yearTo, setYearTo] = useState('');
+  const [month, setMonth] = useState('');
+  const [dateBy, setDateBy] = useState('added');
+  const [sort, setSort] = useState('createdAt');
+  const [order, setOrder] = useState('desc');
   const [showAdd, setShowAdd] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ phone: '', name: '', tags: '', email: '', notes: '' });
   const [importResult, setImportResult] = useState(null);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
   const [total, setTotal] = useState(0);
   const [dragOver, setDragOver] = useState(false);
-  const [selected, setSelected] = useState([]); // customer ids on this page
+  const [selected, setSelected] = useState([]); // customer ids (may span pages)
   const [bulkTag, setBulkTag] = useState('');
+  const [bulkMode, setBulkMode] = useState('add');
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [columns, setColumns] = useState(() => {
+    const def = { phone: true, name: true, tags: true, email: true, added: true, source: true, orders: false, lastseen: false };
+    try { return { ...def, ...JSON.parse(localStorage.getItem('ocp_customer_cols') || '{}') }; } catch { return def; }
+  });
+  const [showCols, setShowCols] = useState(false);
+  const [detail, setDetail] = useState(null);
+  const [msgIds, setMsgIds] = useState([]);
+  const [msgLabel, setMsgLabel] = useState('');
+  const [msgText, setMsgText] = useState('');
+  const [msgBusy, setMsgBusy] = useState(false);
+  const [views, setViews] = useState(() => { try { return JSON.parse(localStorage.getItem('ocp_customer_views') || '[]'); } catch { return []; } });
+  const [showViews, setShowViews] = useState(false);
+  const [viewName, setViewName] = useState('');
   const fileRef = useRef();
 
-  const load = useCallback(async () => {
-    const params = new URLSearchParams({ page, limit: 50 });
+  const YEARS = useRef((() => { const y = new Date().getFullYear(); const a = []; for (let i = y; i >= 2020; i--) a.push(String(i)); return a; })()).current;
+  const MONTHS = [['01','Jan'],['02','Feb'],['03','Mar'],['04','Apr'],['05','May'],['06','Jun'],['07','Jul'],['08','Aug'],['09','Sep'],['10','Oct'],['11','Nov'],['12','Dec']];
+  const fmtDay = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+  // Preset → {from,to} or {year,yearTo,month}; explicit custom dates pass through.
+  const dateParams = () => {
+    if (preset === 'custom') {
+      const o = {};
+      if (fromDate) o.from = fromDate;
+      if (toDate) o.to = toDate;
+      return o;
+    }
+    if (preset === 'syear') {
+      const o = {};
+      if (year) o.year = year;
+      if (yearTo) o.yearTo = yearTo;
+      if (month && year && !yearTo) o.month = month;
+      return o;
+    }
+    const now = new Date();
+    const t = fmtDay(now);
+    const ago = (n) => { const d = new Date(now); d.setDate(d.getDate() - n); return fmtDay(d); };
+    switch (preset) {
+      case 'today': return { from: t, to: t };
+      case 'yesterday': { const y = ago(1); return { from: y, to: y }; }
+      case '7d': return { from: ago(6), to: t };
+      case '30d': return { from: ago(29), to: t };
+      case 'month': return { from: t.slice(0, 7) + '-01', to: t };
+      case 'year': return { from: `${now.getFullYear()}-01-01`, to: t };
+      default: return {};
+    }
+  };
+
+  const filterParams = (withPage = true) => {
+    const params = new URLSearchParams();
+    if (withPage) { params.set('page', String(page)); params.set('limit', String(pageSize)); }
+    params.set('sort', sort);
+    params.set('order', order);
+    params.set('dateBy', dateBy);
+    params.set('source', sourceFilter);
     if (search) params.set('search', search);
-    if (tagFilter !== 'all') params.set('tag', tagFilter);
-    const data = await api(`/api/customers?${params}`);
+    if (selectedTags.length > 0) {
+      params.set('tag', selectedTags.join(','));
+      if (selectedTags.length > 1) params.set('tagMode', tagMode);
+    }
+    for (const [k, v] of Object.entries(dateParams())) if (v) params.set(k, v);
+    return params;
+  };
+
+  const load = useCallback(async () => {
+    const data = await api(`/api/customers?${filterParams()}`);
     setCustomers(data.customers || []);
     setTotal(data.total || 0);
     api('/api/customers/tags').then(setTags);
-  }, [page, search, tagFilter]);
+  }, [page, pageSize, search, selectedTags, tagMode, sourceFilter, preset, fromDate, toDate, year, yearTo, month, dateBy, sort, order]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -623,13 +697,16 @@ function CustomersView() {
     setSelected(prev => allIn ? prev.filter(id => !ids.includes(id)) : [...new Set([...prev, ...ids])]);
   };
 
-  // Bulk actions run per-item against existing endpoints (pages hold ≤50).
+  // Bulk actions go through single-call batch endpoints.
   const bulkDelete = async () => {
     if (selected.length === 0) return;
-    if (!confirm(`Delete ${selected.length} customers? This cannot be undone.`)) return;
+    if (!(await confirm(`Delete ${selected.length} customers? This cannot be undone.`, { title: `Delete ${selected.length} customers` }))) return;
     setBulkBusy(true);
-    for (const id of selected) {
-      await api(`/api/customers/${id}`, { method: 'DELETE' });
+    try {
+      const res = await api('/api/customers/bulk-delete', { method: 'POST', body: JSON.stringify({ ids: selected }) });
+      toast(`Deleted ${res.deleted}${res.skippedBot ? ` (${res.skippedBot} bot-owned skipped)` : ''}`, 'success');
+    } catch (e) {
+      toast(e?.message || 'delete failed');
     }
     setSelected([]);
     setBulkBusy(false);
@@ -640,16 +717,11 @@ function CustomersView() {
     const tag = bulkTag.trim();
     if (selected.length === 0 || !tag) return;
     setBulkBusy(true);
-    const byId = new Map(customers.map(c => [c.id, c]));
-    for (const id of selected) {
-      const c = byId.get(id);
-      if (!c) continue;
-      const tags = [...new Set([...(c.tags || []), tag])];
-      if (c.source === 'bot') {
-        await api(`/api/customers/${c.phone}/tags`, { method: 'POST', body: JSON.stringify({ tags }) });
-      } else {
-        await api(`/api/customers/${id}`, { method: 'PUT', body: JSON.stringify({ tags }) });
-      }
+    try {
+      const res = await api('/api/customers/bulk-tag', { method: 'POST', body: JSON.stringify({ ids: selected, tag, mode: bulkMode }) });
+      toast(`${bulkMode === 'add' ? 'Tagged' : 'Untagged'} ${res.updated}`, 'success');
+    } catch (e) {
+      toast(e?.message || 'tag failed');
     }
     setBulkTag('');
     setSelected([]);
@@ -657,15 +729,155 @@ function CustomersView() {
     load();
   };
 
+  const downloadCsv = async (url, filename) => {
+    const headers = {};
+    const k = getAdminKey();
+    if (k) headers['X-Admin-Key'] = k;
+    const res = await fetch(url, { headers });
+    if (!res.ok) throw new Error(`export failed (${res.status})`);
+    const blob = await res.blob();
+    const objUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = objUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(objUrl), 5000);
+  };
+
+  const exportSelected = async () => {
+    if (selected.length === 0) return;
+    try {
+      await downloadCsv(`${API}/api/customers/export?ids=${selected.map(encodeURIComponent).join(',')}`, 'customers-selected.csv');
+    } catch (e) {
+      toast(e?.message || 'export failed');
+    }
+  };
+
+  const selectAllFiltered = async () => {
+    try {
+      const all = await api(`/api/customers/all?${filterParams(false)}`);
+      setSelected((all || []).map(c => c.id));
+      toast(`Selected ${(all || []).length} contacts`, 'success');
+    } catch (e) {
+      toast(e?.message || 'select failed');
+    }
+  };
+
+  const openBulkMessage = (ids, label) => {
+    if (!ids || ids.length === 0) return;
+    setMsgIds(ids);
+    setMsgLabel(label);
+    setMsgText('');
+  };
+
+  const sendBulkMessage = async () => {
+    if (msgIds.length === 0 || !msgText.trim()) return;
+    setMsgBusy(true);
+    try {
+      const res = await api('/api/customers/bulk-message', { method: 'POST', body: JSON.stringify({ ids: msgIds, message: msgText }) });
+      setMsgIds([]);
+      setMsgText('');
+      setSelected([]);
+      toast(`Sending to ${res.total} contacts`, 'success');
+    } catch (e) {
+      toast(e?.message || 'send failed');
+    }
+    setMsgBusy(false);
+  };
+
+  const sendTestTo = async (phone) => {
+    if (!phone || !msgText.trim()) return;
+    setMsgBusy(true);
+    try {
+      await api('/api/test-send', { method: 'POST', body: JSON.stringify({ phone, message: msgText }) });
+      toast('Test message sent', 'success');
+    } catch (e) {
+      toast(e?.message || 'send failed');
+    }
+    setMsgBusy(false);
+  };
+
+  const snapshotFilters = () => ({ search, selectedTags, tagMode, sourceFilter, preset, fromDate, toDate, year, yearTo, month, dateBy, sort, order, pageSize });
+  const applyView = (v) => {
+    const s = v.state || {};
+    setSearch(s.search || '');
+    setSelectedTags(s.selectedTags || []);
+    setTagMode(s.tagMode || 'any');
+    setSourceFilter(s.sourceFilter || 'all');
+    setPreset(s.preset || 'all');
+    setFromDate(s.fromDate || '');
+    setToDate(s.toDate || '');
+    setYear(s.year || '');
+    setYearTo(s.yearTo || '');
+    setMonth(s.month || '');
+    setDateBy(s.dateBy || 'added');
+    setSort(s.sort || 'createdAt');
+    setOrder(s.order || 'desc');
+    setPageSize(s.pageSize || 50);
+    setSelected([]);
+    setPage(1);
+    setShowViews(false);
+  };
+  const saveView = () => {
+    const name = viewName.trim();
+    if (!name) return;
+    const next = [...views.filter(x => x.name !== name), { name, state: snapshotFilters() }];
+    setViews(next);
+    try { localStorage.setItem('ocp_customer_views', JSON.stringify(next)); } catch { /* ignore */ }
+    setViewName('');
+  };
+  const deleteView = (name) => {
+    const next = views.filter(x => x.name !== name);
+    setViews(next);
+    try { localStorage.setItem('ocp_customer_views', JSON.stringify(next)); } catch { /* ignore */ }
+  };
+
+  const toggleCol = (k) => {
+    setColumns(prev => {
+      const next = { ...prev, [k]: !prev[k] };
+      try { localStorage.setItem('ocp_customer_cols', JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+  };
+
+  const clickSort = (field) => {
+    if (sort === field) {
+      setOrder(o => (o === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSort(field);
+      setOrder(field === 'name' ? 'asc' : 'desc');
+    }
+    setPage(1);
+  };
+  const sortArrow = (field) => (sort === field ? (order === 'asc' ? ' ▲' : ' ▼') : '');
+
+  const fmtAdded = (c) => {
+    if (!c.createdAt) return '—';
+    const d = new Date(c.createdAt);
+    return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString();
+  };
+
   const handleFile = async (file) => {
     if (!file) return;
-    const fd = new FormData();
-    fd.append('file', file);
-    const res = await fetch(`${API}/api/customers/import`, { method: 'POST', body: fd });
-    const data = await res.json();
-    setImportResult(data);
-    load();
-    if (fileRef.current) fileRef.current.value = '';
+    setImportResult(null);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const headers = {};
+      const k = getAdminKey();
+      if (k) headers['X-Admin-Key'] = k;
+      const res = await fetch(`${API}/api/customers/import`, { method: 'POST', headers, body: fd });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || `import failed (${res.status})`);
+      setImportResult(data);
+      load();
+    } catch (e) {
+      setImportResult({ error: e?.message || 'import failed' });
+    } finally {
+      if (fileRef.current) fileRef.current.value = '';
+    }
   };
 
   const handleDrop = (e) => {
@@ -734,20 +946,140 @@ function CustomersView() {
 
       <div onDragOver={(e) => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)} onDrop={handleDrop}>
         {/* Search and filters */}
-        <div className="flex flex-col gap-3 mb-3 sm:flex-row">
-          <div className="relative flex-1 min-w-0">
-            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400"><Icons.Search /></div>
-            <input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-              className="w-full pl-9 pr-3 py-2 rounded-xl border border-stone-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-400" placeholder="Search by name or phone..." />
+        <div className="flex flex-col gap-3 mb-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="relative flex-1 min-w-0">
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400"><Icons.Search /></div>
+              <input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                className="w-full pl-9 pr-3 py-2 rounded-xl border border-stone-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-400" placeholder="Search by name or phone..." />
+            </div>
+            <div className="relative">
+              <button onClick={() => { setShowTagPicker(v => !v); setShowCols(false); setShowViews(false); }}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-stone-200 text-sm bg-white focus:outline-none hover:bg-stone-50">
+                <Icons.Tag s={14} /> {selectedTags.length === 0 ? 'All Tags' : `${selectedTags.length} tag${selectedTags.length > 1 ? 's' : ''}`} <Icons.ChevronDown s={14} />
+              </button>
+              {showTagPicker && (
+                <div className="absolute z-30 mt-1 w-60 bg-white rounded-xl border border-stone-200 shadow-lg p-2 max-h-72 overflow-y-auto">
+                  <button onClick={() => { setSelectedTags([]); setPage(1); }}
+                    className="w-full text-left px-2 py-1.5 rounded-lg text-xs font-medium text-zinc-500 hover:bg-stone-100">Clear tags</button>
+                  {tags.map(t => (
+                    <label key={t} className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm hover:bg-stone-100 cursor-pointer">
+                      <input type="checkbox" checked={selectedTags.includes(t)}
+                        onChange={() => { setSelectedTags(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]); setPage(1); }}
+                        className="accent-brand-600 size-4 cursor-pointer" />
+                      <span className="truncate">{t}</span>
+                    </label>
+                  ))}
+                  {tags.length === 0 && <div className="px-2 py-1.5 text-xs text-zinc-400">No tags yet</div>}
+                  {selectedTags.length > 1 && (
+                    <div className="flex items-center gap-2 px-2 pt-2 mt-1 border-t border-stone-100 text-xs text-zinc-500">
+                      Match:
+                      <button onClick={() => { setTagMode('any'); setPage(1); }} className={cn('px-2 py-1 rounded-lg font-medium', tagMode === 'any' ? 'bg-brand-600 text-white' : 'bg-stone-100')}>Any</button>
+                      <button onClick={() => { setTagMode('all'); setPage(1); }} className={cn('px-2 py-1 rounded-lg font-medium', tagMode === 'all' ? 'bg-brand-600 text-white' : 'bg-stone-100')}>All</button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            <select value={sourceFilter} onChange={(e) => { setSourceFilter(e.target.value); setPage(1); }} title="Bot = synced from store · Imported = uploaded/manual"
+              className="px-3 py-2 rounded-xl border border-stone-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-400">
+              <option value="all">All sources</option>
+              <option value="bot">Bot</option>
+              <option value="local">Imported</option>
+            </select>
+            <div className="relative">
+              <button onClick={() => { setShowViews(v => !v); setShowCols(false); setShowTagPicker(false); }}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-stone-200 text-sm bg-white hover:bg-stone-50">
+                Views <Icons.ChevronDown s={14} />
+              </button>
+              {showViews && (
+                <div className="absolute z-30 right-0 mt-1 w-64 bg-white rounded-xl border border-stone-200 shadow-lg p-2">
+                  <div className="flex gap-1.5 mb-1">
+                    <input value={viewName} onChange={(e) => setViewName(e.target.value)} placeholder="View name…"
+                      className="flex-1 min-w-0 px-2.5 py-1.5 rounded-lg border border-stone-200 text-xs focus:outline-none focus:border-brand-400" />
+                    <button onClick={saveView} className="px-2.5 py-1.5 rounded-lg bg-brand-600 text-white text-xs font-bold hover:bg-brand-700">Save</button>
+                  </div>
+                  {views.length === 0 && <div className="px-2 py-1.5 text-xs text-zinc-400">No saved views — set filters, name it, Save.</div>}
+                  {views.map(v => (
+                    <div key={v.name} className="flex items-center gap-1 px-2 py-1.5 rounded-lg hover:bg-stone-100">
+                      <button onClick={() => applyView(v)} className="flex-1 text-left text-sm truncate">{v.name}</button>
+                      <button onClick={() => deleteView(v.name)} aria-label={`Delete view ${v.name}`} className="p-1 rounded hover:bg-red-50 text-zinc-400 hover:text-red-500"><Icons.X s={12} /></button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="relative">
+              <button onClick={() => { setShowCols(v => !v); setShowViews(false); setShowTagPicker(false); }}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-stone-200 text-sm bg-white hover:bg-stone-50">
+                Columns <Icons.ChevronDown s={14} />
+              </button>
+              {showCols && (
+                <div className="absolute z-30 right-0 mt-1 w-48 bg-white rounded-xl border border-stone-200 shadow-lg p-2">
+                  {[['phone', 'Phone'], ['name', 'Name'], ['tags', 'Tags'], ['email', 'Email'], ['added', 'Added'], ['source', 'Source'], ['orders', 'Orders'], ['lastseen', 'Last seen']].map(([k, label]) => (
+                    <label key={k} className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm hover:bg-stone-100 cursor-pointer">
+                      <input type="checkbox" checked={!!columns[k]} onChange={() => toggleCol(k)} className="accent-brand-600 size-4 cursor-pointer" />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+            {customers.length > 0 && (
+              <button onClick={clearAll} className="px-3 py-2 rounded-xl border border-red-200 bg-white text-sm font-medium text-red-600 hover:bg-red-50 transition-colors">Clear All</button>
+            )}
           </div>
-          <select value={tagFilter} onChange={(e) => { setTagFilter(e.target.value); setPage(1); }}
-            className="px-3 py-2 rounded-xl border border-stone-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-400">
-            <option value="all">All Tags</option>
-            {tags.map(t => <option key={t} value={t}>{t}</option>)}
-          </select>
-          {customers.length > 0 && (
-            <button onClick={clearAll} className="px-3 py-2 rounded-xl border border-red-200 bg-white text-sm font-medium text-red-600 hover:bg-red-50 transition-colors">Clear All</button>
-          )}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:flex-wrap">
+            <div className="inline-flex items-center gap-1.5 text-xs text-zinc-500"><Icons.Calendar s={14} /> When:</div>
+            <select value={preset} onChange={(e) => { setPreset(e.target.value); setPage(1); }}
+              className="px-3 py-2 rounded-xl border border-stone-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-400">
+              <option value="all">All time</option>
+              <option value="today">Today</option>
+              <option value="yesterday">Yesterday</option>
+              <option value="7d">Last 7 days</option>
+              <option value="30d">Last 30 days</option>
+              <option value="month">This month</option>
+              <option value="year">This year</option>
+              <option value="syear">Specific year…</option>
+              <option value="custom">Custom range…</option>
+            </select>
+            {preset === 'custom' && (
+              <>
+                <input type="date" value={fromDate} max={toDate || undefined} onChange={(e) => { setFromDate(e.target.value); setPage(1); }}
+                  className="px-3 py-2 rounded-xl border border-stone-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-400" aria-label="From date" />
+                <span className="text-xs text-zinc-400">to</span>
+                <input type="date" value={toDate} min={fromDate || undefined} onChange={(e) => { setToDate(e.target.value); setPage(1); }}
+                  className="px-3 py-2 rounded-xl border border-stone-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-400" aria-label="To date" />
+              </>
+            )}
+            {preset === 'syear' && (
+              <>
+                <select value={year} onChange={(e) => { setYear(e.target.value); setMonth(''); setPage(1); }}
+                  className="px-3 py-2 rounded-xl border border-stone-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-400" aria-label="Year">
+                  <option value="">Year…</option>
+                  {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
+                </select>
+                <select value={month} disabled={!year} onChange={(e) => { setMonth(e.target.value); setYearTo(''); setPage(1); }}
+                  className="px-3 py-2 rounded-xl border border-stone-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-400 disabled:opacity-40" aria-label="Month">
+                  <option value="">All months</option>
+                  {MONTHS.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
+                </select>
+                {!month && (
+                  <select value={yearTo} onChange={(e) => { setYearTo(e.target.value); setPage(1); }}
+                    className="px-3 py-2 rounded-xl border border-stone-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-400" aria-label="To year">
+                    <option value="">…same year</option>
+                    {YEARS.filter(y => !year || y >= year).map(y => <option key={y} value={y}>to {y}</option>)}
+                  </select>
+                )}
+              </>
+            )}
+            <select value={dateBy} onChange={(e) => { setDateBy(e.target.value); setPage(1); }}
+              title="Added = first-seen date · Active = recent activity (falls back to Added)"
+              className="px-3 py-2 rounded-xl border border-stone-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-400">
+              <option value="added">By added date</option>
+              <option value="active">By recent activity</option>
+            </select>
+          </div>
         </div>
 
         {/* Add/Edit form */}

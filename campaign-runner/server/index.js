@@ -604,60 +604,110 @@ function clampInt(v, def, min, max) {
   if (Number.isNaN(n)) return def;
   return Math.min(max, Math.max(min, n));
 }
+// ── Customer list filters (shared by GET /, /all, /export) ──
+// Query: search, tag (repeat/comma) + tagMode=any|all, source=all|bot|local,
+// dateBy=added|active, from/to (YYYY-MM-DD), year, yearTo, month,
+// sort=name|phone|createdAt, order=asc|desc. Dates are UTC day boundaries.
+function addedDateMs(c) {
+  if (!c || !c.createdAt) return null;
+  const t = Date.parse(c.createdAt);
+  return Number.isNaN(t) ? null : t;
+}
+function activeDateMs(c) {
+  if (!c) return null;
+  const t = Date.parse(c.last_seen_at || c.createdAt);
+  return Number.isNaN(t) ? null : t;
+}
+function parseCustomerFilters(q) {
+  const tags = [];
+  const rawTags = q.tag === undefined ? [] : (Array.isArray(q.tag) ? q.tag : [q.tag]);
+  for (const t of rawTags) {
+    for (const s of String(t).split(',')) {
+      const v = s.trim().slice(0, 50);
+      if (v && v !== 'all' && !tags.includes(v)) tags.push(v);
+    }
+  }
+  if (tags.length > 20) tags.length = 20;
+  const tagMode = q.tagMode === 'all' ? 'all' : 'any';
+  const source = (q.source === 'bot' || q.source === 'local') ? q.source : 'all';
+  const dateBy = q.dateBy === 'active' ? 'active' : 'added';
+  const sort = (q.sort === 'name' || q.sort === 'phone' || q.sort === 'createdAt') ? q.sort : 'createdAt';
+  const order = q.order === 'asc' ? 'asc' : 'desc';
+  let fromMs = null, toMs = null;
+  const day = (s) => (/^\d{4}-\d{2}-\d{2}$/.test(String(s || '')) ? String(s) : null);
+  const fromD = day(q.from), toD = day(q.to);
+  if (fromD) { const t = Date.parse(`${fromD}T00:00:00Z`); if (!Number.isNaN(t)) fromMs = t; }
+  if (toD) { const t = Date.parse(`${toD}T23:59:59.999Z`); if (!Number.isNaN(t)) toMs = t; }
+  const yr = (v) => { const n = parseInt(String(v ?? ''), 10); return (n >= 2000 && n <= 2100) ? n : null; };
+  if (fromMs === null && toMs === null) {
+    const year = yr(q.year);
+    const yearTo = yr(q.yearTo);
+    const month = q.month === undefined || q.month === '' || q.month === 'all' ? 0 : clampInt(q.month, 0, 1, 12);
+    if (year && month >= 1) {
+      fromMs = Date.UTC(year, month - 1, 1);
+      toMs = Date.UTC(year, month, 1) - 1;
+    } else if (year) {
+      const y2 = (yearTo && yearTo >= year) ? yearTo : year;
+      fromMs = Date.UTC(year, 0, 1);
+      toMs = Date.UTC(y2 + 1, 0, 1) - 1;
+    }
+  }
+  return { tags, tagMode, source, dateBy, sort, order, fromMs, toMs };
+}
+function applyCustomerFilters(list, f) {
+  let out = Array.isArray(list) ? list : [];
+  if (f.source !== 'all') out = out.filter(c => c.source === f.source);
+  if (f.tags.length > 0) {
+    out = out.filter(c => {
+      const ct = Array.isArray(c.tags) ? c.tags : [];
+      return f.tagMode === 'all' ? f.tags.every(t => ct.includes(t)) : f.tags.some(t => ct.includes(t));
+    });
+  }
+  if (f.fromMs !== null || f.toMs !== null) {
+    out = out.filter(c => {
+      const t = f.dateBy === 'active' ? activeDateMs(c) : addedDateMs(c);
+      if (t === null) return false;
+      return (f.fromMs === null || t >= f.fromMs) && (f.toMs === null || t <= f.toMs);
+    });
+  }
+  const dir = f.order === 'asc' ? 1 : -1;
+  out = [...out].sort((a, b) => {
+    let ka, kb, na = false, nb = false;
+    if (f.sort === 'createdAt') {
+      ka = addedDateMs(a); kb = addedDateMs(b);
+      na = ka === null; nb = kb === null;
+      ka = ka ?? 0; kb = kb ?? 0;
+    } else if (f.sort === 'name') {
+      ka = String(a.name || '').toLowerCase(); kb = String(b.name || '').toLowerCase();
+    } else {
+      ka = String(a.phone || ''); kb = String(b.phone || '');
+    }
+    if (na && nb) return 0;
+    if (na) return 1;
+    if (nb) return -1;
+    return (ka < kb ? -1 : ka > kb ? 1 : 0) * dir;
+  });
+  return out;
+}
 app.get('/api/customers', async (req, res) => {
   const search = String(req.query.search || '').slice(0, 200);
   const page = clampInt(req.query.page, 1, 1, 10000);
   const limit = clampInt(req.query.limit, 50, 1, 100);
-  const tag = String(req.query.tag || 'all').slice(0, 50);
-  if (BOT_ADMIN_KEY) {
-    try {
-      const data = await botApi(`/admin/customers?search=${encodeURIComponent(search)}&limit=2000`, { timeoutMs: 10000 });
-      let customers = (data.customers || []).map(c => ({
-        id: String(c.id),
-        phone: c.phone,
-        name: c.name || '',
-        tags: [],
-        email: c.email || '',
-        total_orders: c.total_orders,
-        total_spent: c.total_spent,
-        createdAt: c.created_at,
-        last_seen_at: c.last_seen_at,
-        source: 'bot',
-      }));
-      const localTags = load('customer_tags', {});
-      customers.forEach(c => { c.tags = localTags[c.phone] || []; });
-      if (tag && tag !== 'all') customers = customers.filter(c => c.tags.includes(tag));
-      const total = customers.length;
-      const start = (page - 1) * limit;
-      return res.json({ customers: customers.slice(start, start + limit), total, page, pages: Math.ceil(total / limit), source: 'bot' });
-    } catch (err) {
-      clog(null, 'customers-bot-fallback', {});
-    }
-  }
-  let customers = load('customers');
-  if (!Array.isArray(customers)) customers = [];
-  if (search) { const q = search.toLowerCase(); customers = customers.filter(c => String(c.phone || '').includes(q) || String(c.name || '').toLowerCase().includes(q)); }
-  if (tag && tag !== 'all') customers = customers.filter(c => (c.tags || []).includes(tag));
+  const f = parseCustomerFilters(req.query);
+  // Merged set: bot (search-filtered server-side, limit 2000) + local file.
+  // Search/tag/source/dates/sort all operate on the merged, deduped set.
+  const { customers: merged, botOk } = await getMergedCustomers({ search });
+  const customers = applyCustomerFilters(merged, f);
   const total = customers.length;
   const start = (page - 1) * limit;
-  res.json({ customers: customers.slice(start, start + limit), total, page, pages: Math.ceil(total / limit), source: 'local' });
+  res.json({ customers: customers.slice(start, start + limit), total, page, pages: Math.ceil(total / limit), source: botOk ? 'merged' : 'local' });
 });
 
-app.get('/api/customers/all', async (_req, res) => {
-  if (BOT_ADMIN_KEY) {
-    try {
-      const data = await botApi('/admin/customers?limit=2000', { timeoutMs: 10000 });
-      const localTags = load('customer_tags', {});
-      const customers = (data.customers || []).map(c => ({
-        id: String(c.id), phone: c.phone, name: c.name || '', tags: localTags[c.phone] || [],
-        email: c.email || '', total_orders: c.total_orders, total_spent: c.total_spent,
-        createdAt: c.created_at, source: 'bot',
-      }));
-      return res.json(customers);
-    } catch (err) { /* fall through */ }
-  }
-  const local = load('customers');
-  res.json(Array.isArray(local) ? local : []);
+app.get('/api/customers/all', async (req, res) => {
+  const search = String(req.query.search || '').slice(0, 200);
+  const f = parseCustomerFilters(req.query);
+  const { customers: merged } = await getMergedCustomers({ search });
+  res.json(applyCustomerFilters(merged, f));
 });
 
 function sanitizeTags(tags) {
@@ -682,10 +732,15 @@ app.post('/api/customers', (req, res) => {
   res.json(c);
 });
 
-app.put('/api/customers/:id', (req, res) => {
+app.put('/api/customers/:id', async (req, res) => {
   const customers = load('customers');
   const idx = customers.findIndex(c => c.id === req.params.id);
-  if (idx === -1) return res.status(404).json({ error: 'not found' });
+  if (idx === -1) {
+    const byId = await mergedById();
+    const hit = byId.get(String(req.params.id));
+    if (hit && hit.source === 'bot') return res.status(409).json({ error: 'bot-owned contact (tag only)' });
+    return res.status(404).json({ error: 'not found' });
+  }
   const b = req.body || {};
   const patch = {};
   if (b.name !== undefined) {
@@ -706,10 +761,17 @@ app.put('/api/customers/:id', (req, res) => {
   res.json(customers[idx]);
 });
 
-app.delete('/api/customers/:id', (req, res) => {
-  let customers = load('customers');
-  customers = customers.filter(c => c.id !== req.params.id);
-  save('customers', customers);
+app.delete('/api/customers/:id', async (req, res) => {
+  const current = load('customers');
+  const list = Array.isArray(current) ? current : [];
+  const next = list.filter(c => c.id !== req.params.id);
+  if (next.length !== list.length) {
+    save('customers', next);
+    return res.json({ ok: true });
+  }
+  const byId = await mergedById();
+  const hit = byId.get(String(req.params.id));
+  if (hit && hit.source === 'bot') return res.status(409).json({ error: 'bot-owned contact cannot be deleted here' });
   res.json({ ok: true });
 });
 
@@ -726,25 +788,250 @@ app.post('/api/customers/:phone/tags', (req, res) => {
   res.json({ ok: true });
 });
 
-app.get('/api/customers/tags', (_req, res) => {
-  const localTags = load('customer_tags', {});
+// ── Bulk customer ops (single load+save; bot-owned rows route to the tags overlay) ──
+async function mergedById() {
+  const { customers } = await getMergedCustomers();
+  const map = new Map();
+  for (const c of customers) {
+    if (!map.has(String(c.id))) map.set(String(c.id), c);
+    if (c.localId && !map.has(String(c.localId))) map.set(String(c.localId), c);
+  }
+  return map;
+}
+function parseIdList(v, max = 2000) {
+  if (!Array.isArray(v)) return null;
+  const ids = [...new Set(v.map(x => String(x ?? '').slice(0, 100)).filter(Boolean))].slice(0, max);
+  return ids.length > 0 ? ids : null;
+}
+function resolveBulkPhones(byId, ids) {
+  const phones = [];
+  const notFound = [];
+  for (const id of ids) {
+    const c = byId.get(String(id)) || byId.get(String(normPhone(id)));
+    if (!c) { notFound.push(id); continue; }
+    const p = normPhone(c.phone);
+    if (isSendablePhone(p) && !phones.includes(p)) phones.push(p);
+  }
+  return { phones, notFound };
+}
+app.post('/api/customers/bulk-delete', rateLimit({ windowMs: 60 * 1000, max: 30 }), async (req, res) => {
+  const ids = parseIdList(req.body?.ids);
+  if (!ids) return res.status(400).json({ error: 'ids (1-2000) required' });
+  const byId = await mergedById();
+  let customers = load('customers');
+  if (!Array.isArray(customers)) return res.status(500).json({ error: 'store corrupted' });
+  const allTags = load('customer_tags', {});
+  let deleted = 0, skippedBot = 0;
+  const notFound = [];
+  const seenLocal = new Set();
+  for (const id of ids) {
+    const c = byId.get(String(id));
+    if (!c) { notFound.push(id); continue; }
+    if (c.source === 'bot') { skippedBot++; continue; } // bot is source of truth — refuse loudly
+    const lid = String(c.localId || c.id);
+    if (seenLocal.has(lid)) continue;
+    seenLocal.add(lid);
+    customers = customers.filter(x => String(x.id) !== lid);
+    if (allTags[c.phone]) delete allTags[c.phone];
+    deleted++;
+  }
+  save('customers', customers);
+  save('customer_tags', allTags);
+  clog(null, 'customers-bulk-delete', { deleted, skippedBot });
+  res.json({ deleted, skippedBot, notFound });
+});
+app.post('/api/customers/bulk-tag', rateLimit({ windowMs: 60 * 1000, max: 30 }), async (req, res) => {
+  const ids = parseIdList(req.body?.ids);
+  const body = req.body || {};
+  const mode = body.mode === 'remove' ? 'remove' : 'add';
+  const incoming = body.tags !== undefined ? body.tags : body.tag;
+  const clean = sanitizeTags(incoming);
+  if (!ids) return res.status(400).json({ error: 'ids (1-2000) required' });
+  if (clean.length === 0) return res.status(400).json({ error: 'tag required' });
+  const byId = await mergedById();
+  let customers = load('customers');
+  if (!Array.isArray(customers)) return res.status(500).json({ error: 'store corrupted' });
+  const allTags = load('customer_tags', {});
+  const byLocalId = new Map(customers.map(c => [String(c.id), c]));
+  let updated = 0;
+  const notFound = [];
+  for (const id of ids) {
+    const c = byId.get(String(id));
+    if (!c) { notFound.push(id); continue; }
+    const phone = normPhone(c.phone);
+    if (mode === 'add') {
+      allTags[phone] = unionTags(allTags[phone], clean);
+    } else {
+      allTags[phone] = unionTags(allTags[phone]).filter(t => !clean.includes(t));
+      if (allTags[phone].length === 0) delete allTags[phone];
+    }
+    const lid = c.localId || (c.source === 'local' ? c.id : null);
+    const rec = lid ? byLocalId.get(String(lid)) : null;
+    if (rec) {
+      rec.tags = mode === 'add' ? unionTags(rec.tags, clean) : unionTags(rec.tags).filter(t => !clean.includes(t));
+    }
+    updated++;
+  }
+  save('customers', customers);
+  save('customer_tags', allTags);
+  clog(null, 'customers-bulk-tag', { updated, mode });
+  res.json({ updated, notFound });
+});
+app.post('/api/customers/bulk-message', rateLimit({ windowMs: 60 * 1000, max: 10 }), async (req, res) => {
+  const ids = parseIdList(req.body?.ids);
+  const { message, imageUrl } = req.body || {};
+  if (!ids) return res.status(400).json({ error: 'ids (1-2000) required' });
+  if (typeof message !== 'string' || !message.trim() || message.length > 4096) {
+    return res.status(400).json({ error: 'message (1-4096 chars) required' });
+  }
+  if (imageUrl !== undefined && imageUrl !== '' && (typeof imageUrl !== 'string' || imageUrl.length > 2048)) {
+    return res.status(400).json({ error: 'invalid imageUrl' });
+  }
+  const byId = await mergedById();
+  const { phones } = resolveBulkPhones(byId, ids);
+  const v = validatePhoneList(phones);
+  if (v.phones.length === 0) return res.status(400).json({ error: 'no sendable contacts in selection' });
+  const bulkCap = checkDailyCap(v.phones.length);
+  if (!bulkCap.ok) return res.status(429).json({ error: bulkCap.error });
+  const campaigns = load('campaigns');
+  if (!Array.isArray(campaigns) || campaigns.length > 1000) return res.status(400).json({ error: 'campaign store full' });
+  const c = {
+    id: uid(),
+    name: `Bulk message ${new Date().toLocaleDateString()} (${v.phones.length})`.slice(0, 100),
+    message: message.slice(0, 4096), imageUrl: imageUrl || '',
+    recipientMode: 'custom', recipientTag: 'all', recipientPhones: v.phones,
+    variables: sanitizeVariables(req.body.variables),
+    scheduledAt: null, status: 'draft',
+    sent: 0, failed: 0, skipped: 0, total: 0, createdAt: new Date().toISOString(), results: [],
+  };
+  campaigns.push(c);
+  save('campaigns', campaigns);
+  clog(c.id, 'bulk-message-create', { total: v.phones.length });
+  const r = await startSend(c.id);
+  if (r.error) return res.status(r.status || 400).json({ error: r.error, campaignId: c.id });
+  res.json({ ok: true, campaignId: c.id, total: r.total, skipped: r.skipped });
+});
+
+app.get('/api/customers/tags', async (_req, res) => {
+  // Tags from the merged set (bot + local deduped) so filters match the list.
+  const { customers } = await getMergedCustomers();
   const tagSet = new Set();
-  if (localTags && typeof localTags === 'object') Object.values(localTags).forEach(tags => Array.isArray(tags) && tags.forEach(t => tagSet.add(String(t).slice(0, 50))));
-  const lc = load('customers');
-  if (Array.isArray(lc)) lc.forEach(c => (c.tags || []).forEach(t => tagSet.add(String(t).slice(0, 50))));
+  for (const c of customers) {
+    if (Array.isArray(c.tags)) for (const t of c.tags) {
+      const s = String(t || '').slice(0, 50);
+      if (s) tagSet.add(s);
+    }
+  }
   res.json([...tagSet].sort().slice(0, 200));
 });
 
-app.post('/api/customers/import', upload.single('file'), (req, res) => {
+// Import column detection: header names (any order) map to phone/name/tags/email/notes.
+// Whole-cell match on letters-only lowercase; longest alias wins ("Phone 1 - Value"
+// beats "Phone 1 -"); for phone, the column whose data looks like phone numbers wins.
+const IMPORT_HEADERS = {
+  phone: ['phonenumber', 'mobilenumber', 'phonevalue', 'mobilevalue', 'contactnumber', 'phone', 'mobile', 'contact', 'number', 'tel', 'telephone', 'phoneno'],
+  name: ['firstname', 'customername', 'contactname', 'fullname', 'name', 'customer'],
+  tags: ['tags', 'tag', 'labels', 'label', 'groups', 'group', 'category'],
+  email: ['email', 'e-mail', 'mail', 'emailid', 'e mail'],
+  notes: ['address', 'notes', 'note', 'remarks', 'remark', 'comments', 'comment'],
+};
+const IMPORT_ALIAS_SET = new Set(Object.values(IMPORT_HEADERS).flat().map(a => a.replace(/[^a-z]/g, '')));
+function normImportHeader(s) { return String(s ?? '').trim().toLowerCase().replace(/[^a-z]/g, ''); }
+function matchImportAlias(cell, aliases) {
+  let best = 0;
+  for (const a of aliases) {
+    const na = a.replace(/[^a-z]/g, '');
+    if (cell === na && na.length > best) best = na.length;
+  }
+  return best;
+}
+function resolveImportColumns(headerRow, sampleRows, width) {
+  const cells = (headerRow || []).map(normImportHeader);
+  const pick = (aliases) => {
+    let idx = -1, bestLen = 0;
+    for (let i = 0; i < cells.length; i++) {
+      const len = matchImportAlias(cells[i], aliases);
+      if (len > bestLen) { idx = i; bestLen = len; }
+    }
+    return idx;
+  };
+  // Phone: the column with the most valid phone numbers wins (header match only breaks ties),
+  // so truncated/odd headers like "Phone 1 - ..." can never misroute it.
+  let phone = -1, bestValid = 0, bestLen = 0;
+  for (let i = 0; i < width; i++) {
+    let valid = 0;
+    for (const r of sampleRows) {
+      const v = String(r[i] ?? '').trim();
+      if (!v) continue;
+      if (isSendablePhone(normPhone(v))) valid++;
+    }
+    const len = matchImportAlias(cells[i] || '', IMPORT_HEADERS.phone);
+    if (valid > bestValid || (valid === bestValid && valid > 0 && len > bestLen)) { phone = i; bestValid = valid; bestLen = len; }
+  }
+  return {
+    phone,
+    name: pick(IMPORT_HEADERS.name),
+    tags: pick(IMPORT_HEADERS.tags),
+    email: pick(IMPORT_HEADERS.email),
+    notes: pick(IMPORT_HEADERS.notes),
+  };
+}
+
+app.post('/api/customers/import', uploadImport.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'file required' });
-  let content = '';
+  const ext = extname(req.file.originalname).toLowerCase();
+  // Header row (any column order) → name/tags/email/notes map; phone column is
+  // resolved from data (most phone-like column). Otherwise positional fallback.
+  // Caps: 10,000 rows — beyond that the file is truncated (flagged in response).
+  const ROW_CAP = 10000;
+  let truncated = false;
+  let rows = [];
   try {
-    content = readFileSync(req.file.path, 'utf-8');
+    if (ext === '.xlsx' || ext === '.xls') {
+      if (req.file.size > 5 * 1024 * 1024) return res.status(400).json({ error: 'file too large' });
+      let wb = null;
+      try {
+        wb = XLSX.readFile(req.file.path, { sheetRows: ROW_CAP + 1 });
+      } catch {
+        return res.status(400).json({ error: 'invalid spreadsheet' });
+      }
+      const sheet = wb.Sheets?.[wb.SheetNames?.[0]];
+      if (!sheet) return res.status(400).json({ error: 'empty spreadsheet' });
+      const aoa = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: true });
+      truncated = aoa.length > ROW_CAP;
+      rows = aoa.slice(0, ROW_CAP).map(r => (Array.isArray(r) ? r : [r]).slice(0, 20).map(c => String(c ?? '').trim().slice(0, 200)));
+    } else {
+      let content = '';
+      try {
+        content = readFileSync(req.file.path, 'utf-8');
+      } catch {
+        return res.status(400).json({ error: 'unreadable file' });
+      }
+      if (content.length > 5 * 1024 * 1024) return res.status(400).json({ error: 'file too large' });
+      const lines = content.split(/\r?\n/).filter(Boolean);
+      truncated = lines.length > ROW_CAP;
+      rows = lines.slice(0, ROW_CAP)
+        .map(line => line.split(',').map(s => s.trim().replace(/^"|"$/g, '').slice(0, 200)));
+    }
   } finally {
     try { unlinkSync(req.file.path); } catch {}
   }
-  if (content.length > 2 * 1024 * 1024) return res.status(400).json({ error: 'file too large' });
-  const lines = content.split(/\r?\n/).filter(Boolean).slice(0, 2000);
+  const headerCells = (rows[0] || []).map(normImportHeader);
+  const headerMode = headerCells.some(c => IMPORT_ALIAS_SET.has(c));
+  const dataStart = headerMode ? 1 : 0;
+  const width = Math.max(1, ...rows.slice(0, dataStart + 200).map(r => r.length));
+  const resolved = resolveImportColumns(headerMode ? rows[0] : [], rows.slice(dataStart, dataStart + 200), width);
+  let cols;
+  if (headerMode) {
+    if (resolved.phone === -1) return res.status(400).json({ error: 'no phone column found (need phone/mobile/number)' });
+    cols = resolved;
+  } else if (resolved.phone !== -1) {
+    // No header, but a clearly phone-like column exists (maybe not first) — use it
+    cols = { phone: resolved.phone, name: 1, tags: 2, email: 3, notes: -1 };
+  } else {
+    cols = { phone: 0, name: 1, tags: 2, email: 3, notes: -1 };
+  }
+  let dataRows = rows.slice(dataStart);
   const customers = load('customers');
   const localTags = load('customer_tags', {});
   let imported = 0, skipped = 0;
