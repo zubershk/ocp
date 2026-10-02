@@ -1972,7 +1972,7 @@ function CampaignsView() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-xl font-bold text-zinc-900">Campaigns</h1>
-            <p className="text-sm text-zinc-500">{campaigns.length} campaigns</p>
+            <p className="text-sm text-zinc-500">{campaigns.length} campaigns{(settings.dailySendCap || 0) > 0 && <> · Sent today: {settings.sentToday ?? 0}/{settings.dailySendCap}</>}</p>
           </div>
           <button onClick={() => { setStep(1); resetWizard(); }}
             className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 transition-colors">
@@ -2556,8 +2556,8 @@ function SettingsView() {
     setSaveError('');
     try {
       try { localStorage.setItem('ocp_campaign_admin_key', adminKey); } catch {}
-      const { delayMs, brandName, brandLogo, brandColor, footerText, defaultCountryCode } = settings;
-      await api('/api/settings', { method: 'PUT', body: JSON.stringify({ delayMs, brandName, brandLogo, brandColor, footerText, defaultCountryCode }) });
+      const { delayMs, brandName, brandLogo, brandColor, footerText, defaultCountryCode, dailySendCap, batchSize } = settings;
+      await api('/api/settings', { method: 'PUT', body: JSON.stringify({ delayMs, brandName, brandLogo, brandColor, footerText, defaultCountryCode, dailySendCap, batchSize }) });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (e) {
@@ -2637,6 +2637,22 @@ function SettingsView() {
         <div className="text-xs text-zinc-500">Bot URL: <span className="font-mono">{settings.botApiUrl || 'http://bot:8090'}</span> (environment-only) · {settings.configured ? 'configured' : 'not configured'}</div>
         <Input label="Delay Between Batches (ms, 500-10000)" type="number" value={settings.delayMs || 3000} onChange={(e) => setSettings({ ...settings, delayMs: parseInt(e.target.value) || 3000 })} />
         <p className="text-xs text-zinc-400">Messages are sent through the bot's Evolution GO integration. Recommended: 3000ms.</p>
+        </CardContent>
+      </Card>
+
+      {/* Sending Safety */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Sending Safety</CardTitle>
+          <CardDescription>Anti-ban guardrails: pace sends and cap daily volume.</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+        <div className="text-xs text-zinc-500">Sent today (IST): <span className="font-bold text-zinc-800">{settings.sentToday ?? 0}</span>{(settings.dailySendCap || 0) > 0 && <> / {settings.dailySendCap}</>} · Known-bad numbers auto-skipped: <span className="font-bold text-zinc-800">{settings.blockedCount ?? 0}</span></div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Input label="Daily Send Cap (0 = unlimited)" type="number" value={settings.dailySendCap ?? 1000} onChange={(e) => setSettings({ ...settings, dailySendCap: parseInt(e.target.value) || 0 })} placeholder="1000" />
+          <Input label="Contacts Per Batch (1-20)" type="number" value={settings.batchSize ?? 5} onChange={(e) => setSettings({ ...settings, batchSize: Math.min(20, Math.max(1, parseInt(e.target.value) || 5)) })} placeholder="5" />
+        </div>
+        <p className="text-xs text-zinc-400">New sends are refused once the cap is reached. Smaller batches + longer delays keep WhatsApp from rate-limiting the account. Dead numbers are learned automatically and skipped before sending.</p>
         </CardContent>
       </Card>
 

@@ -219,20 +219,110 @@ try {
 // ═══════════════════════════════════════════
 const DEFAULT_SETTINGS = {
   delayMs: 3000,
+  batchSize: 5,
+  dailySendCap: 1000,
   brandName: '',
   brandLogo: '',
   brandColor: '#ea580c',
   footerText: 'Sent via OCP Campaign Runner',
   defaultCountryCode: '91',
 };
+function getSettings() {
+  let stored = {};
+  try { stored = load('settings', {}); } catch { stored = {}; }
+  return {
+    delayMs: typeof stored.delayMs === 'number' ? stored.delayMs : DEFAULT_SETTINGS.delayMs,
+    batchSize: typeof stored.batchSize === 'number' ? stored.batchSize : DEFAULT_SETTINGS.batchSize,
+    dailySendCap: typeof stored.dailySendCap === 'number' ? stored.dailySendCap : DEFAULT_SETTINGS.dailySendCap,
+  };
+}
+// IST calendar day (YYYY-MM-DD) — the operator's wall clock. All dashboard
+// day buckets and the daily cap use this so evening sends land on the right day.
+function istDay(ts) {
+  if (ts === undefined || ts === null) return null;
+  const d = new Date(typeof ts === 'number' ? ts : ts);
+  if (Number.isNaN(d.getTime())) return null;
+  try {
+    return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+  } catch {
+    return d.toISOString().slice(0, 10);
+  }
+}
+// Messages successfully sent today (IST day) — enforced by checkDailyCap.
+// Scans live results + archives so resume-all restarts count exactly once.
+function sentToday() {
+  const day = istDay(Date.now());
+  let n = 0;
+  try {
+    for (const c of load('campaigns')) {
+      for (const bucket of [c.results, c.resultsArchive]) {
+        if (!Array.isArray(bucket)) continue;
+        for (const r of bucket) {
+          if (r.ok && istDay(r.sentAt) === day) n++;
+        }
+      }
+    }
+  } catch { /* ignore */ }
+  return n;
+}
+function checkDailyCap(additional) {
+  const { dailySendCap: cap } = getSettings();
+  if (!cap || cap <= 0) return { ok: true, sent: sentToday(), cap: 0 };
+  const sent = sentToday();
+  if (sent + (additional || 0) > cap) {
+    return { ok: false, sent, cap, error: `daily send cap reached (${sent}/${cap} sent today)` };
+  }
+  return { ok: true, sent, cap };
+}
+// Learned blocklist: numbers WhatsApp reports as unregistered. Auto-skipped
+// before any send attempt so dead numbers never count as sends.
+function loadBlocklist() {
+  try {
+    const b = load('invalid_phones', []);
+    return Array.isArray(b) ? new Set(b.map(String).filter(Boolean)) : new Set();
+  } catch { return new Set(); }
+}
+function addToBlocklist(phones) {
+  if (!phones || phones.length === 0) return;
+  try {
+    const set = loadBlocklist();
+    let dirty = false;
+    for (const p of phones) {
+      const n = normPhone(p);
+      if (isSendablePhone(n) && !set.has(n)) { set.add(n); dirty = true; }
+    }
+    if (dirty) save('invalid_phones', [...set].slice(-20000));
+  } catch { /* ignore */ }
+}
+function seedBlocklistFromResults() {
+  try {
+    const found = [];
+    for (const c of load('campaigns')) {
+      if (!Array.isArray(c.results)) continue;
+      for (const r of c.results) {
+        if (!r.ok && /not registered on WhatsApp/i.test(r.error || '')) found.push(r.phone);
+      }
+    }
+    if (found.length > 0) {
+      const before = loadBlocklist().size;
+      addToBlocklist(found);
+      clog(null, 'blocklist-seed', { added: loadBlocklist().size - before });
+    }
+  } catch { /* ignore */ }
+}
 function publicSettings() {
   let stored = {};
   try { stored = load('settings', {}); } catch { stored = {}; }
   // never expose botAdminKey/botApiUrl from file; use env
+  const s = getSettings();
   return {
     botApiUrl: BOT_API_URL,
     configured: Boolean(BOT_ADMIN_KEY),
-    delayMs: typeof stored.delayMs === 'number' ? stored.delayMs : DEFAULT_SETTINGS.delayMs,
+    delayMs: s.delayMs,
+    batchSize: Math.min(20, Math.max(1, s.batchSize || DEFAULT_SETTINGS.batchSize)),
+    dailySendCap: s.dailySendCap,
+    sentToday: sentToday(),
+    blockedCount: loadBlocklist().size,
     brandName: typeof stored.brandName === 'string' ? stored.brandName.slice(0, 100) : '',
     brandLogo: typeof stored.brandLogo === 'string' ? stored.brandLogo.slice(0, 512) : '',
     brandColor: typeof stored.brandColor === 'string' ? stored.brandColor.slice(0, 20) : DEFAULT_SETTINGS.brandColor,
@@ -258,6 +348,18 @@ app.put('/api/settings', (req, res) => {
     if (!Number.isInteger(d) || d < 500 || d > 10000) return res.status(400).json({ error: 'delayMs must be 500-10000' });
     out.delayMs = d;
   } else out.delayMs = prev.delayMs ?? DEFAULT_SETTINGS.delayMs;
+  if (b.batchSize !== undefined) {
+    const n = Number(b.batchSize);
+    if (!Number.isInteger(n) || n < 1 || n > 20) return res.status(400).json({ error: 'batchSize must be 1-20' });
+    out.batchSize = n;
+  } else out.batchSize = prev.batchSize ?? DEFAULT_SETTINGS.batchSize;
+  if (b.dailySendCap !== undefined) {
+    const n = Number(b.dailySendCap);
+    if (!Number.isInteger(n) || n < 0 || n > 50000) {
+      return res.status(400).json({ error: 'dailySendCap must be 0 (unlimited) or 1-50000' });
+    }
+    out.dailySendCap = n;
+  } else out.dailySendCap = prev.dailySendCap ?? DEFAULT_SETTINGS.dailySendCap;
   if (b.brandName !== undefined) {
     if (typeof b.brandName !== 'string' || b.brandName.length > 100) return res.status(400).json({ error: 'invalid brandName' });
     out.brandName = b.brandName;
@@ -445,7 +547,17 @@ function validatePhoneList(list) {
   return { phones: [...seen], skipped };
 }
 async function resolvePhonesAsync(campaign) {
-  if (modeOf(campaign) === 'custom') return validatePhoneList(campaign.recipientPhones);
+  const blocked = loadBlocklist();
+  const stripBlocked = (phones) => {
+    if (blocked.size === 0) return { phones, blocked: 0 };
+    const kept = phones.filter(p => !blocked.has(normPhone(p)));
+    return { phones: kept, blocked: phones.length - kept.length };
+  };
+  if (modeOf(campaign) === 'custom') {
+    const v = validatePhoneList(campaign.recipientPhones);
+    const s = stripBlocked(v.phones);
+    return { phones: s.phones, skipped: v.skipped + s.blocked, blocked: s.blocked };
+  }
   const customers = await allCustomers();
   let filtered = customers;
   if (modeOf(campaign) === 'tag' && campaign.recipientTag && campaign.recipientTag !== 'all') {
@@ -458,7 +570,8 @@ async function resolvePhonesAsync(campaign) {
     if (isSendablePhone(p)) seen.add(p);
     else skipped++;
   }
-  return { phones: [...seen], skipped };
+  const s = stripBlocked([...seen]);
+  return { phones: s.phones, skipped: skipped + s.blocked, blocked: s.blocked };
 }
 
 // ── Image resolver (centralized SSRF policy) ──
@@ -1425,6 +1538,12 @@ async function startSend(id) {
       activeSenders.delete(id);
       return { error: skipped > 0 ? `no sendable recipients (${skipped} invalid skipped)` : 'no recipients', status: 400 };
     }
+    // Anti-ban guard: refuse to start when the daily send cap would be exceeded.
+    const cap = checkDailyCap(phones.length);
+    if (!cap.ok) {
+      activeSenders.delete(id);
+      return { error: cap.error, status: 429 };
+    }
     // re-load fresh to avoid lost update during resolve
     campaigns = load('campaigns');
     campaign = campaigns.find(c => c.id === id);
@@ -1567,7 +1686,7 @@ async function sendCampaignViaBot(campaignId, phones) {
     clog(campaignId, 'send-image-fail', {});
     return;
   }
-  const batchSize = 20;
+  const batchSize = Math.min(20, Math.max(1, getSettings().batchSize || DEFAULT_SETTINGS.batchSize));
   const customers = await allCustomers();
   const byPhone = new Map(customers.map(c => [normPhone(c.phone), c]));
   const groups = new Map();
@@ -1781,6 +1900,9 @@ try {
     if (dirty) save('campaigns', existing);
   }
 } catch {}
+
+// seed learned blocklist from past 'not registered' failures (one-time catch-up)
+seedBlocklistFromResults();
 
 // ── Production static hosting ──
 const DIST_DIR = join(ROOT, 'dist');
