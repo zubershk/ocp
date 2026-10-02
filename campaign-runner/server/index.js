@@ -13,10 +13,29 @@ const DATA_DIR = join(ROOT, 'data');
 const UPLOADS_DIR = join(ROOT, 'uploads');
 for (const d of [DATA_DIR, UPLOADS_DIR]) if (!existsSync(d)) mkdirSync(d, { recursive: true });
 
+// Minimal .env loader (no extra dependency): fills missing vars from
+// campaign-runner/.env, repo-root .env, then bot/.env — explicit env wins.
+function loadEnvFile(p) {
+  let text = null;
+  try { text = readFileSync(p, 'utf8'); } catch { return; }
+  for (const line of text.split('\n')) {
+    const t = line.trim();
+    if (!t || t.startsWith('#') || !t.includes('=')) continue;
+    const eq = t.indexOf('=');
+    const k = t.slice(0, eq).trim();
+    let v = t.slice(eq + 1).trim();
+    if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) v = v.slice(1, -1);
+    if (!k || k in process.env) continue;
+    process.env[k] = v;
+  }
+}
+for (const p of [join(ROOT, '..', 'bot', '.env'), join(ROOT, '..', '.env'), join(ROOT, '.env')]) loadEnvFile(p);
+
 // Env-only bot configuration (SSRF-safe, no UI override)
-// Default http://bot:8090 for docker; override with BOT_API_URL=http://localhost:8090 for local dev
-const BOT_API_URL = (process.env.BOT_API_URL || 'http://bot:8090').replace(/\/$/, '');
+// Default http://localhost:8090 for local dev; docker-compose overrides with http://bot:8090
+const BOT_API_URL = (process.env.BOT_API_URL || 'http://localhost:8090').replace(/\/$/, '');
 const BOT_ADMIN_KEY = process.env.BOT_ADMIN_KEY || process.env.CAMPAIGN_ADMIN_KEY || '';
+if (!BOT_ADMIN_KEY) console.warn('WARN: BOT_ADMIN_KEY is not set — all /api/* (except /api/bot-health) will return 500. Set it in campaign-runner/.env, root .env, or bot/.env.');
 function getBotConfig() {
   return { url: BOT_API_URL, key: BOT_ADMIN_KEY };
 }
