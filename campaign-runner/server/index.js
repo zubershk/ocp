@@ -1781,38 +1781,77 @@ async function sendCampaignViaBot(campaignId, phones) {
 // ═══════════════════════════════════════════
 app.get('/api/dashboard', async (_req, res) => {
   const campaigns = load('campaigns');
-  let totalCustomers = 0;
-  if (BOT_ADMIN_KEY) {
-    try {
-      const data = await botApi('/admin/customers?limit=1', { timeoutMs: 10000 });
-      totalCustomers = data.total || 0;
-    } catch (err) { /* fall through */ }
+  // Merged total: bot total (uncapped) + local-only contacts, deduped by phone.
+  // Uses the same merged set as /api/customers so the count matches the list.
+  const { customers: merged, botOk, botTotal } = await getMergedCustomers();
+  let totalCustomers = merged.length;
+  if (botOk && typeof botTotal === 'number' && botTotal > 0) {
+    const localOnly = merged.filter(c => c.source === 'local').length;
+    const botFetchedUnique = merged.length - localOnly;
+    if (botTotal > botFetchedUnique) {
+      // Bot has more than the 2000-row fetch window: uncapped total + locals.
+      // Upper bound if locals overlap unfetched bot rows (documented).
+      totalCustomers = botTotal + localOnly;
+    } else {
+      totalCustomers = merged.length;
+    }
   }
-  if (totalCustomers === 0) {
-    const lc = load('customers');
-    totalCustomers = Array.isArray(lc) ? lc.length : 0;
+  // Totals include archived results so resume-all restarts don't erase history.
+  // Live counters already cover live rows; archive rows are counted from data.
+  let totalSent = 0, totalFailed = 0;
+  const sentByDay = new Map();
+  const countRow = (r) => {
+    if (r.ok) {
+      const day = istDay(r.sentAt);
+      if (day) sentByDay.set(day, (sentByDay.get(day) || 0) + 1);
+    }
+  };
+  for (const c of campaigns) {
+    totalSent += (c.sent || 0);
+    totalFailed += (c.failed || 0);
+    if (Array.isArray(c.results)) for (const r of c.results) countRow(r);
+    if (Array.isArray(c.resultsArchive)) for (const r of c.resultsArchive) {
+      if (r.ok) totalSent++;
+      else totalFailed++;
+      countRow(r);
+    }
   }
-  const totalSent = campaigns.reduce((s, c) => s + (c.sent || 0), 0);
-  const totalFailed = campaigns.reduce((s, c) => s + (c.failed || 0), 0);
+  // Activity by SEND day (IST), not campaign creation day — new sends on old
+  // campaigns move the bars. Campaigns without results fall back to startedAt.
   const last7 = [];
   for (let i = 6; i >= 0; i--) {
-    const d = new Date(); d.setDate(d.getDate() - i);
-    const key = d.toISOString().slice(0, 10);
-    const dayCampaigns = campaigns.filter(c => c.createdAt?.startsWith(key));
-    last7.push({ date: key, campaigns: dayCampaigns.length, sent: dayCampaigns.reduce((s, c) => s + (c.sent || 0), 0) });
+    const key = istDay(Date.now() - i * 86400000);
+    const dayCampaigns = campaigns.filter(c => istDay(c.createdAt) === key);
+    let sent = sentByDay.get(key) || 0;
+    if (sent === 0) {
+      for (const c of campaigns) {
+        if (Array.isArray(c.results) && c.results.length > 0) continue;
+        const activeAt = c.startedAt || c.completedAt || c.createdAt;
+        if (istDay(activeAt) === key) sent += (c.sent || 0);
+      }
+    }
+    last7.push({ date: key, campaigns: dayCampaigns.length, sent });
   }
+  // Tag counts from the merged set (single count per contact). Previously
+  // localTags + local file were summed separately, double-counting imports
+  // (import writes tags to both stores).
   const tagCounts = {};
-  const localTags = load('customer_tags', {});
-  if (localTags && typeof localTags === 'object') Object.values(localTags).forEach(tags => Array.isArray(tags) && tags.forEach(t => { tagCounts[t] = (tagCounts[t] || 0) + 1; }));
-  const lc2 = load('customers');
-  if (Array.isArray(lc2)) lc2.forEach(c => (c.tags || []).forEach(t => { tagCounts[t] = (tagCounts[t] || 0) + 1; }));
+  for (const c of merged) {
+    if (Array.isArray(c.tags)) for (const t of c.tags) {
+      const s = String(t || '').slice(0, 50);
+      if (s) tagCounts[s] = (tagCounts[s] || 0) + 1;
+    }
+  }
+  // Most recently ACTIVE first (completed/started/created), not file order.
+  const activeTs = (c) => Date.parse(c.completedAt || c.startedAt || c.createdAt) || 0;
+  const recentCampaigns = [...campaigns].sort((a, b) => activeTs(b) - activeTs(a)).slice(0, 5);
+  res.setHeader('Cache-Control', 'no-store, must-revalidate');
   res.json({
     totalCustomers,
     totalCampaigns: campaigns.length,
     totalSent, totalFailed,
     deliveryRate: totalSent + totalFailed > 0 ? Math.round((totalSent / (totalSent + totalFailed)) * 100) : 0,
-    recentCampaigns: campaigns.slice(-5).reverse(),
-    last7, tagCounts,
+    recentCampaigns, last7, tagCounts,
   });
 });
 

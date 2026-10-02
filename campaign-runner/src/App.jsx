@@ -494,7 +494,13 @@ function DashboardView() {
 
       {/* Activity chart */}
       <div className="bg-white rounded-2xl border border-stone-200 p-5">
-        <h3 className="text-sm font-bold text-zinc-900 mb-4">Activity (Last 7 Days)</h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-bold text-zinc-900">Activity (Last 7 Days)</h3>
+          <button onClick={() => loadDash()} disabled={refreshing} title="Refresh dashboard"
+            className="p-1.5 rounded-lg hover:bg-stone-100 text-zinc-400 hover:text-zinc-600 disabled:opacity-40 text-xs font-medium inline-flex items-center gap-1">
+            <Icons.Clock s={14} /> {refreshing ? 'Refreshing…' : 'Refresh'}
+          </button>
+        </div>
         <div className="flex items-end gap-2 h-32">
           {dash.last7.map((d, i) => (
             <div key={i} className="flex-1 flex flex-col items-center gap-1">
@@ -2250,7 +2256,7 @@ function CampaignsView() {
                 </div>
                 {testResult && (
                   <div className={cn('mt-2 text-xs px-3 py-2 rounded-xl', { 'bg-emerald-50 text-emerald-700': testResult.ok, 'bg-red-50 text-red-600': !testResult.ok })}>
-                    {testResult.ok ? 'Test sent successfully!' : `Failed: ${JSON.stringify(testResult.error || testResult.result)}`}
+              {testResult.ok ? 'Test sent successfully! (test sends are not counted in the dashboard)' : `Failed: ${JSON.stringify(testResult.error || testResult.result)}`}
                   </div>
                 )}
                 <div>
