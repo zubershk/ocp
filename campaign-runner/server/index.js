@@ -633,27 +633,43 @@ app.post('/api/customers/import', upload.single('file'), (req, res) => {
   const localTags = load('customer_tags', {});
   let imported = 0, skipped = 0;
   const seen = new Set(customers.map(c => c.phone));
-  for (const line of lines) {
-    const parts = line.split(',').map(s => s.trim().replace(/^"|"$/g, '').slice(0, 200));
+  const cell = (r, i) => (i === -1 ? '' : String(r[i] ?? '').trim().slice(0, 200));
+  for (const r of dataRows) {
+    const parts = [cell(r, cols.phone), cell(r, cols.name), cell(r, cols.tags), cell(r, cols.email)];
+    if (parts.every(p => !p)) continue; // blank row: ignore, don't count
     const phone = normPhone(parts[0] || '');
     if (!isSendablePhone(phone)) { skipped++; continue; }
     if (seen.has(phone)) { skipped++; continue; }
     const tags = parts[2] ? parts[2].split(';').map(t => t.trim().slice(0, 50)).filter(Boolean).slice(0, 20) : [];
     const email = parts[3] || '';
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { skipped++; continue; }
-    customers.push({ id: uid(), phone, name: (parts[1] || '').slice(0, 100), tags, email, notes: '', createdAt: new Date().toISOString() });
+    customers.push({ id: uid(), phone, name: (parts[1] || '').slice(0, 100), tags, email, notes: (cols.notes === -1 ? '' : String(r[cols.notes] ?? '').trim().slice(0, 500)), createdAt: new Date().toISOString() });
     seen.add(phone);
     if (tags.length > 0) localTags[phone] = tags;
     imported++;
   }
   save('customers', customers);
   save('customer_tags', localTags);
-  clog(null, 'customers-import', { imported, skipped });
-  res.json({ imported, skipped, total: customers.length });
+  clog(null, 'customers-import', { imported, skipped, truncated });
+  res.json({ imported, skipped, total: customers.length, truncated });
 });
 
-app.get('/api/customers/export', (_req, res) => {
-  const customers = load('customers');
+app.get('/api/customers/export', async (req, res) => {
+  // Export the merged set (bot + local deduped), honoring list filters so the
+  // CSV matches the table. `ids` (comma list, max 5000) exports a selection.
+  const search = String(req.query.search || '').slice(0, 200);
+  const f = parseCustomerFilters(req.query);
+  const { customers: merged } = await getMergedCustomers({ search });
+  let customers = applyCustomerFilters(merged, f);
+  const idsRaw = String(req.query.ids || '');
+  if (idsRaw) {
+    const want = idsRaw.split(',').map(s => s.trim()).filter(Boolean).slice(0, 5000);
+    const set = new Set(want);
+    const rank = new Map(want.map((id, i) => [id, i]));
+    customers = customers
+      .filter(c => set.has(String(c.id)) || (c.localId && set.has(String(c.localId))) || set.has(String(c.phone)))
+      .sort((a, b) => (rank.get(String(a.id)) ?? rank.get(String(a.phone)) ?? 0) - (rank.get(String(b.id)) ?? rank.get(String(b.phone)) ?? 0));
+  }
   const esc = (s) => `"${String(s ?? '').replace(/"/g, '""')}"`;
   const csv = 'phone,name,tags,email\n' + customers.map(c => `${c.phone},${esc(c.name)},${esc((c.tags || []).join(';'))},${esc(c.email || '')}`).join('\n');
   res.setHeader('Content-Type', 'text/csv');
