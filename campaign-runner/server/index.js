@@ -123,6 +123,7 @@ app.use('/uploads', (req, res, next) => {
   next();
 }, express.static(UPLOADS_DIR, { dotfiles: 'deny', setHeaders(res, pth) { if (!pth.match(/\.(jpg|jpeg|png|webp|gif)$/i)) res.setHeader('Content-Type', 'application/octet-stream'); } }));
 const allowedUploadExt = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif']);
+const allowedUploadMime = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
 function fileFilter(_req, file, cb) {
   const ext = extname(file.originalname).toLowerCase();
   if (!allowedUploadExt.has(ext)) return cb(new Error('type not allowed'), false);
