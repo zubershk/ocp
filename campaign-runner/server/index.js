@@ -296,19 +296,135 @@ function normPhone(phone) {
   if (d.length === 11 && d.startsWith('0')) return d.slice(1);
   return d;
 }
-async function allCustomers() {
+// ── Customer merge (bot + local file) ──
+// Bot is source of truth for phone/name/email/order stats; local file holds
+// imported/manual contacts plus notes/tags. Merge dedupes by normalized phone.
+// Overlap: prefer richer record — bot id/stats kept, local name/tags/notes/email
+// fill in when bot fields are empty; tags are unioned. Local-only keeps source:'local'.
+function loadLocalCustomers() {
+  const lc = load('customers');
+  return Array.isArray(lc) ? lc : [];
+}
+function loadLocalTagsMap() {
+  const t = load('customer_tags', {});
+  return (t && typeof t === 'object' && !Array.isArray(t)) ? t : {};
+}
+function unionTags(...lists) {
+  const set = new Set();
+  for (const l of lists) {
+    if (!Array.isArray(l)) continue;
+    for (const t of l) {
+      const s = String(t || '').trim().slice(0, 50);
+      if (s) set.add(s);
+    }
+  }
+  return [...set];
+}
+function normalizeBotCustomer(c, localTags) {
+  const phone = normPhone(c.phone);
+  const tags = unionTags(localTags[phone], localTags[c.phone]);
+  return {
+    id: String(c.id), phone, name: c.name || '', tags,
+    email: c.email || '', total_orders: c.total_orders, total_spent: c.total_spent,
+    createdAt: c.created_at, last_seen_at: c.last_seen_at, source: 'bot',
+  };
+}
+function normalizeLocalCustomer(c, localTags) {
+  const phone = normPhone(c.phone);
+  const tags = unionTags(c.tags, localTags[phone], localTags[c.phone]);
+  return {
+    id: c.id || String(phone), phone, name: c.name || '', tags,
+    email: c.email || '', notes: c.notes || '',
+    total_orders: c.total_orders, total_spent: c.total_spent,
+    createdAt: c.createdAt || c.addedAt, source: 'local',
+  };
+}
+function mergeCustomerLists(botCustomers, localCustomers) {
+  const map = new Map();
+  for (const b of botCustomers) {
+    const np = normPhone(b.phone);
+    if (!np) continue;
+    if (map.has(np)) {
+      const ex = map.get(np);
+      ex.tags = unionTags(ex.tags, b.tags);
+      if (!ex.name && b.name) ex.name = b.name;
+      if (!ex.email && b.email) ex.email = b.email;
+      continue;
+    }
+    map.set(np, { ...b, phone: np });
+  }
+  for (const l of localCustomers) {
+    const np = normPhone(l.phone);
+    if (!np) continue;
+    if (map.has(np)) {
+      const ex = map.get(np);
+      map.set(np, {
+        ...ex,
+        localId: l.id || ex.localId,
+        name: ex.name || l.name || '',
+        email: ex.email || l.email || '',
+        notes: l.notes || ex.notes || '',
+        tags: unionTags(ex.tags, l.tags),
+        total_orders: ex.total_orders ?? l.total_orders,
+        total_spent: ex.total_spent ?? l.total_spent,
+        createdAt: ex.createdAt || l.createdAt,
+        source: 'bot',
+      });
+    } else {
+      map.set(np, { ...l, phone: np, source: 'local' });
+    }
+  }
+  return [...map.values()];
+}
+// Full bot list via offset pagination (bot caps limit at 2000/page).
+// Without this, bot contacts beyond the freshest 2000 are invisible to
+// audience resolution AND render with empty names in byPhone.
+async function fetchAllBotCustomers({ search = '' } = {}) {
+  const all = [];
+  let total = null;
+  for (let page = 0; page < 10; page++) {
+    const q = `?limit=2000&offset=${page * 2000}${search ? `&search=${encodeURIComponent(search)}` : ''}`;
+    const data = await botApi(`/admin/customers${q}`, { timeoutMs: 15000 });
+    const batch = Array.isArray(data.customers) ? data.customers : [];
+    if (typeof data.total === 'number') total = data.total;
+    all.push(...batch);
+    if (batch.length < 2000) break;
+  }
+  return { customers: all, total };
+}
+async function getMergedCustomers({ search = '' } = {}) {
+  const localRaw = loadLocalCustomers();
+  const localTags = loadLocalTagsMap();
+  let botRaw = null;
+  let botTotal = null;
+  let botOk = false;
   if (BOT_ADMIN_KEY) {
     try {
-      const data = await botApi('/admin/customers?limit=2000');
-      const localTags = load('customer_tags', {});
-      return (data.customers || []).map(c => ({
-        id: String(c.id), phone: c.phone, name: c.name || '', tags: localTags[c.phone] || [],
-        email: c.email || '', total_orders: c.total_orders, total_spent: c.total_spent,
-        createdAt: c.created_at, source: 'bot',
-      }));
+      const data = await fetchAllBotCustomers({ search });
+      botRaw = data.customers || [];
+      botTotal = typeof data.total === 'number' ? data.total : null;
+      botOk = true;
     } catch (err) { clog(null, 'customers-bot-fallback', {}); }
   }
-  return load('customers');
+  if (!botOk) {
+    let locals = localRaw.map(c => normalizeLocalCustomer(c, localTags));
+    if (search) {
+      const q = search.toLowerCase();
+      locals = locals.filter(c => String(c.phone || '').includes(q) || String(c.name || '').toLowerCase().includes(q));
+    }
+    return { customers: locals, botOk: false, botTotal: null };
+  }
+  const botNormed = (botRaw || []).map(c => normalizeBotCustomer(c, localTags));
+  let localNormed = localRaw.map(c => normalizeLocalCustomer(c, localTags));
+  if (search) {
+    const q = search.toLowerCase();
+    localNormed = localNormed.filter(c => String(c.phone || '').includes(q) || String(c.name || '').toLowerCase().includes(q));
+  }
+  return { customers: mergeCustomerLists(botNormed, localNormed), botOk: true, botTotal };
+}
+async function allCustomers() {
+  const { customers } = await getMergedCustomers();
+  return customers;
 }
 function modeOf(campaign) {
   if (campaign.recipientMode) return campaign.recipientMode;
