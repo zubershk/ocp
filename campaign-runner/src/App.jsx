@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, createContext, useContext } from 'react';
 import { UsersIcon, MegaphoneIcon, SendIcon, TrendingDownIcon } from 'lucide-react';
 import { cn } from './lib/utils';
 import { Badge, Card, CardContent, CardDescription, CardHeader, CardTitle } from './components/ui';
@@ -31,6 +31,93 @@ async function api(path, opts = {}) {
     throw err;
   }
   return data;
+}
+
+// ── In-app dialogs (replaces native confirm()/alert()) ──
+const DialogContext = createContext(null);
+function useDialog() {
+  const ctx = useContext(DialogContext);
+  if (!ctx) throw new Error('useDialog must be used inside <DialogProvider>');
+  return ctx;
+}
+function DialogProvider({ children }) {
+  const [confirmState, setConfirmState] = useState(null);
+  const [toasts, setToasts] = useState([]);
+  const toastId = useRef(0);
+
+  const toast = useCallback((message, kind = 'error') => {
+    const id = ++toastId.current;
+    setToasts(prev => [...prev.slice(-2), { id, message: String(message || 'Something went wrong'), kind }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
+  }, []);
+
+  // confirm(message, { title, confirmLabel, danger }) → Promise<boolean>
+  const confirm = useCallback((message, opts = {}) => new Promise((resolve) => {
+    setConfirmState({
+      message,
+      title: opts.title || 'Please confirm',
+      confirmLabel: opts.confirmLabel || (opts.danger === false ? 'Confirm' : 'Delete'),
+      danger: opts.danger !== false,
+      resolve,
+    });
+  }), []);
+
+  const settle = useCallback((value) => {
+    setConfirmState(prev => {
+      if (prev) setTimeout(() => prev.resolve(value), 0);
+      return null;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!confirmState) return;
+    const onKey = (e) => { if (e.key === 'Escape') settle(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [confirmState, settle]);
+
+  const toastStyles = {
+    error: 'bg-red-50 border-red-200 text-red-700',
+    success: 'bg-emerald-50 border-emerald-200 text-emerald-700',
+    info: 'bg-white border-stone-200 text-zinc-700',
+  };
+
+  return (
+    <DialogContext.Provider value={{ confirm, toast }}>
+      {children}
+      {confirmState && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => settle(false)}>
+          <div role="alertdialog" aria-modal="true" aria-label={confirmState.title}
+            className="w-full max-w-sm bg-white rounded-2xl border border-stone-200 shadow-xl p-5"
+            onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-sm font-bold text-zinc-900">{confirmState.title}</h3>
+            <p className="text-sm text-zinc-500 mt-1">{confirmState.message}</p>
+            <div className="flex justify-end gap-2 mt-4">
+              <button onClick={() => settle(false)}
+                className="px-4 py-2 rounded-xl border border-stone-200 bg-white text-sm font-medium text-zinc-700 hover:bg-stone-50 transition-colors">
+                Cancel
+              </button>
+              <button autoFocus onClick={() => settle(true)}
+                className={cn('px-4 py-2 rounded-xl text-sm font-medium text-white transition-colors',
+                  confirmState.danger ? 'bg-red-600 hover:bg-red-700' : 'bg-brand-600 hover:bg-brand-700')}>
+                {confirmState.confirmLabel}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {toasts.length > 0 && (
+        <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm">
+          {toasts.map(t => (
+            <button key={t.id} onClick={() => setToasts(prev => prev.filter(x => x.id !== t.id))}
+              className={cn('text-left text-sm font-medium px-4 py-3 rounded-xl border shadow-lg', toastStyles[t.kind] || toastStyles.info)}>
+              {t.message}
+            </button>
+          ))}
+        </div>
+      )}
+    </DialogContext.Provider>
+  );
 }
 
 // ── SVG Icons ──
@@ -305,6 +392,7 @@ export default function App() {
   );
 
   return (
+    <DialogProvider>
     <div className="min-h-screen bg-stone-50 flex">
       {/* Desktop sidebar */}
       <aside className={cn('hidden md:flex bg-zinc-950 text-white flex-shrink-0 flex-col transition-[width] sticky top-0 h-screen', collapsed ? 'w-[68px]' : 'w-60')}>
@@ -341,6 +429,7 @@ export default function App() {
         </div>
       </main>
     </div>
+    </DialogProvider>
   );
 }
 
@@ -497,11 +586,15 @@ function CustomersView() {
 
   const saveCustomer = async () => {
     const payload = { ...form, tags: form.tags.split(',').map(t => t.trim()).filter(Boolean) };
-    if (editing) {
-      await api(`/api/customers/${editing.id}`, { method: 'PUT', body: JSON.stringify(payload) });
-    } else {
-      const res = await api('/api/customers', { method: 'POST', body: JSON.stringify(payload) });
-      if (res.error) return alert(res.error);
+    try {
+      if (editing) {
+        await api(`/api/customers/${editing.id}`, { method: 'PUT', body: JSON.stringify(payload) });
+      } else {
+        const res = await api('/api/customers', { method: 'POST', body: JSON.stringify(payload) });
+        if (res.error) return toast(res.error);
+      }
+    } catch (e) {
+      return toast(e?.message || 'save failed');
     }
     setForm({ phone: '', name: '', tags: '', email: '', notes: '' });
     setEditing(null);
@@ -510,8 +603,12 @@ function CustomersView() {
   };
 
   const removeCustomer = async (id) => {
-    if (!confirm('Delete this customer?')) return;
-    await api(`/api/customers/${id}`, { method: 'DELETE' });
+    if (!(await confirm('Delete this customer?', { title: 'Delete customer' }))) return;
+    try {
+      await api(`/api/customers/${id}`, { method: 'DELETE' });
+    } catch (e) {
+      return toast(e?.message || 'delete failed');
+    }
     setSelected(prev => prev.filter(x => x !== id));
     load();
   };
@@ -754,6 +851,7 @@ function CustomersView() {
 // TEMPLATES
 // ═══════════════════════════════════════════
 function TemplatesView() {
+  const { confirm, toast } = useDialog();
   const [templates, setTemplates] = useState([]);
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -772,7 +870,7 @@ function TemplatesView() {
   ];
 
   const saveTemplate = async () => {
-    if (!form.name || !form.message) return alert('Name and message are required');
+    if (!form.name || !form.message) return toast('Name and message are required');
     if (editing) {
       await api(`/api/templates/${editing.id}`, { method: 'PUT', body: JSON.stringify(form) });
     } else {
@@ -785,7 +883,7 @@ function TemplatesView() {
   };
 
   const removeTemplate = async (id) => {
-    if (!confirm('Delete this template?')) return;
+    if (!(await confirm('Delete this template?', { title: 'Delete template' }))) return;
     await api(`/api/templates/${id}`, { method: 'DELETE' });
     load();
   };
@@ -908,6 +1006,7 @@ function TemplatesView() {
 // MEDIA LIBRARY
 // ═══════════════════════════════════════════
 function MediaView() {
+  const { confirm, toast } = useDialog();
   const [media, setMedia] = useState([]);
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef();
@@ -917,17 +1016,27 @@ function MediaView() {
 
   const upload = async (files) => {
     setUploading(true);
-    for (const file of files) {
-      const fd = new FormData();
-      fd.append('file', file);
-      await fetch(`${API}/api/media/upload`, { method: 'POST', body: fd });
+    try {
+      const k = getAdminKey();
+      for (const file of files) {
+        const fd = new FormData();
+        fd.append('file', file);
+        const headers = {};
+        if (k) headers['X-Admin-Key'] = k;
+        const res = await fetch(`${API}/api/media/upload`, { method: 'POST', headers, body: fd });
+        const data = await res.json().catch(() => null);
+        if (!res.ok) throw new Error(data?.error || `upload failed (${res.status})`);
+      }
+    } catch (e) {
+      toast(e?.message || 'upload failed');
+    } finally {
+      setUploading(false);
+      load();
     }
-    setUploading(false);
-    load();
   };
 
   const removeMedia = async (id) => {
-    if (!confirm('Delete this media item?')) return;
+    if (!(await confirm('Delete this media item?', { title: 'Delete media' }))) return;
     await api(`/api/media/${id}`, { method: 'DELETE' });
     load();
   };
@@ -980,6 +1089,7 @@ function MediaView() {
 // CAMPAIGNS (Wizard)
 // ═══════════════════════════════════════════
 function CampaignsView() {
+  const { confirm, toast } = useDialog();
   const [campaigns, setCampaigns] = useState([]);
   const [step, setStep] = useState(0); // 0=list, 1=compose, 2=recipients, 3=review
   const [compose, setCompose] = useState({ name: '', message: '', imageUrl: '' });
@@ -1072,8 +1182,8 @@ function CampaignsView() {
   const uploadImage = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    if (!/^image\/(jpeg|png|webp|gif)$/.test(file.type)) { alert('Only JPEG/PNG/WebP/GIF allowed'); e.target.value = ''; return; }
-    if (file.size > 5 * 1024 * 1024) { alert('Image too large (max 5MB)'); e.target.value = ''; return; }
+    if (!/^image\/(jpeg|png|webp|gif)$/.test(file.type)) { toast('Only JPEG/PNG/WebP/GIF allowed'); e.target.value = ''; return; }
+    if (file.size > 5 * 1024 * 1024) { toast('Image too large (max 5MB)'); e.target.value = ''; return; }
     const fd = new FormData();
     fd.append('file', file);
     try {
@@ -1082,10 +1192,10 @@ function CampaignsView() {
       if (k) headers['X-Admin-Key'] = k;
       const res = await fetch(`${API}/api/media/upload`, { method: 'POST', headers, body: fd });
       const data = await res.json().catch(() => null);
-      if (!res.ok) { alert(data?.error || `upload failed (${res.status})`); return; }
+      if (!res.ok) { toast(data?.error || `upload failed (${res.status})`); return; }
       setCompose({ ...compose, imageUrl: data.url });
     } catch {
-      alert('upload failed');
+      toast('upload failed');
     } finally {
       e.target.value = '';
     }
@@ -1149,7 +1259,7 @@ function CampaignsView() {
   };
 
   const createCampaign = async () => {
-    if (recipientMode === 'custom' && selectedPhones.length === 0) return alert('Select at least one contact');
+    if (recipientMode === 'custom' && selectedPhones.length === 0) return toast('Select at least one contact');
     const res = await api('/api/campaigns', {
       method: 'POST',
       body: JSON.stringify({
@@ -1161,7 +1271,7 @@ function CampaignsView() {
         scheduledAt: scheduledAt || null,
       }),
     });
-    if (res.error) return alert(res.error);
+    if (res.error) return toast(res.error);
     setStep(0);
     resetWizard();
     load();
@@ -1177,27 +1287,29 @@ function CampaignsView() {
     try {
       const res = await api(`/api/campaigns/${id}/send`, { method: 'POST' });
       setShowProgress(id);
+      toast('Campaign sending started', 'success');
       load();
     } catch (e) {
-      alert(e.message || 'send failed');
+      toast(e.message || 'send failed');
     } finally {
       setSendingIds(prev => { const n = new Set(prev); n.delete(id); return n; });
     }
   };
 
   const cancelCampaign = async (id) => {
-    if (!confirm('Cancel this campaign?')) return;
+    if (!(await confirm('Cancel this campaign?', { title: 'Cancel campaign' }))) return;
     try {
       await api(`/api/campaigns/${id}/cancel`, { method: 'POST' });
+      toast('Campaign cancelled', 'success');
     } catch (e) {
-      alert(e.message || 'cancel failed');
+      toast(e.message || 'cancel failed');
     } finally {
       load();
     }
   };
 
   const removeCampaign = async (id) => {
-    if (!confirm('Delete this campaign?')) return;
+    if (!(await confirm('Delete this campaign?', { title: 'Delete campaign' }))) return;
     await api(`/api/campaigns/${id}`, { method: 'DELETE' });
     load();
   };
@@ -1483,7 +1595,7 @@ function CampaignsView() {
               </div>
               <div className="flex gap-2">
                 <button onClick={() => setStep(0)} className="flex-1 py-2 rounded-xl border border-stone-200 text-sm font-medium hover:bg-stone-50">Back</button>
-                <button onClick={() => { if (!compose.name || !compose.message) return alert('Name and message required'); setStep(2); }} className="flex-1 py-2 rounded-xl bg-brand-600 text-white text-sm font-medium hover:bg-brand-700">Next: Recipients</button>
+                <button onClick={() => { if (!compose.name || !compose.message) return toast('Name and message required'); setStep(2); }} className="flex-1 py-2 rounded-xl bg-brand-600 text-white text-sm font-medium hover:bg-brand-700">Next: Recipients</button>
               </div>
             </div>
           </div>
@@ -1608,7 +1720,7 @@ function CampaignsView() {
               </div>
               <div className="flex gap-2">
                 <button onClick={() => setStep(1)} className="flex-1 py-2 rounded-xl border border-stone-200 text-sm font-medium hover:bg-stone-50">Back</button>
-                <button onClick={() => { if (recipientMode === 'custom' && selectedPhones.length === 0) return alert('Select at least one contact'); setStep(3); }} className="flex-1 py-2 rounded-xl bg-brand-600 text-white text-sm font-medium hover:bg-brand-700">Next: Review</button>
+                <button onClick={() => { if (recipientMode === 'custom' && selectedPhones.length === 0) return toast('Select at least one contact'); setStep(3); }} className="flex-1 py-2 rounded-xl bg-brand-600 text-white text-sm font-medium hover:bg-brand-700">Next: Review</button>
               </div>
             </div>
           </div>
@@ -1732,8 +1844,8 @@ function SettingsView() {
   const uploadLogo = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    if (!/^image\/(jpeg|png|webp|gif)$/.test(file.type)) { alert('Only JPEG/PNG/WebP/GIF allowed'); e.target.value = ''; return; }
-    if (file.size > 5 * 1024 * 1024) { alert('Image too large (max 5MB)'); e.target.value = ''; return; }
+    if (!/^image\/(jpeg|png|webp|gif)$/.test(file.type)) { toast('Only JPEG/PNG/WebP/GIF allowed'); e.target.value = ''; return; }
+    if (file.size > 5 * 1024 * 1024) { toast('Image too large (max 5MB)'); e.target.value = ''; return; }
     const fd = new FormData();
     fd.append('file', file);
     try {
@@ -1742,10 +1854,10 @@ function SettingsView() {
       if (k) headers['X-Admin-Key'] = k;
       const res = await fetch(`${API}/api/media/upload`, { method: 'POST', headers, body: fd });
       const data = await res.json().catch(() => null);
-      if (!res.ok) { alert(data?.error || `upload failed (${res.status})`); return; }
+      if (!res.ok) { toast(data?.error || `upload failed (${res.status})`); return; }
       setSettings({ ...settings, brandLogo: data.url });
     } catch {
-      alert('upload failed');
+      toast('upload failed');
     } finally {
       e.target.value = '';
     }
