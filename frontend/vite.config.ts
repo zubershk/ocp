@@ -26,16 +26,19 @@ export default defineConfig({
       interval: 1000,
     },
     proxy: {
-      '/api': 'http://localhost:8090',
+      // BOT_PROXY_URL overrides the bot target when :8090 is squatted
+      // (e.g. stale netsh portproxy rules); default preserves the
+      // canonical layout. Example: BOT_PROXY_URL=http://localhost:8091 npm run dev
+      '/api': process.env.BOT_PROXY_URL ?? 'http://localhost:8090',
       '/admin': {
-        target: 'http://localhost:8090',
+        target: process.env.BOT_PROXY_URL ?? 'http://localhost:8090',
         bypass(req) {
           if (req.headers['x-admin-key']) return null;
           return '/index.html';
         },
       },
-      '/uploads': 'http://localhost:8090',
-      '/health': 'http://localhost:8090',
+      '/uploads': process.env.BOT_PROXY_URL ?? 'http://localhost:8090',
+      '/health': process.env.BOT_PROXY_URL ?? 'http://localhost:8090',
     },
   },
 })
