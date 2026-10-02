@@ -6,7 +6,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync, unlinkS
 import { join, dirname, resolve, extname, basename, sep } from 'path';
 import { fileURLToPath } from 'url';
 import { validateExternalImageUrlSync } from './imagePolicy.js';
-import XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -1097,7 +1097,21 @@ function resolveImportColumns(headerRow, sampleRows, width) {
   };
 }
 
-app.post('/api/customers/import', uploadImport.single('file'), (req, res) => {
+// Cell values from exceljs (numbers, strings, Dates, rich-text, formula results)
+// normalized to plain strings for the import mapper.
+function excelCellStr(v) {
+  if (v === null || v === undefined) return '';
+  if (v instanceof Date) return Number.isNaN(v.getTime()) ? '' : v.toISOString();
+  if (typeof v === 'object') {
+    if (Array.isArray(v.richText)) return v.richText.map(p => p.text || '').join('');
+    if (v.text !== undefined) return String(v.text);
+    if (v.result !== undefined) return excelCellStr(v.result);
+    return '';
+  }
+  return String(v);
+}
+
+app.post('/api/customers/import', uploadImport.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'file required' });
   const ext = extname(req.file.originalname).toLowerCase();
   // Header row (any column order) → name/tags/email/notes map; phone column is
@@ -1107,19 +1121,32 @@ app.post('/api/customers/import', uploadImport.single('file'), (req, res) => {
   let truncated = false;
   let rows = [];
   try {
-    if (ext === '.xlsx' || ext === '.xls') {
+    if (ext === '.xlsx') {
       if (req.file.size > 5 * 1024 * 1024) return res.status(400).json({ error: 'file too large' });
-      let wb = null;
+      let buf = null;
       try {
-        wb = XLSX.readFile(req.file.path, { sheetRows: ROW_CAP + 1 });
+        buf = readFileSync(req.file.path);
+      } catch {
+        return res.status(400).json({ error: 'unreadable file' });
+      }
+      const wb = new ExcelJS.Workbook();
+      try {
+        await wb.xlsx.load(buf);
       } catch {
         return res.status(400).json({ error: 'invalid spreadsheet' });
       }
-      const sheet = wb.Sheets?.[wb.SheetNames?.[0]];
-      if (!sheet) return res.status(400).json({ error: 'empty spreadsheet' });
-      const aoa = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: true });
-      truncated = aoa.length > ROW_CAP;
-      rows = aoa.slice(0, ROW_CAP).map(r => (Array.isArray(r) ? r : [r]).slice(0, 20).map(c => String(c ?? '').trim().slice(0, 200)));
+      const ws = wb.worksheets[0];
+      if (!ws) return res.status(400).json({ error: 'empty spreadsheet' });
+      const totalRows = ws.rowCount || 0;
+      if (totalRows === 0) return res.status(400).json({ error: 'empty spreadsheet' });
+      truncated = totalRows > ROW_CAP;
+      for (let r = 1; r <= Math.min(totalRows, ROW_CAP); r++) {
+        const vals = ws.getRow(r).values || [];
+        rows.push(vals.slice(1, 21).map(c => excelCellStr(c).trim().slice(0, 200)));
+      }
+    } else if (ext === '.xls') {
+      // Legacy binary format isn't supported — Excel/Sheets re-save as .xlsx in seconds.
+      return res.status(400).json({ error: 'convert .xls to .xlsx and retry' });
     } else {
       let content = '';
       try {
