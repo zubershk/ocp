@@ -1111,19 +1111,31 @@ function CustomersView() {
           {selected.length > 0 && (
             <div className="flex flex-wrap items-center gap-2 px-4 py-2.5 bg-brand-50 border-b border-brand-200">
               <span className="text-xs font-bold text-brand-700">{selected.length} selected</span>
-              <div className="flex gap-1.5 items-center ml-1">
-                <input value={bulkTag} onChange={(e) => setBulkTag(e.target.value)} placeholder="Add tag..."
-                  className="w-32 px-2.5 py-1.5 rounded-lg border border-brand-200 text-xs bg-white focus:outline-none focus:border-brand-400" />
+              {selected.length < total && (
+                <button onClick={selectAllFiltered} className="text-xs font-medium text-brand-700 underline underline-offset-2 hover:text-brand-800">
+                  Select all {total} filtered
+                </button>
+              )}
+              <div className="flex flex-wrap gap-1.5 items-center ml-1">
+                <select value={bulkMode} onChange={(e) => setBulkMode(e.target.value)}
+                  className="px-2 py-1.5 rounded-lg border border-brand-200 text-xs bg-white focus:outline-none" aria-label="Tag mode">
+                  <option value="add">Add tag</option>
+                  <option value="remove">Remove tag</option>
+                </select>
+                <input value={bulkTag} onChange={(e) => setBulkTag(e.target.value)} placeholder="tag…"
+                  className="w-28 px-2.5 py-1.5 rounded-lg border border-brand-200 text-xs bg-white focus:outline-none focus:border-brand-400" />
                 <button onClick={applyBulkTag} disabled={bulkBusy} className="px-3 py-1.5 rounded-lg bg-brand-600 text-white text-xs font-bold hover:bg-brand-700 disabled:opacity-50 transition-colors">Tag</button>
+                <button onClick={() => openBulkMessage(selected, `${selected.length} contacts`)} disabled={bulkBusy} className="px-3 py-1.5 rounded-lg border border-brand-200 text-brand-700 text-xs font-bold hover:bg-brand-100 disabled:opacity-50 transition-colors">Message</button>
+                <button onClick={exportSelected} disabled={bulkBusy} className="px-3 py-1.5 rounded-lg border border-brand-200 text-brand-700 text-xs font-bold hover:bg-brand-100 disabled:opacity-50 transition-colors">Export</button>
                 <button onClick={bulkDelete} disabled={bulkBusy} className="px-3 py-1.5 rounded-lg border border-red-200 text-red-600 text-xs font-bold hover:bg-red-50 disabled:opacity-50 transition-colors">Delete</button>
                 <button onClick={() => setSelected([])} className="px-2 py-1.5 text-xs font-medium text-zinc-500 hover:text-zinc-700">Clear</button>
               </div>
             </div>
           )}
           {customers.length === 0 ? (
-            <Empty icon={<Icons.Users s={20} />} title="No customers yet" hint="Import a CSV or add manually." />
+            <Empty icon={<Icons.Users s={20} />} title="No customers match" hint="Adjust filters, import a file, or add manually." />
           ) : (
-            <table className="w-full min-w-[680px] text-sm">
+            <table className="w-full min-w-[720px] text-sm">
               <thead className="bg-stone-50 border-b border-stone-200">
                 <tr>
                   <th className="pl-4 pr-1 py-2.5 w-10">
@@ -1133,12 +1145,21 @@ function CustomersView() {
                       onChange={toggleSelectPage} className="accent-brand-600 size-4 cursor-pointer" />
                   </th>
                   <th className="text-left px-4 py-2.5 font-medium text-zinc-500 w-12">#</th>
-                  <th className="text-left px-4 py-2.5 font-medium text-zinc-500">Phone</th>
-                  <th className="text-left px-4 py-2.5 font-medium text-zinc-500">Name</th>
-                  <th className="text-left px-4 py-2.5 font-medium text-zinc-500">Tags</th>
-                  <th className="text-left px-4 py-2.5 font-medium text-zinc-500">Email</th>
-                  <th className="text-left px-4 py-2.5 font-medium text-zinc-500">Added</th>
-                  <th className="w-20"></th>
+                  {columns.phone && (
+                    <th className="text-left px-4 py-2.5"><button onClick={() => clickSort('phone')} className="inline-flex items-center font-medium text-zinc-500 hover:text-zinc-800">Phone{sortArrow('phone')}</button></th>
+                  )}
+                  {columns.name && (
+                    <th className="text-left px-4 py-2.5"><button onClick={() => clickSort('name')} className="inline-flex items-center font-medium text-zinc-500 hover:text-zinc-800">Name{sortArrow('name')}</button></th>
+                  )}
+                  {columns.tags && <th className="text-left px-4 py-2.5 font-medium text-zinc-500">Tags</th>}
+                  {columns.email && <th className="text-left px-4 py-2.5 font-medium text-zinc-500">Email</th>}
+                  {columns.added && (
+                    <th className="text-left px-4 py-2.5"><button onClick={() => clickSort('createdAt')} className="inline-flex items-center font-medium text-zinc-500 hover:text-zinc-800">Added{sortArrow('createdAt')}</button></th>
+                  )}
+                  {columns.source && <th className="text-left px-4 py-2.5 font-medium text-zinc-500">Source</th>}
+                  {columns.orders && <th className="text-left px-4 py-2.5 font-medium text-zinc-500">Orders</th>}
+                  {columns.lastseen && <th className="text-left px-4 py-2.5 font-medium text-zinc-500">Last seen</th>}
+                  <th className="w-32"></th>
                 </tr>
               </thead>
               <tbody>
@@ -1147,16 +1168,25 @@ function CustomersView() {
                     <td className="pl-4 pr-1 py-2.5">
                       <input type="checkbox" aria-label={`Select ${c.phone}`} checked={selected.includes(c.id)} onChange={() => toggleSelect(c.id)} className="accent-brand-600 size-4 cursor-pointer" />
                     </td>
-                    <td className="px-4 py-2.5 text-xs text-zinc-400">{(page - 1) * 50 + i + 1}</td>
-                    <td className="px-4 py-2.5 font-mono text-xs">{c.phone}</td>
-                    <td className="px-4 py-2.5 font-medium">{c.name || '—'}</td>
-                    <td className="px-4 py-2.5">{(c.tags || []).length > 0 ? c.tags.map(t => <Badge key={t}>{t}</Badge>) : '—'}</td>
-                    <td className="px-4 py-2.5 text-xs text-zinc-500">{c.email || '—'}</td>
-                    <td className="px-4 py-2.5 text-xs text-zinc-400">{new Date(c.createdAt).toLocaleDateString()}</td>
+                    <td className="px-4 py-2.5 text-xs text-zinc-400">{(page - 1) * pageSize + i + 1}</td>
+                    {columns.phone && <td className="px-4 py-2.5 font-mono text-xs">{c.phone}</td>}
+                    {columns.name && <td className="px-4 py-2.5 font-medium">{c.name || '—'}</td>}
+                    {columns.tags && <td className="px-4 py-2.5">{(c.tags || []).length > 0 ? c.tags.map(t => <Badge key={t}>{t}</Badge>) : '—'}</td>}
+                    {columns.email && <td className="px-4 py-2.5 text-xs text-zinc-500">{c.email || '—'}</td>}
+                    {columns.added && <td className="px-4 py-2.5 text-xs text-zinc-400">{fmtAdded(c)}</td>}
+                    {columns.source && <td className="px-4 py-2.5"><Badge color={c.source === 'bot' ? 'blue' : 'green'}>{c.source === 'bot' ? 'Bot' : 'Local'}</Badge></td>}
+                    {columns.orders && <td className="px-4 py-2.5 text-xs text-zinc-500">{c.total_orders ?? '—'}</td>}
+                    {columns.lastseen && <td className="px-4 py-2.5 text-xs text-zinc-400">{c.last_seen_at ? new Date(c.last_seen_at).toLocaleDateString() : '—'}</td>}
                     <td className="px-4 py-2.5">
                       <div className="flex gap-1">
-                        <button onClick={() => startEdit(c)} className="p-1.5 rounded-lg hover:bg-stone-100 text-zinc-400 hover:text-zinc-600"><Icons.Edit /></button>
-                        <button onClick={() => removeCustomer(c.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-zinc-400 hover:text-red-500"><Icons.Trash /></button>
+                        <button onClick={() => startEdit(c)} disabled={c.source === 'bot'} title={c.source === 'bot' ? 'Bot-owned — tag only' : 'Edit'}
+                          className="p-1.5 rounded-lg hover:bg-stone-100 text-zinc-400 hover:text-zinc-600 disabled:opacity-30 disabled:hover:bg-transparent"><Icons.Edit /></button>
+                        <button onClick={() => openBulkMessage([c.id], c.name || c.phone)} title="Send message"
+                          className="p-1.5 rounded-lg hover:bg-stone-100 text-zinc-400 hover:text-zinc-600"><Icons.Send s={14} /></button>
+                        <button onClick={() => setDetail(c)} title="Details"
+                          className="p-1.5 rounded-lg hover:bg-stone-100 text-zinc-400 hover:text-zinc-600"><Icons.Eye s={14} /></button>
+                        <button onClick={() => removeCustomer(c.id)} disabled={c.source === 'bot'} title={c.source === 'bot' ? 'Bot-owned — cannot delete here' : 'Delete'}
+                          className="p-1.5 rounded-lg hover:bg-red-50 text-zinc-400 hover:text-red-500 disabled:opacity-30 disabled:hover:bg-transparent"><Icons.Trash /></button>
                       </div>
                     </td>
                   </tr>
@@ -1164,12 +1194,18 @@ function CustomersView() {
               </tbody>
             </table>
           )}
-          {total > 50 && (
+          {total > pageSize && (
             <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-t border-stone-200">
-              <span className="text-xs text-zinc-400">Showing {(page - 1) * 50 + 1}–{Math.min(page * 50, total)} of {total}</span>
-              <div className="flex gap-2">
+              <span className="text-xs text-zinc-400">Showing {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} of {total}</span>
+              <div className="flex gap-2 items-center">
+                <select value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+                  className="px-2 py-1 rounded-lg border border-stone-200 text-xs bg-white" aria-label="Rows per page">
+                  <option value={25}>25 / page</option>
+                  <option value={50}>50 / page</option>
+                  <option value={100}>100 / page</option>
+                </select>
                 <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="px-3 py-1 rounded-lg border border-stone-200 text-xs font-medium disabled:opacity-40">Prev</button>
-                <button onClick={() => setPage(p => p + 1)} disabled={page * 50 >= total} className="px-3 py-1 rounded-lg border border-stone-200 text-xs font-medium disabled:opacity-40">Next</button>
+                <button onClick={() => setPage(p => p + 1)} disabled={page * pageSize >= total} className="px-3 py-1 rounded-lg border border-stone-200 text-xs font-medium disabled:opacity-40">Next</button>
               </div>
             </div>
           )}
@@ -2129,21 +2165,23 @@ function CampaignsView() {
 function StepIndicator({ current }) {
   const steps = ['Compose', 'Recipients', 'Review'];
   return (
-    <div className="flex flex-wrap items-center gap-2 mb-4">
-      {steps.map((s, i) => (
-        <div key={i} className="flex items-center gap-2">
-          <div className={cn('size-7 rounded-full flex items-center justify-center text-xs font-bold', {
-            'bg-emerald-500 text-white': i + 1 < current,
-            'bg-brand-600 text-white': i + 1 === current,
-            'bg-stone-200 text-zinc-500': i + 1 > current,
-          })}>
-            {i + 1 < current ? <Icons.Check s={14} /> : i + 1}
+    <>
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        {steps.map((s, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <div className={cn('size-7 rounded-full flex items-center justify-center text-xs font-bold', {
+              'bg-emerald-500 text-white': i + 1 < current,
+              'bg-brand-600 text-white': i + 1 === current,
+              'bg-stone-200 text-zinc-500': i + 1 > current,
+            })}>
+              {i + 1 < current ? <Icons.Check s={14} /> : i + 1}
+            </div>
+            <span className={cn('text-sm font-medium', { 'text-zinc-900': i + 1 === current, 'text-zinc-400': i + 1 !== current })}>{s}</span>
+            {i < steps.length - 1 && <div className={cn('w-8 h-0.5', { 'bg-emerald-500': i + 1 < current, 'bg-stone-200': i + 1 >= current })} />}
           </div>
-          <span className={cn('text-sm font-medium', { 'text-zinc-900': i + 1 === current, 'text-zinc-400': i + 1 !== current })}>{s}</span>
-          {i < steps.length - 1 && <div className={cn('w-8 h-0.5', { 'bg-emerald-500': i + 1 < current, 'bg-stone-200': i + 1 >= current })} />}
-        </div>
-      ))}
-    </div>
+        ))}
+      </div>
+    </>
   );
 }
 
