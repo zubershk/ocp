@@ -355,6 +355,19 @@ const canManageTables = ['owner', 'manager'].includes(role);
     retry: 1,
   });
   const order: PosOrder | undefined = orderQuery.data;
+  // Stale persisted order (e.g. saved against a different database):
+  // a 404 means the order is gone, so drop the id and start fresh
+  // instead of refetching a ghost on every load.
+  useEffect(() => {
+    if (orderId == null || !orderQuery.error) return;
+    if (posErrorMessage(orderQuery.error as Error).status !== 404) return;
+    try {
+      localStorage.removeItem(orderKey(outletId));
+      localStorage.removeItem(PAYMENTS_KEY(orderId));
+    } catch {}
+    setOrderId(null);
+    setNotice('The saved order no longer exists — started a new sale.');
+  }, [orderId, outletId, orderQuery.error]);
   const serverHeldQuery = useQuery({
     queryKey: ['pos-held', outletId],
     queryFn: () => posApi.getHeldOrders(),
