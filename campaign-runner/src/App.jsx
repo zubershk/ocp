@@ -1646,11 +1646,21 @@ function CampaignsView() {
   };
 
   const [sendingIds, setSendingIds] = useState(new Set());
-  const sendCampaign = async (id) => {
+  // Prefill the wizard locally — nothing is saved until Review confirm (no orphan drafts).
+  const prefillWizard = (c, nameSuffix = '', step = 1) => {
+    setCompose({ name: `${c.name || 'Campaign'}${nameSuffix}`.slice(0, 100), message: c.message || '', imageUrl: c.imageUrl || '' });
+    setRecipientMode(modeOf(c));
+    setRecipientTag(c.recipientTag || 'all');
+    setSelectedPhones(c.recipientPhones || []);
+    restoreVarRows(c.variables);
+    setScheduledAt('');
+    setStep(step);
+  };
+  const sendCampaign = async (id, skipConfirm = false) => {
     if (sendingIds.has(id)) return;
     const c = campaigns.find(x => x.id === id);
     const label = c ? recipientLabel(c) : 'all recipients';
-    if (!confirm(`Send this campaign to ${label}?`)) return;
+    if (!skipConfirm && !(await confirm(`Send this campaign to ${label}?`, { title: 'Send campaign', confirmLabel: 'Send', danger: false }))) return;
     setSendingIds(prev => new Set(prev).add(id));
     try {
       const res = await api(`/api/campaigns/${id}/send`, { method: 'POST' });
@@ -1682,22 +1692,159 @@ function CampaignsView() {
     load();
   };
 
-  // Reuse: duplicate into a fresh draft and open it in the composer.
-  const duplicateCampaign = async (id) => {
-    const c = await api(`/api/campaigns/${id}/duplicate`, { method: 'POST' });
-    if (c.error) return alert(c.error);
-    setCompose({ name: c.name, message: c.message, imageUrl: c.imageUrl });
-    setRecipientMode(modeOf(c));
-    setRecipientTag(c.recipientTag || 'all');
-    setSelectedPhones(c.recipientPhones || []);
-    restoreVarRows(c.variables);
-    setScheduledAt('');
-    setStep(1);
+  // Reuse: prefill the wizard locally (saves only on Review confirm — no orphan draft).
+  const duplicateCampaign = (c) => {
+    prefillWizard(c, ' (copy)');
+    toast('Editing a copy — confirm in the wizard to save', 'info');
+  };
+
+  const failedCount = (c) => {
+    if (Array.isArray(c.results) && c.results.length > 0) return c.results.filter(r => !r.ok).length;
+    return c.failed || 0;
+  };
+
+  // Resend-all: fresh draft with the same message + audience, then send it.
+  const resendAll = async (c) => {
+    if (!(await confirm(`Send "${c.name}" again to the same audience?`, { title: 'Resend campaign', confirmLabel: 'Resend', danger: false }))) return;
+    try {
+      const created = await api('/api/campaigns', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: `${c.name} (resend)`.slice(0, 100),
+          message: c.message, imageUrl: c.imageUrl || '',
+          recipientMode: modeOf(c), recipientTag: c.recipientTag || 'all',
+          recipientPhones: c.recipientPhones || [], variables: c.variables || {}, scheduledAt: null,
+        }),
+      });
+      await sendCampaign(created.id, true);
+    } catch (e) {
+      toast(e?.message || 'resend failed');
+    }
     load();
   };
 
+  // Resume: continue without resending delivered contacts (pending), or restart all.
+  const resumeCampaign = async (c, mode) => {
+    const results = Array.isArray(c.results) ? c.results : [];
+    const okCount = results.filter(r => r.ok).length;
+    const pendingN = Math.max(0, (c.total || 0) - okCount - failedCount(c));
+    const msg = mode === 'pending'
+      ? `Resume "${c.name}"? ${okCount} already delivered will be skipped (${pendingN} to send).`
+      : `Resend "${c.name}" to all ${c.total || 0}, restarting counts? Already delivered contacts will get it again.`;
+    if (!(await confirm(msg, { title: mode === 'pending' ? 'Resume campaign' : 'Resend to all', confirmLabel: mode === 'pending' ? 'Resume' : 'Resend', danger: mode !== 'pending' }))) return;
+    try {
+      const res = await api(`/api/campaigns/${c.id}/resume`, { method: 'POST', body: JSON.stringify({ mode }) });
+      toast(mode === 'pending' ? `Resuming ${res.pending} contacts (skipped ${res.alreadySent} sent)` : `Restarted — sending to ${res.pending}`, 'success');
+      openDetail(c.id);
+    } catch (e) {
+      toast(e?.message || 'resume failed');
+    }
+    load();
+  };
+
+  // Retry-failed: server clones only failed recipients and auto-sends. Original untouched.
+  const retryFailed = async (c) => {
+    const n = failedCount(c);
+    if (n === 0) return toast('No failed recipients to retry');
+    if (!(await confirm(`Retry ${n} failed recipient${n === 1 ? '' : 's'}?`, { title: 'Retry failed', confirmLabel: 'Retry', danger: false }))) return;
+    try {
+      const res = await api(`/api/campaigns/${c.id}/retry-failed`, { method: 'POST' });
+      toast(`Retrying ${res.total} contacts`, 'success');
+    } catch (e) {
+      toast(e?.message || 'retry failed');
+    }
+    load();
+  };
+
+  const saveAsTemplate = async (c) => {
+    try {
+      await api('/api/templates', { method: 'POST', body: JSON.stringify({ name: c.name, message: c.message, imageUrl: c.imageUrl || '' }) });
+      toast('Saved as template', 'success');
+    } catch (e) {
+      toast(e?.message || 'save failed');
+    }
+  };
+
+  const exportResults = async (c) => {
+    try {
+      const headers = {};
+      const k = getAdminKey();
+      if (k) headers['X-Admin-Key'] = k;
+      const res = await fetch(`${API}/api/campaigns/${c.id}/export`, { headers });
+      if (!res.ok) throw new Error(`export failed (${res.status})`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `campaign-${c.id}-results.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    } catch (e) {
+      toast(e?.message || 'export failed');
+    }
+  };
+
+  const openDetail = async (id) => {
+    try {
+      const d = await api(`/api/campaigns/${id}`);
+      setDetail(d);
+      setDetailFilter('all');
+      setDetailSearch('');
+      setDetailPreview(null);
+      try {
+        const p = await api('/api/campaigns/preview-recipients', {
+          method: 'POST',
+          body: JSON.stringify({ recipientMode: d.recipientMode || 'all', recipientTag: d.recipientTag || 'all', recipientPhones: d.recipientPhones || [] }),
+        });
+        setDetailPreview(p);
+      } catch { /* preview unavailable — stats still show */ }
+    } catch (e) {
+      toast(e?.message || 'load failed');
+    }
+  };
+
+  const refreshDetail = async () => {
+    if (!detail) return;
+    try {
+      const d = await api(`/api/campaigns/${detail.id}`);
+      setDetail(d);
+    } catch { /* keep stale data on transient failure */ }
+  };
+
+  // Live-tick the drawer while a send is in flight.
+  useEffect(() => {
+    if (!detail || detail.status !== 'sending') return;
+    const t = setInterval(refreshDetail, 2000);
+    return () => clearInterval(t);
+  }, [detail?.id, detail?.status]);
+
+  const retryOne = async (phone) => {
+    if (!detail || !phone) return;
+    if (!(await confirm(`Resend this campaign to ${phone}?`, { title: 'Retry contact', confirmLabel: 'Resend', danger: false }))) return;
+    try {
+      const res = await api('/api/customers/bulk-message', {
+        method: 'POST',
+        body: JSON.stringify({ ids: [phone], message: detail.message, imageUrl: detail.imageUrl || '' }),
+      });
+      toast(`Resending to ${res.total} contact${res.total === 1 ? '' : 's'}`, 'success');
+      refreshDetail();
+    } catch (e) {
+      toast(e?.message || 'retry failed');
+    }
+    load();
+  };
+
+  const copyPhone = (phone) => {
+    if (!phone) return;
+    navigator.clipboard.writeText(String(phone))
+      .then(() => toast('Phone copied', 'success'))
+      .catch(() => toast('Copy failed'));
+  };
+
   const testSend = async () => {
-    if (!testPhone || !compose.message) return alert('Phone and message required');
+    if (!testPhone || !compose.message) return toast('Phone and message required');
     setTestResult(null);
     const res = await api('/api/test-send', { method: 'POST', body: JSON.stringify({ phone: testPhone, message: compose.message, imageUrl: compose.imageUrl, variables: variablesObj() }) });
     setTestResult(res);
