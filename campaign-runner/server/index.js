@@ -6,6 +6,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync, unlinkS
 import { join, dirname, resolve, extname, basename, sep } from 'path';
 import { fileURLToPath } from 'url';
 import { validateExternalImageUrlSync } from './imagePolicy.js';
+import XLSX from 'xlsx';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -128,6 +129,14 @@ function fileFilter(_req, file, cb) {
   cb(null, true);
 }
 const upload = multer({ dest: UPLOADS_DIR, limits: { fileSize: 5 * 1024 * 1024 }, fileFilter });
+// Customer import accepts CSV + Excel (first sheet, phone,name,tags,email columns)
+const allowedImportExt = new Set(['.csv', '.xlsx', '.xls']);
+function importFileFilter(_req, file, cb) {
+  const ext = extname(file.originalname).toLowerCase();
+  if (!allowedImportExt.has(ext)) return cb(new Error('import type not allowed'), false);
+  cb(null, true);
+}
+const uploadImport = multer({ dest: UPLOADS_DIR, limits: { fileSize: 5 * 1024 * 1024 }, fileFilter: importFileFilter });
 function sniffImageType(buf) {
   if (!buf || buf.length < 4) return null;
   if (buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF) return 'image/jpeg';
@@ -1228,6 +1237,7 @@ if (existsSync(join(DIST_DIR, 'index.html'))) {
 
 // multer/fileFilter + JSON error handling (must be before listen)
 app.use((err, _req, res, _next) => {
+  if (err && /import type not allowed/i.test(err.message)) return res.status(400).json({ error: 'only .csv/.xlsx/.xls allowed' });
   if (err && /type not allowed/i.test(err.message)) return res.status(400).json({ error: 'invalid image type (jpeg/png/webp/gif only)' });
   if (err && err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ error: 'file too large (max 5MB)' });
   if (err && err.type === 'entity.too.large') return res.status(400).json({ error: 'payload too large' });
