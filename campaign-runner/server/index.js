@@ -531,9 +531,13 @@ function renderMessage(template, contact, settings, variables) {
 function sanitizeVariables(v) {
   const out = {};
   if (!v || typeof v !== 'object' || Array.isArray(v)) return out;
+  // Reserved: contact/system tags always win in renderMessage — user variables
+  // must not clobber them (e.g. an empty `name` row blanked every recipient).
+  const reserved = new Set(['name', 'phone', 'brand_name', 'time']);
   for (const [k, val] of Object.entries(v).slice(0, 20)) {
     if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(k)) continue;
     if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
+    if (reserved.has(k)) continue;
     out[k] = String(val ?? '').slice(0, 200);
   }
   return out;
@@ -583,7 +587,9 @@ async function botApiWithRetry(path, opts = {}, retries = 3) {
       return await botApi(path, opts);
     } catch (e) {
       const status = e.status || 0;
-      const retryable = status === 429 || status === 502 || status === 503 || status === 504;
+      // 504 = our own abort (unknown outcome on non-idempotent sends) — never
+      // auto-retry; surface it so the caller records `unknown`, not `failed`.
+      const retryable = status === 429 || status === 502 || status === 503;
       if (!retryable || attempt >= retries) throw e;
       let wait = delayMs;
       if (status === 429 && e.retryAfter) {
@@ -1399,7 +1405,7 @@ app.post('/api/campaigns/preview-recipients', async (req, res) => {
     recipientTag: req.body.recipientTag || 'all',
     recipientPhones: req.body.recipientPhones || [],
   });
-  res.json({ sendable: phones.length, skipped });
+  res.json({ sendable: phones.length, skipped, blocked: blocked || 0 });
 });
 
 async function startSend(id) {
@@ -1589,18 +1595,31 @@ async function sendCampaignViaBot(campaignId, phones) {
       return;
     }
     try {
+      // 90s: the bot sends phones sequentially (~1.5-3s each with checks/uploads),
+      // so a 20-batch legitimately takes 30-60s. No 504 retries (see botApiWithRetry).
       const result = await botApiWithRetry('/admin/broadcast/send', {
         method: 'POST',
         body: JSON.stringify({ phones: batch, message: text, image_url: image }),
+        timeoutMs: 90000,
       }, 3);
       const cur = load('campaigns');
       const idx = cur.findIndex(c => c.id === campaignId);
       if (idx === -1) return;
       if (result.results) {
+        const newlyDead = [];
         for (const r of result.results) {
           cur[idx].results.push({ phone: r.phone, name: byPhone.get(r.phone)?.name || '', ok: !!r.ok, error: r.error || null, sentAt: new Date().toISOString() });
-          if (r.ok) cur[idx].sent++; else cur[idx].failed++;
+          // Dead numbers are expected list churn — count as skipped, not failed,
+          // so the delivery rate reflects real send health.
+          if (!r.ok && /not registered on WhatsApp/i.test(r.error || '')) {
+            cur[idx].skipped++;
+            newlyDead.push(r.phone);
+          }
+          else if (r.ok) cur[idx].sent++;
+          else cur[idx].failed++;
         }
+        // Learn: never attempt these numbers again (auto-skipped in resolve).
+        addToBlocklist(newlyDead);
       } else {
         for (const phone of batch) {
           cur[idx].results.push({ phone, name: byPhone.get(phone)?.name || '', ok: false, error: 'API error', sentAt: new Date().toISOString() });
@@ -1612,13 +1631,13 @@ async function sendCampaignViaBot(campaignId, phones) {
       const cur = load('campaigns');
       const idx = cur.findIndex(c => c.id === campaignId);
       if (idx === -1) return;
-      const msg = err.status === 429 ? 'rate limited' : err.status === 504 ? 'timeout' : 'send failed';
+      const msg = err.status === 429 ? 'rate limited' : err.status === 504 ? 'timeout (delivery unknown — verify before retry)' : 'send failed';
       for (const phone of batch) {
         cur[idx].results.push({ phone, name: byPhone.get(phone)?.name || '', ok: false, error: msg, sentAt: new Date().toISOString() });
         cur[idx].failed++;
       }
       save('campaigns', cur);
-      clog(campaignId, 'batch-fail', { batch: bi });
+      clog(campaignId, 'batch-fail', { batch: bi, status: err.status || 0 });
     }
     if (bi + 1 < batches.length && delay > 0) {
       await new Promise(r => setTimeout(r, delay));
