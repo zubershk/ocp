@@ -1189,7 +1189,8 @@ const TRANSITIONS = {
   scheduled: ['sending', 'cancelled', 'draft'],
   sending: ['done', 'failed', 'cancelled'],
   done: [],
-  cancelled: [],
+  // cancelled -> sending is legal ONLY via POST /:id/resume (never via /send)
+  cancelled: ['sending'],
   failed: ['sending', 'scheduled', 'draft'],
 };
 function canTransition(from, to) {
@@ -1346,8 +1347,54 @@ app.get('/api/campaigns/:id', (req, res) => {
   res.json({ ...c, pending });
 });
 
+app.get('/api/campaigns/:id/export', (req, res) => {
+  const c = load('campaigns').find(c => c.id === req.params.id);
+  if (!c) return res.status(404).json({ error: 'not found' });
+  const esc = (s) => `"${String(s ?? '').replace(/"/g, '""')}"`;
+  const rows = Array.isArray(c.results) ? c.results : [];
+  const csv = 'phone,name,ok,error,sentAt\n' + rows.map(r =>
+    `${r.phone || ''},${esc(r.name)},${r.ok ? 'yes' : 'no'},${esc(r.error || '')},${r.sentAt || ''}`).join('\n');
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', `attachment; filename=campaign-${c.id}-results.csv`);
+  res.send(csv);
+});
+
+// Retry only the failed recipients of a done/failed campaign: clones them
+// into a fresh custom draft and starts sending. Original is untouched.
+app.post('/api/campaigns/:id/retry-failed', rateLimit({ windowMs: 60 * 1000, max: 5 }), async (req, res) => {
+  const campaigns = load('campaigns');
+  if (!Array.isArray(campaigns)) return res.status(500).json({ error: 'store corrupted' });
+  const src = campaigns.find(c => c.id === req.params.id);
+  if (!src) return res.status(404).json({ error: 'not found' });
+  if (src.status !== 'done' && src.status !== 'failed' && src.status !== 'completed') {
+    return res.status(400).json({ error: 'only done or failed campaigns can be retried' });
+  }
+  const failedPhones = [...new Set((Array.isArray(src.results) ? src.results : [])
+    .filter(r => !r.ok)
+    .map(r => normPhone(r.phone))
+    .filter(p => isSendablePhone(p)))];
+  if (failedPhones.length === 0) return res.status(400).json({ error: 'no failed recipients to retry' });
+  const retryCap = checkDailyCap(failedPhones.length);
+  if (!retryCap.ok) return res.status(429).json({ error: retryCap.error });
+  if (campaigns.length > 1000) return res.status(400).json({ error: 'campaign store full' });
+  const c = {
+    id: uid(), name: `Retry: ${String(src.name || 'campaign').slice(0, 90)} (${failedPhones.length})`,
+    message: src.message, imageUrl: src.imageUrl || '',
+    recipientMode: 'custom', recipientTag: 'all', recipientPhones: failedPhones,
+    variables: { ...(src.variables || {}) },
+    scheduledAt: null, status: 'draft',
+    sent: 0, failed: 0, skipped: 0, total: 0, createdAt: new Date().toISOString(), results: [],
+  };
+  campaigns.push(c);
+  save('campaigns', campaigns);
+  clog(c.id, 'retry-failed-create', { from: src.id, total: failedPhones.length });
+  const r = await startSend(c.id);
+  if (r.error) return res.status(r.status || 400).json({ error: r.error, campaignId: c.id });
+  res.json({ ok: true, campaignId: c.id, total: r.total, skipped: r.skipped });
+});
+
 app.post('/api/campaigns/preview-recipients', async (req, res) => {
-  const { phones, skipped } = await resolvePhonesAsync({
+  const { phones, skipped, blocked } = await resolvePhonesAsync({
     recipientMode: req.body.recipientMode || 'all',
     recipientTag: req.body.recipientTag || 'all',
     recipientPhones: req.body.recipientPhones || [],
@@ -1414,6 +1461,80 @@ app.post('/api/campaigns/:id/cancel', (req, res) => {
   save('campaigns', campaigns);
   clog(c.id, 'cancel', { status: c.status });
   res.json({ ok: true });
+});
+
+// Resume a cancelled/failed campaign WITHOUT resending delivered contacts.
+// mode 'pending' (default): send only unsent+failed (delivered skipped, history kept).
+// mode 'all': restart on the same ID (prior results archived, counters reset).
+app.post('/api/campaigns/:id/resume', rateLimit({ windowMs: 60 * 1000, max: 5 }), async (req, res) => {
+  const mode = req.body?.mode === 'all' ? 'all' : 'pending';
+  if (activeSenders.has(req.params.id)) return res.status(409).json({ error: 'already sending' });
+  let campaigns = load('campaigns');
+  if (!Array.isArray(campaigns)) return res.status(500).json({ error: 'store corrupted' });
+  const c = campaigns.find(x => x.id === req.params.id);
+  if (!c) return res.status(404).json({ error: 'not found' });
+  if (c.status !== 'cancelled' && c.status !== 'failed') {
+    return res.status(400).json({ error: `cannot resume from status ${c.status}` });
+  }
+  activeSenders.add(c.id);
+  try {
+    const { phones: resolved, skipped: freshSkipped } = await resolvePhonesAsync(c);
+    if (mode === 'all') {
+      const allCap = checkDailyCap(resolved.length);
+      if (!allCap.ok) {
+        activeSenders.delete(c.id);
+        return res.status(429).json({ error: allCap.error });
+      }
+      if (resolved.length === 0) {
+        activeSenders.delete(c.id);
+        return res.status(400).json({ error: freshSkipped > 0 ? `no sendable recipients (${freshSkipped} invalid skipped)` : 'no recipients' });
+      }
+      // archive forensics, then restart counts on the same ID
+      const archive = [...(c.resultsArchive || []), ...(Array.isArray(c.results) ? c.results : [])].slice(-10000);
+      const fresh = load('campaigns');
+      const cur = fresh.find(x => x.id === c.id);
+      if (!cur) { activeSenders.delete(c.id); return res.status(404).json({ error: 'not found' }); }
+      Object.assign(cur, {
+        status: 'sending', total: resolved.length, sent: 0, failed: 0, skipped: freshSkipped,
+        results: [], resultsArchive: archive, startedAt: new Date().toISOString(),
+      });
+      delete cur.completedAt; delete cur.error; delete cur.cancelledAt;
+      save('campaigns', fresh);
+      clog(c.id, 'resume-all', { total: resolved.length });
+      sendCampaignViaBot(c.id, resolved).catch(() => clog(c.id, 'send-error', {})).finally(() => activeSenders.delete(c.id));
+      return res.json({ ok: true, mode, total: resolved.length, alreadySent: 0, pending: resolved.length, skipped: freshSkipped });
+    }
+    // pending: delivered (ok) are skipped; failed + never-attempted are sent. History kept.
+    const okPhones = new Set((Array.isArray(c.results) ? c.results : [])
+      .filter(r => r.ok).map(r => normPhone(r.phone)).filter(Boolean));
+    const pending = resolved.filter(p => !okPhones.has(normPhone(p)));
+    if (pending.length === 0) {
+      activeSenders.delete(c.id);
+      return res.status(400).json({ error: `nothing pending — all ${okPhones.size} delivered` });
+    }
+    const pendingCap = checkDailyCap(pending.length);
+    if (!pendingCap.ok) {
+      activeSenders.delete(c.id);
+      return res.status(429).json({ error: pendingCap.error });
+    }
+    const fresh = load('campaigns');
+    const cur = fresh.find(x => x.id === c.id);
+    if (!cur) { activeSenders.delete(c.id); return res.status(404).json({ error: 'not found' }); }
+    if (cur.status === 'sending') { activeSenders.delete(c.id); return res.status(409).json({ error: 'already sending' }); }
+    const sentOk = (Array.isArray(cur.results) ? cur.results : []).filter(r => r.ok).length;
+    cur.status = 'sending';
+    cur.total = Math.max(cur.total || 0, sentOk + (cur.failed || 0) + pending.length);
+    cur.skipped = freshSkipped;
+    cur.startedAt = cur.startedAt || new Date().toISOString();
+    delete cur.completedAt; delete cur.error; delete cur.cancelledAt;
+    save('campaigns', fresh);
+    clog(c.id, 'resume-pending', { pending: pending.length, alreadySent: sentOk });
+    sendCampaignViaBot(c.id, pending).catch(() => clog(c.id, 'send-error', {})).finally(() => activeSenders.delete(c.id));
+    return res.json({ ok: true, mode, total: cur.total, alreadySent: sentOk, pending: pending.length, skipped: freshSkipped });
+  } catch (e) {
+    activeSenders.delete(c.id);
+    throw e;
+  }
 });
 
 async function sendCampaignViaBot(campaignId, phones) {
