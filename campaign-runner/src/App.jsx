@@ -232,7 +232,7 @@ export default function App() {
   });
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  useEffect(() => { api('/api/settings').then(s => { setSettings(s); if (s.botAdminKey) checkBot(s); }); }, []);
+  useEffect(() => { api('/api/settings').then(s => { setSettings(s); checkBot(s); }).catch(() => { checkBot({}); }); }, []);
   const checkBot = async (s) => {
     // Same-origin probe via the runner backend (a direct browser fetch to
     // :8090 would be blocked by the bot's CORS allow-list).
@@ -349,9 +349,41 @@ export default function App() {
 // ═══════════════════════════════════════════
 function DashboardView() {
   const [dash, setDash] = useState(null);
-  const [days, setDays] = useState(7);
+  const [dashErr, setDashErr] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => { api('/api/dashboard').then(setDash); }, []);
+  const loadDash = useCallback(async (quiet = false) => {
+    if (!quiet) setRefreshing(true);
+    try {
+      const d = await api('/api/dashboard');
+      setDash(d);
+      setDashErr('');
+    } catch (e) {
+      setDashErr(e?.message || 'load failed');
+    } finally {
+      setRefreshing(false);
+    }
+  }, []);
+
+  // Refetch on mount, every 15s while visible, and when the tab regains focus —
+  // sends completing elsewhere (other tab, scheduler, background worker) show up.
+  useEffect(() => {
+    loadDash();
+    const t = setInterval(() => { if (!document.hidden) loadDash(true); }, 15000);
+    const onFocus = () => loadDash(true);
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onFocus);
+    return () => { clearInterval(t); window.removeEventListener('focus', onFocus); document.removeEventListener('visibilitychange', onFocus); };
+  }, [loadDash]);
+
+  if (dashErr) {
+    const hint = dashErr === 'unauthorized'
+      ? 'Unauthorized — paste your BOT_ADMIN_KEY in Settings (stored locally as ocp_campaign_admin_key).'
+      : dashErr === 'admin key not configured'
+        ? 'Server misconfigured — set BOT_ADMIN_KEY in campaign-runner/.env (or root .env / bot/.env) and restart npm run dev.'
+        : dashErr;
+    return <div className="flex items-center justify-center h-64 text-zinc-400 text-sm">Dashboard unavailable: {hint}</div>;
+  }
 
   if (!dash) return <div className="flex items-center justify-center h-64 text-zinc-400 text-sm">Loading...</div>;
 
@@ -1659,10 +1691,11 @@ function StepIndicator({ current }) {
 // SETTINGS
 // ═══════════════════════════════════════════
 function SettingsView() {
+  const { toast } = useDialog();
   const [settings, setSettings] = useState({});
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState('');
-  const [adminKey, setAdminKey] = useState(() => { try { return localStorage.getItem('ocp_campaign_admin_key') || ''; } catch { return ''; } });
+  const [adminKey, setAdminKey] = useState(() => getAdminKey());
   const logoRef = useRef();
 
   useEffect(() => { api('/api/settings').then(setSettings).catch(() => {}); }, []);
