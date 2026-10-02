@@ -1211,6 +1211,76 @@ function CustomersView() {
           )}
         </div>
       </div>
+
+      {/* Details modal */}
+      {detail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => setDetail(null)}>
+          <div className="w-full max-w-md bg-white rounded-2xl border border-stone-200 shadow-xl p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-bold text-zinc-900">{detail.name || detail.phone}</h3>
+              <button onClick={() => setDetail(null)} aria-label="Close details" className="p-1.5 rounded-lg hover:bg-stone-100 text-zinc-400"><Icons.X s={14} /></button>
+            </div>
+            <div className="flex flex-col gap-2 text-sm">
+              {[
+                ['Phone', detail.phone],
+                ['Name', detail.name || '—'],
+                ['Tags', (detail.tags || []).length > 0 ? detail.tags.join(', ') : '—'],
+                ['Email', detail.email || '—'],
+                ['Notes', detail.notes || '—'],
+                ['Source', detail.source === 'bot' ? 'Bot (synced)' : 'Imported / manual'],
+                ['Orders', detail.total_orders ?? '—'],
+                ['Total spent', detail.total_spent ?? '—'],
+                ['Added', fmtAdded(detail)],
+                ['Last seen', detail.last_seen_at ? new Date(detail.last_seen_at).toLocaleString() : '—'],
+              ].map(([k, v]) => (
+                <div key={k} className="flex gap-3">
+                  <span className="w-24 shrink-0 text-xs font-medium text-zinc-400">{k}</span>
+                  <span className="text-zinc-800 break-words min-w-0">{String(v)}</span>
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-end gap-2 mt-4">
+              <button onClick={() => { setDetail(null); openBulkMessage([detail.id], detail.name || detail.phone); }}
+                className="px-4 py-2 rounded-xl bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 transition-colors">Message</button>
+              <button onClick={() => setDetail(null)}
+                className="px-4 py-2 rounded-xl border border-stone-200 text-sm font-medium hover:bg-stone-50 transition-colors">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Message modal (single test or bulk selection) */}
+      {msgIds.length > 0 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => { if (!msgBusy) { setMsgIds([]); setMsgText(''); } }}>
+          <div className="w-full max-w-md bg-white rounded-2xl border border-stone-200 shadow-xl p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="text-sm font-bold text-zinc-900">Message {msgLabel}</h3>
+              <button onClick={() => { if (!msgBusy) { setMsgIds([]); setMsgText(''); } }} aria-label="Close message" className="p-1.5 rounded-lg hover:bg-stone-100 text-zinc-400"><Icons.X s={14} /></button>
+            </div>
+            <p className="text-xs text-zinc-500 mb-3">
+              {msgIds.length === 1 ? 'Sends one test message via the bot.' : `Starts a campaign to ${msgIds.length} contacts (tracked under Campaigns).`}
+            </p>
+            <textarea value={msgText} onChange={(e) => setMsgText(e.target.value)} rows={4} maxLength={4096}
+              placeholder="Type your message… (use {name} for personalization in campaigns)"
+              className="w-full px-3 py-2 rounded-xl border border-stone-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-400" />
+            <div className="flex justify-end gap-2 mt-3">
+              <button onClick={() => { setMsgIds([]); setMsgText(''); }} disabled={msgBusy}
+                className="px-4 py-2 rounded-xl border border-stone-200 text-sm font-medium hover:bg-stone-50 disabled:opacity-40 transition-colors">Cancel</button>
+              {msgIds.length === 1 ? (
+                <button onClick={() => sendTestTo(customers.find(c => c.id === msgIds[0])?.phone)} disabled={msgBusy || !msgText.trim()}
+                  className="px-4 py-2 rounded-xl bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 disabled:opacity-40 transition-colors">
+                  {msgBusy ? 'Sending…' : 'Send test'}
+                </button>
+              ) : (
+                <button onClick={sendBulkMessage} disabled={msgBusy || !msgText.trim()}
+                  className="px-4 py-2 rounded-xl bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 disabled:opacity-40 transition-colors">
+                  {msgBusy ? 'Starting…' : `Send to ${msgIds.length}`}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1482,6 +1552,11 @@ function CampaignsView() {
   ]);
   const msgRef = useRef();
   const fileRef = useRef();
+  const [detail, setDetail] = useState(null);
+  const [detailFilter, setDetailFilter] = useState('all');
+  const [detailSearch, setDetailSearch] = useState('');
+  const [detailPreview, setDetailPreview] = useState(null);
+  const [showReuse, setShowReuse] = useState(null);
 
   const load = () => {
     api('/api/campaigns').then(setCampaigns);
@@ -1587,6 +1662,27 @@ function CampaignsView() {
       if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key)) o[key] = v;
     }
     return o;
+  };
+
+  const deliveryRate = (c) => ((c.sent || 0) + (c.failed || 0) > 0 ? Math.round(((c.sent || 0) / ((c.sent || 0) + (c.failed || 0))) * 100) : 0);
+  const fmtDuration = (c) => {
+    if (!c.startedAt) return '—';
+    const end = c.completedAt ? new Date(c.completedAt) : new Date();
+    const s = Math.max(0, Math.round((end - new Date(c.startedAt)) / 1000));
+    if (s < 60) return `${s}s`;
+    const m = Math.floor(s / 60);
+    if (m < 60) return `${m}m ${s % 60}s`;
+    return `${Math.floor(m / 60)}h ${m % 60}m`;
+  };
+  const detailResults = () => {
+    const rows = Array.isArray(detail?.results) ? detail.results : [];
+    const q = detailSearch.trim().toLowerCase();
+    return rows.filter(r => {
+      if (detailFilter === 'ok' && !r.ok) return false;
+      if (detailFilter === 'failed' && r.ok) return false;
+      if (q && !(String(r.phone || '').includes(q) || String(r.name || '').toLowerCase().includes(q))) return false;
+      return true;
+    });
   };
 
   const defaultVarRows = () => ([
@@ -1910,9 +2006,9 @@ function CampaignsView() {
           ) : campaigns.slice().reverse().map((c) => (
             <Card key={c.id}>
               <CardContent className="flex items-start justify-between gap-3 p-4">
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0 cursor-pointer" onClick={() => openDetail(c.id)} title="Open details">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-sm font-bold text-zinc-900">{c.name}</span>
+                    <span className="text-sm font-bold text-zinc-900 hover:text-brand-700">{c.name}</span>
                     <Badge color={c.status === 'draft' ? 'stone' : c.status === 'sending' ? 'blue' : c.status === 'scheduled' ? 'amber' : c.status === 'cancelled' ? 'red' : 'green'}>{c.status}</Badge>
                     <Badge color="brand">{recipientLabel(c)}</Badge>
                     {c.skipped > 0 && <Badge color="amber">{c.skipped} skipped</Badge>}
@@ -1936,23 +2032,48 @@ function CampaignsView() {
                     </div>
                   )}
                 </div>
-                <div className="flex gap-1 ml-4">
+                <div className="flex gap-1 ml-4 items-start" onClick={(e) => e.stopPropagation()}>
                   {(c.status === 'draft' || c.status === 'failed') && (
                     <>
                       <button disabled={sendingIds.has(c.id)} onClick={() => sendCampaign(c.id)} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-brand-600 text-white text-xs font-medium hover:bg-brand-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"><Icons.Send s={12} /> {sendingIds.has(c.id) ? 'Sending…' : 'Send'}</button>
-                      <button onClick={() => { setCompose({ name: c.name, message: c.message, imageUrl: c.imageUrl }); setRecipientMode(modeOf(c)); setRecipientTag(c.recipientTag || 'all'); setSelectedPhones(c.recipientPhones || []); restoreVarRows(c.variables); setScheduledAt(c.scheduledAt || ''); setStep(1); }} className="p-1.5 rounded-lg hover:bg-stone-100 text-zinc-400 hover:text-zinc-600"><Icons.Edit /></button>
+                      <button title="Edit" onClick={() => prefillWizard(c)} className="p-1.5 rounded-lg hover:bg-stone-100 text-zinc-400 hover:text-zinc-600"><Icons.Edit /></button>
+                    </>
+                  )}
+                  {c.status === 'scheduled' && (
+                    <>
+                      <button title="Send now" onClick={() => sendCampaign(c.id)} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-brand-600 text-white text-xs font-medium hover:bg-brand-700 transition-colors"><Icons.Send s={12} /> Send</button>
+                      <button title="Edit" onClick={() => prefillWizard(c)} className="p-1.5 rounded-lg hover:bg-stone-100 text-zinc-400 hover:text-zinc-600"><Icons.Edit /></button>
+                      <button title="Details" onClick={() => openDetail(c.id)} className="p-1.5 rounded-lg hover:bg-stone-100 text-zinc-400 hover:text-zinc-600"><Icons.Eye s={14} /></button>
+                      <button title="Cancel schedule" onClick={() => cancelCampaign(c.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-zinc-400 hover:text-red-500"><Icons.X /></button>
+                      <button title="Reuse as new campaign" onClick={() => duplicateCampaign(c)} className="p-1.5 rounded-lg hover:bg-stone-100 text-zinc-400 hover:text-zinc-600"><Icons.Copy s={14} /></button>
+                      <button title="Delete" onClick={() => removeCampaign(c.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-zinc-400 hover:text-red-500"><Icons.Trash /></button>
                     </>
                   )}
                   {c.status === 'sending' && (
-                    <button onClick={() => { setShowProgress(c.id); setLiveCampaign(c); }} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-blue-50 text-blue-700 text-xs font-medium hover:bg-blue-100 transition-colors"><Icons.Eye /> Progress</button>
-                  )}
-                  {c.status === 'sending' && (
-                    <button onClick={() => cancelCampaign(c.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-zinc-400 hover:text-red-500"><Icons.X /></button>
-                  )}
-                  {(c.status === 'draft' || c.status === 'done' || c.status === 'cancelled') && (
                     <>
-                      <button title="Reuse as new campaign" onClick={() => duplicateCampaign(c.id)} className="p-1.5 rounded-lg hover:bg-stone-100 text-zinc-400 hover:text-zinc-600"><Icons.Copy s={14} /></button>
-                      <button onClick={() => removeCampaign(c.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-zinc-400 hover:text-red-500"><Icons.Trash /></button>
+                      <button onClick={() => { setShowProgress(c.id); setLiveCampaign(c); }} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-blue-50 text-blue-700 text-xs font-medium hover:bg-blue-100 transition-colors"><Icons.Eye /> Progress</button>
+                      <button title="Cancel" onClick={() => cancelCampaign(c.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-zinc-400 hover:text-red-500"><Icons.X /></button>
+                    </>
+                  )}
+                  {(c.status === 'done' || c.status === 'failed' || c.status === 'cancelled') && (
+                    <>
+                      <button title="Details" onClick={() => openDetail(c.id)} className="p-1.5 rounded-lg hover:bg-stone-100 text-zinc-400 hover:text-zinc-600"><Icons.Eye s={14} /></button>
+                      <div className="relative">
+                        <button title="Reuse options" onClick={() => setShowReuse(v => (v === c.id ? null : c.id))} className="p-1.5 rounded-lg hover:bg-stone-100 text-zinc-400 hover:text-zinc-600"><Icons.MoreVert s={14} /></button>
+                        {showReuse === c.id && (
+                          <div className="absolute right-0 z-30 mt-1 w-56 bg-white rounded-xl border border-stone-200 shadow-lg p-1.5">
+                            <button onClick={() => { setShowReuse(null); resendAll(c); }} className="w-full text-left px-3 py-2 rounded-lg text-xs font-medium hover:bg-stone-100">Resend to same audience</button>
+                            {failedCount(c) > 0 && (
+                              <button onClick={() => { setShowReuse(null); retryFailed(c); }} className="w-full text-left px-3 py-2 rounded-lg text-xs font-medium hover:bg-stone-100">Retry {failedCount(c)} failed</button>
+                            )}
+                            <button onClick={() => { setShowReuse(null); prefillWizard(c, ' (copy)', 2); }} className="w-full text-left px-3 py-2 rounded-lg text-xs font-medium hover:bg-stone-100">Send to new audience…</button>
+                            <button onClick={() => { setShowReuse(null); duplicateCampaign(c); }} className="w-full text-left px-3 py-2 rounded-lg text-xs font-medium hover:bg-stone-100">Copy to composer…</button>
+                            <button onClick={() => { setShowReuse(null); saveAsTemplate(c); }} className="w-full text-left px-3 py-2 rounded-lg text-xs font-medium hover:bg-stone-100">Save as template</button>
+                            <button onClick={() => { setShowReuse(null); exportResults(c); }} className="w-full text-left px-3 py-2 rounded-lg text-xs font-medium hover:bg-stone-100">Export results CSV</button>
+                          </div>
+                        )}
+                      </div>
+                      <button title="Delete" onClick={() => removeCampaign(c.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-zinc-400 hover:text-red-500"><Icons.Trash /></button>
                     </>
                   )}
                 </div>
@@ -1987,6 +2108,92 @@ function CampaignsView() {
                 <div className="text-center text-sm text-emerald-600 font-bold">Campaign completed!</div>
               )}
               <button onClick={() => { setShowProgress(null); setLiveCampaign(null); load(); }} className="w-full py-2 rounded-xl border border-stone-200 text-sm font-medium hover:bg-stone-50">Close</button>
+            </div>
+          </Modal>
+        )}
+
+        {/* Campaign detail drawer (all statuses) */}
+        {detail && (
+          <Modal open={true} onClose={() => setDetail(null)} title={detail.name} wide>
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center gap-4">
+                <div className="relative size-20 shrink-0 rounded-full transition-all" title={`Delivery rate ${deliveryRate(detail)}%`}
+                  style={{ background: `conic-gradient(#059669 ${deliveryRate(detail) * 3.6}deg, #e7e5e4 0deg)` }}>
+                  <div className="absolute inset-2 bg-white rounded-full flex items-center justify-center text-sm font-bold text-zinc-900">{deliveryRate(detail)}%</div>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Badge color={detail.status === 'draft' ? 'stone' : detail.status === 'sending' ? 'blue' : detail.status === 'scheduled' ? 'amber' : detail.status === 'cancelled' ? 'red' : 'green'}>{detail.status}</Badge>
+                    {detail.status === 'sending' && <span className="text-[10px] text-blue-600 font-medium animate-pulse">live</span>}
+                    <button onClick={refreshDetail} title="Refresh stats" className="p-1.5 rounded-lg hover:bg-stone-100 text-zinc-400 hover:text-zinc-600"><Icons.Clock s={14} /></button>
+                  </div>
+                  <div className="w-full h-2.5 rounded-full overflow-hidden flex bg-stone-100 mt-2" title={`${detail.sent || 0} sent · ${detail.failed || 0} failed · ${Math.max(0, (detail.total || 0) - (detail.sent || 0) - (detail.failed || 0))} pending`}>
+                    <div className="bg-emerald-500 h-full transition-all" style={{ width: `${detail.total ? ((detail.sent || 0) / detail.total) * 100 : 0}%` }} />
+                    <div className="bg-red-400 h-full transition-all" style={{ width: `${detail.total ? ((detail.failed || 0) / detail.total) * 100 : 0}%` }} />
+                  </div>
+                  <div className="flex justify-between mt-1 text-[11px] text-zinc-500">
+                    <span>{(detail.sent || 0) + (detail.failed || 0)} / {detail.total || 0} processed{(detail.skipped || 0) > 0 && ` · ${detail.skipped} skipped`}</span>
+                    <span>{fmtDuration(detail)}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-xs bg-stone-50 rounded-xl px-3 py-2">
+                <span className="text-zinc-500">Audience: <span className="font-medium text-zinc-800">{recipientLabel(detail)}</span></span>
+                {detailPreview && <span className="text-zinc-500">· <span className="font-medium text-zinc-800">{detailPreview.sendable}</span> reachable now{detailPreview.skipped > 0 && ` (${detailPreview.skipped} invalid)`}{detailPreview.blocked > 0 && ` (${detailPreview.blocked} known-bad auto-skipped)`}</span>}
+                {(detail.status === 'draft' || detail.status === 'failed' || detail.status === 'scheduled') && (
+                  <button onClick={() => { const d = detail; setDetail(null); prefillWizard(d, '', 2); }} className="ml-auto font-medium text-brand-700 hover:text-brand-800 underline underline-offset-2">Edit audience…</button>
+                )}
+              </div>
+              {detail.scheduledAt && <div className="text-xs text-amber-600 inline-flex items-center gap-1"><Icons.Clock /> Scheduled: {new Date(detail.scheduledAt).toLocaleString()}</div>}
+              <div className="flex flex-wrap gap-2">
+                {['all', 'ok', 'failed'].map(f => (
+                  <button key={f} onClick={() => setDetailFilter(f)}
+                    className={cn('px-3 py-1.5 rounded-lg text-xs font-medium', detailFilter === f ? 'bg-zinc-900 text-white' : 'bg-stone-100 text-zinc-600 hover:bg-stone-200')}>
+                    {f === 'all' ? `All (${(detail.results || []).length})` : f === 'ok' ? `Sent (${(detail.results || []).filter(r => r.ok).length})` : `Failed (${failedCount(detail)})`}
+                  </button>
+                ))}
+                <input value={detailSearch} onChange={(e) => setDetailSearch(e.target.value)} placeholder="Search phone or name…"
+                  className="flex-1 min-w-[140px] px-3 py-1.5 rounded-lg border border-stone-200 text-xs focus:outline-none focus:border-brand-400" />
+              </div>
+              <div className="flex flex-col gap-1 max-h-64 overflow-y-auto">
+                {detailResults().length === 0 && <div className="text-xs text-zinc-400 text-center py-4">No results yet — send the campaign to populate this.</div>}
+                {detailResults().map((r, i) => (
+                  <div key={i} onClick={() => copyPhone(r.phone)} title="Click to copy phone"
+                    className={cn('flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg cursor-pointer', { 'bg-emerald-50 hover:bg-emerald-100': r.ok, 'bg-red-50 hover:bg-red-100': !r.ok })}>
+                    {r.ok ? <span className="text-emerald-600"><Icons.Check /></span> : <span className="text-red-500"><Icons.X /></span>}
+                    <span className="font-mono text-zinc-700">{r.phone}</span>
+                    <span className="text-zinc-500 truncate">{r.name}</span>
+                    {!r.ok && r.error && <span className="text-red-500 truncate" title={r.error}>{r.error}</span>}
+                    {r.sentAt && <span className="text-zinc-400 shrink-0">{new Date(r.sentAt).toLocaleTimeString()}</span>}
+                    {!r.ok && (
+                      <button onClick={(e) => { e.stopPropagation(); retryOne(r.phone); }} title={`Retry ${r.phone}`}
+                        className="ml-auto shrink-0 px-2 py-1 rounded-lg bg-white border border-red-200 text-red-600 text-[11px] font-bold hover:bg-red-500 hover:text-white transition-colors">Retry</button>
+                    )}
+                    {r.ok && r.sentAt && <span className="ml-auto shrink-0" />}
+                  </div>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-2 pt-1 border-t border-stone-100">
+                {(detail.status === 'cancelled' || detail.status === 'failed') && (
+                  <>
+                    <button onClick={() => resumeCampaign(detail, 'pending')} className="px-3 py-2 rounded-xl bg-brand-600 text-white text-xs font-bold hover:bg-brand-700">Resume — {Math.max(0, (detail.total || 0) - (detail.results || []).filter(r => r.ok).length - failedCount(detail))} pending</button>
+                    <button onClick={() => resumeCampaign(detail, 'all')} className="px-3 py-2 rounded-xl border border-red-200 text-red-600 text-xs font-medium hover:bg-red-50">Resend to all {detail.total || 0}</button>
+                  </>
+                )}
+                {detail.status === 'done' && (
+                  <button onClick={() => { setDetail(null); resendAll(detail); }} className="px-3 py-2 rounded-xl bg-brand-600 text-white text-xs font-bold hover:bg-brand-700">Resend all</button>
+                )}
+                {failedCount(detail) > 0 && (detail.status === 'failed' || detail.status === 'done') && (
+                  <button onClick={() => { setDetail(null); retryFailed(detail); }} className="px-3 py-2 rounded-xl border border-brand-200 text-brand-700 text-xs font-bold hover:bg-brand-50">Retry {failedCount(detail)} failed</button>
+                )}
+                <button onClick={() => { const d = detail; setDetail(null); prefillWizard(d, ' (copy)', 2); }} className="px-3 py-2 rounded-xl border border-stone-200 text-xs font-medium hover:bg-stone-50">New audience…</button>
+                <button onClick={() => { const d = detail; setDetail(null); duplicateCampaign(d); }} className="px-3 py-2 rounded-xl border border-stone-200 text-xs font-medium hover:bg-stone-50">Copy</button>
+                <button onClick={() => saveAsTemplate(detail)} className="px-3 py-2 rounded-xl border border-stone-200 text-xs font-medium hover:bg-stone-50">Save as template</button>
+                <button onClick={() => exportResults(detail)} className="px-3 py-2 rounded-xl border border-stone-200 text-xs font-medium hover:bg-stone-50">Export CSV</button>
+                {(detail.status === 'draft' || detail.status === 'failed' || detail.status === 'scheduled' || detail.status === 'done' || detail.status === 'cancelled') && (
+                  <button onClick={async () => { const id = detail.id; setDetail(null); await removeCampaign(id); }} className="px-3 py-2 rounded-xl border border-red-200 text-red-600 text-xs font-medium hover:bg-red-50">Delete</button>
+                )}
+              </div>
             </div>
           </Modal>
         )}
