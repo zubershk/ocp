@@ -575,13 +575,20 @@ function CustomersView() {
     e.preventDefault();
     setDragOver(false);
     const file = e.dataTransfer.files[0];
-    if (file?.name.endsWith('.csv')) handleFile(file);
+    if (file && /\.(csv|xlsx|xls)$/i.test(file.name)) handleFile(file);
   };
 
-  const exportCsv = () => { window.open(`${API}/api/customers/export`); };
+  // Export respects the current filters (search/tags/source/dates/sort).
+  const exportCsv = async () => {
+    try {
+      await downloadCsv(`${API}/api/customers/export?${filterParams(false)}`, 'customers.csv');
+    } catch (e) {
+      toast(e?.message || 'export failed');
+    }
+  };
 
   const clearAll = async () => {
-    if (!confirm('Delete ALL customers? This cannot be undone.')) return;
+    if (!(await confirm('Delete ALL customers? This cannot be undone.', { title: 'Delete all customers' }))) return;
     await api('/api/customers', { method: 'DELETE' });
     load();
   };
@@ -601,23 +608,30 @@ function CustomersView() {
         </div>
         <div className="flex gap-2">
           <button onClick={exportCsv} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-stone-200 bg-white text-sm font-medium text-zinc-700 hover:bg-stone-50 transition-colors"><Icons.Download /> Export</button>
-          <label className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-stone-200 bg-white text-sm font-medium cursor-pointer hover:bg-stone-50 transition-colors"><Icons.Upload /> Import CSV<input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={(e) => handleFile(e.target.files[0])} /></label>
+          <label className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-stone-200 bg-white text-sm font-medium cursor-pointer hover:bg-stone-50 transition-colors"><Icons.Upload /> Import<input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={(e) => handleFile(e.target.files[0])} /></label>
           <button onClick={() => { setForm({ phone: '', name: '', tags: '', email: '', notes: '' }); setEditing(null); setShowAdd(!showAdd); }} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 transition-colors"><Icons.Plus /> Add Customer</button>
         </div>
       </div>
 
       {/* Import result */}
       {importResult && (
-        <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 flex flex-wrap items-center justify-between gap-3">
-          <span className="text-sm text-emerald-700">Imported {importResult.imported} customers ({importResult.skipped} skipped). Total: {importResult.total}</span>
-          <button onClick={() => setImportResult(null)}><Icons.X /></button>
-        </div>
+        importResult.error ? (
+          <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+            <span className="text-sm text-red-700">Import failed: {importResult.error}</span>
+            <button onClick={() => setImportResult(null)}><Icons.X /></button>
+          </div>
+        ) : (
+          <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+            <span className="text-sm text-emerald-700">Imported {importResult.imported} customers ({importResult.skipped} skipped). Total: {importResult.total}{importResult.truncated ? ' · only first 10,000 rows processed' : ''}</span>
+            <button onClick={() => setImportResult(null)}><Icons.X /></button>
+          </div>
+        )
       )}
 
       {/* Drag-drop zone */}
       {dragOver && (
         <div className="fixed inset-0 z-40 bg-brand-50/80 border-4 border-dashed border-brand-400 flex items-center justify-center" onDragOver={(e) => e.preventDefault()} onDrop={handleDrop} onDragLeave={() => setDragOver(false)}>
-          <div className="text-center"><Icons.Upload s={48} /><p className="text-lg font-bold text-brand-700 mt-2">Drop CSV file here</p></div>
+          <div className="text-center"><Icons.Upload s={48} /><p className="text-lg font-bold text-brand-700 mt-2">Drop CSV or Excel file here</p></div>
         </div>
       )}
 
