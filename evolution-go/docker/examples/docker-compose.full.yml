@@ -1,3 +1,7 @@
+# EXAMPLE ONLY — DO NOT USE IN PRODUCTION.
+# This file ships well-known default credentials (admin:admin, minioadmin)
+# so the stack boots locally. Production must override every credential
+# via environment; see evolution-go/.env.example.
 version: '3.8'
 
 services:
