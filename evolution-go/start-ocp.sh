@@ -4,7 +4,7 @@
 #  waits for both ports, prints one status line each.
 #
 #  Usage (from Windows PowerShell/cmd):
-#      wsl -e -e bash /home/user/Downloads/evolution-go/start-ocp.sh
+#      wsl -e bash ~/start-ocp.sh
 #
 #  Usage (from inside WSL):
 #      ~/start-ocp.sh   (if you symlink it)

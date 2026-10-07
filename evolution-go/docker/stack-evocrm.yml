@@ -10,17 +10,18 @@ services:
       SERVER_PORT: 3300
       CLIENT_NAME: "evolution"
 
-      # Segurança (ALTERE a chave abaixo)
-      GLOBAL_API_KEY: "***REMOVED_API_KEY***"
+      # Segurança — provide via environment, never commit real values.
+      # Generate: openssl rand -hex 16
+      GLOBAL_API_KEY: "${GLOBAL_API_KEY:?set GLOBAL_API_KEY}"
 
       # Banco de Dados PostgreSQL (serviço 'postgres' já existente)
-      POSTGRES_AUTH_DB: "postgresql://***REMOVED_DB_CREDS***@postgres:5432/removed_db?sslmode=disable"
-      POSTGRES_USERS_DB: "postgresql://***REMOVED_DB_CREDS***@postgres:5432/removed_db?sslmode=disable"
+      POSTGRES_AUTH_DB: "${POSTGRES_AUTH_DB:?set POSTGRES_AUTH_DB}"
+      POSTGRES_USERS_DB: "${POSTGRES_USERS_DB:?set POSTGRES_USERS_DB}"
       POSTGRES_HOST: "postgres"
       POSTGRES_PORT: "5432"
       POSTGRES_USER: "${POSTGRES_USER:?set POSTGRES_USER}"
-      POSTGRES_PASSWORD: "***REMOVED***"
-      POSTGRES_DB: "removed_db"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"
+      POSTGRES_DB: "${POSTGRES_DB:?set POSTGRES_DB}"
       DATABASE_SAVE_MESSAGES: "false"
 
       # Logs e Debug
@@ -67,7 +68,7 @@ services:
       labels:
         - traefik.enable=true
         - traefik.docker.network=papi
-        - traefik.http.routers.evocrm.rule=Host(`evocrm.example.com`)
+          - traefik.http.routers.evocrm.rule=Host(`evocrm.example.com`)
         - traefik.http.routers.evocrm.entrypoints=websecure
         - traefik.http.routers.evocrm.tls=true
         - traefik.http.routers.evocrm.tls.certresolver=letsencryptresolver

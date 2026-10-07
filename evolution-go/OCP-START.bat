@@ -7,7 +7,7 @@ echo.
 wsl --shutdown
 timeout /t 5 /nobreak >nul
 
-wsl -e -e bash /home/user/Downloads/evolution-go/start-ocp.sh
+wsl -e bash ~/start-ocp.sh
 
 echo.
 echo ================================================
@@ -16,4 +16,4 @@ echo   Closing this window will stop the server
 echo ================================================
 
 :: Keep-alive: holds WSL VM open permanently
-wsl -e -e bash -c "while true; do sleep 3600; done"
+wsl -e bash -c "while true; do sleep 3600; done"

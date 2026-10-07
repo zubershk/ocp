@@ -1,14 +1,21 @@
-# Secrets
+# Secrets — never commit real credentials; see D0 deployability notes.
 bot/.env
 bot/.env.local
 .env
 .env.local
+.env.bak.*
+.env.backup
+*.bak
+*.env.production
 frontend/.env
 frontend/.env.local
 evolution-go/.env
 evolution-go/.env.local
 campaign-runner/.env
 campaign-runner/.env.local
+!*.env.example
+*_SERVICE_ACCOUNT*.json
+credentials*.json
 *.pem
 *.key
 *.p12
