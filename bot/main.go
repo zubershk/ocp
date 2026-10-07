@@ -53,8 +53,8 @@ func main() {
 	}
 	// Seed owner from BOT_ADMIN_KEY if no admin_users yet (SaaS bootstrap)
 	admin.EnsureOwnerSeed(cfg)
-	// Ensure bootstrap tenant rows exist (idempotent; mirrors 021)
-	admin.EnsureTenantBootstrap()
+	// Ensure bootstrap tenant rows exist using env-driven identity (idempotent; mirrors 021)
+	admin.EnsureTenantBootstrap(cfg)
 
 	// Load business config from DB (sizes, payments, icons, delivery fee, etc.)
 	services.LoadBusinessConfig()
@@ -74,8 +74,10 @@ func main() {
 		botMessageService.SetBrandName(rc.Name)
 	} else if cfg.RestaurantName != "" {
 		botMessageService.SetBrandName(cfg.RestaurantName)
+	} else if cfg.InitialOrgName != "" {
+		botMessageService.SetBrandName(cfg.InitialOrgName)
 	} else {
-		botMessageService.SetBrandName("Orange Cheese Pizza")
+		botMessageService.SetBrandName("Restaurant")
 	}
 
 	// Initialize bot handler
@@ -378,7 +380,14 @@ func main() {
 	// Start server — SaaS graceful shutdown (drains in-flight orders)
 	addr := ":" + cfg.BotPort
 	srv := &http.Server{Addr: addr, Handler: router}
-	log.Printf("Starting Orange Cheese Pizza Bot on %s", addr)
+	brand := cfg.RestaurantName
+if brand == "" {
+	brand = cfg.InitialOrgName
+}
+if brand == "" {
+	brand = "Restaurant"
+}
+log.Printf("Starting %s Bot on %s", brand, addr)
 	log.Printf("Webhook endpoint: http://localhost%s/webhook/evolution", addr)
 
 	// Configure webhook in Evolution GO — use Docker service hostname when running in compose

@@ -17,7 +17,14 @@ type Config struct {
 	SecurityConfig
 	IntegrationConfig
 	DeploymentConfig
-	// D2-owned restaurant identity (tenant configuration, not deployment).
+	// D2-owned tenant bootstrap identity (environment-driven, no OCP defaults).
+	InitialOrgName      string
+	InitialOrgSlug      string
+	InitialCurrency     string
+	InitialTimezone     string
+	InitialOutletName   string
+	TemplateRestaurantSlug string
+	// Restaurant identity (runtime, not bootstrap).
 	RestaurantName           string
 	RestaurantPhone          string
 	RestaurantAddress        string
@@ -107,7 +114,7 @@ func Load() *Config {
 		IntegrationConfig: IntegrationConfig{
 			EvolutionAPIURL:        getEnv("EVOLUTION_API_URL", "http://localhost:8080"),
 			EvolutionAPIKey:        getEnv("EVOLUTION_API_KEY", ""),
-			EvolutionInstance:      getEnv("EVOLUTION_INSTANCE", "OCP"),
+			EvolutionInstance:      getEnv("EVOLUTION_INSTANCE", "restaurant"),
 			EvolutionInstanceToken: getEnv("EVOLUTION_INSTANCE_TOKEN", ""),
 			RedisURL:               getEnv("REDIS_URL", ""),
 			RazorpayKeyID:          getEnv("RAZORPAY_KEY_ID", ""),
@@ -118,9 +125,15 @@ func Load() *Config {
 			PublicBaseURL:  strings.TrimRight(getEnv("PUBLIC_BASE_URL", ""), "/"),
 			SingleTenant:   strings.EqualFold(getEnv("SINGLE_TENANT_MODE", "true"), "true") || getEnv("SINGLE_TENANT_MODE", "true") == "1",
 			BillingEnabled: false, // open-source only; SaaS billing disabled (enable via code change)
-			BaseDomain:     strings.TrimSpace(getEnv("BASE_DOMAIN", "ocp.app")),
+			BaseDomain:     strings.TrimSpace(getEnv("BASE_DOMAIN", "")),
 		},
-		RestaurantName:           getEnv("RESTAURANT_NAME", "Orange Cheese Pizza"),
+		InitialOrgName:      getEnv("INITIAL_ORG_NAME", ""),
+		InitialOrgSlug:      strings.ToLower(strings.TrimSpace(getEnv("INITIAL_ORG_SLUG", ""))),
+		InitialCurrency:     strings.ToUpper(strings.TrimSpace(getEnv("INITIAL_CURRENCY", "INR"))),
+		InitialTimezone:     getEnv("INITIAL_TIMEZONE", "UTC"),
+		InitialOutletName:   getEnv("INITIAL_OUTLET_NAME", "Main Outlet"),
+		TemplateRestaurantSlug: strings.ToLower(strings.TrimSpace(getEnv("TEMPLATE_RESTAURANT_SLUG", ""))),
+		RestaurantName:           getEnv("RESTAURANT_NAME", ""),
 		RestaurantPhone:          getEnv("RESTAURANT_PHONE", ""),
 		RestaurantAddress:        getEnv("RESTAURANT_ADDRESS", ""),
 		RestaurantMapURL:         getEnv("RESTAURANT_MAP_URL", ""),

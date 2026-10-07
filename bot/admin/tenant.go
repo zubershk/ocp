@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"orangecheesepizza/bot/config"
 	"orangecheesepizza/bot/database"
 )
 
@@ -217,40 +218,72 @@ func (h *AdminHandler) hasPermissions(orgID int, role string, permKeys []string)
 	return true
 }
 
-// EnsureTenantBootstrap guarantees the bootstrap tenant exists:
-// OCP organization -> OCP restaurant -> Main Outlet. Idempotent and
-// a no-op on existing installations (mirrors migration 021 for DBs
-// created outside the migration path).
-func EnsureTenantBootstrap() {
+// EnsureTenantBootstrap guarantees the bootstrap tenant exists using
+// environment-driven identity. Idempotent and a no-op on existing
+// installations (mirrors migration 021 for DBs created outside the
+// migration path).
+func EnsureTenantBootstrap(cfg *config.Config) {
 	var orgID int
-	err := database.DB.QueryRow(`SELECT id FROM organizations WHERE slug='ocp'`).Scan(&orgID)
+	slug := cfg.InitialOrgSlug
+	if slug == "" {
+		slug = "default"
+	}
+	err := database.DB.QueryRow(`SELECT id FROM organizations WHERE slug=$1`, slug).Scan(&orgID)
 	if err == sql.ErrNoRows {
+		name := cfg.InitialOrgName
+		if name == "" {
+			name = "Restaurant"
+		}
 		err = database.DB.QueryRow(
-			`INSERT INTO organizations (name, slug) VALUES ('Orange Cheese Pizza','ocp') RETURNING id`).Scan(&orgID)
+			`INSERT INTO organizations (name, slug) VALUES ($1,$2) RETURNING id`, name, slug).Scan(&orgID)
 	}
 	if err != nil {
 		return
 	}
+
 	var restID int
+	restSlug := cfg.TemplateRestaurantSlug
+	if restSlug == "" {
+		restSlug = slug
+	}
 	err = database.DB.QueryRow(
-		`SELECT id FROM restaurants WHERE organization_id=$1 AND slug='ocp'`, orgID).Scan(&restID)
+		`SELECT id FROM restaurants WHERE organization_id=$1 AND slug=$2`, orgID, restSlug).Scan(&restID)
 	if err == sql.ErrNoRows {
+		name := cfg.RestaurantName
+		if name == "" {
+			name = cfg.InitialOrgName
+		}
+		if name == "" {
+			name = "Restaurant"
+		}
+		currency := cfg.InitialCurrency
+		if currency == "" {
+			currency = "INR"
+		}
+		timezone := cfg.InitialTimezone
+		if timezone == "" {
+			timezone = "UTC"
+		}
 		err = database.DB.QueryRow(
 			`INSERT INTO restaurants (organization_id, name, slug, currency, timezone)
-			 VALUES ($1,'Orange Cheese Pizza','ocp','INR','Asia/Kolkata') RETURNING id`, orgID).Scan(&restID)
+			 VALUES ($1,$2,$3,$4,$5) RETURNING id`, orgID, name, restSlug, currency, timezone).Scan(&restID)
 	}
 	if err != nil {
 		return
 	}
-	// Main Outlet only when the restaurant has no outlets at all
-	// (fresh installs) — never invent outlets for live restaurants.
+
+	outletName := cfg.InitialOutletName
+	if outletName == "" {
+		outletName = "Main Outlet"
+	}
 	var outletCount int
 	if err := database.DB.QueryRow(
 		`SELECT COUNT(*) FROM outlets WHERE restaurant_id = $1`, restID).Scan(&outletCount); err == nil && outletCount == 0 {
 		_, _ = database.DB.Exec(
 			`INSERT INTO outlets (restaurant_id, name, slug, active, sort_order)
-			 VALUES ($1,'Main Outlet','main',true,0) ON CONFLICT (restaurant_id, slug) DO NOTHING`, restID)
+			 VALUES ($1,$2,'main',true,0) ON CONFLICT (restaurant_id, slug) DO NOTHING`, restID, outletName)
 	}
+
 	_, _ = database.DB.Exec(
 		`INSERT INTO subscriptions (organization_id, plan, status) VALUES ($1,'free','active')
 		 ON CONFLICT (organization_id) DO NOTHING`, orgID)

@@ -65,6 +65,17 @@ func NewBotHandler(
 	}
 }
 
+func (h *BotHandler) brandName() string {
+	if h.config.RestaurantName != "" {
+		return h.config.RestaurantName
+	}
+	if h.config.InitialOrgName != "" {
+		return h.config.InitialOrgName
+	}
+	return "Restaurant"
+}
+
+
 func (h *BotHandler) ProcessMessage(phone, text, messageID string) error {
 	// Check for duplicate message
 	if h.isDuplicateMessage(messageID) {
@@ -183,7 +194,7 @@ func (h *BotHandler) handleWelcome(phone string, state *models.CustomerState) er
 		{Type: "reply", DisplayText: "💬 Talk to Us", ID: "talk_to_us"},
 	}
 
-	return h.evolutionClient.SendButton(phone, h.config.RestaurantName, welcomeText, "Orange Cheese Pizza", buttons)
+	return h.evolutionClient.SendButton(phone, h.config.RestaurantName, welcomeText, h.brandName(), buttons)
 }
 
 func (h *BotHandler) handleMainMenu(phone string, state *models.CustomerState, text string) error {
@@ -233,7 +244,7 @@ func (h *BotHandler) handleShowCategories(phone string, state *models.CustomerSt
 		"📋 Menu Categories",
 		"Select a category to browse:",
 		"View Menu",
-		"Orange Cheese Pizza",
+		h.brandName(),
 		sections,
 	)
 }
@@ -283,7 +294,7 @@ func (h *BotHandler) handleShowCategoryItems(phone string, state *models.Custome
 		fmt.Sprintf("🍕 %s", categoryName),
 		"Select an item to add to cart:",
 		"Choose Item",
-		"Orange Cheese Pizza",
+		h.brandName(),
 		sections,
 	)
 }
@@ -333,7 +344,7 @@ func (h *BotHandler) handleShowItemDetails(phone string, state *models.CustomerS
 			fmt.Sprintf("🍕 %s - ₹%.2f", item.Name, item.Price),
 			item.Description,
 			"Select Options",
-			"Orange Cheese Pizza",
+			h.brandName(),
 			sections,
 		)
 	}
@@ -414,7 +425,7 @@ func (h *BotHandler) handleShowQuantitySelector(phone string, state *models.Cust
 
 	text := fmt.Sprintf("%s - ₹%.2f%s\n\nHow many would you like?", currentItem.Name, currentItem.Price, optionsText)
 
-	return h.evolutionClient.SendButton(phone, "Select Quantity", text, "Orange Cheese Pizza", buttons)
+	return h.evolutionClient.SendButton(phone, "Select Quantity", text, h.brandName(), buttons)
 }
 
 func (h *BotHandler) handleCart(phone string, state *models.CustomerState, text string, context map[string]interface{}) error {
@@ -486,7 +497,7 @@ func (h *BotHandler) handleShowCart(phone string, state *models.CustomerState) e
 		{Type: "reply", DisplayText: "🗑️ Clear Cart", ID: "clear_cart"},
 	}
 
-	return h.evolutionClient.SendButton(phone, "Your Cart", cartText.String(), "Orange Cheese Pizza", buttons)
+	return h.evolutionClient.SendButton(phone, "Your Cart", cartText.String(), h.brandName(), buttons)
 }
 
 func (h *BotHandler) handleClearCart(phone string, state *models.CustomerState) error {
@@ -518,7 +529,7 @@ func (h *BotHandler) handleCheckout(phone string, state *models.CustomerState) e
 		{Type: "reply", DisplayText: "🏪 Pickup", ID: "pickup"},
 	}
 
-	return h.evolutionClient.SendButton(phone, "Delivery or Pickup?", "How would you like to receive your order?", "Orange Cheese Pizza", buttons)
+	return h.evolutionClient.SendButton(phone, "Delivery or Pickup?", "How would you like to receive your order?", h.brandName(), buttons)
 }
 
 func (h *BotHandler) handleDeliveryType(phone string, state *models.CustomerState, text string, context map[string]interface{}) error {
@@ -586,7 +597,7 @@ func (h *BotHandler) handleShowPaymentMethods(phone string, state *models.Custom
 		{Type: "reply", DisplayText: "💳 Online Payment", ID: "online"},
 	}
 
-	return h.evolutionClient.SendButton(phone, "Payment Method", "How would you like to pay?", "Orange Cheese Pizza", buttons)
+	return h.evolutionClient.SendButton(phone, "Payment Method", "How would you like to pay?", h.brandName(), buttons)
 }
 
 func (h *BotHandler) handlePaymentMethod(phone string, state *models.CustomerState, text string, context map[string]interface{}) error {
@@ -668,7 +679,7 @@ func (h *BotHandler) handleShowOrderSummary(phone string, context map[string]int
 		{Type: "reply", DisplayText: "❌ Cancel", ID: "cancel_order"},
 	}
 
-	return h.evolutionClient.SendButton(phone, "Order Summary", summary.String(), "Orange Cheese Pizza", buttons)
+	return h.evolutionClient.SendButton(phone, "Order Summary", summary.String(), h.brandName(), buttons)
 }
 
 func (h *BotHandler) handleOrderConfirmation(phone string, state *models.CustomerState, text string, context map[string]interface{}) error {
@@ -783,7 +794,7 @@ func (h *BotHandler) handleRestaurantInfo(phone string, state *models.CustomerSt
 		{Type: "reply", DisplayText: "🔙 Back to Menu", ID: "main_menu"},
 	}
 
-	return h.evolutionClient.SendButton(phone, "Restaurant Info", info.String(), "Orange Cheese Pizza", buttons)
+	return h.evolutionClient.SendButton(phone, "Restaurant Info", info.String(), h.brandName(), buttons)
 }
 
 func (h *BotHandler) handleOpeningHours(phone string, state *models.CustomerState) error {
@@ -811,7 +822,7 @@ func (h *BotHandler) handleOpeningHours(phone string, state *models.CustomerStat
 		{Type: "reply", DisplayText: "🏠 Main Menu", ID: "main_menu"},
 	}
 
-	return h.evolutionClient.SendButton(phone, "Opening Hours", hours.String(), "Orange Cheese Pizza", buttons)
+	return h.evolutionClient.SendButton(phone, "Opening Hours", hours.String(), h.brandName(), buttons)
 }
 
 func (h *BotHandler) handleLocation(phone string, state *models.CustomerState) error {
@@ -841,7 +852,7 @@ func (h *BotHandler) handleLocation(phone string, state *models.CustomerState) e
 		{Type: "reply", DisplayText: "🏠 Main Menu", ID: "main_menu"},
 	}
 
-	return h.evolutionClient.SendButton(phone, "Location", location.String(), "Orange Cheese Pizza", buttons)
+	return h.evolutionClient.SendButton(phone, "Location", location.String(), h.brandName(), buttons)
 }
 
 func (h *BotHandler) handleHumanSupport(phone string, state *models.CustomerState) error {
