@@ -34,24 +34,11 @@ func main() {
 		}
 	}
 
-	// Load configuration
+	// Load configuration. Validate() is the single controlled gate:
+	// required deployment values fatal, dev-only defaults applied inside.
 	cfg := config.Load()
-
-	// Security: CORS origins must be explicit in production. GIN_MODE=release
-	// (baked into the Docker image) refuses to start without CORS_ALLOWED_ORIGINS;
-	// local dev falls back to the Vite localhost defaults.
-	if !cfg.CORSAllowedOriginsSet {
-		if os.Getenv("GIN_MODE") == "release" {
-			log.Fatal("SECURITY: CORS_ALLOWED_ORIGINS must be set explicitly when GIN_MODE=release")
-		}
-		cfg.CORSAllowedOrigins = "http://localhost:5173,http://127.0.0.1:5173"
-		log.Println("WARNING: CORS_ALLOWED_ORIGINS not set — using localhost defaults for development only")
-	}
-
-	// Security: webhooks must always be authenticated. Fail fast instead of
-	// rejecting per-request — an unset secret is a deploy misconfiguration.
-	if cfg.WebhookSecret == "" {
-		log.Fatal("SECURITY: EVOLUTION_WEBHOOK_SECRET must be set — refusing to start with unauthenticated webhooks")
+	if err := cfg.Validate(); err != nil {
+		log.Fatal(err)
 	}
 
 	// Initialize database
@@ -212,7 +199,8 @@ func main() {
 		apiGroup.GET("/crusts", apiHandler.GetCrusts)
 		apiGroup.GET("/business-config", func(c *gin.Context) {
 			if rid, err := services.RequireRestaurant(c); err == nil {
-				c.JSON(200, services.GetBizConfigFor(rid))
+				cfg, src := services.LoadBusinessConfigForEx(rid)
+				c.JSON(200, gin.H{"config": cfg, "_meta": gin.H{"source": string(src)}})
 				return
 			}
 			c.JSON(200, services.GetBizConfig())

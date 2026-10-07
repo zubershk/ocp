@@ -1487,8 +1487,8 @@ func (h *AdminHandler) CalculatePOSPrice(c *gin.Context) {
 func (h *AdminHandler) GetPOSConfig(c *gin.Context) {
 	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
 	outletID := c.GetInt("outletID")
-	cfg := services.ResolvePOSConfig(rid, outletID)
-	c.JSON(http.StatusOK, gin.H{"pos_config": cfg})
+	cfg, src := services.ResolvePOSConfigForEx(rid, outletID)
+	c.JSON(http.StatusOK, gin.H{"pos_config": cfg, "_meta": gin.H{"source": string(src), "version": cfg.Version}})
 }
 
 func (h *AdminHandler) UpdatePOSConfig(c *gin.Context) {
@@ -1505,7 +1505,8 @@ func (h *AdminHandler) UpdatePOSConfig(c *gin.Context) {
 	auditLog(c, "update_pos_config", "pos_config", cfg)
 	// SSE invalidation: pos.config_updated is cache invalidation, not payload authority
 	services.BroadcastRealtimeFor(rid, 0, c.GetInt("orgID"), "pos.config_updated", map[string]interface{}{"restaurant_id": rid, "version": cfg.Version})
-	c.JSON(http.StatusOK, gin.H{"ok": true, "pos_config": services.ResolvePOSConfig(rid, 0)})
+	saved, src := services.ResolvePOSConfigForEx(rid, 0)
+	c.JSON(http.StatusOK, gin.H{"ok": true, "pos_config": saved, "_meta": gin.H{"source": string(src), "version": saved.Version}})
 }
 
 // Live chat — SaaS bot dashboard
@@ -2463,8 +2464,8 @@ func sampleData(key string) map[string]interface{} {
 // ---------- Business Configuration ----------
 
 func (h *AdminHandler) GetBusinessConfig(c *gin.Context) {
-	cfg := services.GetBusinessConfigFor(services.ResolveRestaurant(c.GetInt("restaurantID")))
-	c.JSON(200, cfg)
+	cfg, src := services.LoadBusinessConfigForEx(services.ResolveRestaurant(c.GetInt("restaurantID")))
+	c.JSON(200, gin.H{"config": cfg, "_meta": gin.H{"source": string(src)}})
 }
 
 func (h *AdminHandler) UpdateBusinessConfig(c *gin.Context) {
