@@ -1,4 +1,4 @@
-import type { POSConfig } from '../../hooks/usePosConfig';
+import type { POSConfig } from '../../config/posDefaults';
 import type { PosOrderType } from '../../services/posService';
 import { orderTypeIcon } from './billRules';
 

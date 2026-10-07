@@ -107,9 +107,26 @@ type POSConfig struct {
 }
 
 var (
-	posCfgCache = map[int]*POSConfig{}
+	posCfgCache = map[int]cachedPOSConfig{}
 	posCfgMu    sync.RWMutex
 )
+
+// ConfigSource tells callers whether a config came from the database or
+// from a fallback. Fallbacks must be surfaced, never silently served as
+// tenant configuration.
+type ConfigSource string
+
+const (
+	ConfigSourceDB               ConfigSource = "db"
+	ConfigSourceFallbackDefault  ConfigSource = "fallback-default"
+	ConfigSourceFallbackInvalid  ConfigSource = "fallback-invalid"
+	ConfigSourceFallbackOffline  ConfigSource = "fallback-offline"
+)
+
+type cachedPOSConfig struct {
+	cfg *POSConfig
+	src ConfigSource
+}
 
 func defaultPOSConfig() *POSConfig {
 	return &POSConfig{
@@ -236,54 +253,53 @@ func validatePOSConfig(cfg *POSConfig) error {
 // LoadPOSConfigFor loads and caches per-restaurant config. Falls back to defaults if no row.
 // Size inches are derived from bot_config.sizes[].inches (canonical) on every load.
 func LoadPOSConfigFor(restaurantID int) *POSConfig {
+	cfg, _ := LoadPOSConfigForEx(restaurantID)
+	return cfg
+}
+
+// LoadPOSConfigForEx is LoadPOSConfigFor plus the provenance of the
+// returned config. Callers that render or persist config must use the
+// source to distinguish tenant data from development defaults.
+func LoadPOSConfigForEx(restaurantID int) (*POSConfig, ConfigSource) {
 	rid := ResolveRestaurant(restaurantID)
 	posCfgMu.RLock()
 	if c, ok := posCfgCache[rid]; ok {
 		posCfgMu.RUnlock()
-		out := *c
+		out := *c.cfg
 		enrichPOSSizeMeta(&out, rid)
-		return &out
+		return &out, c.src
 	}
 	posCfgMu.RUnlock()
 
-	var raw string
-	err := database.DB.QueryRow(`SELECT value::text FROM site_settings WHERE key='pos_config' AND restaurant_id=$1`, rid).Scan(&raw)
-	if err != nil {
-		cfg := defaultPOSConfig()
+	store := func(cfg *POSConfig, src ConfigSource) (*POSConfig, ConfigSource) {
 		enrichPOSSizeMeta(cfg, rid)
 		posCfgMu.Lock()
-		posCfgCache[rid] = cfg
+		posCfgCache[rid] = cachedPOSConfig{cfg: cfg, src: src}
 		posCfgMu.Unlock()
 		out := *cfg
 		enrichPOSSizeMeta(&out, rid)
-		return &out
+		return &out, src
+	}
+
+	if database.DB == nil {
+		return store(defaultPOSConfig(), ConfigSourceFallbackOffline)
+	}
+	var raw string
+	err := database.DB.QueryRow(`SELECT value::text FROM site_settings WHERE key='pos_config' AND restaurant_id=$1`, rid).Scan(&raw)
+	if err != nil {
+		return store(defaultPOSConfig(), ConfigSourceFallbackDefault)
 	}
 	var cfg POSConfig
 	if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
-		cfg2 := defaultPOSConfig()
-		enrichPOSSizeMeta(cfg2, rid)
-		posCfgMu.Lock()
-		posCfgCache[rid] = cfg2
-		posCfgMu.Unlock()
-		out := *cfg2
-		enrichPOSSizeMeta(&out, rid)
-		return &out
+		return store(defaultPOSConfig(), ConfigSourceFallbackInvalid)
 	}
 	// Validate persisted value; on failure return defaults (do not cache invalid)
 	if err := validatePOSConfig(&cfg); err != nil {
-		cfg2 := defaultPOSConfig()
-		enrichPOSSizeMeta(cfg2, rid)
-		out := *cfg2
+		out := *defaultPOSConfig()
 		enrichPOSSizeMeta(&out, rid)
-		return &out
+		return &out, ConfigSourceFallbackInvalid
 	}
-	enrichPOSSizeMeta(&cfg, rid)
-	posCfgMu.Lock()
-	posCfgCache[rid] = &cfg
-	posCfgMu.Unlock()
-	out := cfg
-	enrichPOSSizeMeta(&out, rid)
-	return &out
+	return store(&cfg, ConfigSourceDB)
 }
 
 // SavePOSConfig validates, persists, and invalidates cache.
@@ -321,18 +337,30 @@ func InvalidatePOSCache(restaurantID int) {
 // ResolvePOSConfig returns effective config for restaurant+outlet.
 // Today: restaurant only; later: merges outlet overrides. Always enriches inches from bot_config.
 func ResolvePOSConfig(restaurantID, outletID int) *POSConfig {
-	_ = outletID // reserved for outlet overrides
-	cfg := LoadPOSConfigFor(restaurantID)
-	enrichPOSSizeMeta(cfg, ResolveRestaurant(restaurantID))
+	cfg, _ := ResolvePOSConfigForEx(restaurantID, outletID)
 	return cfg
 }
 
-// Helper for provisioning new restaurant default pos_config (call after org/restaurant creation)
+// ResolvePOSConfigForEx is ResolvePOSConfig plus provenance.
+func ResolvePOSConfigForEx(restaurantID, outletID int) (*POSConfig, ConfigSource) {
+	_ = outletID // reserved for outlet overrides
+	cfg, src := LoadPOSConfigForEx(restaurantID)
+	enrichPOSSizeMeta(cfg, ResolveRestaurant(restaurantID))
+	return cfg, src
+}
+
+// EnsurePOSConfigSeed creates the default pos_config row only when the
+// restaurant has none. It never overwrites an existing row: the previous
+// implementation saved defaults unconditionally before the guarded
+// insert, destroying custom configuration on every call.
 func EnsurePOSConfigSeed(restaurantID int) {
-	_ = SavePOSConfig(defaultPOSConfig(), restaurantID)
-	// Seed is idempotent via ON CONFLICT; validate ensures not to overwrite custom
-	// So we use INSERT ... ON CONFLICT DO NOTHING via raw Exec to avoid overwriting
 	rid := ResolveRestaurant(restaurantID)
+	var exists bool
+	if err := database.DB.QueryRow(
+		`SELECT EXISTS(SELECT 1 FROM site_settings WHERE key='pos_config' AND restaurant_id=$1)`,
+		rid).Scan(&exists); err == nil && exists {
+		return
+	}
 	raw, _ := json.Marshal(defaultPOSConfig())
 	_, _ = database.DB.Exec(
 		`INSERT INTO site_settings (key, value, restaurant_id) VALUES ('pos_config', $1::jsonb, $2) ON CONFLICT (key, restaurant_id) DO NOTHING`,

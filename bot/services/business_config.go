@@ -176,6 +176,28 @@ func LoadBusinessConfigFor(restaurantID int) *BusinessConfig {
 	return &out
 }
 
+// LoadBusinessConfigForEx is LoadBusinessConfigFor plus provenance: "db"
+// when a stored row parsed, "fallback-default" when no row exists,
+// "fallback-invalid" on parse failure, "fallback-offline" without a DB.
+// Callers that render or persist config must surface the source.
+func LoadBusinessConfigForEx(restaurantID int) (*BusinessConfig, ConfigSource) {
+	if database.DB == nil {
+		return defaultBusinessConfig(), ConfigSourceFallbackOffline
+	}
+	rid := ResolveRestaurant(restaurantID)
+	var raw []byte
+	if err := database.DB.QueryRow(
+		`SELECT value::text FROM site_settings WHERE key = 'bot_config' AND restaurant_id = $1`,
+		rid).Scan(&raw); err != nil {
+		return LoadBusinessConfigFor(restaurantID), ConfigSourceFallbackDefault
+	}
+	var probe BusinessConfig
+	if err := json.Unmarshal(raw, &probe); err != nil {
+		return LoadBusinessConfigFor(restaurantID), ConfigSourceFallbackInvalid
+	}
+	return LoadBusinessConfigFor(restaurantID), ConfigSourceDB
+}
+
 // GetBusinessConfigFor reads one restaurant's config without touching
 // the process cache (admin paths).
 func GetBusinessConfigFor(restaurantID int) *BusinessConfig {

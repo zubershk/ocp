@@ -82,8 +82,7 @@ export default function ReceiptModal({
           )}
           <div className="print-receipt rounded-2xl border border-zinc-200 p-4 text-sm">
             <div className="text-center">
-              <div className="font-bold">Orange Cheese Pizza</div>
-              <div className="text-xs text-zinc-500">{outletName}</div>
+              <div className="font-bold">{outletName || 'Receipt'}</div>
               <div className="font-bold mt-1">Order #{order.order_number}</div>
               <div className="text-xs text-zinc-500">
                 {order.order_type.replace('_', ' ')} · {order.status} ·{' '}

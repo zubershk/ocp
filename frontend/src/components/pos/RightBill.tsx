@@ -7,7 +7,7 @@ import CheckoutPanel from './CheckoutPanel';
 import DiscountList from './DiscountList';
 import OrderTypeStrip from './OrderTypeStrip';
 import { shouldShowField } from './billRules';
-import type { POSConfig } from '../../hooks/usePosConfig';
+import type { POSConfig } from '../../config/posDefaults';
 import { formatINR, posApi, posErrorMessage, toRupees, type LedgerSummary, type PosOrder, type PosOrderType, type PosPayMethod } from '../../services/posService';
 import type { CartLine, CustomerInfo, RecordedPayment } from './types';
 

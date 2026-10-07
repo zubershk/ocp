@@ -6,57 +6,23 @@ import { Button } from '@/components/shadcn/button';
 import { Input } from '@/components/shadcn/input';
 import { Badge } from '@/components/shadcn/badge';
 
-interface POSConfig {
-  order_types: { key: string; label: string; short: string; icon: string; active: boolean; requires_table?: boolean; requires_address?: boolean }[];
-  size_meta: Record<string, { label: string; inches: string }>;
-  bill_rows: { key: string; label: string; visible: boolean; editable?: boolean }[];
-  charges: { container_default: number; tip_enabled: boolean; round_mode: string; tax_source: string };
-  customer_fields: Record<string, { visible: boolean; required: boolean; for: string[] }>;
-  features: Record<string, boolean>;
-  ui: { header_title: string; currency_symbol: string; pos_accent: string };
-  version: number;
-}
-
-const DEFAULT_POS_CONFIG: POSConfig = {
-  order_types: [
-    { key: 'dine_in', label: 'Dine In', short: 'Dine In', icon: 'utensils', active: true, requires_table: true },
-    { key: 'delivery', label: 'Delivery', short: 'Delivery', icon: 'bike', active: true, requires_address: true },
-    { key: 'takeaway', label: 'Take Away', short: 'Take Away', icon: 'bag', active: true },
-  ],
-  size_meta: { regular: { label: 'Regular', inches: '7 Inches' }, medium: { label: 'Medium', inches: '10 Inches' }, large: { label: 'Large', inches: '13 Inches' } },
-  bill_rows: [
-    { key: 'subtotal', label: 'Sub Total', visible: true },
-    { key: 'discount', label: 'Discount', visible: true },
-    { key: 'container', label: 'Container Charge', visible: true, editable: true },
-    { key: 'tax', label: 'Tax', visible: true },
-    { key: 'customer_paid', label: 'Customer Paid', visible: true },
-    { key: 'return_to_customer', label: 'Return to Customer', visible: true },
-    { key: 'tip', label: 'Tip', visible: true, editable: true },
-  ],
-  charges: { container_default: 0, tip_enabled: true, round_mode: 'nearest', tax_source: 'restaurant.tax_percent' },
-  customer_fields: {
-    phone: { visible: true, required: true, for: ['delivery', 'takeaway'] },
-    name: { visible: true, required: false, for: ['dine_in', 'delivery', 'takeaway'] },
-    address: { visible: true, required: false, for: ['delivery'] },
-    locality: { visible: true, required: false, for: ['delivery'] },
-  },
-  features: { bogo: false, split_bill: false, complimentary: true, advance_order: true, kot: true, hold: true },
-  ui: { header_title: 'OCP POS', currency_symbol: '₹', pos_accent: '#b91c1c' },
-  version: 1,
-};
-
+import { DEFAULT_POS_CONFIG, type POSConfig } from '../config/posDefaults';
+import { isFallbackSource, type ConfigSource } from '../config/tenant';
 export default function AdminPosConfig() {
   const qc = useQueryClient();
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['pos-config'],
     queryFn: async () => {
       try {
-        const r = await adminFetch<{ pos_config: POSConfig }>('/admin/pos/config');
-        return r.pos_config;
+        const r = await adminFetch<{ pos_config: POSConfig; _meta?: { source?: ConfigSource } }>('/admin/pos/config');
+        const source: ConfigSource = r._meta?.source ?? 'db';
+        return { config: r.pos_config, source, fromFallback: isFallbackSource(source) };
       } catch (e) {
         const msg = String((e as Error)?.message ?? '');
-        // 404 until bot restarts with migration 034 — fall back to defaults so admin remains usable
-        if (msg.includes('404') || msg.includes('Not Found') || msg.includes('not found')) return DEFAULT_POS_CONFIG;
+        // Backend unreachable — stay usable on development defaults, flagged.
+        if (msg.includes('404') || msg.includes('Not Found') || msg.includes('not found') || msg.includes('Failed to fetch')) {
+          return { config: DEFAULT_POS_CONFIG, source: 'fallback-default' as ConfigSource, fromFallback: true };
+        }
         throw e;
       }
     },
@@ -65,13 +31,16 @@ export default function AdminPosConfig() {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
-  useEffect(() => { if (data) setLocal(data); }, [data]);
+  useEffect(() => { if (data) setLocal(data.config); }, [data]);
+  const fromFallback = data?.fromFallback ?? false;
 
   const save = useMutation({
     mutationFn: (cfg: POSConfig) => adminFetch('/admin/pos/config', { method: 'PUT', body: JSON.stringify(cfg) }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['pos-config'] });
-      setMsg('Saved — POS will refresh on next load (SSE + focus fallback).');
+      setMsg(fromFallback
+        ? 'Created tenant config from defaults — POS will refresh on next load.'
+        : 'Saved — POS will refresh on next load (SSE + focus fallback).');
       setTimeout(() => setMsg(null), 3000);
     },
     onError: (e: Error) => setMsg(e.message),
@@ -89,6 +58,11 @@ export default function AdminPosConfig() {
       </div>
 
       {msg && <div className="p-3 rounded bg-amber-50 border border-amber-200 text-sm">{msg}</div>}
+      {fromFallback && (
+        <div role="status" className="p-3 rounded bg-amber-50 border border-amber-300 text-sm font-semibold text-amber-800">
+          No stored tenant configuration — editing development defaults. Saving creates the tenant config row.
+        </div>
+      )}
 
       <Card>
         <CardContent className="p-6 space-y-4">
@@ -187,12 +161,13 @@ export default function AdminPosConfig() {
       <Button
         disabled={saving}
         onClick={async () => {
+          if (fromFallback && !window.confirm('No stored tenant config exists. Save these values as the new tenant configuration?')) return;
           setSaving(true);
           try { await save.mutateAsync(local); } finally { setSaving(false); }
         }}
         className="min-h-[44px]"
       >
-        {saving ? 'Saving…' : 'Save POS Config'}
+        {saving ? 'Saving…' : fromFallback ? 'Create Tenant Config' : 'Save POS Config'}
       </Button>
       <p className="text-xs text-muted-foreground">Validation: order_types 1..5, size_meta 1..5, bill_rows 1..12, round_mode none|nearest|up|down, currency 1..5. Config is restaurant-level; outlet overrides via ResolvePOSConfig(restaurantID, outletID) later.</p>
     </div>
