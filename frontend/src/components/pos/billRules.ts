@@ -1,5 +1,5 @@
 import { Bike, Circle, ShoppingBag, Smartphone, UtensilsCrossed, type LucideIcon } from 'lucide-react';
-import type { POSConfig } from '../../hooks/usePosConfig';
+import type { POSConfig } from '../../config/posDefaults';
 import type { PosOrderType } from '../../services/posService';
 
 const ICON_BY_NAME: Record<string, LucideIcon> = {

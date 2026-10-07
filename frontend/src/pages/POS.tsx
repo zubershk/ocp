@@ -115,7 +115,7 @@ const canCancel = ['owner', 'manager'].includes(role);
 const canManageTables = ['owner', 'manager'].includes(role);
   const outletsQuery = useQuery({ queryKey: ['pos-outlets-name'], queryFn: posApi.getOutlets, enabled: authed, staleTime: 60_000 });
   const outletName = outletsQuery.data?.find(o => o.id === outletId)?.name ?? null;
-  const { config } = usePosConfig();
+  const { config, isFallback, error: configError } = usePosConfig();
   const activeOrderTypes = useMemo(() => config.order_types.filter(o => o.active), [config.order_types]);
   // Sync container default from config (once, when config loads, if not dirty)
   useEffect(() => {
@@ -384,6 +384,13 @@ const canManageTables = ['owner', 'manager'].includes(role);
         Skip to menu
       </a>
       {header}
+      {isFallback && (
+        <div role="alert" className="mx-auto w-full max-w-[1600px] px-2 pt-2">
+          <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
+            POS configuration unavailable — showing development defaults. {configError ?? 'Complete setup to configure this register.'}
+          </div>
+        </div>
+      )}
       <main id="pos-main" className="mx-auto w-full max-w-[1600px] flex-1 p-2 gap-2 grid grid-cols-1 md:grid-cols-[200px_1fr] lg:grid-cols-[220px_minmax(0,1fr)_340px] xl:grid-cols-[220px_minmax(0,1fr)_400px] items-start">
         {/* LEFT - Categories vertical (md+; tabs below md/lg breakpoint) */}
         <div className="hidden md:flex md:flex-col rounded-xl border border-[var(--pos-border)] bg-white overflow-hidden md:max-h-[calc(100dvh-72px)] md:sticky md:top-[66px]">

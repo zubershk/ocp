@@ -81,10 +81,12 @@ export default function AdminBusinessConfig() {
     general: true, sizes: true, payments: true, icons: false, whatsapp: false,
   });
 
-  const { data: config, isLoading } = useQuery<BusinessConfig>({
+  const { data: resp, isLoading } = useQuery<{ config: BusinessConfig; _meta?: { source?: string } }>({
     queryKey: ['admin-business-config'],
     queryFn: () => adminFetch('/admin/business-config'),
   });
+  const config = resp?.config;
+  const configSource = resp?._meta?.source ?? 'db';
 
   const [localConfig, setLocalConfig] = useState<BusinessConfig | null>(null);
   const cfg = localConfig || config;
@@ -201,6 +203,9 @@ export default function AdminBusinessConfig() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Business Configuration</h1>
+          {configSource !== 'db' && (
+            <p role="status" className="mt-1 text-xs font-semibold text-amber-700">No stored tenant configuration (source: {configSource}) — showing development defaults.</p>
+          )}
           <p className="text-sm text-muted-foreground mt-1">
             Configure sizes, payments, icons, delivery, and more for your business type.{' '}
             <RouterLink to="/admin/catalog" className="text-primary hover:underline">

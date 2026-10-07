@@ -1,5 +1,6 @@
-const _rawBaseUrl = import.meta.env.VITE_API_BASE_URL as string | undefined;
-const API_BASE_URL: string = _rawBaseUrl == null ? 'http://localhost:8090' : String(_rawBaseUrl).replace(/\/+$/, '');
+import { loadRuntimeConfig } from '../config/runtime';
+
+const API_BASE_URL: string = loadRuntimeConfig().apiBaseUrl;
 
 export const apiBaseUrl = API_BASE_URL;
 
