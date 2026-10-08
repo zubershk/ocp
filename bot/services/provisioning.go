@@ -136,8 +136,10 @@ func ProvisionRestaurant(orgName, restName, slug, ownerName, ownerKeyHash string
 	_, _ = tx.Exec(`INSERT INTO site_settings (key, value, restaurant_id)
 	 SELECT 'pos_config', value, $2 FROM site_settings WHERE key='pos_config' AND restaurant_id=$1
 	 ON CONFLICT (key, restaurant_id) DO NOTHING`, bootRest, restID)
-	// Fallback default if boot has no pos_config (fresh DB or old)
-	_, _ = tx.Exec(`INSERT INTO site_settings (key, value, restaurant_id) VALUES ('pos_config', '{
+// Fallback default if boot has no pos_config (fresh DB or old).
+	// No currency mirror is seeded: the symbol is derived on every load
+	// from the restaurant's authoritative currency.
+	fallbackPOS := `{
     "order_types": [
       {"key":"dine_in","label":"Dine In","short":"Dine In","icon":"utensils","active":true,"requires_table":true},
       {"key":"delivery","label":"Delivery","short":"Delivery","icon":"bike","active":true,"requires_address":true},
@@ -148,9 +150,10 @@ func ProvisionRestaurant(orgName, restName, slug, ownerName, ownerKeyHash string
     "charges": {"container_default":0,"tip_enabled":true,"round_mode":"nearest","tax_source":"restaurant.tax_percent"},
     "customer_fields": {"phone":{"visible":true,"required":true,"for":["delivery","takeaway"]},"name":{"visible":true,"required":false,"for":["dine_in","delivery","takeaway"]},"address":{"visible":true,"required":false,"for":["delivery"]},"locality":{"visible":true,"required":false,"for":["delivery"]}},
     "features": {"bogo":false,"split_bill":false,"complimentary":true,"advance_order":true,"kot":true,"hold":true},
-    "ui": {"header_title":"OCP POS","currency_symbol":"₹","pos_accent":"#b91c1c"},
+    "ui": {"header_title":"OCP POS","pos_accent":"#b91c1c"},
     "version": 1
-  }'::jsonb, $1) ON CONFLICT (key, restaurant_id) DO NOTHING`, restID)
+}`
+	_, _ = tx.Exec(`INSERT INTO site_settings (key, value, restaurant_id) VALUES ('pos_config', $1::jsonb, $2) ON CONFLICT (key, restaurant_id) DO NOTHING`, fallbackPOS, restID)
 	_, _ = tx.Exec(`INSERT INTO onboarding_progress (restaurant_id, current_step) VALUES ($1,'business_info') ON CONFLICT (restaurant_id) DO NOTHING`, restID)
 
 	if err = tx.Commit(); err != nil {

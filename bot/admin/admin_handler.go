@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -262,11 +263,71 @@ func (h *AdminHandler) ListCustomers(c *gin.Context) {
 }
 
 // BroadcastSend sends a text message to multiple phone numbers via Evolution GO.
+//
+// Idempotency: callers may pass idempotency_base (e.g. campaign ID); the key
+// base+"|"+phone is remembered for 1h, so retried batches replay stored
+// results instead of re-sending. In-memory only (restart clears it).
+var broadcastIdem = struct {
+	sync.Mutex
+	m map[string]broadcastIdemEntry
+}{m: make(map[string]broadcastIdemEntry)}
+
+type broadcastIdemEntry struct {
+	Phone string
+	OK    bool
+	Error string
+	at    time.Time
+}
+
+func broadcastIdemGet(key string) (broadcastIdemEntry, bool) {
+	if key == "" {
+		return broadcastIdemEntry{}, false
+	}
+	broadcastIdem.Lock()
+	defer broadcastIdem.Unlock()
+	e, ok := broadcastIdem.m[key]
+	if !ok {
+		return broadcastIdemEntry{}, false
+	}
+	if time.Since(e.at) > time.Hour {
+		delete(broadcastIdem.m, key)
+		return broadcastIdemEntry{}, false
+	}
+	return e, true
+}
+
+func broadcastIdemSet(key string, e broadcastIdemEntry) {	if key == "" {
+		return
+	}
+	broadcastIdem.Lock()
+	defer broadcastIdem.Unlock()
+	if len(broadcastIdem.m) > 20000 {
+		for k, v := range broadcastIdem.m {
+			if time.Since(v.at) > time.Hour {
+				delete(broadcastIdem.m, k)
+			}
+		}
+		if len(broadcastIdem.m) > 20000 {
+			broadcastIdem.m = make(map[string]broadcastIdemEntry)
+		}
+	}
+	e.at = time.Now()
+	broadcastIdem.m[key] = e
+}
+
+func idemKeyFor(base, phone string) string {
+	if strings.TrimSpace(base) == "" || strings.TrimSpace(phone) == "" {
+		return ""
+	}
+	return strings.TrimSpace(base) + "|" + strings.TrimSpace(phone)
+}
+
 func (h *AdminHandler) BroadcastSend(c *gin.Context) {
 	var req struct {
-		Phones   []string `json:"phones" binding:"required"`
-		Message  string   `json:"message" binding:"required"`
-		ImageURL string   `json:"image_url"`
+		Phones         []string `json:"phones" binding:"required"`
+		Message        string   `json:"message" binding:"required"`
+		ImageURL       string   `json:"image_url"`
+		IdempotencyBase string  `json:"idempotency_base"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		if strings.Contains(err.Error(), "request body too large") {
@@ -309,6 +370,17 @@ func (h *AdminHandler) BroadcastSend(c *gin.Context) {
 		if len(phone) > 10 {
 			phone = phone[len(phone)-10:]
 		}
+		if idemKey := idemKeyFor(req.IdempotencyBase, phone); idemKey != "" {
+			if prev, ok := broadcastIdemGet(idemKey); ok {
+				results = append(results, result{Phone: prev.Phone, OK: prev.OK, Error: prev.Error})
+				if prev.OK {
+					success++
+				} else {
+					failed++
+				}
+				continue
+			}
+		}
 		dest := phone
 		if len(phone) == 10 {
 			dest = "91" + phone
@@ -329,6 +401,15 @@ func (h *AdminHandler) BroadcastSend(c *gin.Context) {
 			_ = services.SaveWhatsAppMessage(phone, "out", req.Message, "")
 			results = append(results, result{Phone: phone, OK: true})
 			success++
+		}
+		if idemKey := idemKeyFor(req.IdempotencyBase, phone); idemKey != "" {
+			last := results[len(results)-1]
+			// Cache successes only: a cached failure would replay as failed
+			// and mask genuine retries (notably timeout-marked rows that may
+			// have been delivered). Uncached failures are re-attempted for real.
+			if last.OK {
+				broadcastIdemSet(idemKey, broadcastIdemEntry{Phone: last.Phone, OK: last.OK, Error: last.Error})
+			}
 		}
 	}
 	auditLog(c, "broadcast_send", "campaign", map[string]interface{}{"total": len(req.Phones), "success": success, "failed": failed})
@@ -1488,7 +1569,7 @@ func (h *AdminHandler) GetPOSConfig(c *gin.Context) {
 	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
 	outletID := c.GetInt("outletID")
 	cfg, src := services.ResolvePOSConfigForEx(rid, outletID)
-	c.JSON(http.StatusOK, gin.H{"pos_config": cfg, "_meta": gin.H{"source": string(src), "version": cfg.Version}})
+	c.JSON(http.StatusOK, gin.H{"pos_config": cfg, "currency": services.RestaurantCurrencyAuthority(rid), "_meta": gin.H{"source": string(src), "version": cfg.Version}})
 }
 
 func (h *AdminHandler) UpdatePOSConfig(c *gin.Context) {
@@ -1506,7 +1587,7 @@ func (h *AdminHandler) UpdatePOSConfig(c *gin.Context) {
 	// SSE invalidation: pos.config_updated is cache invalidation, not payload authority
 	services.BroadcastRealtimeFor(rid, 0, c.GetInt("orgID"), "pos.config_updated", map[string]interface{}{"restaurant_id": rid, "version": cfg.Version})
 	saved, src := services.ResolvePOSConfigForEx(rid, 0)
-	c.JSON(http.StatusOK, gin.H{"ok": true, "pos_config": saved, "_meta": gin.H{"source": string(src), "version": saved.Version}})
+	c.JSON(http.StatusOK, gin.H{"ok": true, "pos_config": saved, "currency": services.RestaurantCurrencyAuthority(rid), "_meta": gin.H{"source": string(src), "version": saved.Version}})
 }
 
 // Live chat — SaaS bot dashboard
@@ -2464,8 +2545,9 @@ func sampleData(key string) map[string]interface{} {
 // ---------- Business Configuration ----------
 
 func (h *AdminHandler) GetBusinessConfig(c *gin.Context) {
-	cfg, src := services.LoadBusinessConfigForEx(services.ResolveRestaurant(c.GetInt("restaurantID")))
-	c.JSON(200, gin.H{"config": cfg, "_meta": gin.H{"source": string(src)}})
+	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
+	cfg, src := services.LoadBusinessConfigForEx(rid)
+	c.JSON(200, gin.H{"config": cfg, "currency": services.RestaurantCurrencyAuthority(rid), "_meta": gin.H{"source": string(src)}})
 }
 
 func (h *AdminHandler) UpdateBusinessConfig(c *gin.Context) {
@@ -2481,13 +2563,15 @@ func (h *AdminHandler) UpdateBusinessConfig(c *gin.Context) {
 	// Reload in all engines
 	services.ReloadBizConfig()
 	auditLog(c, "update_business_config", "updated business configuration", "business_config")
-	c.JSON(200, gin.H{"ok": true, "config": cfg})
+	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
+	c.JSON(200, gin.H{"ok": true, "config": cfg, "currency": services.RestaurantCurrencyAuthority(rid)})
 }
 
 func (h *AdminHandler) ReloadBusinessConfig(c *gin.Context) {
 	services.ReloadBizConfig()
 	auditLog(c, "reload_business_config", "reloaded business configuration from DB", "business_config")
-	c.JSON(200, gin.H{"ok": true, "config": services.GetBizConfig()})
+	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
+	c.JSON(200, gin.H{"ok": true, "config": services.GetBizConfig(), "currency": services.RestaurantCurrencyAuthority(rid)})
 }
 
 // ---------- Crust Management ----------

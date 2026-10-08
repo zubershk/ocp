@@ -14,14 +14,14 @@ export default function AdminPosConfig() {
     queryKey: ['pos-config'],
     queryFn: async () => {
       try {
-        const r = await adminFetch<{ pos_config: POSConfig; _meta?: { source?: ConfigSource } }>('/admin/pos/config');
+        const r = await adminFetch<{ pos_config: POSConfig; currency?: { code: string; symbol: string }; _meta?: { source?: ConfigSource } }>('/admin/pos/config');
         const source: ConfigSource = r._meta?.source ?? 'db';
-        return { config: r.pos_config, source, fromFallback: isFallbackSource(source) };
+        return { config: r.pos_config, currency: r.currency, source, fromFallback: isFallbackSource(source) };
       } catch (e) {
         const msg = String((e as Error)?.message ?? '');
         // Backend unreachable — stay usable on development defaults, flagged.
         if (msg.includes('404') || msg.includes('Not Found') || msg.includes('not found') || msg.includes('Failed to fetch')) {
-          return { config: DEFAULT_POS_CONFIG, source: 'fallback-default' as ConfigSource, fromFallback: true };
+          return { config: DEFAULT_POS_CONFIG, currency: undefined, source: 'fallback-default' as ConfigSource, fromFallback: true };
         }
         throw e;
       }
@@ -33,6 +33,10 @@ export default function AdminPosConfig() {
 
   useEffect(() => { if (data) setLocal(data.config); }, [data]);
   const fromFallback = data?.fromFallback ?? false;
+  // Display currency is authoritative from the restaurant record. The symbol
+  // is derived on every load and stripped on save — it is not editable here.
+  const currencySymbol = data?.currency?.symbol ?? local?.ui.currency_symbol ?? '₹';
+  const currencyCode = data?.currency?.code ?? '';
 
   const save = useMutation({
     mutationFn: (cfg: POSConfig) => adminFetch('/admin/pos/config', { method: 'PUT', body: JSON.stringify(cfg) }),
@@ -105,7 +109,7 @@ export default function AdminPosConfig() {
           <h2 className="font-semibold">Charges (foundation — no calculation in PR #2)</h2>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label className="text-xs font-semibold">Container Default (₹)</label>
+              <label className="text-xs font-semibold">Container Default ({currencySymbol})</label>
               <Input type="number" value={String(local.charges.container_default)} onChange={e => setLocal({ ...local, charges: { ...local.charges, container_default: Number(e.target.value) || 0 } })} className="mt-1" />
             </div>
             <div className="flex flex-col justify-end">
@@ -152,7 +156,7 @@ export default function AdminPosConfig() {
           <h2 className="font-semibold">UI</h2>
           <div className="grid grid-cols-3 gap-4">
             <div><label className="text-xs">Header Title</label><Input value={local.ui.header_title} onChange={e => setLocal({ ...local, ui: { ...local.ui, header_title: e.target.value } })} maxLength={40} /></div>
-            <div><label className="text-xs">Currency</label><Input value={local.ui.currency_symbol} onChange={e => setLocal({ ...local, ui: { ...local.ui, currency_symbol: e.target.value } })} maxLength={5} /></div>
+            <div><label className="text-xs">Currency (from restaurant)</label><Input value={currencyCode ? `${currencyCode} (${currencySymbol})` : currencySymbol} readOnly title="Derived from the restaurant's authoritative currency. Change it on the restaurant record, not here." /></div>
             <div><label className="text-xs">Accent</label><Input value={local.ui.pos_accent} onChange={e => setLocal({ ...local, ui: { ...local.ui, pos_accent: e.target.value } })} placeholder="#b91c1c" /></div>
           </div>
         </CardContent>
@@ -169,7 +173,7 @@ export default function AdminPosConfig() {
       >
         {saving ? 'Saving…' : fromFallback ? 'Create Tenant Config' : 'Save POS Config'}
       </Button>
-      <p className="text-xs text-muted-foreground">Validation: order_types 1..5, size_meta 1..5, bill_rows 1..12, round_mode none|nearest|up|down, currency 1..5. Config is restaurant-level; outlet overrides via ResolvePOSConfig(restaurantID, outletID) later.</p>
+      <p className="text-xs text-muted-foreground">Validation: order_types 1..5, size_meta 1..5, bill_rows 1..12, round_mode none|nearest|up|down. Currency symbol is derived from the restaurant record. Config is restaurant-level; outlet overrides via ResolvePOSConfig(restaurantID, outletID) later.</p>
     </div>
   );
 }

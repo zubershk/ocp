@@ -9,7 +9,7 @@ import DiscountList from './DiscountList';
 import {
   posApi,
   posErrorMessage,
-  formatINR,
+  formatCurrency,
   toPaise,
   toRupees,
   newIdempotencyKey,
@@ -70,6 +70,7 @@ export default function CheckoutPanel({
   canPay,
   canDiscount,
   canCancel,
+  currencySymbol = '₹',
 }: {
   orderId: number;
   payments: RecordedPayment[];
@@ -88,6 +89,7 @@ export default function CheckoutPanel({
   canPay: boolean;
   canDiscount: boolean;
   canCancel: boolean;
+  currencySymbol?: string;
 }) {
   const orderQuery = useQuery({
     queryKey: ['pos-order', orderId],
@@ -189,7 +191,7 @@ export default function CheckoutPanel({
       const ledger = await onResyncLedger(orderId);
       const overpaid = ledger?.overpaid_paise ?? overpaidPaise;
       if (overpaid > 0) {
-        setNotice(`Overpaid ${formatINR(toRupees(overpaid))} — refund before completing.`);
+        setNotice(`Overpaid ${formatCurrency(toRupees(overpaid), currencySymbol)} — refund before completing.`);
         return;
       }
       await posApi.completeOrder(orderId);
@@ -258,7 +260,7 @@ export default function CheckoutPanel({
                   {it.quantity}× {it.name}
                   {(it.size || it.crust) && <span className="text-zinc-400 font-medium"> ({[it.size, it.crust].filter(Boolean).join(' · ')})</span>}
                 </span>
-                <span className="font-bold tabular-nums shrink-0">{formatINR(it.line_total)}</span>
+                <span className="font-bold tabular-nums shrink-0">{formatCurrency(it.line_total, currencySymbol)}</span>
               </li>
             ))}
           </ul>
@@ -266,10 +268,10 @@ export default function CheckoutPanel({
 
           {/* Totals: server-authoritative */}
           <dl className="rounded-2xl border border-zinc-100 p-3 space-y-1 text-sm tabular-nums">
-            <div className="flex justify-between"><dt className="text-zinc-500 font-medium">Subtotal</dt><dd className="font-bold">{formatINR(order.subtotal)}</dd></div>
-            {order.discount > 0 && <div className="flex justify-between text-emerald-700"><dt className="font-medium">Discount</dt><dd className="font-bold">−{formatINR(order.discount)}</dd></div>}
-            {(order.tax_amount ?? 0) > 0 && <div className="flex justify-between"><dt className="text-zinc-500 font-medium">Tax</dt><dd className="font-bold">{formatINR(order.tax_amount ?? 0)}</dd></div>}
-            <div className="flex justify-between items-baseline border-t border-zinc-100 pt-1.5 mt-1"><dt className="font-black text-base">Total</dt><dd className="font-black text-2xl">{formatINR(order.total)}</dd></div>
+            <div className="flex justify-between"><dt className="text-zinc-500 font-medium">Subtotal</dt><dd className="font-bold">{formatCurrency(order.subtotal, currencySymbol)}</dd></div>
+            {order.discount > 0 && <div className="flex justify-between text-emerald-700"><dt className="font-medium">Discount</dt><dd className="font-bold">−{formatCurrency(order.discount, currencySymbol)}</dd></div>}
+            {(order.tax_amount ?? 0) > 0 && <div className="flex justify-between"><dt className="text-zinc-500 font-medium">Tax</dt><dd className="font-bold">{formatCurrency(order.tax_amount ?? 0, currencySymbol)}</dd></div>}
+            <div className="flex justify-between items-baseline border-t border-zinc-100 pt-1.5 mt-1"><dt className="font-black text-base">Total</dt><dd className="font-black text-2xl">{formatCurrency(order.total, currencySymbol)}</dd></div>
           </dl>
 
           {/* Payments ledger + remaining */}
@@ -278,7 +280,7 @@ export default function CheckoutPanel({
               {payments.map((p) => (
                 <li key={p.paymentId} className="flex justify-between rounded-lg bg-emerald-50 text-emerald-800 px-2.5 py-1.5 font-bold">
                   <span className="uppercase">{p.method}</span>
-                  <span className="tabular-nums">{formatINR(toRupees(p.amountPaise))}</span>
+                  <span className="tabular-nums">{formatCurrency(toRupees(p.amountPaise), currencySymbol)}</span>
                 </li>
               ))}
             </ul>
@@ -315,16 +317,16 @@ export default function CheckoutPanel({
           <div className={compact ? `rounded-2xl p-3 text-white ${due === 0 ? 'bg-emerald-600' : 'bg-zinc-950'}` : `mt-auto rounded-3xl p-4 text-white ${due === 0 ? 'bg-emerald-600' : 'bg-zinc-950'}`}>
             <div className="flex items-center justify-between text-sm font-semibold opacity-80">
               <span>{due === 0 ? 'Fully paid' : 'Amount due'}</span>
-              {paidPaise > 0 && <span className="tabular-nums text-xs">Paid {formatINR(toRupees(paidPaise))}</span>}
+              {paidPaise > 0 && <span className="tabular-nums text-xs">Paid {formatCurrency(toRupees(paidPaise), currencySymbol)}</span>}
             </div>
-            <div className={compact ? 'font-black text-3xl tabular-nums mt-0.5' : 'font-black text-4xl tabular-nums mt-0.5'}>{formatINR(dueRupees)}</div>
+            <div className={compact ? 'font-black text-3xl tabular-nums mt-0.5' : 'font-black text-4xl tabular-nums mt-0.5'}>{formatCurrency(dueRupees, currencySymbol)}</div>
             {!ledgerReady && (
               <p role="status" className="mt-2 text-sm font-semibold opacity-80">Syncing payment status…</p>
             )}
             {orderOpen && ledgerReady && (
               overpaidPaise > 0 ? (
                 <div role="alert" className={compact ? 'mt-2 rounded-2xl bg-white text-amber-700 font-bold text-sm px-3 py-2.5' : 'mt-3 rounded-2xl bg-white text-amber-700 font-bold px-3 py-2.5'}>
-                  Overpaid {formatINR(toRupees(overpaidPaise))} — refund before completing.
+                  Overpaid {formatCurrency(toRupees(overpaidPaise), currencySymbol)} — refund before completing.
                 </div>
               ) : due === 0 ? (
                 <button
@@ -351,7 +353,7 @@ export default function CheckoutPanel({
       )}
 
       {/* Pay dialog */}
-      <Modal open={payOpen} onClose={() => !paying && setPayOpen(false)} title={`Collect ${formatINR(dueRupees)}`} size="sm">
+      <Modal open={payOpen} onClose={() => !paying && setPayOpen(false)} title={`Collect ${formatCurrency(dueRupees, currencySymbol)}`} size="sm">
         <div className="space-y-4">
           <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Payment method">
             {METHODS.map((m) => (
@@ -384,23 +386,23 @@ export default function CheckoutPanel({
               />
               <div className="flex gap-2">
                 {[...new Set([Math.ceil(dueRupees), Math.ceil(dueRupees / 100) * 100, Math.ceil(dueRupees / 500) * 500])].map((v) => (
-                  <button key={v} type="button" aria-label={`Set tendered to ₹${v}`} onClick={() => setTendered(String(v))} className="flex-1 h-11 min-h-[44px] rounded-xl bg-zinc-100 hover:bg-zinc-200 font-bold text-sm">₹{v}</button>
+                  <button key={v} type="button" aria-label={`Set tendered to ${currencySymbol}${v}`} onClick={() => setTendered(String(v))} className="flex-1 h-11 min-h-[44px] rounded-xl bg-zinc-100 hover:bg-zinc-200 font-bold text-sm">{currencySymbol}{v}</button>
                 ))}
               </div>
               <div className="flex justify-between rounded-2xl bg-zinc-50 px-3 py-2 text-sm font-bold tabular-nums">
                 <span>Change</span>
-                <span className={changePaise < 0 ? 'text-red-600' : ''}>{formatINR(Math.max(0, toRupees(changePaise)))}</span>
+                <span className={changePaise < 0 ? 'text-red-600' : ''}>{formatCurrency(Math.max(0, toRupees(changePaise)), currencySymbol)}</span>
               </div>
             </div>
           )}
           {method === 'upi' && (
             <p className="rounded-2xl bg-zinc-50 p-3 text-sm text-zinc-600">
-              Collect {formatINR(dueRupees)} on the counter UPI. Mark as paid only after the customer completes the transfer.
+              Collect {formatCurrency(dueRupees, currencySymbol)} on the counter UPI. Mark as paid only after the customer completes the transfer.
             </p>
           )}
           {method === 'card' && (
             <p className="rounded-2xl bg-zinc-50 p-3 text-sm text-zinc-600">
-              Charge {formatINR(dueRupees)} on the card terminal, then confirm here.
+              Charge {formatCurrency(dueRupees, currencySymbol)} on the card terminal, then confirm here.
             </p>
           )}
 
@@ -412,7 +414,7 @@ export default function CheckoutPanel({
             disabled={paying || !validTender}
             className="w-full h-14 rounded-2xl bg-[var(--pos-accent,#b91c1c)] hover:bg-[var(--pos-accent-hover,#991b1b)] disabled:bg-zinc-200 disabled:text-zinc-400 text-white font-black text-lg transition-all active:scale-[0.98]"
           >
-            {paying ? 'Processing payment…' : `Record ${method.toUpperCase()} ${formatINR(dueRupees)}`}
+            {paying ? 'Processing payment…' : `Record ${method.toUpperCase()} ${formatCurrency(dueRupees, currencySymbol)}`}
           </button>
           <p className="text-xs text-zinc-400 text-center">Retries reuse the same request key — no double submission.</p>
         </div>

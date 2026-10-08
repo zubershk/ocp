@@ -2,6 +2,12 @@
 title OCP Frontend - DO NOT CLOSE
 cd /d "%~dp0frontend"
 
+:: Bot API target for the vite proxy (/api, /admin, /uploads, /health).
+:: Follows BOT_PORT so a moved bot (e.g. :8091 when :8090 is squatted) keeps
+:: working. Override: set BOT_PROXY_URL=http://localhost:8091
+if not defined BOT_PORT set "BOT_PORT=8090"
+if not defined BOT_PROXY_URL set "BOT_PROXY_URL=http://localhost:%BOT_PORT%"
+
 :: Kill stale vite dev servers squatting :5173.
 :: Filtered to vite only - other node apps (campaign runner :3001) are untouched.
 powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='node.exe'\" | Where-Object { $_.CommandLine -like '*vite*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }" >nul 2>&1

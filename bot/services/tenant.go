@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"orangecheesepizza/bot/database"
+	"orangecheesepizza/bot/services/currency"
 )
 
 // ------------------------------------------------------------------
@@ -62,6 +63,47 @@ func DefaultOutletID(restaurantID int) int {
 		return 0
 	}
 	return id
+}
+
+// RestaurantCurrency returns the ISO-4217 currency code for a restaurant.
+// Falls back to "USD" if not found or DB unavailable.
+func RestaurantCurrency(restaurantID int) string {
+	if database.DB == nil {
+		return "USD"
+	}
+	rid := ResolveRestaurant(restaurantID)
+	var currency string
+	err := database.DB.QueryRow(
+		`SELECT currency FROM restaurants WHERE id = $1`, rid).Scan(&currency)
+	if err != nil || currency == "" {
+		return "USD"
+	}
+	return currency
+}
+
+// CurrencyAuthority describes the single authoritative operating currency
+// for a restaurant. One restaurant → one currency: configs, POS, website,
+// receipts, and channels consume this block instead of keeping their own
+// currency values. Integer ledger semantics are unchanged (minor units);
+// no FX or multi-currency conversion exists.
+type CurrencyAuthority struct {
+	Code      string `json:"code"`
+	Symbol    string `json:"symbol"`
+	Locale    string `json:"locale"`
+	MinorUnit int    `json:"minor_unit"`
+}
+
+// RestaurantCurrencyAuthority returns the authoritative currency block for
+// a restaurant, resolved from restaurants.currency (D2 bootstrap default).
+func RestaurantCurrencyAuthority(restaurantID int) CurrencyAuthority {
+	code := RestaurantCurrency(restaurantID)
+	info := currency.Lookup(code)
+	return CurrencyAuthority{
+		Code:      info.Code,
+		Symbol:    info.Symbol,
+		Locale:    info.Locale,
+		MinorUnit: info.MinorUnit,
+	}
 }
 
 // ResolveRestaurant returns the explicit tenant restaurant or the default.

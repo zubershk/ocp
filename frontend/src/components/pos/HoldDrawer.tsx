@@ -1,6 +1,6 @@
 import { PauseCircle, Play, Search } from 'lucide-react';
 import { Modal } from '../ui/Modal';
-import { formatINR, type PosOrderType } from '../../services/posService';
+import { formatCurrency, type PosOrderType } from '../../services/posService';
 import type { HeldOrder } from './types';
 
 const typeLabel: Record<string, string> = {
@@ -16,6 +16,7 @@ export default function HeldDrawer({
   orderTypes,
   onResume,
   resumingId,
+  currencySymbol = '₹',
 }: {
   open: boolean;
   onClose: () => void;
@@ -24,6 +25,7 @@ export default function HeldDrawer({
   orderTypes?: Record<number, PosOrderType>;
   onResume: (h: HeldOrder) => void;
   resumingId: number | null;
+  currencySymbol?: string;
 }) {
   return (
     <Modal open={open} onClose={onClose} title={`Held orders · this outlet (${held.length})`} size="sm">
@@ -42,7 +44,7 @@ export default function HeldDrawer({
                 <div className="text-xs text-zinc-500 font-semibold">
                   {typeLabel[orderTypes?.[h.id] ?? ''] ?? ''}
                   {orderTypes?.[h.id] ? ' · ' : ''}
-                  {formatINR(h.total)} · {new Date(h.at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                  {formatCurrency(h.total, currencySymbol)} · {new Date(h.at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
                 </div>
               </div>
               <button

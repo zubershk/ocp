@@ -9,6 +9,29 @@ Add-Type -AssemblyName System.Drawing
 $script:BotSvc = 'orange-cheese-pizza-bot'
 $script:EvoSvc = 'evolution-go'
 $script:CampaignSvc = 'ocp-campaign-runner'
+
+# Effective bot port — single source of truth for probes, labels and the
+# frontend proxy. Order: $env:BOT_PORT -> evolution-go/bot/.env (systemd
+# EnvironmentFile) -> repo bot/.env -> 8090 default. Computed once at panel
+# launch; restart the panel after changing BOT_PORT anywhere.
+function Get-ConfiguredBotPort {
+    if ($env:BOT_PORT -match '^\d+$') { return $env:BOT_PORT }
+    $repoRoot = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
+    foreach ($f in @(
+        (Join-Path (Split-Path $repoRoot -Parent) 'evolution-go\bot\.env'),
+        (Join-Path $repoRoot 'bot\.env')
+    )) {
+        if (Test-Path $f) {
+            $m = Select-String -Path $f -Pattern '^BOT_PORT=(\d+)' | Select-Object -First 1
+            if ($m -and $m.Matches[0].Groups[1].Value -match '^\d+$') { return $m.Matches[0].Groups[1].Value }
+        }
+    }
+    return '8090'
+}
+$script:BotPort = Get-ConfiguredBotPort
+# Child processes (frontend vite via .bat / npm fallback) inherit this, so
+# /api + /admin + /uploads + /health follow a moved bot automatically.
+if (-not $env:BOT_PROXY_URL) { $env:BOT_PROXY_URL = "http://localhost:$($script:BotPort)" }
 $script:Sync = [hashtable]::Synchronized(@{
     BotStatus      = '...'
     EvoStatus      = '...'
@@ -38,6 +61,7 @@ $runspace.SessionStateProxy.SetVariable('Sync', $Sync)
 # inherit script variables, so without this Get-Svc always got ''.
 $runspace.SessionStateProxy.SetVariable('BotSvc', $script:BotSvc)
 $runspace.SessionStateProxy.SetVariable('EvoSvc', $script:EvoSvc)
+$runspace.SessionStateProxy.SetVariable('BotPort', $script:BotPort)
 $runspace.SessionStateProxy.SetVariable('CampaignSvc', $script:CampaignSvc)
 # Repo root must be shared explicitly too — $PSScriptRoot is empty inside
 # a fresh runspace, so START ALL previously couldn't locate OCP-FRONTEND.bat.
@@ -48,22 +72,23 @@ $psCmd.Runspace = $runspace
 $psCmd.AddScript({
     function Get-Svc($name) {
         try {
-            $r = wsl -e -e bash -c "systemctl --user is-active $name" 2>$null
+            $r = wsl -e bash -c "systemctl --user is-active $name" 2>$null
             return "$r".Trim()
         } catch { return 'unknown' }
     }
     function Send-Cmd($cmd) {
-        try { wsl -e -e bash -c $cmd 2>$null | Out-Null } catch {}
+        try { wsl -e bash -c $cmd 2>$null | Out-Null } catch {}
     }
     function Clear-StrayBot {
-        # Kill stray bot-ocp processes (manual nohup runs) that squat :8090
-        # and crash-loop the systemd service with "bind: address already in use".
-        # Only kills pizza-owned processes; root-owned squatters are reported.
-        try { wsl -e -e bash -c "pkill -f 'bot-ocp'; sleep 1" 2>$null | Out-Null } catch {}
+        # Kill stray bot-ocp processes (manual nohup runs) that squat the bot
+        # port and crash-loop the systemd service with "bind: address already in use".
+        # Only kills pizza-owned processes; SYSTEM-level holders (portproxy)
+        # are reported, never killed from here.
+        try { wsl -e bash -c "pkill -f 'bot-ocp'; sleep 1" 2>$null | Out-Null } catch {}
     }
     function Test-BotPort {
         try {
-            $code = wsl -e -e bash -c "curl -s -m 4 -o /dev/null -w '%{http_code}' http://localhost:8090/health" 2>$null
+            $code = wsl -e bash -c "curl -s -m 4 -o /dev/null -w '%{http_code}' http://localhost:$BotPort/health" 2>$null
             return "$code".Trim() -eq '200'
         } catch { return $false }
     }
@@ -71,17 +96,16 @@ $psCmd.AddScript({
         # Idempotent: never kill a healthy bot — pkill first caused a
         # self-inflicted outage on every START ALL press.
         if (Test-BotPort) {
-            $Sync.Logs.Enqueue('[OK] Bot already healthy on :8090 — left running')
+            $Sync.Logs.Enqueue("[OK] Bot already healthy on :$BotPort — left running")
             return
         }
         Clear-StrayBot
         Send-Cmd 'export XDG_RUNTIME_DIR=/run/user/$(id -u); systemctl --user start orange-cheese-pizza-bot'
         Start-Sleep -Seconds 4
         if (Test-BotPort) {
-            $Sync.Logs.Enqueue('[OK] Bot healthy on :8090')
+            $Sync.Logs.Enqueue("[OK] Bot healthy on :$BotPort")
         } else {
-            $Sync.Logs.Enqueue('[WARN] Bot not responding — port 8090 may be held by a root process.')
-            $Sync.Logs.Enqueue("[FIX] Run in PowerShell: wsl -u root -e bash -c 'pkill -f bot-ocp'")
+            $Sync.Logs.Enqueue("[WARN] Bot not responding on :$BotPort — see FIX PORTS for diagnosis.")
         }
     }
     function Get-Frontend {
@@ -196,7 +220,7 @@ $psCmd.AddScript({
     function Test-UrlMs($url) {
         # HTTP latency in ms, or $null when unreachable
         try {
-            $t = wsl -e -e bash -c "curl -s -m 4 -o /dev/null -w '%{time_total}' $url" 2>$null
+            $t = wsl -e bash -c "curl -s -m 4 -o /dev/null -w '%{time_total}' $url" 2>$null
             $t = "$t".Trim()
             if ($t -match '^[\d\.]+$') { return [int]([double]$t * 1000) }
         } catch {}
@@ -236,8 +260,7 @@ $psCmd.AddScript({
                     if (Test-BotPort) {
                         $Sync.Logs.Enqueue('[OK] All services + frontend started (bot healthy)')
                     } else {
-                        $Sync.Logs.Enqueue('[WARN] Bot not responding — possible port squatter on :8090.')
-                        $Sync.Logs.Enqueue("[FIX] Press FIX PORTS, or run: wsl -u root -e bash -c 'pkill -f bot-ocp'")
+                        $Sync.Logs.Enqueue("[WARN] Bot not responding on :$BotPort — press FIX PORTS for diagnosis.")
                     }
                     if ($null -ne (Test-UrlMs 'http://127.0.0.1:8080/server/ok')) {
                         $Sync.Logs.Enqueue('[OK] Evolution GO healthy on :8080')
@@ -278,18 +301,26 @@ $psCmd.AddScript({
                     $Sync.Logs.Enqueue('[INFO] Checking ports...')
                     $evoOk = $null -ne (Test-UrlMs 'http://127.0.0.1:8080/server/ok')
                     if ((Test-BotPort) -and $evoOk) {
-                        $Sync.Logs.Enqueue('[OK] :8090 and :8080 both healthy — nothing to fix')
+                        $Sync.Logs.Enqueue("[OK] :$BotPort and :8080 both healthy — nothing to fix")
                     } else {
                         $Sync.Logs.Enqueue('[INFO] Clearing stray processes on blocked ports...')
-                        try { wsl -e -e bash -c "pkill -f 'bot-ocp'; pkill -f 'evolution-go'; sleep 1" 2>$null | Out-Null } catch {}
+                        try { wsl -e bash -c "pkill -f 'bot-ocp'; pkill -f 'evolution-go'; sleep 1" 2>$null | Out-Null } catch {}
                         Stop-FrontendDev
                         Send-Cmd 'export XDG_RUNTIME_DIR=/run/user/$(id -u); systemctl --user restart evolution-go orange-cheese-pizza-bot'
                         Start-Sleep -Seconds 5
                         if (Test-BotPort) {
-                            $Sync.Logs.Enqueue('[OK] Ports clear, bot healthy on :8090')
+                            $Sync.Logs.Enqueue("[OK] Ports clear, bot healthy on :$BotPort")
                         } else {
-                            $Sync.Logs.Enqueue('[WARN] Still blocked — a root-owned process holds :8090.')
-                            $Sync.Logs.Enqueue("[FIX] Run in PowerShell: wsl -u root -e bash -c 'pkill -f bot-ocp'")
+                            # Never suggest pkill-as-root here: past incidents showed
+                            # the holder is a stale SYSTEM portproxy while the real
+                            # bot is healthy inside WSL — root pkill would murder it.
+                            $wslCode = wsl -e bash -c "curl -s -m 4 -o /dev/null -w '%{http_code}' http://localhost:$BotPort/health" 2>$null
+                            if ("$wslCode".Trim() -eq '200') {
+                                $Sync.Logs.Enqueue('[INFO] Bot answers inside WSL but not from Windows — stale netsh portproxy is shadowing the port.')
+                                $Sync.Logs.Enqueue("[FIX] In ADMIN PowerShell run: netsh interface portproxy delete v4tov4 listenport=$BotPort listenaddress=127.0.0.1")
+                            } else {
+                                $Sync.Logs.Enqueue("[WARN] Bot API down on :$BotPort — check its journal (panel log tail) or run: wsl bash -c ""journalctl --user -u orange-cheese-pizza-bot --since '5 min ago' --no-pager | tail -30""")
+                            }
                         }
                         if (Test-FrontendPort) {
                             $Sync.Logs.Enqueue('[OK] Frontend port :5173 listening')
@@ -354,7 +385,7 @@ $psCmd.AddScript({
         $Sync.FrontendStatus = Get-Frontend
 
         # port truth + numbers for the cards (service state can lie)
-        $d = Set-PortDetail 8090 'http://localhost:8090/health'
+        $d = Set-PortDetail $BotPort "http://localhost:$BotPort/health"
         $Sync.BotPort = $d.Bound; $Sync.BotDetail = $d.Text
         $d = Set-PortDetail 8080 'http://127.0.0.1:8080/server/ok'
         $Sync.EvoPort = $d.Bound; $Sync.EvoDetail = $d.Text
@@ -367,7 +398,7 @@ $psCmd.AddScript({
         # drain log queue from service journal — only NEW lines (the old
         # tail-every-cycle re-appended the same lines forever)
         try {
-            $lines = wsl -e -e bash -c "journalctl --user -u orange-cheese-pizza-bot --since '8 seconds ago' --no-pager -o cat 2>/dev/null" 2>$null
+            $lines = wsl -e bash -c "journalctl --user -u orange-cheese-pizza-bot --since '8 seconds ago' --no-pager -o cat 2>/dev/null" 2>$null
             foreach ($line in $lines) {
                 $t = "$line".Trim()
                 if ($t -and -not $seen.ContainsKey($t)) {
@@ -483,7 +514,7 @@ $lblBotName.Size = New-Object System.Drawing.Size(120, 16)
 $cardBot.Controls.Add($lblBotName)
 
 $lblBotPort = New-Object System.Windows.Forms.Label
-$lblBotPort.Text = ':8090'
+$lblBotPort.Text = ":$($script:BotPort)"
 $lblBotPort.Font = New-Object System.Drawing.Font('Consolas', 9)
 $lblBotPort.ForeColor = [System.Drawing.Color]::FromArgb(140, 140, 160)
 $lblBotPort.Location = New-Object System.Drawing.Point(10, 24)

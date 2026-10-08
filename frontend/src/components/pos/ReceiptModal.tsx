@@ -5,7 +5,7 @@ import Input from '../ui/Input';
 import { Modal } from '../ui/Modal';
 import Badge from '../ui/Badge';
 import {
-  formatINR,
+  formatCurrency,
   toRupees,
   newIdempotencyKey,
   posErrorMessage,
@@ -22,6 +22,7 @@ export default function ReceiptModal({
   canRefund,
   outletName,
   onNewSale,
+  currencySymbol = '₹',
 }: {
   open: boolean;
   onClose: () => void;
@@ -30,6 +31,7 @@ export default function ReceiptModal({
   canRefund: boolean;
   outletName: string;
   onNewSale?: () => void;
+  currencySymbol?: string;
 }) {
   const [refundId, setRefundId] = useState<number | null>(null);
   const [refundAmount, setRefundAmount] = useState('');
@@ -68,7 +70,7 @@ export default function ReceiptModal({
             <div className="rounded-2xl bg-emerald-600 text-white p-4 mb-3 text-center print:hidden">
               <CheckCircle2 size={28} className="mx-auto" />
               <div className="font-black text-xl mt-1">Order completed</div>
-              <div className="text-sm opacity-90">Order #{order.order_number} · {formatINR(order.total)} paid</div>
+              <div className="text-sm opacity-90">Order #{order.order_number} · {formatCurrency(order.total, currencySymbol)} paid</div>
               {onNewSale && (
                 <button
                   type="button"
@@ -97,7 +99,7 @@ export default function ReceiptModal({
                     {it.quantity}× {it.name}
                     {it.size ? ` (${it.size})` : ''}
                   </span>
-                  <span>{formatINR(it.line_total)}</span>
+                  <span>{formatCurrency(it.line_total, currencySymbol)}</span>
                 </li>
               ))}
             </ul>
@@ -105,35 +107,35 @@ export default function ReceiptModal({
             <dl className="space-y-0.5 tabular-nums">
               <div className="flex justify-between">
                 <dt>Subtotal</dt>
-                <dd>{formatINR(order.subtotal)}</dd>
+                <dd>{formatCurrency(order.subtotal, currencySymbol)}</dd>
               </div>
               {order.discount > 0 && (
                 <div className="flex justify-between">
                   <dt>Discount</dt>
-                  <dd>−{formatINR(order.discount)}</dd>
+                  <dd>−{formatCurrency(order.discount, currencySymbol)}</dd>
                 </div>
               )}
               {(order.tax_amount ?? 0) > 0 && (
                 <div className="flex justify-between">
                   <dt>Tax</dt>
-                  <dd>{formatINR(order.tax_amount ?? 0)}</dd>
+                  <dd>{formatCurrency(order.tax_amount ?? 0, currencySymbol)}</dd>
                 </div>
               )}
               {(order.container_charge ?? 0) > 0 && (
                 <div className="flex justify-between">
                   <dt>Container</dt>
-                  <dd>{formatINR(order.container_charge ?? 0)}</dd>
+                  <dd>{formatCurrency(order.container_charge ?? 0, currencySymbol)}</dd>
                 </div>
               )}
               {(order.tip_amount ?? 0) > 0 && (
                 <div className="flex justify-between">
                   <dt>Tip</dt>
-                  <dd>{formatINR(order.tip_amount ?? 0)}</dd>
+                  <dd>{formatCurrency(order.tip_amount ?? 0, currencySymbol)}</dd>
                 </div>
               )}
               <div className="flex justify-between font-bold text-base">
                 <dt>Total</dt>
-                <dd>{formatINR(order.total)}</dd>
+                <dd>{formatCurrency(order.total, currencySymbol)}</dd>
               </div>
             </dl>
             {order.is_complimentary === true && (
@@ -146,7 +148,7 @@ export default function ReceiptModal({
                   {payments.map((p) => (
                     <li key={p.paymentId} className="flex justify-between">
                       <span className="uppercase">{p.method}</span>
-                      <span>{formatINR(toRupees(p.amountPaise))}</span>
+                      <span>{formatCurrency(toRupees(p.amountPaise), currencySymbol)}</span>
                     </li>
                   ))}
                 </ul>
@@ -171,7 +173,7 @@ export default function ReceiptModal({
                     <li key={p.paymentId}>
                       <button
                         type="button"
-                        aria-label={`Refund ${p.method} ${formatINR(toRupees(p.amountPaise))}`}
+                        aria-label={`Refund ${p.method} ${formatCurrency(toRupees(p.amountPaise), currencySymbol)}`}
                         onClick={() => {
                           setRefundId(p.paymentId);
                           setRefundAmount(toRupees(p.amountPaise).toFixed(2));
@@ -182,14 +184,14 @@ export default function ReceiptModal({
                         <span className="uppercase font-semibold flex items-center gap-1.5">
                           <Undo2 size={13} /> {p.method}
                         </span>
-                        <span className="tabular-nums font-bold">{formatINR(toRupees(p.amountPaise))}</span>
+                        <span className="tabular-nums font-bold">{formatCurrency(toRupees(p.amountPaise), currencySymbol)}</span>
                       </button>
                     </li>
                   ))}
                 </ul>
               ) : (
                 <div className="space-y-2">
-                  <Input label="Refund amount (₹)" inputMode="decimal" value={refundAmount} onChange={(e) => setRefundAmount(e.target.value)} />
+                  <Input label={`Refund amount (${currencySymbol})`} inputMode="decimal" value={refundAmount} onChange={(e) => setRefundAmount(e.target.value)} />
                   <div className="flex gap-1.5">
                     <Button variant="secondary" className="flex-1" onClick={() => setRefundId(null)}>
                       Back
