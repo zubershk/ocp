@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -262,11 +263,71 @@ func (h *AdminHandler) ListCustomers(c *gin.Context) {
 }
 
 // BroadcastSend sends a text message to multiple phone numbers via Evolution GO.
+//
+// Idempotency: callers may pass idempotency_base (e.g. campaign ID); the key
+// base+"|"+phone is remembered for 1h, so retried batches replay stored
+// results instead of re-sending. In-memory only (restart clears it).
+var broadcastIdem = struct {
+	sync.Mutex
+	m map[string]broadcastIdemEntry
+}{m: make(map[string]broadcastIdemEntry)}
+
+type broadcastIdemEntry struct {
+	Phone string
+	OK    bool
+	Error string
+	at    time.Time
+}
+
+func broadcastIdemGet(key string) (broadcastIdemEntry, bool) {
+	if key == "" {
+		return broadcastIdemEntry{}, false
+	}
+	broadcastIdem.Lock()
+	defer broadcastIdem.Unlock()
+	e, ok := broadcastIdem.m[key]
+	if !ok {
+		return broadcastIdemEntry{}, false
+	}
+	if time.Since(e.at) > time.Hour {
+		delete(broadcastIdem.m, key)
+		return broadcastIdemEntry{}, false
+	}
+	return e, true
+}
+
+func broadcastIdemSet(key string, e broadcastIdemEntry) {	if key == "" {
+		return
+	}
+	broadcastIdem.Lock()
+	defer broadcastIdem.Unlock()
+	if len(broadcastIdem.m) > 20000 {
+		for k, v := range broadcastIdem.m {
+			if time.Since(v.at) > time.Hour {
+				delete(broadcastIdem.m, k)
+			}
+		}
+		if len(broadcastIdem.m) > 20000 {
+			broadcastIdem.m = make(map[string]broadcastIdemEntry)
+		}
+	}
+	e.at = time.Now()
+	broadcastIdem.m[key] = e
+}
+
+func idemKeyFor(base, phone string) string {
+	if strings.TrimSpace(base) == "" || strings.TrimSpace(phone) == "" {
+		return ""
+	}
+	return strings.TrimSpace(base) + "|" + strings.TrimSpace(phone)
+}
+
 func (h *AdminHandler) BroadcastSend(c *gin.Context) {
 	var req struct {
-		Phones   []string `json:"phones" binding:"required"`
-		Message  string   `json:"message" binding:"required"`
-		ImageURL string   `json:"image_url"`
+		Phones         []string `json:"phones" binding:"required"`
+		Message        string   `json:"message" binding:"required"`
+		ImageURL       string   `json:"image_url"`
+		IdempotencyBase string  `json:"idempotency_base"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		if strings.Contains(err.Error(), "request body too large") {
@@ -309,6 +370,17 @@ func (h *AdminHandler) BroadcastSend(c *gin.Context) {
 		if len(phone) > 10 {
 			phone = phone[len(phone)-10:]
 		}
+		if idemKey := idemKeyFor(req.IdempotencyBase, phone); idemKey != "" {
+			if prev, ok := broadcastIdemGet(idemKey); ok {
+				results = append(results, result{Phone: prev.Phone, OK: prev.OK, Error: prev.Error})
+				if prev.OK {
+					success++
+				} else {
+					failed++
+				}
+				continue
+			}
+		}
 		dest := phone
 		if len(phone) == 10 {
 			dest = "91" + phone
@@ -329,6 +401,15 @@ func (h *AdminHandler) BroadcastSend(c *gin.Context) {
 			_ = services.SaveWhatsAppMessage(phone, "out", req.Message, "")
 			results = append(results, result{Phone: phone, OK: true})
 			success++
+		}
+		if idemKey := idemKeyFor(req.IdempotencyBase, phone); idemKey != "" {
+			last := results[len(results)-1]
+			// Cache successes only: a cached failure would replay as failed
+			// and mask genuine retries (notably timeout-marked rows that may
+			// have been delivered). Uncached failures are re-attempted for real.
+			if last.OK {
+				broadcastIdemSet(idemKey, broadcastIdemEntry{Phone: last.Phone, OK: last.OK, Error: last.Error})
+			}
 		}
 	}
 	auditLog(c, "broadcast_send", "campaign", map[string]interface{}{"total": len(req.Phones), "success": success, "failed": failed})
