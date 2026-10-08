@@ -218,9 +218,9 @@ try {
 // SETTINGS (safe, env-only secrets)
 // ═══════════════════════════════════════════
 const DEFAULT_SETTINGS = {
-  delayMs: 3000,
-  batchSize: 5,
-  dailySendCap: 1000,
+  delayMs: 5000,
+  batchSize: 3,
+  dailySendCap: 250,
   brandName: '',
   brandLogo: '',
   brandColor: '#ea580c',
@@ -267,12 +267,83 @@ function sentToday() {
 }
 function checkDailyCap(additional) {
   const { dailySendCap: cap } = getSettings();
-  if (!cap || cap <= 0) return { ok: true, sent: sentToday(), cap: 0 };
+  if (!cap || cap <= 0) return { ok: true, sent: sentToday(), cap: 0, unique24h: uniqueSent24h() };
   const sent = sentToday();
   if (sent + (additional || 0) > cap) {
     return { ok: false, sent, cap, error: `daily send cap reached (${sent}/${cap} sent today)` };
   }
-  return { ok: true, sent, cap };
+  // Tier guard: Meta counts UNIQUE users per rolling 24h, not calendar-day sends.
+  const uniq = uniqueSent24h();
+  if (uniq.size + (additional || 0) > cap) {
+    return { ok: false, sent, cap, error: `unique-recipient guard reached (${uniq.size}/${cap} in trailing 24h)` };
+  }
+  return { ok: true, sent, cap, unique24h: uniq.size };
+}
+// Remaining sendable count under BOTH guards (calendar-day sends and
+// trailing-24h uniques). Infinity when uncapped. Read fresh on every call.
+function capRoom() {
+  const { dailySendCap: cap } = getSettings();
+  if (!cap || cap <= 0) return { room: Infinity, cap: 0, sent: sentToday(), unique: uniqueSent24h().size, binding: 'none' };
+  const sent = sentToday();
+  const unique = uniqueSent24h().size;
+  const dayRoom = cap - sent;
+  const uniqueRoom = cap - unique;
+  return { room: Math.max(0, Math.min(dayRoom, uniqueRoom)), cap, sent, unique, binding: dayRoom <= uniqueRoom ? 'day' : 'unique' };
+}
+// Clamp a recipient list to what the cap allows right now.
+// Never rejects partial room: { keep, deferred, note }.
+// Rejects only when NOTHING fits: { rejected: true, error, status: 429 }.
+function clampToCap(phones) {
+  const list = Array.isArray(phones) ? phones : [];
+  const { room, cap, sent, unique, binding } = capRoom();
+  if (!Number.isFinite(room)) return { keep: list, deferred: 0, note: null, rejected: false };
+  if (room <= 0) {
+    const error = binding === 'unique'
+      ? `unique-recipient guard reached (${unique}/${cap} in trailing 24h) — no room left today`
+      : `daily send cap reached (${sent}/${cap} sent today)`;
+    return { keep: [], deferred: list.length, note: null, rejected: true, error, status: 429 };
+  }
+  if (list.length <= room) return { keep: list, deferred: 0, note: null, rejected: false };
+  const deferred = list.length - room;
+  return {
+    keep: list.slice(0, room), deferred, rejected: false,
+    note: `daily cap ${cap}: sending first ${room} of ${list.length} — ${deferred} deferred (raise the cap in Settings or resume tomorrow)`,
+  };
+}
+// Distinct phones successfully messaged in the trailing 24h (live + archive).
+function uniqueSent24h() {
+  const cutoff = Date.now() - 86400000;
+  const set = new Set();
+  try {
+    for (const c of load('campaigns')) {
+      for (const bucket of [c.results, c.resultsArchive]) {
+        if (!Array.isArray(bucket)) continue;
+        for (const r of bucket) {
+          if (!r.ok) continue;
+          const t = Date.parse(r.sentAt);
+          if (!Number.isNaN(t) && t >= cutoff && r.phone) set.add(normPhone(r.phone));
+        }
+      }
+    }
+  } catch { /* ignore */ }
+  return set;
+}
+// Delivered phones for ONE campaign across live results AND the archive.
+// The archive holds deliveries from before a resume-all restart; ignoring
+// it makes resume-pending re-send already-delivered contacts. Normalized,
+// so format drift cannot slip a delivered number back into pending.
+function deliveredPhones(c) {
+  const set = new Set();
+  if (!c) return set;
+  for (const bucket of [c.results, c.resultsArchive]) {
+    if (!Array.isArray(bucket)) continue;
+    for (const r of bucket) {
+      if (!r.ok) continue;
+      const n = normPhone(r.phone);
+      if (n) set.add(n);
+    }
+  }
+  return set;
 }
 // Learned blocklist: numbers WhatsApp reports as unregistered. Auto-skipped
 // before any send attempt so dead numbers never count as sends.
@@ -298,9 +369,11 @@ function seedBlocklistFromResults() {
   try {
     const found = [];
     for (const c of load('campaigns')) {
-      if (!Array.isArray(c.results)) continue;
-      for (const r of c.results) {
-        if (!r.ok && /not registered on WhatsApp/i.test(r.error || '')) found.push(r.phone);
+      for (const bucket of [c.results, c.resultsArchive]) {
+        if (!Array.isArray(bucket)) continue;
+        for (const r of bucket) {
+          if (!r.ok && /not registered on WhatsApp/i.test(r.error || '')) found.push(r.phone);
+        }
       }
     }
     if (found.length > 0) {
@@ -322,6 +395,7 @@ function publicSettings() {
     batchSize: Math.min(20, Math.max(1, s.batchSize || DEFAULT_SETTINGS.batchSize)),
     dailySendCap: s.dailySendCap,
     sentToday: sentToday(),
+    unique24h: uniqueSent24h().size,
     blockedCount: loadBlocklist().size,
     brandName: typeof stored.brandName === 'string' ? stored.brandName.slice(0, 100) : '',
     brandLogo: typeof stored.brandLogo === 'string' ? stored.brandLogo.slice(0, 512) : '',
@@ -355,8 +429,8 @@ app.put('/api/settings', (req, res) => {
   } else out.batchSize = prev.batchSize ?? DEFAULT_SETTINGS.batchSize;
   if (b.dailySendCap !== undefined) {
     const n = Number(b.dailySendCap);
-    if (!Number.isInteger(n) || n < 0 || n > 50000) {
-      return res.status(400).json({ error: 'dailySendCap must be 0 (unlimited) or 1-50000' });
+    if (!Number.isInteger(n) || n < 0 || n > 10000) {
+      return res.status(400).json({ error: 'dailySendCap must be 0 (unlimited) or 1-10000' });
     }
     out.dailySendCap = n;
   } else out.dailySendCap = prev.dailySendCap ?? DEFAULT_SETTINGS.dailySendCap;
@@ -1011,8 +1085,15 @@ app.post('/api/customers/bulk-message', rateLimit({ windowMs: 60 * 1000, max: 10
   const { phones } = resolveBulkPhones(byId, ids);
   const v = validatePhoneList(phones);
   if (v.phones.length === 0) return res.status(400).json({ error: 'no sendable contacts in selection' });
-  const bulkCap = checkDailyCap(v.phones.length);
-  if (!bulkCap.ok) return res.status(429).json({ error: bulkCap.error });
+  // Reject-only pre-gate: keep the FULL spec so deferred recipients stay
+  // resumable. startSend clamps to what fits and reports the deferred count.
+  const preRoom = capRoom();
+  if (Number.isFinite(preRoom.room) && preRoom.room <= 0) {
+    const err = preRoom.binding === 'unique'
+      ? `unique-recipient guard reached (${preRoom.unique}/${preRoom.cap} in trailing 24h) — no room left today`
+      : `daily send cap reached (${preRoom.sent}/${preRoom.cap} sent today)`;
+    return res.status(429).json({ error: err });
+  }
   const campaigns = load('campaigns');
   if (!Array.isArray(campaigns) || campaigns.length > 1000) return res.status(400).json({ error: 'campaign store full' });
   const c = {
@@ -1029,7 +1110,7 @@ app.post('/api/customers/bulk-message', rateLimit({ windowMs: 60 * 1000, max: 10
   clog(c.id, 'bulk-message-create', { total: v.phones.length });
   const r = await startSend(c.id);
   if (r.error) return res.status(r.status || 400).json({ error: r.error, campaignId: c.id });
-  res.json({ ok: true, campaignId: c.id, total: r.total, skipped: r.skipped });
+  res.json({ ok: true, campaignId: c.id, total: r.total, skipped: r.skipped, deferred: r.deferred || 0, deferredNote: r.deferredNote || null });
 });
 
 app.get('/api/customers/tags', async (_req, res) => {
@@ -1348,6 +1429,13 @@ function canTransition(from, to) {
 }
 const activeSenders = new Set();
 let schedulerRunning = false;
+// One campaign sending at a time: parallel sends share the bot's 60/min
+// per-IP bucket and one WhatsApp socket, producing 429s, timeouts and
+// interleaved duplicates. A second send gets a clear 409 instead.
+function sendSlotBusy(exceptId) {
+  for (const id of activeSenders) if (id !== exceptId) return true;
+  return false;
+}
 
 app.get('/api/campaigns', (_req, res) => { res.json(load('campaigns')); });
 
@@ -1520,14 +1608,24 @@ app.post('/api/campaigns/:id/retry-failed', rateLimit({ windowMs: 60 * 1000, max
     .map(r => normPhone(r.phone))
     .filter(p => isSendablePhone(p)))];
   if (failedPhones.length === 0) return res.status(400).json({ error: 'no failed recipients to retry' });
-  const retryCap = checkDailyCap(failedPhones.length);
-  if (!retryCap.ok) return res.status(429).json({ error: retryCap.error });
+  // Reject-only pre-gate (full list kept; startSend clamps to what fits).
+  const retryRoom = capRoom();
+  if (Number.isFinite(retryRoom.room) && retryRoom.room <= 0) {
+    const err = retryRoom.binding === 'unique'
+      ? `unique-recipient guard reached (${retryRoom.unique}/${retryRoom.cap} in trailing 24h) — no room left today`
+      : `daily send cap reached (${retryRoom.sent}/${retryRoom.cap} sent today)`;
+    return res.status(429).json({ error: err });
+  }
   if (campaigns.length > 1000) return res.status(400).json({ error: 'campaign store full' });
   const c = {
     id: uid(), name: `Retry: ${String(src.name || 'campaign').slice(0, 90)} (${failedPhones.length})`,
     message: src.message, imageUrl: src.imageUrl || '',
     recipientMode: 'custom', recipientTag: 'all', recipientPhones: failedPhones,
     variables: { ...(src.variables || {}) },
+    // Keep the ORIGINAL campaign id as the bot idempotency base: phones the
+    // bot already delivered under it replay as delivered instead of
+    // re-sending (critical for timeout-marked rows that actually went out).
+    idempotencyBase: src.id,
     scheduledAt: null, status: 'draft',
     sent: 0, failed: 0, skipped: 0, total: 0, createdAt: new Date().toISOString(), results: [],
   };
@@ -1536,7 +1634,7 @@ app.post('/api/campaigns/:id/retry-failed', rateLimit({ windowMs: 60 * 1000, max
   clog(c.id, 'retry-failed-create', { from: src.id, total: failedPhones.length });
   const r = await startSend(c.id);
   if (r.error) return res.status(r.status || 400).json({ error: r.error, campaignId: c.id });
-  res.json({ ok: true, campaignId: c.id, total: r.total, skipped: r.skipped });
+  res.json({ ok: true, campaignId: c.id, total: r.total, skipped: r.skipped, deferred: r.deferred || 0, deferredNote: r.deferredNote || null });
 });
 
 app.post('/api/campaigns/preview-recipients', async (req, res) => {
@@ -1558,6 +1656,7 @@ async function startSend(id) {
   if (campaign.status === 'done' || campaign.status === 'completed') return { error: 'already sent', status: 409 };
   if (campaign.status === 'cancelled') return { error: 'cancelled campaigns cannot be resent, duplicate instead', status: 400 };
   if (!['draft', 'scheduled', 'failed'].includes(campaign.status)) return { error: `cannot send from status ${campaign.status}`, status: 400 };
+  if (sendSlotBusy(id)) return { error: 'another campaign is already sending — wait for it to finish', status: 409 };
   activeSenders.add(id);
   try {
     const { phones, skipped } = await resolvePhonesAsync(campaign);
@@ -1565,11 +1664,13 @@ async function startSend(id) {
       activeSenders.delete(id);
       return { error: skipped > 0 ? `no sendable recipients (${skipped} invalid skipped)` : 'no recipients', status: 400 };
     }
-    // Anti-ban guard: refuse to start when the daily send cap would be exceeded.
-    const cap = checkDailyCap(phones.length);
-    if (!cap.ok) {
+    // Anti-ban guard: send what fits under the cap now, defer the rest.
+    // Deferred recipients stay in the campaign spec (no result rows), so
+    // resume-pending picks them up tomorrow. Rejects only when nothing fits.
+    const clamped = clampToCap(phones);
+    if (clamped.rejected) {
       activeSenders.delete(id);
-      return { error: cap.error, status: 429 };
+      return { error: clamped.error, status: 429 };
     }
     // re-load fresh to avoid lost update during resolve
     campaigns = load('campaigns');
@@ -1578,19 +1679,46 @@ async function startSend(id) {
     if (campaign.status === 'sending') { activeSenders.delete(id); return { error: 'already sending', status: 409 }; }
     if (campaign.status === 'done' || campaign.status === 'completed') { activeSenders.delete(id); return { error: 'already sent', status: 409 }; }
     if (campaign.status === 'cancelled') { activeSenders.delete(id); return { error: 'cancelled', status: 400 }; }
+    // Auto-resume: never re-send already-delivered contacts (live + archive).
+    // Fresh drafts have no deliveries and take the reset path below.
+    const alreadyDelivered = deliveredPhones(campaign);
+    let sendPhones = clamped.keep.filter(p => !alreadyDelivered.has(normPhone(p)));
+    const resumedCount = clamped.keep.length - sendPhones.length;
+    if (sendPhones.length === 0) {
+      activeSenders.delete(id);
+      return { error: `nothing pending — all ${alreadyDelivered.size} already delivered (nothing to send)`, status: 400 };
+    }
+    // Re-clamp after excluding delivered (room may now fit everything).
+    const resendClamped = clampToCap(sendPhones);
+    if (resendClamped.rejected) {
+      activeSenders.delete(id);
+      return { error: resendClamped.error, status: 429 };
+    }
+    sendPhones = resendClamped.keep;
+    const deferred = clamped.deferred + resendClamped.deferred;
+    const deferredNote = resendClamped.note || clamped.note;
+    const isFresh = alreadyDelivered.size === 0;
+    if (isFresh) {
+      campaign.total = sendPhones.length;
+      campaign.sent = 0;
+      campaign.failed = 0;
+      campaign.skipped = skipped;
+      campaign.results = [];
+    } else {
+      // Preserve delivered history; top up totals for the new attempt.
+      campaign.total = Math.max(campaign.total || 0,
+        (campaign.sent || 0) + (campaign.failed || 0) + sendPhones.length);
+    }
     campaign.status = 'sending';
-    campaign.total = phones.length;
-    campaign.sent = 0;
-    campaign.failed = 0;
     campaign.skipped = skipped;
-    campaign.results = [];
     campaign.startedAt = new Date().toISOString();
     delete campaign.completedAt;
     delete campaign.error;
+    if (deferred > 0) campaign.deferredNote = deferredNote; else delete campaign.deferredNote;
     save('campaigns', campaigns);
-    clog(id, 'send-start', { total: phones.length, skipped });
-    sendCampaignViaBot(campaign.id, phones).catch(e => clog(id, 'send-error', {})).finally(() => activeSenders.delete(id));
-    return { ok: true, total: phones.length, skipped };
+    clog(id, 'send-start', { total: sendPhones.length, skipped, deferred, resumed: resumedCount });
+    sendCampaignViaBot(campaign.id, sendPhones).catch(e => clog(id, 'send-error', {})).finally(() => activeSenders.delete(id));
+    return { ok: true, total: sendPhones.length, skipped, deferred, deferredNote, alreadyDelivered: alreadyDelivered.size };
   } catch (e) {
     activeSenders.delete(id);
     throw e;
@@ -1600,7 +1728,7 @@ async function startSend(id) {
 app.post('/api/campaigns/:id/send', rateLimit({ windowMs: 60 * 1000, max: 5 }), async (req, res) => {
   const r = await startSend(req.params.id);
   if (r.error) return res.status(r.status || 400).json({ error: r.error });
-  res.json({ ok: true, total: r.total, skipped: r.skipped });
+  res.json({ ok: true, total: r.total, skipped: r.skipped, deferred: r.deferred || 0, deferredNote: r.deferredNote || null, alreadyDelivered: r.alreadyDelivered || 0 });
 });
 
 app.post('/api/campaigns/:id/cancel', (req, res) => {
@@ -1628,14 +1756,20 @@ app.post('/api/campaigns/:id/resume', rateLimit({ windowMs: 60 * 1000, max: 5 })
   if (c.status !== 'cancelled' && c.status !== 'failed') {
     return res.status(400).json({ error: `cannot resume from status ${c.status}` });
   }
+  if (sendSlotBusy(c.id)) return res.status(409).json({ error: 'another campaign is already sending — wait for it to finish' });
   activeSenders.add(c.id);
   try {
     const { phones: resolved, skipped: freshSkipped } = await resolvePhonesAsync(c);
     if (mode === 'all') {
-      const allCap = checkDailyCap(resolved.length);
-      if (!allCap.ok) {
+      // Delivered contacts WILL get the message again — require explicit ack.
+      if (req.body?.acknowledgeResend !== true) {
         activeSenders.delete(c.id);
-        return res.status(429).json({ error: allCap.error });
+        return res.status(400).json({ error: 'resending delivered contacts requires acknowledgeResend' });
+      }
+      const allClamped = clampToCap(resolved);
+      if (allClamped.rejected) {
+        activeSenders.delete(c.id);
+        return res.status(429).json({ error: allClamped.error });
       }
       if (resolved.length === 0) {
         activeSenders.delete(c.id);
@@ -1647,42 +1781,46 @@ app.post('/api/campaigns/:id/resume', rateLimit({ windowMs: 60 * 1000, max: 5 })
       const cur = fresh.find(x => x.id === c.id);
       if (!cur) { activeSenders.delete(c.id); return res.status(404).json({ error: 'not found' }); }
       Object.assign(cur, {
-        status: 'sending', total: resolved.length, sent: 0, failed: 0, skipped: freshSkipped,
+        status: 'sending', total: allClamped.keep.length, sent: 0, failed: 0, skipped: freshSkipped,
         results: [], resultsArchive: archive, startedAt: new Date().toISOString(),
       });
       delete cur.completedAt; delete cur.error; delete cur.cancelledAt;
+      if (allClamped.deferred > 0) cur.deferredNote = allClamped.note; else delete cur.deferredNote;
       save('campaigns', fresh);
-      clog(c.id, 'resume-all', { total: resolved.length });
-      sendCampaignViaBot(c.id, resolved).catch(() => clog(c.id, 'send-error', {})).finally(() => activeSenders.delete(c.id));
-      return res.json({ ok: true, mode, total: resolved.length, alreadySent: 0, pending: resolved.length, skipped: freshSkipped });
+      clog(c.id, 'resume-all', { total: allClamped.keep.length, deferred: allClamped.deferred });
+      sendCampaignViaBot(c.id, allClamped.keep).catch(() => clog(c.id, 'send-error', {})).finally(() => activeSenders.delete(c.id));
+      return res.json({ ok: true, mode, total: allClamped.keep.length, alreadySent: 0, pending: allClamped.keep.length, skipped: freshSkipped, deferred: allClamped.deferred, deferredNote: allClamped.note });
     }
-    // pending: delivered (ok) are skipped; failed + never-attempted are sent. History kept.
-    const okPhones = new Set((Array.isArray(c.results) ? c.results : [])
-      .filter(r => r.ok).map(r => normPhone(r.phone)).filter(Boolean));
+    // pending: delivered (ok) are skipped — across live results AND the
+    // archive (resume-all parks history there); failed + never-attempted
+    // are sent. History kept.
+    const okPhones = deliveredPhones(c);
     const pending = resolved.filter(p => !okPhones.has(normPhone(p)));
     if (pending.length === 0) {
       activeSenders.delete(c.id);
       return res.status(400).json({ error: `nothing pending — all ${okPhones.size} delivered` });
     }
-    const pendingCap = checkDailyCap(pending.length);
-    if (!pendingCap.ok) {
+    const pendClamped = clampToCap(pending);
+    if (pendClamped.rejected) {
       activeSenders.delete(c.id);
-      return res.status(429).json({ error: pendingCap.error });
+      return res.status(429).json({ error: pendClamped.error });
     }
     const fresh = load('campaigns');
     const cur = fresh.find(x => x.id === c.id);
     if (!cur) { activeSenders.delete(c.id); return res.status(404).json({ error: 'not found' }); }
     if (cur.status === 'sending') { activeSenders.delete(c.id); return res.status(409).json({ error: 'already sending' }); }
     const sentOk = (Array.isArray(cur.results) ? cur.results : []).filter(r => r.ok).length;
+    const alreadyDelivered = deliveredPhones(cur).size;
     cur.status = 'sending';
-    cur.total = Math.max(cur.total || 0, sentOk + (cur.failed || 0) + pending.length);
+    cur.total = Math.max(cur.total || 0, sentOk + (cur.failed || 0) + pendClamped.keep.length);
     cur.skipped = freshSkipped;
     cur.startedAt = cur.startedAt || new Date().toISOString();
     delete cur.completedAt; delete cur.error; delete cur.cancelledAt;
+    if (pendClamped.deferred > 0) cur.deferredNote = pendClamped.note; else delete cur.deferredNote;
     save('campaigns', fresh);
-    clog(c.id, 'resume-pending', { pending: pending.length, alreadySent: sentOk });
-    sendCampaignViaBot(c.id, pending).catch(() => clog(c.id, 'send-error', {})).finally(() => activeSenders.delete(c.id));
-    return res.json({ ok: true, mode, total: cur.total, alreadySent: sentOk, pending: pending.length, skipped: freshSkipped });
+    clog(c.id, 'resume-pending', { pending: pendClamped.keep.length, alreadySent: alreadyDelivered, deferred: pendClamped.deferred });
+    sendCampaignViaBot(c.id, pendClamped.keep).catch(() => clog(c.id, 'send-error', {})).finally(() => activeSenders.delete(c.id));
+    return res.json({ ok: true, mode, total: cur.total, alreadySent: alreadyDelivered, pending: pendClamped.keep.length, skipped: freshSkipped, deferred: pendClamped.deferred, deferredNote: pendClamped.note });
   } catch (e) {
     activeSenders.delete(c.id);
     throw e;
@@ -1740,12 +1878,35 @@ async function sendCampaignViaBot(campaignId, phones) {
       clog(campaignId, 'send-aborted', { status: fresh.status });
       return;
     }
+    // Cap backstop: re-checked per batch so a long send (or a parallel
+    // sender) cannot overrun the cap that the start gate measured.
+    // Deferred recipients have no result rows, so resume-pending picks them
+    // up tomorrow. Status failed (not done) keeps resume available.
+    const { room: batchRoom, cap: batchCap } = capRoom();
+    if (batchRoom <= 0) {
+      const stop = load('campaigns');
+      const stopIdx = stop.findIndex(c => c.id === campaignId);
+      if (stopIdx !== -1) {
+        stop[stopIdx].status = 'failed';
+        stop[stopIdx].error = 'daily send cap reached mid-send — resume tomorrow to continue';
+        stop[stopIdx].capStopped = true;
+        stop[stopIdx].completedAt = new Date().toISOString();
+        save('campaigns', stop);
+      }
+      clog(campaignId, 'send-cap-stop', { batch: bi, cap: batchCap });
+      return;
+    }
     try {
       // 90s: the bot sends phones sequentially (~1.5-3s each with checks/uploads),
       // so a 20-batch legitimately takes 30-60s. No 504 retries (see botApiWithRetry).
+      // idempotency_base lets the bot replay stored results instead of re-sending
+      // on duplicate delivery (retries, double-clicks, scheduler races).
+      // Retry clones carry the ORIGINAL campaign id as base so already-delivered
+      // phones replay instead of re-sending.
+      const idemBase = stored.idempotencyBase || campaignId;
       const result = await botApiWithRetry('/admin/broadcast/send', {
         method: 'POST',
-        body: JSON.stringify({ phones: batch, message: text, image_url: image }),
+        body: JSON.stringify({ phones: batch, message: text, image_url: image, idempotency_base: idemBase }),
         timeoutMs: 90000,
       }, 3);
       const cur = load('campaigns');
@@ -1891,6 +2052,8 @@ app.post('/api/test-send', rateLimit({ windowMs: 60 * 1000, max: 10 }), async (r
   if (typeof message !== 'string' || message.length > 4096) return res.status(400).json({ error: 'invalid message' });
   const normed = normPhone(phone);
   if (!isSendablePhone(normed)) return res.status(400).json({ error: 'invalid phone' });
+  const testCap = checkDailyCap(1);
+  if (!testCap.ok) return res.status(429).json({ error: testCap.error });
   let image = '';
   try {
     image = resolveImagePayload(imageUrl);

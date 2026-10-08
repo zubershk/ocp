@@ -786,7 +786,7 @@ function CustomersView() {
       setMsgIds([]);
       setMsgText('');
       setSelected([]);
-      toast(`Sending to ${res.total} contacts`, 'success');
+      toast(res.deferred > 0 ? `Sending to ${res.total} contacts — ${res.deferred} deferred by daily cap` : `Sending to ${res.total} contacts`, res.deferred > 0 ? 'info' : 'success');
     } catch (e) {
       toast(e?.message || 'send failed');
     }
@@ -1767,7 +1767,7 @@ function CampaignsView() {
     try {
       const res = await api(`/api/campaigns/${id}/send`, { method: 'POST' });
       setShowProgress(id);
-      toast('Campaign sending started', 'success');
+      toast((res.alreadyDelivered > 0 ? `Resuming — skipping ${res.alreadyDelivered} already delivered. Sending ${res.total}` : 'Campaign sending started') + (res.deferred > 0 ? ` — ${res.deferred} deferred by daily cap (${res.deferredNote || 'resume tomorrow'})` : ''), (res.deferred > 0 || res.alreadyDelivered > 0) ? 'info' : 'success');
       load();
     } catch (e) {
       toast(e.message || 'send failed');
@@ -1805,6 +1805,17 @@ function CampaignsView() {
     return c.failed || 0;
   };
 
+  // Distinct delivered contacts across live results AND the archive
+  // (resume-all parks history there). Resume math must use this, or
+  // archived deliveries get re-sent and undercounted in the UI.
+  const deliveredCount = (c) => {
+    const s = new Set();
+    for (const r of [...(Array.isArray(c.results) ? c.results : []), ...(Array.isArray(c.resultsArchive) ? c.resultsArchive : [])]) {
+      if (r.ok && r.phone) s.add(normPhone(r.phone));
+    }
+    return s.size;
+  };
+
   // Resend-all: fresh draft with the same message + audience, then send it.
   const resendAll = async (c) => {
     if (!(await confirm(`Send "${c.name}" again to the same audience?`, { title: 'Resend campaign', confirmLabel: 'Resend', danger: false }))) return;
@@ -1827,16 +1838,15 @@ function CampaignsView() {
 
   // Resume: continue without resending delivered contacts (pending), or restart all.
   const resumeCampaign = async (c, mode) => {
-    const results = Array.isArray(c.results) ? c.results : [];
-    const okCount = results.filter(r => r.ok).length;
-    const pendingN = Math.max(0, (c.total || 0) - okCount - failedCount(c));
+    const delivered = deliveredCount(c);
+    const pendingN = Math.max(0, (c.total || 0) - delivered - failedCount(c));
     const msg = mode === 'pending'
-      ? `Resume "${c.name}"? ${okCount} already delivered will be skipped (${pendingN} to send).`
+      ? `Resume "${c.name}"? ${delivered} already delivered will be skipped (${pendingN} to send).`
       : `Resend "${c.name}" to all ${c.total || 0}, restarting counts? Already delivered contacts will get it again.`;
     if (!(await confirm(msg, { title: mode === 'pending' ? 'Resume campaign' : 'Resend to all', confirmLabel: mode === 'pending' ? 'Resume' : 'Resend', danger: mode !== 'pending' }))) return;
     try {
-      const res = await api(`/api/campaigns/${c.id}/resume`, { method: 'POST', body: JSON.stringify({ mode }) });
-      toast(mode === 'pending' ? `Resuming ${res.pending} contacts (skipped ${res.alreadySent} sent)` : `Restarted — sending to ${res.pending}`, 'success');
+      const res = await api(`/api/campaigns/${c.id}/resume`, { method: 'POST', body: JSON.stringify({ mode, acknowledgeResend: mode === 'all' }) });
+      toast((mode === 'pending' ? `Resuming ${res.pending} contacts (skipped ${res.alreadySent} sent)` : `Restarted — sending to ${res.pending}`) + (res.deferred > 0 ? ` — ${res.deferred} deferred by daily cap` : ''), res.deferred > 0 ? 'info' : 'success');
       openDetail(c.id);
     } catch (e) {
       toast(e?.message || 'resume failed');
@@ -1851,7 +1861,7 @@ function CampaignsView() {
     if (!(await confirm(`Retry ${n} failed recipient${n === 1 ? '' : 's'}?`, { title: 'Retry failed', confirmLabel: 'Retry', danger: false }))) return;
     try {
       const res = await api(`/api/campaigns/${c.id}/retry-failed`, { method: 'POST' });
-      toast(`Retrying ${res.total} contacts`, 'success');
+      toast(res.deferred > 0 ? `Retrying ${res.total} contacts — ${res.deferred} deferred by daily cap` : `Retrying ${res.total} contacts`, res.deferred > 0 ? 'info' : 'success');
     } catch (e) {
       toast(e?.message || 'retry failed');
     }
@@ -2182,7 +2192,7 @@ function CampaignsView() {
               <div className="flex flex-wrap gap-2 pt-1 border-t border-stone-100">
                 {(detail.status === 'cancelled' || detail.status === 'failed') && (
                   <>
-                    <button onClick={() => resumeCampaign(detail, 'pending')} className="px-3 py-2 rounded-xl bg-brand-600 text-white text-xs font-bold hover:bg-brand-700">Resume — {Math.max(0, (detail.total || 0) - (detail.results || []).filter(r => r.ok).length - failedCount(detail))} pending</button>
+                    <button onClick={() => resumeCampaign(detail, 'pending')} className="px-3 py-2 rounded-xl bg-brand-600 text-white text-xs font-bold hover:bg-brand-700">Resume — {Math.max(0, (detail.total || 0) - deliveredCount(detail) - failedCount(detail))} pending</button>
                     <button onClick={() => resumeCampaign(detail, 'all')} className="px-3 py-2 rounded-xl border border-red-200 text-red-600 text-xs font-medium hover:bg-red-50">Resend to all {detail.total || 0}</button>
                   </>
                 )}
@@ -2641,8 +2651,8 @@ function SettingsView() {
         <CardContent className="flex flex-col gap-4">
         <Input label="Admin Key (stored locally, never sent to server except as auth header)" type="password" value={adminKey} onChange={(e) => setAdminKey(e.target.value)} placeholder="Your BOT_ADMIN_KEY from .env" />
         <div className="text-xs text-zinc-500">Bot URL: <span className="font-mono">{settings.botApiUrl || 'http://bot:8090'}</span> (environment-only) · {settings.configured ? 'configured' : 'not configured'}</div>
-        <Input label="Delay Between Batches (ms, 500-10000)" type="number" value={settings.delayMs || 3000} onChange={(e) => setSettings({ ...settings, delayMs: parseInt(e.target.value) || 3000 })} />
-        <p className="text-xs text-zinc-400">Messages are sent through the bot's Evolution GO integration. Recommended: 3000ms.</p>
+        <Input label="Delay Between Batches (ms, 500-10000)" type="number" value={settings.delayMs || 5000} onChange={(e) => setSettings({ ...settings, delayMs: parseInt(e.target.value) || 5000 })} />
+        <p className="text-xs text-zinc-400">Messages are sent through the bot's Evolution GO integration. Recommended: 5000ms for a new number.</p>
         </CardContent>
       </Card>
 
@@ -2655,8 +2665,8 @@ function SettingsView() {
         <CardContent className="flex flex-col gap-4">
         <div className="text-xs text-zinc-500">Sent today (IST): <span className="font-bold text-zinc-800">{settings.sentToday ?? 0}</span>{(settings.dailySendCap || 0) > 0 && <> / {settings.dailySendCap}</>} · Known-bad numbers auto-skipped: <span className="font-bold text-zinc-800">{settings.blockedCount ?? 0}</span></div>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Input label="Daily Send Cap (0 = unlimited)" type="number" value={settings.dailySendCap ?? 1000} onChange={(e) => setSettings({ ...settings, dailySendCap: parseInt(e.target.value) || 0 })} placeholder="1000" />
-          <Input label="Contacts Per Batch (1-20)" type="number" value={settings.batchSize ?? 5} onChange={(e) => setSettings({ ...settings, batchSize: Math.min(20, Math.max(1, parseInt(e.target.value) || 5)) })} placeholder="5" />
+          <Input label="Daily Send Cap (0 = unlimited)" type="number" value={settings.dailySendCap ?? 250} onChange={(e) => setSettings({ ...settings, dailySendCap: parseInt(e.target.value) || 0 })} placeholder="250" />
+          <Input label="Contacts Per Batch (1-20)" type="number" value={settings.batchSize ?? 3} onChange={(e) => setSettings({ ...settings, batchSize: Math.min(20, Math.max(1, parseInt(e.target.value) || 3)) })} placeholder="3" />
         </div>
         <p className="text-xs text-zinc-400">New sends are refused once the cap is reached. Smaller batches + longer delays keep WhatsApp from rate-limiting the account. Dead numbers are learned automatically and skipped before sending.</p>
         </CardContent>
