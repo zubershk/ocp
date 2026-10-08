@@ -8,7 +8,7 @@ import DiscountList from './DiscountList';
 import OrderTypeStrip from './OrderTypeStrip';
 import { shouldShowField } from './billRules';
 import type { POSConfig } from '../../config/posDefaults';
-import { formatINR, posApi, posErrorMessage, toRupees, type LedgerSummary, type PosOrder, type PosOrderType, type PosPayMethod } from '../../services/posService';
+import { formatCurrency, posApi, posErrorMessage, toRupees, type LedgerSummary, type PosOrder, type PosOrderType, type PosPayMethod } from '../../services/posService';
 import type { CartLine, CustomerInfo, RecordedPayment } from './types';
 
 export interface RightBillProps {
@@ -113,7 +113,7 @@ function CustomerQuickAdd({ cfg, orderType, customer, setCustomer, locked }: {
   );
 }
 
-function CartLines({ order, cart, onQty, onRequestRemove, onRequestClear, lineRefs, pulseKey }: {
+function CartLines({ order, cart, onQty, onRequestRemove, onRequestClear, lineRefs, pulseKey, currencySymbol = '₹' }: {
   order: PosOrder | undefined;
   cart: CartLine[];
   onQty: (key: string, delta: number) => void;
@@ -121,6 +121,7 @@ function CartLines({ order, cart, onQty, onRequestRemove, onRequestClear, lineRe
   onRequestClear: (count: number) => void;
   lineRefs: React.RefObject<Map<string, HTMLDivElement>>;
   pulseKey: string | null;
+  currencySymbol?: string;
 }) {
   return (
     <div className="p-2 space-y-2 bg-white">
@@ -129,7 +130,7 @@ function CartLines({ order, cart, onQty, onRequestRemove, onRequestClear, lineRe
           <div key={it.id} className="border-b py-1.5 text-sm min-w-0">
             <div className="flex items-center gap-2 min-w-0">
               <span className="flex-1 min-w-0 truncate">{it.quantity}× {it.name}</span>
-              <span className="shrink-0 font-bold tabular-nums">₹{(it.line_total ?? it.subtotal).toFixed(2)}</span>
+              <span className="shrink-0 font-bold tabular-nums">{currencySymbol}{(it.line_total ?? it.subtotal).toFixed(2)}</span>
             </div>
             {(it.size || it.crust) && (
               <div className="text-xs text-zinc-500 truncate">{[it.size, it.crust].filter(Boolean).join(' · ')}</div>
@@ -147,7 +148,7 @@ function CartLines({ order, cart, onQty, onRequestRemove, onRequestClear, lineRe
         >
           <div className="flex items-center gap-2 min-w-0">
             <span className="flex-1 min-w-0 truncate" title={l.name}>{l.quantity}× {l.name}</span>
-            <span className="shrink-0 text-xs font-bold tabular-nums">₹{((l.unitPaise ?? 0) * l.quantity / 100).toFixed(2)}</span>
+            <span className="shrink-0 text-xs font-bold tabular-nums">{currencySymbol}{((l.unitPaise ?? 0) * l.quantity / 100).toFixed(2)}</span>
           </div>
           {(l.size || l.crustName) && (
             <div className="text-xs text-zinc-500 truncate">{[l.size, l.crustName].filter(Boolean).join(' · ')}</div>
@@ -357,10 +358,10 @@ export default function RightBill(props: RightBillProps) {
       <div className="flex-1 min-h-0 overflow-y-auto">
       {(cart.length > 0 || orderId != null) && (
         <p role="status" aria-live="polite" className="sr-only">
-          {order ? (order.items ?? []).length : cart.length} items, {order ? formatINR(order.total) : `${currency}${displaySubtotal.toFixed(2)} estimated`}
+          {order ? (order.items ?? []).length : cart.length} items, {order ? formatCurrency(order.total, currency) : `${currency}${displaySubtotal.toFixed(2)} estimated`}
         </p>
       )}
-      <CartLines order={order} cart={cart} onQty={onQty} onRequestRemove={onRequestRemove} onRequestClear={onRequestClear} lineRefs={lineRefs} pulseKey={pulseKey} />
+      <CartLines order={order} cart={cart} onQty={onQty} onRequestRemove={onRequestRemove} onRequestClear={onRequestClear} lineRefs={lineRefs} pulseKey={pulseKey} currencySymbol={currency} />
       {orderId == null ? (
       <>
       <button
@@ -421,6 +422,7 @@ export default function RightBill(props: RightBillProps) {
               canPay={canPay}
               canDiscount={canDiscount}
               canCancel={canCancel}
+              currencySymbol={currency}
             />
       ) : null}
       </div>
@@ -451,7 +453,7 @@ export default function RightBill(props: RightBillProps) {
                 <label className="flex items-center gap-1.5 text-xs font-semibold text-zinc-700 shrink-0 px-1"><input type="checkbox" checked={isComplimentary} onChange={e => setIsComplimentary(e.target.checked)} className="h-4 w-4 accent-[var(--pos-accent,#b91c1c)]" />Complimentary</label>
               )}
             </div>
-            <span className="ml-auto whitespace-nowrap text-sm font-black tabular-nums shrink-0">Total {order ? formatINR(order.total) : `${currency}${displaySubtotal.toFixed(2)}`}</span>
+            <span className="ml-auto whitespace-nowrap text-sm font-black tabular-nums shrink-0">Total {order ? formatCurrency(order.total, currency) : `${currency}${displaySubtotal.toFixed(2)}`}</span>
           </div>
           {isAdvance && cfg.features?.advance_order !== false && (
             <Input id="advance-at" label="Advance time" type="datetime-local" value={advanceAt} min={nowLocal} onChange={e => setAdvanceAt(e.target.value)} aria-label="Advance order time" className="h-11 min-h-[44px] text-xs" />
@@ -485,12 +487,12 @@ export default function RightBill(props: RightBillProps) {
           {!ledgerReady ? (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-zinc-100 border border-zinc-200 text-zinc-500 text-xs font-bold px-3 py-1">Syncing payment status…</span>
           ) : overpaidPaise > 0 ? (
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 border border-amber-300 text-amber-800 text-xs font-bold px-3 py-1">Overpaid {formatINR(toRupees(overpaidPaise))}</span>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 border border-amber-300 text-amber-800 text-xs font-bold px-3 py-1">Overpaid {formatCurrency(toRupees(overpaidPaise), currency)}</span>
           ) : isPaid ? (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 border border-emerald-300 text-emerald-800 text-xs font-bold px-3 py-1">Paid</span>
           ) : (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-zinc-100 border border-zinc-200 text-zinc-600 text-xs font-bold px-3 py-1">
-              Due{dueRupeesValue != null ? ` ${formatINR(dueRupeesValue)}` : ''}
+              Due{dueRupeesValue != null ? ` ${formatCurrency(dueRupeesValue, currency)}` : ''}
             </span>
           )}
         </div>
@@ -535,6 +537,7 @@ export default function RightBill(props: RightBillProps) {
               busy={bogoBusy}
               onPick={applyBogo}
               onRemove={order && order.discount > 0 ? removeBogo : null}
+              currencySymbol={currency}
             />
           </div>
         </Modal>

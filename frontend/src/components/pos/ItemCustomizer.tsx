@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Minus, Plus, Search } from 'lucide-react';
 import Input from '../ui/Input';
 import { Modal } from '../ui/Modal';
-import { posApi, formatPaise, type PosMenuItem } from '../../services/posService';
+import { posApi, formatCurrency, type PosMenuItem } from '../../services/posService';
 import { useCrusts } from '../../context/CrustContext';
 import type { CartLine } from './types';
 import { sizesOf, unitRupees } from './MenuPanel';
@@ -40,6 +40,7 @@ export default function ItemCustomizer({
   const [selectedAddons, setSelectedAddons] = useState<Record<number, Set<number>>>({});
   const { crusts } = useCrusts();
   const { config: posConfig } = usePosConfig();
+  const currencySymbol = posConfig.ui?.currency_symbol ?? '₹';
   const optionsNest = !item.no_crust && crusts.length > 0;
   const selectedCrust = crusts.find((c) => c.slug === crust);
 
@@ -166,11 +167,11 @@ export default function ItemCustomizer({
                   {c.name}
                 </button>
               ))}
-            </div>
             <p className="text-xs text-zinc-500 mt-1.5">
-              Est. {formatPaise(estPaise)} {addonPaise > 0 && `+ ${formatPaise(addonPaise)} addons`} · register reprices on order creation
+              Est. {formatCurrency(estPaise / 100, currencySymbol)} {addonPaise > 0 && `+ ${formatCurrency(addonPaise / 100, currencySymbol)} addons`} · register reprices on order creation
             </p>
           </div>
+        </div>
         )}
 
         {groupsQuery.isLoading ? (
@@ -212,7 +213,7 @@ export default function ItemCustomizer({
                           disabled={!canSelect}
                           aria-pressed={isSel}
                           aria-describedby={helperId}
-                          aria-label={`${it.name} ₹${it.price}${isSel ? ' selected' : ''}`}
+                          aria-label={`${it.name} ${currencySymbol}${it.price}${isSel ? ' selected' : ''}`}
                           onClick={() => {
                             setSelectedAddons(prev => {
                               const next = { ...prev };
@@ -231,7 +232,7 @@ export default function ItemCustomizer({
                           className={`p-3 rounded border-2 text-left transition-all flex flex-col gap-1 min-h-[80px] ${isSel ? 'border-[var(--pos-accent,#b91c1c)] bg-[var(--pos-accent,#b91c1c)] text-white' : 'border-zinc-200 bg-white hover:border-zinc-300'} ${!canSelect ? 'opacity-50 cursor-not-allowed' : 'active:scale-[0.97]'}`}
                         >
                           <span className="text-xs font-medium leading-tight line-clamp-2">{it.name}</span>
-                          <span className="text-sm font-bold">₹{it.price}</span>
+                          <span className="text-sm font-bold">{currencySymbol}{it.price}</span>
                           {isSel && <span className="text-2xs">✓ Selected</span>}
                         </button>
                       );
@@ -304,7 +305,7 @@ export default function ItemCustomizer({
               aria-describedby={!canAdd ? addonGroups.filter(g => (selectedAddons[g.id]?.size ?? 0) < g.min_select).map(g => `addon-help-${g.id}`).join(' ') || undefined : undefined}
               className={`w-full h-14 min-h-[56px] rounded-2xl font-bold text-lg transition-all active:scale-[0.98] sticky bottom-0 z-10 ${canAdd ? 'bg-[var(--pos-accent,#b91c1c)] hover:bg-[var(--pos-accent-hover,#991b1b)] text-white shadow-lg' : 'bg-zinc-200 text-zinc-700 cursor-not-allowed'}`}
             >
-              {canAdd ? 'Save' : 'Select required addons'} {canAdd && estPaise > 0 && `· ${formatPaise(estPaise * qty)}`}
+              {canAdd ? 'Save' : 'Select required addons'} {canAdd && estPaise > 0 && `· ${formatCurrency((estPaise * qty) / 100, currencySymbol)}`}
             </button>
           );
         })()}

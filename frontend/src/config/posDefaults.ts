@@ -9,7 +9,7 @@ export interface POSConfig {
   charges: { container_default: number; tip_enabled: boolean; round_mode: string; tax_source: string; tax_percent?: number };
   customer_fields: Record<string, { visible: boolean; required: boolean; for: string[] }>;
   features: Record<string, boolean>;
-  ui: { header_title: string; currency_symbol: string; pos_accent: string };
+  ui: { header_title: string; currency_symbol?: string; pos_accent: string };
   version: number;
 }
 
@@ -41,7 +41,7 @@ export const DEFAULT_POS_CONFIG: POSConfig = {
     locality: { visible: true, required: false, for: ['delivery'] },
   },
   features: { bogo: false, split_bill: false, complimentary: true, advance_order: true, kot: true, hold: true },
-  ui: { header_title: 'OCP POS', currency_symbol: '₹', pos_accent: '#b91c1c' },
+  ui: { header_title: 'OCP POS', pos_accent: '#b91c1c' },
   version: 1,
 };
 

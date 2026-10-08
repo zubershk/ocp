@@ -115,7 +115,7 @@ const canCancel = ['owner', 'manager'].includes(role);
 const canManageTables = ['owner', 'manager'].includes(role);
   const outletsQuery = useQuery({ queryKey: ['pos-outlets-name'], queryFn: posApi.getOutlets, enabled: authed, staleTime: 60_000 });
   const outletName = outletsQuery.data?.find(o => o.id === outletId)?.name ?? null;
-  const { config, isFallback, error: configError } = usePosConfig();
+  const { config, isFallback, error: configError, currencySymbol: posCurrencySymbol } = usePosConfig();
   const activeOrderTypes = useMemo(() => config.order_types.filter(o => o.active), [config.order_types]);
   // Sync container default from config (once, when config loads, if not dirty)
   useEffect(() => {
@@ -440,8 +440,8 @@ const canManageTables = ['owner', 'manager'].includes(role);
           />
         </div>
       </main>
-      <HoldDrawer open={holdOpen} onClose={()=>setHoldOpen(false)} held={[...serverHeld.map(s => ({ id: s.id, orderNumber: s.order_number, total: s.total, at: s.created_at })), ...held.filter(l => !serverHeld.some(s => s.id === l.id))].slice(0,20)} orderTypes={{}} onResume={async(h: HeldOrder)=>{ setResumingId(h.id); try{await posApi.resumeOrder(h.id); setHeld((prev: HeldOrder[])=>prev.filter(x=>x.id!==h.id)); setHoldOpen(false); const r=await posApi.getOrder(h.id); openOrder(r.id,r.total); setNotice(`Order #${r.order_number} resumed.`);}catch(e){setNotice(posErrorMessage(e as Error).message); void serverHeldQuery.refetch();}finally{setResumingId(null);}}} resumingId={resumingId} />
-      <ReceiptModal open={receiptOpen} onClose={()=>setReceiptOpen(false)} order={order ?? null} payments={payments} canRefund={role==='owner'||role==='manager'} outletName={outletName ?? 'Outlet'} onNewSale={resetSale} />
+      <HoldDrawer open={holdOpen} onClose={()=>setHoldOpen(false)} held={[...serverHeld.map(s => ({ id: s.id, orderNumber: s.order_number, total: s.total, at: s.created_at })), ...held.filter(l => !serverHeld.some(s => s.id === l.id))].slice(0,20)} orderTypes={{}} onResume={async(h: HeldOrder)=>{ setResumingId(h.id); try{await posApi.resumeOrder(h.id); setHeld((prev: HeldOrder[])=>prev.filter(x=>x.id!==h.id)); setHoldOpen(false); const r=await posApi.getOrder(h.id); openOrder(r.id,r.total); setNotice(`Order #${r.order_number} resumed.`);}catch(e){setNotice(posErrorMessage(e as Error).message); void serverHeldQuery.refetch();}finally{setResumingId(null);}}} resumingId={resumingId} currencySymbol={posCurrencySymbol} />
+      <ReceiptModal open={receiptOpen} onClose={()=>setReceiptOpen(false)} order={order ?? null} payments={payments} canRefund={role==='owner'||role==='manager'} outletName={outletName ?? 'Outlet'} onNewSale={resetSale} currencySymbol={posCurrencySymbol} />
       <ConfirmDialog open={pendingConfirm != null} title={confirmCopy.title} message={confirmCopy.message} confirmLabel={confirmCopy.confirmLabel} danger={confirmCopy.danger} onConfirm={() => { void executePendingConfirm(); }} onCancel={() => setPendingConfirm(null)} />
     </div>
   );

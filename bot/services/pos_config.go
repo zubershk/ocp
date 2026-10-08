@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"orangecheesepizza/bot/database"
+	"orangecheesepizza/bot/services/currency"
 )
 
 // ------------------------------------------------------------------
@@ -90,8 +91,10 @@ func (f *POSFeatures) UnmarshalJSON(data []byte) error {
 }
 
 type POSUI struct {
-	HeaderTitle   string `json:"header_title"`
-	CurrencySymbol string `json:"currency_symbol"`
+	HeaderTitle string `json:"header_title"`
+	// CurrencySymbol is derived from the restaurant's authoritative currency.
+	// Kept in JSON for backward compatibility; populated on load from restaurant.currency.
+	CurrencySymbol string `json:"currency_symbol,omitempty"`
 	PosAccent     string `json:"pos_accent"`
 }
 
@@ -157,7 +160,7 @@ func defaultPOSConfig() *POSConfig {
 			"locality": {Visible: true, Required: false, For: []string{"delivery"}},
 		},
 		Features: POSFeatures{Bogo: false, SplitBill: false, Complimentary: true, AdvanceOrder: true, KOT: true, Hold: true},
-		UI: POSUI{HeaderTitle: "OCP POS", CurrencySymbol: "₹", PosAccent: "#b91c1c"},
+		UI: POSUI{HeaderTitle: "OCP POS", PosAccent: "#b91c1c"},
 		Version: 1,
 	}
 }
@@ -240,8 +243,8 @@ func validatePOSConfig(cfg *POSConfig) error {
 	if !validRound[cfg.Charges.RoundMode] {
 		return fmt.Errorf("invalid round_mode")
 	}
-	if len(cfg.UI.CurrencySymbol) == 0 || len(cfg.UI.CurrencySymbol) > 5 {
-		return fmt.Errorf("currency_symbol 1..5")
+	if len(cfg.UI.CurrencySymbol) > 5 {
+		return fmt.Errorf("currency_symbol max 5")
 	}
 	if len(cfg.UI.HeaderTitle) > 40 {
 		return fmt.Errorf("header_title max 40")
@@ -273,6 +276,10 @@ func LoadPOSConfigForEx(restaurantID int) (*POSConfig, ConfigSource) {
 
 	store := func(cfg *POSConfig, src ConfigSource) (*POSConfig, ConfigSource) {
 		enrichPOSSizeMeta(cfg, rid)
+		// Currency authority: the symbol is always derived from the
+		// restaurant's authoritative currency. Any stored mirror is
+		// overwritten so a stale row can never override the authority.
+		ApplyCurrencyAuthority(cfg, rid)
 		posCfgMu.Lock()
 		posCfgCache[rid] = cachedPOSConfig{cfg: cfg, src: src}
 		posCfgMu.Unlock()
@@ -297,19 +304,33 @@ func LoadPOSConfigForEx(restaurantID int) (*POSConfig, ConfigSource) {
 	if err := validatePOSConfig(&cfg); err != nil {
 		out := *defaultPOSConfig()
 		enrichPOSSizeMeta(&out, rid)
+		ApplyCurrencyAuthority(&out, rid)
 		return &out, ConfigSourceFallbackInvalid
 	}
 	return store(&cfg, ConfigSourceDB)
 }
 
+// ApplyCurrencyAuthority sets the POS display currency from the
+// restaurant's authoritative currency code. The symbol is derived, never
+// stored: SavePOSConfig strips it before persist.
+func ApplyCurrencyAuthority(cfg *POSConfig, restaurantID int) {
+	if cfg == nil {
+		return
+	}
+	cfg.UI.CurrencySymbol = currency.Symbol(RestaurantCurrency(ResolveRestaurant(restaurantID)))
+}
+
 // SavePOSConfig validates, persists, and invalidates cache.
 // Inches are canonicalized from bot_config before persist to prevent drift.
+// The currency symbol mirror is stripped before persist: it is derived on
+// every load from the restaurant's authoritative currency.
 func SavePOSConfig(cfg *POSConfig, restaurantID int) error {
 	if err := validatePOSConfig(cfg); err != nil {
 		return err
 	}
 	rid := ResolveRestaurant(restaurantID)
 	canonicalizePOSSizeMeta(cfg, rid)
+	cfg.UI.CurrencySymbol = ""
 	raw, err := json.Marshal(cfg)
 	if err != nil {
 		return err

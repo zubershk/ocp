@@ -206,11 +206,15 @@ async function posFetch<T>(path: string, opts: PosFetchOptions = {}): Promise<T>
 // paise. Conversions here are presentation/transport only.
 export const toPaise = (rupees: number): number => Math.round(rupees * 100);
 export const toRupees = (paise: number): number => paise / 100;
-export function formatINR(rupees: number): string {
-  if (!Number.isFinite(rupees)) return '₹0';
-  return `₹${rupees.toLocaleString('en-IN', { maximumFractionDigits: 2, minimumFractionDigits: Number.isInteger(rupees) ? 0 : 2 })}`;
+
+export function formatCurrency(major: number, currencySymbol: string): string {
+  if (!Number.isFinite(major)) return `${currencySymbol}0`;
+  return `${currencySymbol}${major.toLocaleString('en-US', { maximumFractionDigits: 2, minimumFractionDigits: Number.isInteger(major) ? 0 : 2 })}`;
 }
-export const formatPaise = (paise: number): string => formatINR(toRupees(paise));
+export const formatPaise = (paise: number, currencySymbol?: string): string => formatCurrency(toRupees(paise), currencySymbol ?? '₹');
+
+// Legacy INR-specific formatter kept for backward compatibility during transition.
+export const formatINR = (rupees: number): string => formatCurrency(rupees, '₹');
 
 function mapTable(raw: RawTable): PosTable {
   return {

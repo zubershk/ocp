@@ -5,6 +5,7 @@ import Skeleton from '../ui/Skeleton';
 import Input from '../ui/Input';
 import { posApi, type PosMenuItem } from '../../services/posService';
 import { useCrusts } from '../../context/CrustContext';
+import { usePosConfig } from '../../hooks/usePosConfig';
 import ItemCustomizer from './ItemCustomizer';
 import type { CartLine } from './types';
 import { cartLineKey } from './types';
@@ -68,6 +69,7 @@ export default function MenuPanel({
   const [customize, setCustomize] = useState<PosMenuItem | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const { crusts } = useCrusts();
+  const { currencySymbol } = usePosConfig();
 
   // Ctrl/Cmd + K focuses search from anywhere on the POS.
   useEffect(() => {
@@ -211,7 +213,7 @@ export default function MenuPanel({
                         tapItem(item);
                       }
                     }}
-                    aria-label={`${item.name} ₹${item.price}${hasCart ? `, ${inCart} in cart` : ''}`}
+                    aria-label={`${item.name} ${currencySymbol}${item.price}${hasCart ? `, ${inCart} in cart` : ''}`}
                     className="flex-1 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pos-accent,#b91c1c)]/30"
                   >
                     <div className="bg-white px-1.5 pt-1.5">
@@ -220,7 +222,7 @@ export default function MenuPanel({
                     <div className="p-2">
                       <div className="font-bold text-xs leading-tight line-clamp-2 min-h-7">{item.name}</div>
                       <div className="mt-1 flex items-center justify-between gap-2">
-                        <span className="font-black text-xs tabular-nums">₹{item.price}</span>
+                        <span className="font-black text-xs tabular-nums">{currencySymbol}{item.price}</span>
                         {!simple || inCart === 0 ? (
                           <span className="inline-flex items-center gap-1 text-[var(--pos-accent,#b91c1c)] font-bold text-sm">
                             <Plus size={15} aria-hidden /> Add

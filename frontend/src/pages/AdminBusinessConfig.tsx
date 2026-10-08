@@ -33,11 +33,17 @@ interface BusinessConfig {
   kitchen_hours: string;
   delivery_hours: string;
   business_type: string;
-  currency_symbol: string;
   tax_label: string;
   whatsapp_lists?: boolean;
   whatsapp_photos?: boolean;
   public_base_url?: string;
+}
+
+interface CurrencyAuthority {
+  code: string;
+  symbol: string;
+  locale: string;
+  minor_unit: number;
 }
 
 const ICON_OPTIONS = [
@@ -81,12 +87,16 @@ export default function AdminBusinessConfig() {
     general: true, sizes: true, payments: true, icons: false, whatsapp: false,
   });
 
-  const { data: resp, isLoading } = useQuery<{ config: BusinessConfig; _meta?: { source?: string } }>({
+  const { data: resp, isLoading } = useQuery<{ config: BusinessConfig; currency?: CurrencyAuthority; _meta?: { source?: string } }>({
     queryKey: ['admin-business-config'],
     queryFn: () => adminFetch('/admin/business-config'),
   });
   const config = resp?.config;
   const configSource = resp?._meta?.source ?? 'db';
+  // Operating currency is authoritative from the restaurant record — never
+  // stored in business config. The symbol below is display-only.
+  const currencySymbol = resp?.currency?.symbol ?? '₹';
+  const currencyCode = resp?.currency?.code ?? '';
 
   const [localConfig, setLocalConfig] = useState<BusinessConfig | null>(null);
   const cfg = localConfig || config;
@@ -249,9 +259,9 @@ export default function AdminBusinessConfig() {
             <Input value={cfg.order_prefix} onChange={e => update({ order_prefix: e.target.value.toUpperCase() })}
               placeholder="ORD" maxLength={10} />
           </Field>
-          <Field label="Currency Symbol">
-            <Input value={cfg.currency_symbol} onChange={e => update({ currency_symbol: e.target.value })}
-              placeholder="₹" maxLength={5} />
+          <Field label="Operating Currency (authoritative)">
+            <Input value={currencyCode ? `${currencyCode} (${currencySymbol})` : currencySymbol} readOnly
+              title="Derived from the restaurant's currency. Change it on the restaurant record, not here." />
           </Field>
           <Field label="Tax Label">
             <Input value={cfg.tax_label} onChange={e => update({ tax_label: e.target.value })}
@@ -265,11 +275,11 @@ export default function AdminBusinessConfig() {
             <Input value={cfg.delivery_hours} onChange={e => update({ delivery_hours: e.target.value })}
               placeholder="11 AM - 4 AM" />
           </Field>
-          <Field label={`Delivery Fee (${cfg.currency_symbol})`}>
+          <Field label={`Delivery Fee (${currencySymbol})`}>
             <Input type="number" value={cfg.delivery_fee} onChange={e => update({ delivery_fee: parseFloat(e.target.value) || 0 })}
               min="0" step="1" />
           </Field>
-          <Field label={`Minimum Order (${cfg.currency_symbol})`}>
+          <Field label={`Minimum Order (${currencySymbol})`}>
             <Input type="number" value={cfg.min_order_amount} onChange={e => update({ min_order_amount: parseFloat(e.target.value) || 0 })}
               min="0" step="1" />
           </Field>

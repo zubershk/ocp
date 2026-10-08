@@ -10,6 +10,7 @@ export type { POSConfig };
 
 interface PosConfigResponse {
   pos_config: POSConfig;
+  currency?: { code: string; symbol: string; locale: string; minor_unit: number };
   _meta?: { source?: ConfigSource; version?: number };
 }
 
@@ -18,7 +19,7 @@ export function usePosConfig() {
   const { lastEvent, lastSeq, live } = useRealtime();
   const outletId = getPosOutletId();
 
-  const query = useQuery<{ config: POSConfig; source: ConfigSource; error: string | null }>({
+  const query = useQuery<{ config: POSConfig; source: ConfigSource; error: string | null; currency?: PosConfigResponse['currency'] }>({
     queryKey: ['pos-config', outletId],
     queryFn: async () => {
       try {
@@ -27,12 +28,12 @@ export function usePosConfig() {
         });
         const source: ConfigSource = r._meta?.source ?? 'db';
         if (!isValidConfig(r.pos_config)) {
-          return { config: DEFAULT_POS_CONFIG, source: 'fallback-invalid', error: 'Stored POS configuration failed validation; showing development defaults.' };
+          return { config: DEFAULT_POS_CONFIG, source: 'fallback-invalid', error: 'Stored POS configuration failed validation; showing development defaults.', currency: r.currency };
         }
         if (isFallbackSource(source)) {
-          return { config: r.pos_config, source, error: null };
+          return { config: r.pos_config, source, error: null, currency: r.currency };
         }
-        return { config: r.pos_config, source: 'db', error: null };
+        return { config: r.pos_config, source: 'db', error: null, currency: r.currency };
       } catch (e) {
         return { config: DEFAULT_POS_CONFIG, source: 'fallback-default', error: e instanceof Error ? e.message : 'POS configuration unavailable; showing development defaults.' };
       }
@@ -77,5 +78,9 @@ export function usePosConfig() {
   const isFallback = isFallbackSource(source);
   const error =
     data?.error ?? (isFallback ? 'POS configuration unavailable; showing development defaults.' : null);
-  return { ...query, config, source, isFallback, error, DEFAULT_POS_CONFIG };
+  // Display currency prefers the authoritative block; ui.currency_symbol is
+  // the server-derived mirror kept for backward compatibility.
+  const currencySymbol = data?.currency?.symbol ?? config.ui.currency_symbol ?? '₹';
+  const currencyCode = data?.currency?.code ?? '';
+  return { ...query, config, source, isFallback, error, currencySymbol, currencyCode, DEFAULT_POS_CONFIG };
 }

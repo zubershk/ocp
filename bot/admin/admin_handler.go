@@ -1488,7 +1488,7 @@ func (h *AdminHandler) GetPOSConfig(c *gin.Context) {
 	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
 	outletID := c.GetInt("outletID")
 	cfg, src := services.ResolvePOSConfigForEx(rid, outletID)
-	c.JSON(http.StatusOK, gin.H{"pos_config": cfg, "_meta": gin.H{"source": string(src), "version": cfg.Version}})
+	c.JSON(http.StatusOK, gin.H{"pos_config": cfg, "currency": services.RestaurantCurrencyAuthority(rid), "_meta": gin.H{"source": string(src), "version": cfg.Version}})
 }
 
 func (h *AdminHandler) UpdatePOSConfig(c *gin.Context) {
@@ -1506,7 +1506,7 @@ func (h *AdminHandler) UpdatePOSConfig(c *gin.Context) {
 	// SSE invalidation: pos.config_updated is cache invalidation, not payload authority
 	services.BroadcastRealtimeFor(rid, 0, c.GetInt("orgID"), "pos.config_updated", map[string]interface{}{"restaurant_id": rid, "version": cfg.Version})
 	saved, src := services.ResolvePOSConfigForEx(rid, 0)
-	c.JSON(http.StatusOK, gin.H{"ok": true, "pos_config": saved, "_meta": gin.H{"source": string(src), "version": saved.Version}})
+	c.JSON(http.StatusOK, gin.H{"ok": true, "pos_config": saved, "currency": services.RestaurantCurrencyAuthority(rid), "_meta": gin.H{"source": string(src), "version": saved.Version}})
 }
 
 // Live chat — SaaS bot dashboard
@@ -2464,8 +2464,9 @@ func sampleData(key string) map[string]interface{} {
 // ---------- Business Configuration ----------
 
 func (h *AdminHandler) GetBusinessConfig(c *gin.Context) {
-	cfg, src := services.LoadBusinessConfigForEx(services.ResolveRestaurant(c.GetInt("restaurantID")))
-	c.JSON(200, gin.H{"config": cfg, "_meta": gin.H{"source": string(src)}})
+	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
+	cfg, src := services.LoadBusinessConfigForEx(rid)
+	c.JSON(200, gin.H{"config": cfg, "currency": services.RestaurantCurrencyAuthority(rid), "_meta": gin.H{"source": string(src)}})
 }
 
 func (h *AdminHandler) UpdateBusinessConfig(c *gin.Context) {
@@ -2481,13 +2482,15 @@ func (h *AdminHandler) UpdateBusinessConfig(c *gin.Context) {
 	// Reload in all engines
 	services.ReloadBizConfig()
 	auditLog(c, "update_business_config", "updated business configuration", "business_config")
-	c.JSON(200, gin.H{"ok": true, "config": cfg})
+	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
+	c.JSON(200, gin.H{"ok": true, "config": cfg, "currency": services.RestaurantCurrencyAuthority(rid)})
 }
 
 func (h *AdminHandler) ReloadBusinessConfig(c *gin.Context) {
 	services.ReloadBizConfig()
 	auditLog(c, "reload_business_config", "reloaded business configuration from DB", "business_config")
-	c.JSON(200, gin.H{"ok": true, "config": services.GetBizConfig()})
+	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
+	c.JSON(200, gin.H{"ok": true, "config": services.GetBizConfig(), "currency": services.RestaurantCurrencyAuthority(rid)})
 }
 
 // ---------- Crust Management ----------

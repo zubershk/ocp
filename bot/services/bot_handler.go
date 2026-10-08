@@ -11,6 +11,7 @@ import (
 	"orangecheesepizza/bot/config"
 	"orangecheesepizza/bot/database"
 	"orangecheesepizza/bot/models"
+	"orangecheesepizza/bot/services/currency"
 )
 
 type StateType string
@@ -73,6 +74,13 @@ func (h *BotHandler) brandName() string {
 		return h.config.InitialOrgName
 	}
 	return "Restaurant"
+}
+
+// currencySymbol returns the display symbol for the default restaurant's
+// authoritative currency. WhatsApp button/list texts consume the authority
+// instead of hardcoding a symbol.
+func (h *BotHandler) currencySymbol() string {
+	return currency.Symbol(RestaurantCurrency(ResolveRestaurant(0)))
 }
 
 
@@ -279,7 +287,7 @@ func (h *BotHandler) handleShowCategoryItems(phone string, state *models.Custome
 	var rows []Row
 	for _, item := range items {
 		rows = append(rows, Row{
-			Title:       fmt.Sprintf("%s - ₹%.2f", item.Name, item.Price),
+			Title:       fmt.Sprintf("%s - %s%.2f", item.Name, h.currencySymbol(), item.Price),
 			Description: item.Description,
 			RowID:       fmt.Sprintf("item_%d", item.ID),
 		})
@@ -329,7 +337,7 @@ func (h *BotHandler) handleShowItemDetails(phone string, state *models.CustomerS
 		var rows []Row
 		for _, opt := range item.Options {
 			rows = append(rows, Row{
-				Title:       fmt.Sprintf("%s (₹%.2f)", opt.Name, opt.PriceDelta),
+				Title:       fmt.Sprintf("%s (%s%.2f)", opt.Name, h.currencySymbol(), opt.PriceDelta),
 				Description: fmt.Sprintf("Type: %s", opt.OptionType),
 				RowID:       fmt.Sprintf("opt_%d", opt.ID),
 			})
@@ -341,7 +349,7 @@ func (h *BotHandler) handleShowItemDetails(phone string, state *models.CustomerS
 
 		return h.evolutionClient.SendList(
 			phone,
-			fmt.Sprintf("🍕 %s - ₹%.2f", item.Name, item.Price),
+			fmt.Sprintf("🍕 %s - %s%.2f", item.Name, h.currencySymbol(), item.Price),
 			item.Description,
 			"Select Options",
 			h.brandName(),
@@ -423,7 +431,7 @@ func (h *BotHandler) handleShowQuantitySelector(phone string, state *models.Cust
 		optionsText = strings.TrimSuffix(optionsText, ", ")
 	}
 
-	text := fmt.Sprintf("%s - ₹%.2f%s\n\nHow many would you like?", currentItem.Name, currentItem.Price, optionsText)
+	text := fmt.Sprintf("%s - %s%.2f%s\n\nHow many would you like?", currentItem.Name, h.currencySymbol(), currentItem.Price, optionsText)
 
 	return h.evolutionClient.SendButton(phone, "Select Quantity", text, h.brandName(), buttons)
 }
@@ -484,10 +492,10 @@ func (h *BotHandler) handleShowCart(phone string, state *models.CustomerState) e
 				opts = " (" + strings.Join(optNames, ", ") + ")"
 			}
 		}
-		cartText.WriteString(fmt.Sprintf("%d. %s x%d%s - ₹%.2f\n", i+1, item.MenuItem.Name, item.Quantity, opts, item.Subtotal))
+		cartText.WriteString(fmt.Sprintf("%d. %s x%d%s - %s%.2f\n", i+1, item.MenuItem.Name, item.Quantity, opts, h.currencySymbol(), item.Subtotal))
 	}
 
-	cartText.WriteString(fmt.Sprintf("\n*Total: ₹%.2f*", total))
+	cartText.WriteString(fmt.Sprintf("\n*Total: %s%.2f*", h.currencySymbol(), total))
 
 	// Add buttons
 	buttons := []Button{
@@ -518,8 +526,9 @@ func (h *BotHandler) handleCheckout(phone string, state *models.CustomerState) e
 
 	total, _ := h.cartService.GetCartTotal(phone)
 	biz := GetBizConfig()
+	rid := ResolveRestaurant(0)
 	if total < biz.MinOrderAmount {
-		return h.evolutionClient.SendText(phone, fmt.Sprintf("Minimum order amount is %s%.2f. Please add more items.", biz.CurrencySymbol, biz.MinOrderAmount))
+		return h.evolutionClient.SendText(phone, fmt.Sprintf("Minimum order amount is %s%.2f. Please add more items.", biz.CurrencySymbol(rid), biz.MinOrderAmount))
 	}
 
 	h.stateService.UpdateState(phone, string(StateDeliveryType), map[string]interface{}{})
@@ -664,14 +673,14 @@ func (h *BotHandler) handleShowOrderSummary(phone string, context map[string]int
 				opts = " (" + strings.Join(optNames, ", ") + ")"
 			}
 		}
-		summary.WriteString(fmt.Sprintf("%d. %s x%d%s - ₹%.2f\n", i+1, item.MenuItem.Name, item.Quantity, opts, item.Subtotal))
+		summary.WriteString(fmt.Sprintf("%d. %s x%d%s - %s%.2f\n", i+1, item.MenuItem.Name, item.Quantity, opts, h.currencySymbol(), item.Subtotal))
 	}
 
-	summary.WriteString(fmt.Sprintf("\n*Subtotal: ₹%.2f*", subtotal))
+		summary.WriteString(fmt.Sprintf("\n*Subtotal: %s%.2f*", h.currencySymbol(), subtotal))
 	if deliveryFee > 0 {
-		summary.WriteString(fmt.Sprintf("\n*Delivery: ₹%.2f*", deliveryFee))
+		summary.WriteString(fmt.Sprintf("\n*Delivery: %s%.2f*", h.currencySymbol(), deliveryFee))
 	}
-	summary.WriteString(fmt.Sprintf("\n*Total: ₹%.2f*", total))
+		summary.WriteString(fmt.Sprintf("\n*Total: %s%.2f*", h.currencySymbol(), total))
 
 	buttons := []Button{
 		{Type: "reply", DisplayText: "✅ Confirm Order", ID: "confirm_order"},
@@ -752,7 +761,7 @@ func (h *BotHandler) handlePlaceOrder(phone string, context map[string]interface
 
 	confirmText := fmt.Sprintf("✅ *Order Confirmed!*\n\nYour order *#%s* has been placed successfully.\n\n", orderNumber)
 	confirmText += fmt.Sprintf("*Estimated Time:* 30-45 minutes\n")
-	confirmText += fmt.Sprintf("*Total: ₹%.2f*\n\n", total)
+	confirmText += fmt.Sprintf("*Total: %s%.2f*\n\n", h.currencySymbol(), total)
 
 	if order.OrderType == "delivery" {
 		confirmText += "Our delivery partner will contact you soon. 🚚"

@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"orangecheesepizza/bot/database"
+	"orangecheesepizza/bot/services/currency"
 )
 
 // ------------------------------------------------------------------
@@ -42,12 +43,32 @@ type BusinessConfig struct {
 	KitchenHours   string            `json:"kitchen_hours"`
 	DeliveryHours  string            `json:"delivery_hours"`
 	BusinessType   string            `json:"business_type"`
-	CurrencySymbol string            `json:"currency_symbol"`
 	TaxLabel       string            `json:"tax_label"`
 	// WhatsApp browsing experience ( pointers: nil = default ).
 	WhatsappLists  *bool  `json:"whatsapp_lists,omitempty"`
 	WhatsappPhotos *bool  `json:"whatsapp_photos,omitempty"`
 	PublicBaseURL  string `json:"public_base_url"`
+}
+
+// CurrencySymbol returns the currency symbol for the given restaurant.
+// Derived from the restaurant's authoritative currency code.
+func (c *BusinessConfig) CurrencySymbol(restaurantID int) string {
+	return currency.Symbol(RestaurantCurrency(restaurantID))
+}
+
+// CurrencyCode returns the ISO-4217 currency code for the given restaurant.
+func (c *BusinessConfig) CurrencyCode(restaurantID int) string {
+	return RestaurantCurrency(restaurantID)
+}
+
+// CurrencyLocale returns the formatting locale for the given restaurant.
+func (c *BusinessConfig) CurrencyLocale(restaurantID int) string {
+	return currency.Locale(RestaurantCurrency(restaurantID))
+}
+
+// CurrencyMinorUnit returns the decimal places for the given restaurant.
+func (c *BusinessConfig) CurrencyMinorUnit(restaurantID int) int {
+	return currency.MinorUnit(RestaurantCurrency(restaurantID))
 }
 
 // UseWhatsAppLists reports whether browse lists render as native
@@ -138,9 +159,6 @@ func LoadBusinessConfigFor(restaurantID int) *BusinessConfig {
 	// Apply defaults for empty fields
 	if cfg.OrderPrefix == "" {
 		cfg.OrderPrefix = "ORD"
-	}
-	if cfg.CurrencySymbol == "" {
-		cfg.CurrencySymbol = "₹"
 	}
 	if cfg.BusinessType == "" {
 		cfg.BusinessType = "restaurant"
@@ -364,7 +382,6 @@ func defaultBusinessConfig() *BusinessConfig {
 		KitchenHours:   "11 AM - 11 PM",
 		DeliveryHours:  "11 AM - 4 AM",
 		BusinessType:   "restaurant",
-		CurrencySymbol: "₹",
 		TaxLabel:       "taxes included",
 	}
 }
