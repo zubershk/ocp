@@ -5,7 +5,6 @@ import (
 	"crypto/subtle"
 	"fmt"
 	"log"
-	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -153,18 +152,9 @@ func main() {
 	_ = os.MkdirAll("./uploads", 0755)
 	router.Static("/uploads", "./uploads")
 
-	// Webhook endpoints — the bundled Evolution GO fork sends no auth
-	// headers, so local Evolution instances in dev are trusted by source IP
-	// while every other sender must present the secret. In production
-	// (GIN_MODE=release) loopback callers must authenticate too — shared-host
-	// adjacency is not a trust boundary.
+	// Webhook endpoints — every sender must present the secret.
+	// No source-IP bypass in any mode: loopback is not a trust boundary.
 	webhookAuth := func(c *gin.Context) {
-		if os.Getenv("GIN_MODE") != "release" {
-			if ip := net.ParseIP(c.ClientIP()); ip != nil && ip.IsLoopback() {
-				c.Next()
-				return
-			}
-		}
 		// Verify via X-Webhook-Secret, X-Api-Key, or apikey header
 		provided := c.GetHeader("X-Webhook-Secret")
 		if provided == "" {

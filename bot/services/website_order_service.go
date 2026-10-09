@@ -406,11 +406,12 @@ func (s *WebsiteOrderService) CreateFor(req *WebsiteOrderRequest, idempotencyKey
 }
 
 // orderAccessToken generates a cryptographically random per-order token.
+// Fails closed — panics if crypto/rand is unavailable rather than emitting
+// predictable time-based tokens (which would expose order PII).
 func orderAccessToken() string {
 	b := make([]byte, 24)
 	if _, err := rand.Read(b); err != nil {
-		// crypto/rand never fails on Linux; fall back to time-based uniqueness
-		return fmt.Sprintf("%x", time.Now().UnixNano())
+		panic("crypto/rand unavailable — cannot generate unpredictable order access token")
 	}
 	return hex.EncodeToString(b)
 }

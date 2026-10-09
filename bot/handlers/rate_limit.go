@@ -61,15 +61,18 @@ func (l *ipLimiter) cleanupLoop() {
 }
 
 // RateLimit returns middleware that limits each IP to `limit` requests per `window`.
+// Uses c.ClientIP() which respects gin TrustedProxies (X-Forwarded-For from
+// trusted reverse proxies only). Falls back to RemoteAddr when ClientIP is empty.
 func RateLimit(limit int, window time.Duration) gin.HandlerFunc {
 	lim := newIPLimiter(limit, window)
 	go lim.cleanupLoop()
 	return func(c *gin.Context) {
-		// Use RemoteAddr directly to prevent spoofing via X-Forwarded-For.
-		// If behind a trusted reverse proxy (nginx/cloudflare), set TrustedProxies in gin instead.
-		ip := c.Request.RemoteAddr
-		if idx := strings.LastIndex(ip, ":"); idx != -1 {
-			ip = ip[:idx] // strip port
+		ip := c.ClientIP()
+		if ip == "" {
+			ip = c.Request.RemoteAddr
+			if idx := strings.LastIndex(ip, ":"); idx != -1 {
+				ip = ip[:idx] // strip port
+			}
 		}
 		if ip == "" {
 			ip = "unknown"

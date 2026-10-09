@@ -42,7 +42,8 @@ func sessionTTL() time.Duration {
 func hashHex(s string) string {
 	pepper := os.Getenv("OTP_PEPPER")
 	if pepper == "" {
-		pepper = os.Getenv("BOT_ADMIN_KEY")
+		// Fail closed: OTP_PEPPER is required. Do not fall back to BOT_ADMIN_KEY.
+		panic("OTP_PEPPER environment variable is required for session hashing")
 	}
 	h := sha256.Sum256([]byte(pepper + s))
 	return hex.EncodeToString(h[:])
@@ -284,33 +285,11 @@ func ValidateSessionFor(token string, restaurantID int) (string, *Customer, erro
 	var expiresAt time.Time
 	var sessRid sql.NullInt64
 	err := database.DB.QueryRow(`SELECT phone, expires_at, restaurant_id FROM customer_sessions WHERE token=$1 LIMIT 1`, hashed).Scan(&phone, &expiresAt, &sessRid)
-	legacyHit := false
-	var legacyHash string
 	if err == sql.ErrNoRows {
-		legacyHash = func(s string) string {
-			h := sha256.Sum256([]byte(s))
-			return hex.EncodeToString(h[:])
-		}(token)
-		err = database.DB.QueryRow(`SELECT phone, expires_at, restaurant_id FROM customer_sessions WHERE token=$1 LIMIT 1`, legacyHash).Scan(&phone, &expiresAt, &sessRid)
-		if err == sql.ErrNoRows {
-			return "", nil, fmt.Errorf("invalid token")
-		}
-		legacyHit = true
+		return "", nil, fmt.Errorf("invalid token")
 	}
 	if err != nil {
 		return "", nil, err
-	}
-	if time.Now().After(expiresAt) {
-		// Delete whichever hash was matched; legacy path also cleans peppered variant defensively.
-		database.DB.Exec(`DELETE FROM customer_sessions WHERE token=$1`, hashed)
-		if legacyHit {
-			database.DB.Exec(`DELETE FROM customer_sessions WHERE token=$1`, legacyHash)
-		}
-		return "", nil, fmt.Errorf("session expired")
-	}
-	// Legacy migration: upgrade unpeppered hash to peppered hash so future lookups are peppered-only.
-	if legacyHit {
-		_, _ = database.DB.Exec(`UPDATE customer_sessions SET token=$1 WHERE token=$2`, hashed, legacyHash)
 	}
 	// Sliding rotation: if more than half the TTL has elapsed, extend expiry to now+TTL.
 	// This keeps active users logged in without extending idle sessions indefinitely.
@@ -346,25 +325,14 @@ func ValidateSessionFor(token string, restaurantID int) (string, *Customer, erro
 	return phone, cust, nil
 }
 
-// DeleteSession removes a token (logout). Deletes both peppered and legacy hashes so revocation is complete.
+// DeleteSession removes a token (logout).
 func DeleteSession(token string) error {
 	raw := strings.TrimSpace(token)
 	if raw == "" {
 		return nil
 	}
 	hashed := hashHex(raw)
-	legacy := func(s string) string {
-		h := sha256.Sum256([]byte(s))
-		return hex.EncodeToString(h[:])
-	}(raw)
-	_, err := database.DB.Exec(`DELETE FROM customer_sessions WHERE token IN ($1,$2)`, hashed, legacy)
-	if err != nil {
-		// Fallback for drivers that dislike IN with two params edge case: try single delete.
-		_, err = database.DB.Exec(`DELETE FROM customer_sessions WHERE token=$1`, hashed)
-		if err == nil {
-			_, _ = database.DB.Exec(`DELETE FROM customer_sessions WHERE token=$1`, legacy)
-		}
-	}
+	_, err := database.DB.Exec(`DELETE FROM customer_sessions WHERE token=$1`, hashed)
 	return err
 }
 

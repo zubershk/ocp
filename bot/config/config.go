@@ -83,9 +83,9 @@ type DeploymentConfig struct {
 func Load() *Config {
 	deliveryFee, _ := strconv.ParseFloat(getEnv("DELIVERY_FEE", "0"), 64)
 	minOrderAmount, _ := strconv.ParseFloat(getEnv("MIN_ORDER_AMOUNT", "0"), 64)
-	botDatabaseURL := getEnv("BOT_DATABASE_URL", "postgresql://postgres:root@localhost:5432/orange_cheese_pizza_bot?sslmode=disable")
+	botDatabaseURL := getEnv("BOT_DATABASE_URL", "postgresql://postgres:root@localhost:5432/orange_cheese_pizza_bot?sslmode=require")
 	if !strings.Contains(botDatabaseURL, "sslmode=") {
-		sslMode := getEnv("PGSSLMODE", getEnv("POSTGRES_SSLMODE", "disable"))
+		sslMode := getEnv("PGSSLMODE", getEnv("POSTGRES_SSLMODE", "require"))
 		if strings.Contains(botDatabaseURL, "?") {
 			botDatabaseURL += "&sslmode=" + sslMode
 		} else {
@@ -109,7 +109,7 @@ func Load() *Config {
 		SecurityConfig: SecurityConfig{
 			BotAdminKey:   getEnv("BOT_ADMIN_KEY", ""),
 			WebhookSecret: getEnv("EVOLUTION_WEBHOOK_SECRET", ""),
-			OTPPepper:     getEnv("OTP_PEPPER", getEnv("BOT_ADMIN_KEY", "")),
+			OTPPepper:     getEnv("OTP_PEPPER", ""),
 		},
 		IntegrationConfig: IntegrationConfig{
 			EvolutionAPIURL:        getEnv("EVOLUTION_API_URL", "http://localhost:8080"),
@@ -161,6 +161,9 @@ func (c *Config) Validate() error {
 	}
 	if c.WebhookSecret == "" {
 		return fmt.Errorf("SECURITY: EVOLUTION_WEBHOOK_SECRET must be set — refusing to start with unauthenticated webhooks")
+	}
+	if c.OTPPepper == "" {
+		return fmt.Errorf("SECURITY: OTP_PEPPER must be set — refusing to start without a session pepper")
 	}
 	// Security: CORS origins must be explicit in production. Local dev
 	// falls back to the Vite localhost defaults.

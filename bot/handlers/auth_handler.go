@@ -42,10 +42,9 @@ func (h *AuthHandler) SendOTP(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": ve.Msg})
 			return
 		}
-		// whatsapp send failure still counts as 500 but OTP is stored
-		log.Printf("[auth] send otp failed: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not send code. Please try again."})
-		return
+		// WhatsApp send failure: OTP is already stored and verifiable.
+		// Return success to avoid phone-enumeration via response differences.
+		log.Printf("[auth] whatsapp send failed for %s: %v", req.Phone, err)
 	}
 	c.JSON(http.StatusOK, gin.H{"sent": true, "message": "code sent on WhatsApp"})
 }
