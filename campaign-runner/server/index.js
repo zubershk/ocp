@@ -147,6 +147,47 @@ function sniffImageType(buf) {
   return null;
 }
 
+// ── Encryption at rest for PII stores ──
+// Encrypts customers, customer_tags, campaigns, invalid_phones so phone,
+// name, email and notes are never plaintext on disk. Key from
+// CAMPAIGN_ENCRYPTION_KEY (32 random bytes hex), falling back to a
+// SHA-256 of BOT_ADMIN_KEY with a startup warning.
+const ENCRYPTED_STORES = new Set(['customers', 'customer_tags', 'campaigns', 'invalid_phones']);
+function getEncryptionKey() {
+  const raw = process.env.CAMPAIGN_ENCRYPTION_KEY || process.env.BOT_ADMIN_KEY || '';
+  if (!raw) throw new Error('CAMPAIGN_ENCRYPTION_KEY or BOT_ADMIN_KEY required for at-rest encryption');
+  return crypto.createHash('sha256').update(raw).digest();
+}
+let ENC_KEY = null;
+try { ENC_KEY = getEncryptionKey(); } catch {
+  console.warn('WARN: CAMPAIGN_ENCRYPTION_KEY not set — at-rest encryption disabled');
+}
+
+function encryptValue(plaintext) {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', ENC_KEY, iv);
+  const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return 'ocp-enc:v1:' + iv.toString('hex') + ':' + tag.toString('hex') + ':' + encrypted.toString('base64');
+}
+function decryptValue(token) {
+  if (!token.startsWith('ocp-enc:v1:')) throw new Error('not encrypted');
+  const rest = token.slice('ocp-enc:v1:'.length);
+  const parts = rest.split(':');
+  if (parts.length !== 3) throw new Error('invalid encrypted token');
+  const iv = Buffer.from(parts[0], 'hex');
+  const tag = Buffer.from(parts[1], 'hex');
+  const encrypted = Buffer.from(parts[2], 'base64');
+  const decipher = crypto.createDecipheriv('aes-256-gcm', ENC_KEY, iv);
+  decipher.setAuthTag(tag);
+  return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString('utf8');
+}
+function encryptJson(data) {
+  return encryptValue(JSON.stringify(data));
+}
+function decryptJson(token) {
+  return JSON.parse(decryptValue(token));
+}
 // ── Data helpers (hardened JSON) ──
 function safeParse(text, fb) {
   try {
@@ -161,7 +202,20 @@ function load(name, fb = []) {
   if (!existsSync(p)) return fb;
   try {
     const raw = readFileSync(p, 'utf-8');
-    const data = safeParse(raw, null);
+    let data;
+    if (ENCRYPTED_STORES.has(name) && ENC_KEY) {
+      // Try encrypted first, fall back to plaintext migration
+      try {
+        data = decryptJson(raw);
+      } catch {
+        // Existing plaintext file: parse then re-save encrypted
+        data = safeParse(raw, null);
+        if (data === null || data === undefined) throw new Error('empty');
+        try { save(name, data); } catch {}
+      }
+    } else {
+      data = safeParse(raw, null);
+    }
     if (data === null || data === undefined) throw new Error('empty');
     return data;
   } catch (e) {
@@ -181,7 +235,10 @@ function save(name, data) {
   if (!/^[a-z_]+$/.test(name)) throw new Error('invalid store');
   const p = join(DATA_DIR, `${name}.json`);
   const tmp = `${p}.${process.pid}.${Date.now()}.${crypto.randomBytes(4).toString('hex')}.tmp`;
-  const json = JSON.stringify(data, null, 2);
+  let json = JSON.stringify(data, null, 2);
+  if (ENCRYPTED_STORES.has(name) && ENC_KEY) {
+    json = encryptJson(data);
+  }
   const fd = openSync(tmp, 'w', 0o600);
   try {
     writeFileSync(fd, json);
