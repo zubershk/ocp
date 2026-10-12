@@ -115,6 +115,7 @@ func main() {
 	siteHandler := handlers.NewSiteSettingsHandler()
 	reviewHandler := handlers.NewReviewHandler()
 	provisionHandler := handlers.NewProvisioningHandler()
+	contactHandler := handlers.NewContactHandler()
 
 	// Setup Gin router
 	gin.SetMode(gin.ReleaseMode)
@@ -206,6 +207,7 @@ func main() {
 		apiGroup.GET("/reviews", reviewHandler.ListReviews)
 		apiGroup.GET("/reviews/summary", reviewHandler.ReviewSummary)
 		apiGroup.POST("/reviews", reviewHandler.CreateReview)
+		apiGroup.POST("/contact", handlers.RateLimit(5, time.Minute), contactHandler.SubmitContact)
 		apiGroup.POST("/orders", handlers.RateLimit(20, time.Minute), apiHandler.CreateOrder)
 		apiGroup.GET("/orders/:id", apiHandler.GetOrder)
 		// Customer auth — phone synced to WhatsApp bot (customers.whatsapp_number)
@@ -281,6 +283,9 @@ func main() {
 		adminGroup.DELETE("/uploads/:name", adminHandler.RequireRole("owner", "manager"), adminHandler.DeleteUpload)
 		adminGroup.GET("/reviews", reviewHandler.ListReviewsAdmin)
 		adminGroup.PATCH("/reviews/:id", adminHandler.RequireRole("owner", "manager"), reviewHandler.ModerateReview)
+		// Contact submissions
+		adminGroup.GET("/contact-submissions", contactHandler.ListContactSubmissions)
+		adminGroup.PATCH("/contact-submissions/:id", adminHandler.RequireRole("owner", "manager"), contactHandler.UpdateContactSubmission)
 		// Bot message templates
 		adminGroup.GET("/bot-messages", adminHandler.ListBotMessages)
 		adminGroup.GET("/bot-messages/:key", adminHandler.GetBotMessage)
@@ -349,6 +354,18 @@ func main() {
 		adminGroup.GET("/pos/customer-fields", adminHandler.RequirePermission("pos.read"), adminHandler.ListCustomerFields)
 		adminGroup.PUT("/pos/customer-fields", adminHandler.RequireRole("owner", "manager"), adminHandler.UpsertCustomerField)
 	}
+
+	// NoRoute handler for CORS preflight and 404s
+	router.NoRoute(func(c *gin.Context) {
+		if c.Request.Method == http.MethodOptions {
+			c.Header("Access-Control-Allow-Origin", "*")
+			c.Header("Access-Control-Allow-Methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS")
+			c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Admin-Key, X-Customer-Token, X-Outlet-ID, Idempotency-Key, X-Order-Token, X-Request-ID")
+			c.AbortWithStatus(http.StatusNoContent)
+			return
+		}
+		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+	})
 
 	// Health / readiness — SaaS observability
 	router.GET("/health", func(c *gin.Context) {

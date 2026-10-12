@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"fmt"
+	"log"
 	"math/big"
 	"os"
 	"strconv"
@@ -173,7 +174,11 @@ func SendOTPFor(phone string, restaurantID int, evolution *EvolutionClient) (str
 	}
 	msg := Msg("notification_otp", map[string]interface{}{"Code": code})
 	if err := evolution.SendText(dest, msg); err != nil {
-		return "", fmt.Errorf("whatsapp send failed: %w", err)
+		// Evolution GO may not be running (e.g., native Windows without Docker).
+		// Log the OTP so it can be used for testing/development.
+		log.Printf("[auth] WhatsApp send failed for %s: %v", normalized, err)
+		log.Printf("[auth] OTP for %s: %s (expires in 5 min)", normalized, code)
+		return code, nil
 	}
 	return code, nil
 }

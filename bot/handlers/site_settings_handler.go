@@ -21,7 +21,7 @@ func NewSiteSettingsHandler() *SiteSettingsHandler {
 }
 
 // publicKeys are the settings keys exposed to the public API.
-var publicKeys = []string{"brand", "seo", "social", "footer", "homepage"}
+var publicKeys = []string{"brand", "seo", "social", "footer", "homepage", "contact"}
 
 // --- Public endpoints ---
 
@@ -176,21 +176,15 @@ func (h *SiteSettingsHandler) UpdateSiteSetting(c *gin.Context) {
 		return
 	}
 	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
-	// Update-only (404 when the key does not exist for this tenant).
-	// NOTE: ON CONFLICT (key) must not be used here: since 022 the
-	// unique constraint is (key, restaurant_id), so the old arbiter
-	// matched nothing and every update failed with 500.
-	res, err := database.DB.Exec(
-		`UPDATE site_settings SET value = $1::jsonb, updated_at = NOW()
-		 WHERE key = $2 AND restaurant_id = $3`,
+	// Upsert: create if not exists, update if exists.
+	// Unique constraint is on (key, restaurant_id) since migration 022.
+	_, err := database.DB.Exec(
+		`INSERT INTO site_settings (key, value, restaurant_id) VALUES ($2, $1::jsonb, $3)
+		 ON CONFLICT (key, restaurant_id) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
 		[]byte(*req.Value), key, rid,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update setting"})
-		return
-	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		c.JSON(http.StatusNotFound, gin.H{"error": "setting not found"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"updated": true})
