@@ -50,21 +50,21 @@ export function ProductCard({
   const getBadgeStyles = (text: string) => {
     const lowercaseText = text.toLowerCase();
     if (lowercaseText.includes("%") || lowercaseText === "sale") {
-      return "bg-red-500/10 text-red-500";
+      return "bg-amber-50 text-amber-700 ring-1 ring-amber-600/20";
     }
     if (lowercaseText === "new") {
-      return "bg-blue-500/10 text-blue-500";
+      return "bg-[var(--color-brand-50)] text-[var(--color-brand-600)] ring-1 ring-[var(--color-brand-600)]/20";
     }
     if (lowercaseText === "hot") {
-      return "bg-orange-400/10 text-orange-400";
+      return "bg-amber-50 text-amber-700 ring-1 ring-amber-600/20";
     }
     if (lowercaseText === "spicy") {
-      return "bg-red-500/10 text-red-600";
+      return "bg-red-50 text-red-700 ring-1 ring-red-600/20";
     }
     if (lowercaseText === "bestseller") {
-      return "bg-amber-500/10 text-amber-700";
+      return "bg-amber-50 text-amber-700 ring-1 ring-amber-600/20";
     }
-    return "bg-primary/10 text-primary";
+    return "bg-[var(--color-brand-50)] text-[var(--color-brand-600)] ring-1 ring-[var(--color-brand-600)]/20";
   };
 
   return (

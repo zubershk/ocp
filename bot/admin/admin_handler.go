@@ -803,32 +803,17 @@ func (h *AdminHandler) UploadImage(c *gin.Context) {
 	ct := http.DetectContentType(buf[:n])
 	allowed := map[string]string{
 		"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp",
-		"image/gif": ".gif", "image/bmp": ".bmp",
-		"image/x-icon": ".ico", "image/vnd.microsoft.icon": ".ico",
-		"image/avif": ".avif", "image/heic": ".heic", "image/heif": ".heif",
-		"image/tiff": ".tiff",
+		"image/gif": ".gif",
 	}
-	// block SVG (stored XSS) for open-source hardening
+	// block SVG (stored XSS) and all non-standard image types
 	if ct == "image/svg+xml" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "SVG uploads are not allowed"})
 		return
 	}
 	ext, ok := allowed[ct]
 	if !ok {
-		if len(ct) > 6 && ct[:6] == "image/" {
-			feo := filepath.Ext(header.Filename)
-			if feo == "" {
-				feo = ".jpg"
-			}
-			ext = strings.ToLower(feo)
-			if ext == ".svg" {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "SVG uploads are not allowed"})
-				return
-			}
-		} else {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "file is not an image"})
-			return
-		}
+		c.JSON(http.StatusBadRequest, gin.H{"error": "file is not a supported image (jpeg/png/webp/gif only)"})
+		return
 	}
 	// tenant-aware dir: ./uploads/<restaurant_id>/
 	dir := "./uploads"

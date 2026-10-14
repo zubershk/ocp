@@ -9,7 +9,10 @@ import { useOutletNames, useDeliveryHours } from '../context/RestaurantContext';
 export default function Login() {
   const nav = useNavigate();
   const [params] = useSearchParams();
-  const redirect = params.get('redirect') ?? '/r/account';
+  const redirectRaw = params.get('redirect');
+  // Allowlist redirect to same-origin app routes only — prevent open redirect.
+  const allowedRedirects = ['/r/account', '/r/menu', '/r/checkout', '/r/offers', '/r/orders', '/r/cart'];
+  const redirect: string = allowedRedirects.includes(redirectRaw ?? '') ? (redirectRaw ?? '/r/account') : '/r/account';
   const { customer, setCustomer } = useAuth();
   const { push } = useToast();
   const outletNames = useOutletNames();
