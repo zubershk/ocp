@@ -33,6 +33,22 @@ interface FooterSettings {
   copyright_text?: string;
   tagline?: string;
   extra_links?: Array<{ label: string; url: string }>;
+  // Footer quick links (configurable from admin)
+  quick_links_title?: string;
+  quick_links?: Array<{ label: string; url: string }>;
+  // Primary outlet section
+  outlet_title?: string;
+  delivery_hours_text?: string;
+  payment_label?: string;
+  track_order_text?: string;
+  view_locations_text?: string;
+  // Trust badges
+  trust_title?: string;
+  trust_badges?: Array<{ icon: string; text: string }>;
+  // Bottom bar
+  tax_note?: string;
+  // Other outlets
+  other_outlets_title?: string;
   [key: string]: unknown;
 }
 
@@ -68,12 +84,38 @@ interface HomepageSettings {
   [key: string]: unknown;
 }
 
+interface ContactSettings {
+  title?: string;
+  subtitle?: string;
+  call_title?: string;
+  whatsapp_title?: string;
+  whatsapp_desc?: string;
+  whatsapp_button?: string;
+  outlet_title?: string;
+  delivery_hours_title?: string;
+  delivery_hours_text?: string;
+  delivery_area_text?: string;
+  delivery_note?: string;
+  form_title?: string;
+  form_desc?: string;
+  name_label?: string;
+  phone_label?: string;
+  message_label?: string;
+  submit_button?: string;
+  order_cta_text?: string;
+  other_outlets_title?: string;
+  map_address?: string;
+  map_embed_url?: string;
+  [key: string]: unknown;
+}
+
 interface SiteSettingsResponse {
   brand: BrandSettings;
   seo: SEOSettings;
   social: SocialSettings;
   footer: FooterSettings;
   homepage: HomepageSettings;
+  contact: ContactSettings;
   notifications?: Record<string, unknown>;
   [key: string]: unknown;
 }
@@ -177,12 +219,37 @@ const HOMEPAGE_DEFAULTS: HomepageSettings = {
   extra_chicken_price: 'Chicken ₹60/95/125',
 };
 
+const CONTACT_DEFAULTS: ContactSettings = {
+  title: 'Contact Us',
+  subtitle: "We'd love to hear from you. Reach us by phone, WhatsApp, or visit any of our outlets.",
+  call_title: 'Call Us',
+  whatsapp_title: 'WhatsApp',
+  whatsapp_desc: 'Order directly or ask us anything on WhatsApp.',
+  whatsapp_button: 'Chat on WhatsApp',
+  outlet_title: 'Visit Our {outlet} Outlet',
+  delivery_hours_title: 'Delivery Hours',
+  delivery_hours_text: '{hours} - all days',
+  delivery_area_text: 'We deliver to Mira Road East, Beverly Park, and surrounding areas',
+  delivery_note: 'Free home delivery within our service area. All prices include tax.',
+  form_title: 'Send us a message',
+  form_desc: 'Have a question or feedback? Send us a message and we\'ll get back to you on WhatsApp.',
+  name_label: 'Your Name *',
+  phone_label: 'Phone Number *',
+  message_label: 'Your Message *',
+  submit_button: 'Send on WhatsApp',
+  order_cta_text: 'Order Now',
+  other_outlets_title: 'Other Outlets',
+  map_address: 'Mira Road East, Mumbai',
+  map_embed_url: '',
+};
+
 const SETTINGS_DEFAULTS: SiteSettingsResponse = {
   brand: BRAND_DEFAULTS,
   seo: SEO_DEFAULTS,
   social: SOCIAL_DEFAULTS,
   footer: FOOTER_DEFAULTS,
   homepage: HOMEPAGE_DEFAULTS,
+  contact: CONTACT_DEFAULTS,
 };
 
 const SiteSettingsContext = createContext<SiteSettingsData>({
@@ -332,6 +399,31 @@ export function useFooter() {
     copyrightText: f.copyright_text ?? '',
     tagline: f.tagline ?? '',
     extraLinks: f.extra_links ?? [],
+    // Configurable footer content
+    quickLinksTitle: f.quick_links_title ?? 'Quick Links',
+    quickLinks: f.quick_links ?? [
+      { label: 'Menu', url: '/r/menu' },
+      { label: 'Offers', url: '/r/offers' },
+      { label: 'Locations', url: '/r/locations' },
+      { label: 'About', url: '/r/about' },
+      { label: 'Reviews', url: '/r/reviews' },
+      { label: 'FAQ', url: '/r/faq' },
+      { label: 'Contact', url: '/r/contact' },
+    ],
+    outletTitle: f.outlet_title ?? 'Main Outlet',
+    deliveryHoursText: f.delivery_hours_text ?? 'Delivery {hours} daily',
+    paymentLabel: f.payment_label ?? 'Payments:',
+    trackOrderText: f.track_order_text ?? 'Track Order',
+    viewLocationsText: f.view_locations_text ?? 'View All Locations',
+    trustTitle: f.trust_title ?? 'Why Order With Us',
+    trustBadges: f.trust_badges ?? [
+      { icon: 'ShieldCheck', text: 'Secure Checkout' },
+      { icon: 'Truck', text: 'Free Delivery' },
+      { icon: 'Star', text: '4.7 Rated' },
+      { icon: 'CreditCard', text: 'Cash & UPI' },
+    ],
+    taxNote: f.tax_note ?? 'All prices include tax',
+    otherOutletsTitle: f.other_outlets_title ?? 'Other Outlets',
   }), [f]);
 }
 
@@ -368,6 +460,34 @@ export function useHomepage() {
     extraVegPrice: h.extra_veg_price ?? 'Veg ₹45/80/110',
     extraChickenPrice: h.extra_chicken_price ?? 'Chicken ₹60/95/125',
   }), [h]);
+}
+
+export function useContact() {
+  const { settings } = useSiteSettings();
+  const c = settings.contact ?? {};
+  return useMemo(() => ({
+    title: c.title ?? 'Contact Us',
+    subtitle: c.subtitle ?? "We'd love to hear from you. Reach us by phone, WhatsApp, or visit any of our outlets.",
+    callTitle: c.call_title ?? 'Call Us',
+    whatsappTitle: c.whatsapp_title ?? 'WhatsApp',
+    whatsappDesc: c.whatsapp_desc ?? 'Order directly or ask us anything on WhatsApp.',
+    whatsappButton: c.whatsapp_button ?? 'Chat on WhatsApp',
+    outletTitle: c.outlet_title ?? 'Visit Our {outlet} Outlet',
+    deliveryHoursTitle: c.delivery_hours_title ?? 'Delivery Hours',
+    deliveryHoursText: c.delivery_hours_text ?? '{hours} - all days',
+    deliveryAreaText: c.delivery_area_text ?? 'We deliver to Mira Road East, Beverly Park, and surrounding areas',
+    deliveryNote: c.delivery_note ?? 'Free home delivery within our service area. All prices include tax.',
+    formTitle: c.form_title ?? 'Send us a message',
+    formDesc: c.form_desc ?? 'Have a question or feedback? Send us a message and we\'ll get back to you on WhatsApp.',
+    nameLabel: c.name_label ?? 'Your Name *',
+    phoneLabel: c.phone_label ?? 'Phone Number *',
+    messageLabel: c.message_label ?? 'Your Message *',
+    submitButton: c.submit_button ?? 'Send on WhatsApp',
+    orderCtaText: c.order_cta_text ?? 'Order Now',
+    otherOutletsTitle: c.other_outlets_title ?? 'Other Outlets',
+    mapAddress: c.map_address ?? 'Mira Road East, Mumbai',
+    mapEmbedUrl: c.map_embed_url ?? '',
+  }), [c]);
 }
 
 export function useNotifications() {

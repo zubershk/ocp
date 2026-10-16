@@ -38,6 +38,28 @@ interface HomepageSettings {
   extra_cheese_price: string;
   extra_veg_price: string;
   extra_chicken_price: string;
+  // Contact page
+  contact_title: string;
+  contact_subtitle: string;
+  contact_call_title: string;
+  contact_whatsapp_title: string;
+  contact_whatsapp_desc: string;
+  contact_whatsapp_button: string;
+  contact_outlet_title: string;
+  contact_delivery_hours_title: string;
+  contact_delivery_hours_text: string;
+  contact_delivery_area_text: string;
+  contact_delivery_note: string;
+  contact_form_title: string;
+  contact_form_desc: string;
+  contact_name_label: string;
+  contact_phone_label: string;
+  contact_message_label: string;
+  contact_submit_button: string;
+  contact_order_cta_text: string;
+  contact_other_outlets_title: string;
+  contact_map_address: string;
+  contact_map_embed_url: string;
 }
 
 const DEFAULTS: HomepageSettings = {
@@ -69,6 +91,28 @@ const DEFAULTS: HomepageSettings = {
   extra_cheese_price: 'Extra Cheese ₹60/95/125',
   extra_veg_price: 'Veg ₹45/80/110',
   extra_chicken_price: 'Chicken ₹60/95/125',
+  // Contact page
+  contact_title: 'Contact Us',
+  contact_subtitle: "We'd love to hear from you. Reach us by phone, WhatsApp, or visit any of our outlets.",
+  contact_call_title: 'Call Us',
+  contact_whatsapp_title: 'WhatsApp',
+  contact_whatsapp_desc: 'Order directly or ask us anything on WhatsApp.',
+  contact_whatsapp_button: 'Chat on WhatsApp',
+  contact_outlet_title: 'Visit Our {outlet} Outlet',
+  contact_delivery_hours_title: 'Delivery Hours',
+  contact_delivery_hours_text: '{hours} - all days',
+  contact_delivery_area_text: 'We deliver to Mira Road East, Beverly Park, and surrounding areas',
+  contact_delivery_note: 'Free home delivery within our service area. All prices include tax.',
+  contact_form_title: 'Send us a message',
+  contact_form_desc: 'Have a question or feedback? Send us a message and we\'ll get back to you on WhatsApp.',
+  contact_name_label: 'Your Name *',
+  contact_phone_label: 'Phone Number *',
+  contact_message_label: 'Your Message *',
+  contact_submit_button: 'Send on WhatsApp',
+  contact_order_cta_text: 'Order Now',
+  contact_other_outlets_title: 'Other Outlets',
+  contact_map_address: 'Mira Road East, Mumbai',
+  contact_map_embed_url: '',
 };
 
 export default function AdminHomepage() {
@@ -143,6 +187,28 @@ export default function AdminHomepage() {
     { key: 'extra_cheese_price', label: 'Extra Cheese Price Line', placeholder: 'Extra Cheese ₹60/95/125' },
     { key: 'extra_veg_price', label: 'Extra Veg Price Line', placeholder: 'Veg ₹45/80/110' },
     { key: 'extra_chicken_price', label: 'Extra Chicken Price Line', placeholder: 'Chicken ₹60/95/125' },
+    // Contact page
+    { key: 'contact_title', label: 'Contact Page Title', placeholder: 'Contact Us' },
+    { key: 'contact_subtitle', label: 'Contact Page Subtitle', placeholder: 'We\'d love to hear from you...' },
+    { key: 'contact_call_title', label: 'Call Section Title', placeholder: 'Call Us' },
+    { key: 'contact_whatsapp_title', label: 'WhatsApp Section Title', placeholder: 'WhatsApp' },
+    { key: 'contact_whatsapp_desc', label: 'WhatsApp Description', placeholder: 'Order directly or ask us anything on WhatsApp.' },
+    { key: 'contact_whatsapp_button', label: 'WhatsApp Button Text', placeholder: 'Chat on WhatsApp' },
+    { key: 'contact_outlet_title', label: 'Outlet Section Title', placeholder: 'Visit Our {outlet} Outlet' },
+    { key: 'contact_delivery_hours_title', label: 'Delivery Hours Title', placeholder: 'Delivery Hours' },
+    { key: 'contact_delivery_hours_text', label: 'Delivery Hours Text', placeholder: '{hours} - all days' },
+    { key: 'contact_delivery_area_text', label: 'Delivery Area Text', placeholder: 'We deliver to...' },
+    { key: 'contact_delivery_note', label: 'Delivery Note', placeholder: 'Free home delivery...' },
+    { key: 'contact_form_title', label: 'Contact Form Title', placeholder: 'Send us a message' },
+    { key: 'contact_form_desc', label: 'Contact Form Description', placeholder: 'Have a question or feedback?' },
+    { key: 'contact_name_label', label: 'Name Field Label', placeholder: 'Your Name *' },
+    { key: 'contact_phone_label', label: 'Phone Field Label', placeholder: 'Phone Number *' },
+    { key: 'contact_message_label', label: 'Message Field Label', placeholder: 'Your Message *' },
+    { key: 'contact_submit_button', label: 'Submit Button Text', placeholder: 'Send on WhatsApp' },
+    { key: 'contact_order_cta_text', label: 'Order CTA Button Text', placeholder: 'Order Now' },
+    { key: 'contact_other_outlets_title', label: 'Other Outlets Title', placeholder: 'Other Outlets' },
+    { key: 'contact_map_address', label: 'Map Search Address', placeholder: 'Mira Road East, Mumbai' },
+    { key: 'contact_map_embed_url', label: 'Map Embed URL (full Google Maps embed URL)', placeholder: 'https://www.google.com/maps/embed/v1/...' },
   ];
 
   return (

@@ -43,6 +43,7 @@ const AdminTeam = lazy(() => import('./pages/AdminTeam'));
 const AdminAudit = lazy(() => import('./pages/AdminAudit'));
 const AdminBrand = lazy(() => import('./pages/AdminBrand'));
 const AdminHomepage = lazy(() => import('./pages/AdminHomepage'));
+const AdminFooter = lazy(() => import('./pages/AdminFooter'));
 const AdminPages = lazy(() => import('./pages/AdminPages'));
 const AdminOffers = lazy(() => import('./pages/AdminOffers'));
 const AdminBanners = lazy(() => import('./pages/AdminBanners'));
@@ -184,6 +185,7 @@ function AppRoutes() {
       <Route path="/admin/logs" element={<AdminSuspense><AdminPageShell><AdminAudit /></AdminPageShell></AdminSuspense>} />
       <Route path="/admin/brand" element={<AdminSuspense><AdminPageShell><AdminBrand /></AdminPageShell></AdminSuspense>} />
       <Route path="/admin/homepage" element={<AdminSuspense><AdminPageShell><AdminHomepage /></AdminPageShell></AdminSuspense>} />
+      <Route path="/admin/footer" element={<AdminSuspense><AdminPageShell><AdminFooter /></AdminPageShell></AdminSuspense>} />
       <Route path="/admin/pages" element={<AdminSuspense><AdminPageShell><AdminPages /></AdminPageShell></AdminSuspense>} />
       <Route path="/admin/offers" element={<AdminSuspense><AdminPageShell><AdminOffers /></AdminPageShell></AdminSuspense>} />
       <Route path="/admin/banners" element={<AdminSuspense><AdminPageShell><AdminBanners /></AdminPageShell></AdminSuspense>} />
