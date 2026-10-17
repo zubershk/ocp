@@ -1,8 +1,10 @@
 import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { AnimatePresence, motion } from 'framer-motion';
 import Navbar from './components/layout/Navbar';
 import Footer from './components/layout/Footer';
 import AdminSubNav from './components/layout/AdminSubNav';
+import { NotificationCenter } from './components/ui/NotificationCenter';
 import { RealtimeProvider, useRealtime } from './context/RealtimeContext';
 import AdminPalette from './components/admin/AdminPalette';
 import { useState, useEffect } from 'react';
@@ -58,9 +60,18 @@ const queryClient = new QueryClient({
 
 function PageShell({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={`page-enter ${className}`}>
-      {children}
-    </div>
+    <AnimatePresence mode="popLayout">
+      <motion.div
+        key={className || 'default'}
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -10 }}
+        transition={{ duration: 0.25, ease: 'easeOut' }}
+        className={`page-enter ${className}`}
+      >
+        {children}
+      </motion.div>
+    </AnimatePresence>
   );
 }
 
@@ -101,6 +112,7 @@ function Layout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen flex flex-col bg-[#fefcf8]">
       <Navbar />
+      <NotificationCenter />
       <main className="flex-1">{children}</main>
       <Footer />
     </div>
