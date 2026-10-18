@@ -1,10 +1,10 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { MapPin, Phone, Clock, Pizza, ArrowUpRight } from 'lucide-react';
+import { MapPin, Phone, Clock, Pizza, ArrowUpRight, ArrowUp, ShieldCheck, Truck, Star, CreditCard, ChevronRight, Zap, MessageCircle, Globe, ArrowRight } from 'lucide-react';
 import { useRestaurant, useRestaurantName, useDeliveryHours, useOutletsList, usePaymentInfo } from '../../context/RestaurantContext';
 import { useSocial, useFooter, useBrand } from '../../context/SiteSettingsContext';
 
 export default function Footer() {
-  const { config } = useRestaurant();
   const restaurantName = useRestaurantName();
   const deliveryHours = useDeliveryHours();
   const outlets = useOutletsList();
@@ -19,8 +19,30 @@ export default function Footer() {
     paymentInfo.online && 'Online',
   ].filter(Boolean);
 
+  const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
+
   return (
     <footer className="bg-zinc-950 text-zinc-400">
+      {/* ── Promotional CTA strip ── */}
+      <div className="bg-brand-600 text-white">
+        <div className="container-page py-4 sm:py-5 flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4">
+          <div className="flex items-center gap-2.5 text-center sm:text-left">
+            <Zap size={18} className="shrink-0 hidden sm:block" />
+            <div>
+              <span className="font-semibold text-sm sm:text-base">Free delivery on all orders · {deliveryHours || '11 AM – 4 AM'}</span>
+              <span className="block text-xs text-white/70 sm:inline sm:ml-2">Pay cash or UPI on arrival</span>
+            </div>
+          </div>
+          <Link
+            to="/r/menu"
+            className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-white text-brand-600 font-bold text-sm hover:bg-stone-50 transition-all shadow-[0_4px_6px_-1px_rgba(0,0,0,0.2)] shrink-0"
+          >
+            Order Now <ArrowRight size={14} />
+          </Link>
+        </div>
+      </div>
+
+      {/* ── Main footer grid ── */}
       <div className="container-page py-12 sm:py-16">
         <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8 lg:gap-10">
           {/* Brand */}
@@ -41,23 +63,43 @@ export default function Footer() {
                 100% Real Mozzarella · All prices include tax · Free delivery {deliveryHours}
               </p>
             )}
+            {/* Social links */}
+            <div className="flex items-center gap-3 mt-5">
+              {social.instagram && (
+                <a href={social.instagram?.startsWith('https://') ? social.instagram : '#'} target="_blank" rel="noopener noreferrer" className="w-9 h-9 rounded-full bg-zinc-800 flex items-center justify-center hover:bg-brand-600 transition-colors" aria-label="Instagram">
+                  <Globe size={16} className="text-zinc-400 hover:text-white" />
+                </a>
+              )}
+              {social.facebook && (
+                <a href={social.facebook?.startsWith('https://') ? social.facebook : '#'} target="_blank" rel="noopener noreferrer" className="w-9 h-9 rounded-full bg-zinc-800 flex items-center justify-center hover:bg-brand-600 transition-colors" aria-label="Facebook">
+                  <Globe size={16} className="text-zinc-400 hover:text-white" />
+                </a>
+              )}
+              {social.twitter && (
+                <a href={social.twitter?.startsWith('https://') ? social.twitter : '#'} target="_blank" rel="noopener noreferrer" className="w-9 h-9 rounded-full bg-zinc-800 flex items-center justify-center hover:bg-brand-600 transition-colors" aria-label="Twitter">
+                  <Globe size={16} className="text-zinc-400 hover:text-white" />
+                </a>
+              )}
+              {social.youtube && (
+                <a href={social.youtube?.startsWith('https://') ? social.youtube : '#'} target="_blank" rel="noopener noreferrer" className="w-9 h-9 rounded-full bg-zinc-800 flex items-center justify-center hover:bg-brand-600 transition-colors" aria-label="YouTube">
+                  <Globe size={16} className="text-zinc-400 hover:text-white" />
+                </a>
+              )}
+              {social.whatsapp && (
+                <a href={social.whatsapp?.startsWith('https://') ? social.whatsapp : '#'} target="_blank" rel="noopener noreferrer" className="w-9 h-9 rounded-full bg-zinc-800 flex items-center justify-center hover:bg-green-600 transition-colors" aria-label="WhatsApp">
+                  <MessageCircle size={16} className="text-zinc-400 hover:text-white" />
+                </a>
+              )}
+            </div>
           </div>
 
           {/* Quick Links */}
           <div>
-            <h4 className="text-white font-heading font-semibold mb-4 text-sm">Quick Links</h4>
+            <h4 className="text-white font-heading font-semibold mb-4 text-sm">{footer.quickLinksTitle}</h4>
             <ul className="space-y-2.5">
-              {[
-                { label: 'Menu', to: '/r/menu' },
-                { label: 'Offers', to: '/r/offers' },
-                { label: 'Locations', to: '/r/locations' },
-                { label: 'About', to: '/r/about' },
-                { label: 'Reviews', to: '/r/reviews' },
-                { label: 'FAQ', to: '/r/faq' },
-                { label: 'Contact', to: '/r/contact' },
-              ].map((link) => (
-                <li key={link.to}>
-                  <Link to={link.to} className="text-sm text-zinc-500 hover:text-white transition-colors duration-200 inline-flex items-center gap-1 group">
+              {footer.quickLinks.map((link) => (
+                <li key={link.url}>
+                  <Link to={link.url} className="text-sm text-zinc-500 hover:text-white transition-colors duration-200 inline-flex items-center gap-1 group">
                     {link.label}
                     <ArrowUpRight size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" />
                   </Link>
@@ -86,34 +128,79 @@ export default function Footer() {
               {outlets[0]?.address_lines?.map((line: string, i: number) => (
                 <li key={i} className="flex gap-2">
                   {i === 0 && <MapPin size={14} className="mt-0.5 shrink-0" style={{ color: brand.primaryColor }} />}
-                  <span className="text-zinc-500 leading-relaxed">{line}</span>
+                  <a
+                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((outlets[0]?.address_lines ?? []).join(' '))}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-zinc-500 leading-relaxed hover:text-white transition-colors"
+                  >
+                    {line}
+                  </a>
                 </li>
               ))}
               {outlets[0]?.phones && outlets[0].phones.length > 0 && (
-                <li className="flex gap-2">
+                <li className="flex gap-2 flex-wrap">
                   <Phone size={14} className="mt-0.5 shrink-0" style={{ color: brand.primaryColor }} />
-                  <span className="text-zinc-500">{outlets[0].phones.join(' · ')}</span>
+                  {outlets[0].phones.map((p: string) => (
+                    <a
+                      key={p}
+                      href={`tel:+91${p}`}
+                      className="text-zinc-500 hover:text-white transition-colors"
+                    >
+                      {p}
+                    </a>
+                  )).reduce((acc: any[], curr: any, idx: number) => {
+                    if (idx > 0) acc.push(<span key={`sep-${idx}`} className="text-zinc-700 mx-0.5">·</span>);
+                    acc.push(curr);
+                    return acc;
+                  }, [])}
                 </li>
               )}
               <li className="flex gap-2">
                 <Clock size={14} className="mt-0.5 shrink-0" style={{ color: brand.primaryColor }} />
-                <span className="text-zinc-500">Delivery {deliveryHours} daily</span>
+                <span className="text-zinc-500">{footer.deliveryHoursText.replace('{hours}', deliveryHours || '11 AM – 4 AM')}</span>
               </li>
               {paymentMethods.length > 0 && (
-                <li className="text-zinc-600 text-xs">
-                  Payments: {paymentMethods.join(' + ')}
+                <li className="flex gap-2 flex-wrap items-center pt-1">
+                  <span className="text-xs text-zinc-600">{footer.paymentLabel}</span>
+                  {paymentMethods.map((m) => (
+                    <span key={m} className="text-xs text-zinc-500 bg-zinc-800/60 px-2 py-0.5 rounded">{m}</span>
+                  ))}
                 </li>
               )}
             </ul>
+            {/* Track order CTA */}
+            <Link
+              to="/r/account"
+              className="inline-flex items-center gap-1.5 mt-4 px-5 py-2.5 rounded-full text-white text-xs font-semibold hover:opacity-90 transition-all duration-200 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)]"
+              style={{ backgroundColor: brand.primaryColor }}
+            >
+              {footer.trackOrderText} <ArrowUpRight size={12} />
+            </Link>
           </div>
 
           {/* Other outlets */}
           {outlets.length > 1 && (
             <div>
-              <h4 className="text-white font-heading font-semibold mb-4 text-sm">Other Outlets</h4>
+              <h4 className="text-white font-heading font-semibold mb-4 text-sm">{footer.otherOutletsTitle}</h4>
               <div className="text-sm space-y-2 text-zinc-500">
                 {outlets.slice(1).map((o) => (
-                  <div key={o.id}>{o.name}: <span className="text-zinc-400">{o.phones?.join(' · ')}</span></div>
+                  <div key={o.id}>
+                    <span className="font-medium text-zinc-300">{o.name}:</span>{' '}
+                    {o.phones?.map((p: string) => (
+                      <a
+                        key={p}
+                        href={`tel:+91${p}`}
+                        className="text-zinc-400 hover:text-white transition-colors"
+                      >
+                        {p}
+                      </a>
+                    )).reduce((acc: any[], curr: any, idx: number) => {
+                      if (idx > 0) acc.push(<span key={`sep-${idx}`} className="text-zinc-600 mx-0.5">·</span>);
+                      acc.push(curr);
+                      return acc;
+                    }, [])}
+                  </div>
                 ))}
               </div>
               <Link
@@ -121,19 +208,42 @@ export default function Footer() {
                 className="inline-flex items-center gap-1.5 mt-4 px-5 py-2.5 rounded-full text-white text-xs font-semibold hover:opacity-90 transition-all duration-200 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)]"
                 style={{ backgroundColor: brand.primaryColor }}
               >
-                View All Locations
+                {footer.viewLocationsText}
                 <ArrowUpRight size={12} />
               </Link>
             </div>
           )}
         </div>
 
-        {/* Social + Bottom bar */}
-        <div className="mt-12 pt-6 border-t border-zinc-800/80 flex flex-col sm:flex-row justify-between gap-3 text-xs text-zinc-600">
+        {/* Trust badges */}
+        <div className="mt-12 pt-8 border-t border-zinc-800/80">
+          <div className="grid md:grid-cols-2 gap-8">
+            <div>
+              <h4 className="text-white font-heading font-semibold mb-4 text-sm">{footer.trustTitle}</h4>
+              <div className="flex flex-wrap gap-3">
+                <span className="inline-flex items-center gap-2 bg-zinc-800/60 text-zinc-300 px-4 py-2.5 rounded-xl text-xs font-medium">
+                  <ShieldCheck size={14} className="text-emerald-400" /> Secure Checkout
+                </span>
+                <span className="inline-flex items-center gap-2 bg-zinc-800/60 text-zinc-300 px-4 py-2.5 rounded-xl text-xs font-medium">
+                  <Truck size={14} className="text-brand-400" /> Free Delivery
+                </span>
+                <span className="inline-flex items-center gap-2 bg-zinc-800/60 text-zinc-300 px-4 py-2.5 rounded-xl text-xs font-medium">
+                  <Star size={14} className="text-amber-400" /> 4.7 Rated
+                </span>
+                <span className="inline-flex items-center gap-2 bg-zinc-800/60 text-zinc-300 px-4 py-2.5 rounded-xl text-xs font-medium">
+                  <CreditCard size={14} className="text-blue-400" /> Cash & UPI
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Bottom bar */}
+        <div className="mt-8 pt-6 border-t border-zinc-800/80 flex flex-col sm:flex-row justify-between gap-3 text-xs text-zinc-600">
           <span>
             {footer.copyrightText || `\u00a9 ${new Date().getFullYear()} ${restaurantName}${outlets[0]?.name ? `, ${outlets[0].name}` : ''}. All rights reserved.`}
           </span>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 flex-wrap">
             {social.instagram && (
               <a href={social.instagram?.startsWith('https://') ? social.instagram : '#'} target="_blank" rel="noopener noreferrer" className="hover:text-zinc-400 transition-colors">Instagram</a>
             )}
@@ -149,9 +259,18 @@ export default function Footer() {
             {social.whatsapp && (
               <a href={social.whatsapp?.startsWith('https://') ? social.whatsapp : '#'} target="_blank" rel="noopener noreferrer" className="hover:text-zinc-400 transition-colors">WhatsApp</a>
             )}
-            <span className="text-zinc-700">All prices include tax</span>
+            <span className="text-zinc-700">{footer.taxNote}</span>
           </div>
         </div>
+
+        {/* Back to top */}
+        <button
+          onClick={scrollToTop}
+          className="fixed bottom-6 right-6 z-40 w-10 h-10 rounded-full bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700 flex items-center justify-center transition-all shadow-lg"
+          aria-label="Back to top"
+        >
+          <ArrowUp size={16} />
+        </button>
       </div>
     </footer>
   );
