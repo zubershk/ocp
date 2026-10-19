@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, ReactNode, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { CheckCircle2, AlertCircle, Info, X } from 'lucide-react';
 import type { Toast } from '../types';
@@ -38,12 +38,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           return (
             <div
               key={t.id}
-              className={`
-                pointer-events-auto flex items-center gap-2.5 px-4 py-3 rounded-2xl shadow-lg text-sm font-medium
-                ring-1 ${cfg.ring} ${cfg.bg} text-white
-                ${t.dismissing ? 'animate-toast-out' : 'animate-toast-in'}
-              `}
+              className={`pointer-events-auto flex items-center gap-2.5 px-4 py-3 rounded-2xl shadow-lg text-sm font-medium ring-1 ${cfg.ring} ${cfg.bg} text-white transition-all duration-300 ${t.dismissing ? 'animate-toast-out opacity-0 translate-x-full' : 'animate-toast-in opacity-100 translate-x-0'}`}
               style={{ animationDelay: t.dismissing ? '0ms' : `${i * 30}ms` }}
+              aria-live="polite"
             >
               <Icon size={16} className="shrink-0" />
               <span className="flex-1 min-w-0">{t.title}</span>
