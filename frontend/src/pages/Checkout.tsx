@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ShieldCheck, Bike, Store, Banknote, Smartphone, User, LogIn, MapPin, CreditCard, ShoppingCart, ShoppingBag, ArrowRight } from 'lucide-react';
+import { ShieldCheck, Bike, Store, Banknote, Smartphone, User, LogIn, MapPin, CreditCard, ShoppingCart, ShoppingBag, ArrowRight, Clock, Plus, AlertTriangle } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { orderService } from '../services/orderService';
@@ -14,7 +14,6 @@ type FormState = {
   address: string; landmark: string; city: string; postal: string;
   delivery: 'delivery' | 'pickup'; payment: 'cod' | 'upi' | 'online';
 };
-
 type FieldErrors = Partial<Record<keyof FormState, string>>;
 
 const initialForm: FormState = { name: '', phone: '', email: '', address: '', landmark: '', city: '', postal: '', delivery: 'delivery', payment: 'cod' };
@@ -34,12 +33,6 @@ function validate(form: FormState): FieldErrors {
   return errors;
 }
 
-const steps = [
-  { num: 1, label: 'Cart' },
-  { num: 2, label: 'Details' },
-  { num: 3, label: 'Confirm' },
-];
-
 export default function Checkout() {
   const { items, subtotal, clear } = useCart();
   const { customer } = useAuth();
@@ -54,7 +47,14 @@ export default function Checkout() {
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [hasSubmitted, setHasSubmitted] = useState(false);
-  const summaryRef = useRef<HTMLDivElement>(null);
+  const [showSummary, setShowSummary] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
+
+  const fieldErrors = validate(form);
+  const showFieldError = (field: keyof FormState) => touched[field] ? fieldErrors[field] : undefined;
+  const isDelivery = form.delivery === 'delivery';
+  const hasErrors = Object.keys(fieldErrors).length > 0;
+  const summaryErrors = hasSubmitted ? Object.entries(fieldErrors) : [];
 
   useEffect(() => {
     if (customer) {
@@ -67,6 +67,18 @@ export default function Checkout() {
       }));
     }
   }, [customer]);
+
+  // Auto-scroll to first error on submit
+  useEffect(() => {
+    if (hasSubmitted && Object.keys(fieldErrors).length > 0) {
+      const firstErrorField = Object.keys(fieldErrors)[0];
+      const el = document.getElementById(`field-${firstErrorField}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.focus();
+      }
+    }
+  }, [hasSubmitted]);
 
   if (items.length === 0) return (
     <div className="container-page py-20 text-center">
@@ -84,20 +96,13 @@ export default function Checkout() {
   const update = (patch: Partial<FormState>) => setForm((f) => ({ ...f, ...patch }));
   const blur = (field: keyof FormState) => setTouched((t) => ({ ...t, [field]: true }));
 
-  const fieldErrors = validate(form);
-  const showFieldError = (field: keyof FormState) => touched[field] ? fieldErrors[field] : undefined;
-  const isDelivery = form.delivery === 'delivery';
-
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setHasSubmitted(true);
     setTouched({ name: true, phone: true, email: true, address: true, landmark: true, city: true, postal: true });
     const errs = validate(form);
-    if (Object.keys(errs).length > 0) {
-      requestAnimationFrame(() => summaryRef.current?.focus());
-      return;
-    }
+    if (Object.keys(errs).length > 0) return;
     setSubmitting(true);
     try {
       const order = await orderService.createOrder({
@@ -119,33 +124,17 @@ export default function Checkout() {
     }
   };
 
-  const summaryErrors = hasSubmitted ? Object.entries(fieldErrors) : [];
-
   return (
-    <div className="container-page py-8">
+    <div className="container-page py-6 sm:py-8 pb-32 lg:pb-8">
       <div className="grid lg:grid-cols-3 gap-6 lg:gap-8">
         <form onSubmit={onSubmit} noValidate className="lg:col-span-2 space-y-6">
-          {/* Step indicator */}
-          <nav className="flex items-center gap-1 sm:gap-2 text-sm overflow-x-auto" aria-label="Checkout progress">
-            {steps.map((step, i) => (
-              <div key={step.num} className="flex items-center gap-1 sm:gap-2 shrink-0">
-                <span
-                  className={`
-                    inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold shrink-0
-                    ${step.num < 3
-                      ? 'bg-stone-200 text-stone-500'
-                      : step.num === 3
-                        ? 'bg-brand-600 text-white shadow-sm shadow-brand-600/20'
-                        : 'bg-stone-200 text-stone-500'
-                    }
-                  `}
-                >
-                  {step.num}
-                </span>
-                <span className={step.num === 3 ? 'text-brand-700 font-semibold' : 'text-zinc-400'}>{step.label}</span>
-                {i < steps.length - 1 && <div className="w-6 h-px bg-stone-200 mx-1" />}
-              </div>
-            ))}
+          {/* Progress indicator */}
+          <nav className="flex items-center gap-2 text-sm" aria-label="Checkout progress">
+            <span className="inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold bg-brand-600 text-white shadow-sm">1</span>
+            <span className="text-brand-700 font-semibold">Details</span>
+            <div className="w-8 h-px bg-brand-200 mx-1" />
+            <span className="inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold bg-stone-200 text-stone-500">2</span>
+            <span className="text-zinc-400">Confirm</span>
           </nav>
 
           <h1 className="text-2xl sm:text-3xl font-heading font-bold">Checkout</h1>
@@ -173,16 +162,13 @@ export default function Checkout() {
           )}
 
           {/* Error summary */}
-          <div
-            ref={summaryRef}
-            tabIndex={-1}
-            role="alert"
-            aria-labelledby="error-title"
-            className={`px-4 py-3 rounded-2xl border ${error || summaryErrors.length ? 'bg-red-50 border-red-200' : 'hidden'}`}
-          >
-            <h2 id="error-title" className="text-sm font-bold text-red-800">There is a problem</h2>
-            {error && <p className="text-sm text-red-700 mt-1">{error}</p>}
-            {summaryErrors.length > 0 && (
+          {hasSubmitted && summaryErrors.length > 0 && (
+            <div
+              tabIndex={-1}
+              role="alert"
+              className="px-4 py-3 rounded-2xl border bg-red-50 border-red-200"
+            >
+              <h2 className="text-sm font-bold text-red-800">There is a problem</h2>
               <ul className="mt-1 space-y-0.5 list-disc list-inside">
                 {summaryErrors.map(([field, msg]) => (
                   <li key={field}>
@@ -190,8 +176,13 @@ export default function Checkout() {
                   </li>
                 ))}
               </ul>
-            )}
-          </div>
+            </div>
+          )}
+          {error && (
+            <div className="px-4 py-3 rounded-2xl border bg-red-50 border-red-200">
+              <p className="text-sm text-red-700">{error}</p>
+            </div>
+          )}
 
           {/* Customer info */}
           <section className="bg-white rounded-3xl shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] p-6">
@@ -449,6 +440,22 @@ export default function Checkout() {
             </dl>
           </div>
         </aside>
+      </div>
+
+      {/* Mobile sticky checkout bar */}
+      <div className="fixed bottom-0 inset-x-0 z-50 bg-white border-t border-stone-200 p-3 lg:hidden shadow-[0_-4px_20px_rgba(0,0,0,0.15)]">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="text-xs text-zinc-500">{items.length} items</div>
+            <div className="text-lg font-bold text-zinc-900">₹{subtotal}</div>
+          </div>
+          <Link
+            to="/r/checkout"
+            className="flex-1 max-w-[200px] py-3 rounded-full bg-brand-600 text-white font-semibold text-sm hover:bg-brand-700 transition-all text-center shadow-[0_4px_6px_-1px_rgba(0,0,0,0.2)]"
+          >
+            Checkout
+          </Link>
+        </div>
       </div>
     </div>
   );

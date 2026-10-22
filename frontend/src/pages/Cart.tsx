@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { Minus, Plus, Trash2, ShoppingBag, Plus as PlusIcon, ArrowRight, ShieldCheck, Clock } from 'lucide-react';
+import { Minus, Plus, Trash2, ShoppingBag, Plus as PlusIcon, ArrowRight, ShieldCheck, Clock, Tag, PlusCircle, X } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useCrusts } from '../context/CrustContext';
 import { useMenuItems } from '../hooks/useMenu';
@@ -16,6 +16,8 @@ export default function Cart() {
   const deliveryHours = useDeliveryHours();
   const hp = useHomepage();
   const [removingIds, setRemovingIds] = useState<Set<string>>(new Set());
+  const [promoCode, setPromoCode] = useState('');
+  const [promoApplied, setPromoApplied] = useState(false);
 
   const totalItems = items.reduce((a, b) => a + b.quantity, 0);
 
@@ -24,10 +26,23 @@ export default function Cart() {
     setTimeout(() => { removeItem(id); setRemovingIds((prev) => { const next = new Set(prev); next.delete(id); return next; }); }, 250);
   }, [removeItem]);
 
+  // More suggestions (4 instead of 3) for better upsell
   const suggestions = menuItems
     .filter((m) => ['garlic-bread', 'desserts', 'french-fries', 'drinks', 'beverages'].includes(m.category))
     .filter((m) => !items.some((it) => it.menuItemId === m.id))
-    .slice(0, 3);
+    .slice(0, 4);
+
+  const applyPromo = () => {
+    if (promoCode.trim().toUpperCase() === 'FIRST20') {
+      setPromoApplied(true);
+      push({ type: 'success', title: 'Promo code applied! 20% off your order' });
+    } else {
+      push({ type: 'error', title: 'Invalid promo code' });
+    }
+  };
+
+  const discount = promoApplied ? Math.round(subtotal * 0.2) : 0;
+  const total = subtotal - discount;
 
   if (items.length === 0) return (
     <div className="container-page py-20 text-center animate-fade-up">
@@ -46,7 +61,7 @@ export default function Cart() {
   );
 
   return (
-    <div className="container-page py-8">
+    <div className="container-page py-8 pb-32 lg:pb-8">
       <div className="grid lg:grid-cols-3 gap-6 lg:gap-8">
         {/* Cart items */}
         <div className="lg:col-span-2">
@@ -117,11 +132,11 @@ export default function Cart() {
             ))}
           </ul>
 
-          {/* Suggestions */}
+          {/* Suggestions */ }
           {suggestions.length > 0 && (
             <section className="mt-10">
               <h2 className="font-heading font-bold text-lg">Goes great with your order</h2>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-4">
                 {suggestions.map((s) => (
                   <div
                     key={s.id}
@@ -155,6 +170,16 @@ export default function Cart() {
               </div>
             </section>
           )}
+
+          {/* Add more items CTA */}
+          <div className="mt-6 text-center">
+            <Link
+              to="/r/menu"
+              className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-stone-100 text-zinc-700 font-semibold text-sm hover:bg-stone-200 transition-all"
+            >
+              <PlusIcon size={16} /> Add more items
+            </Link>
+          </div>
         </div>
 
         {/* Order Summary */}
@@ -176,9 +201,36 @@ export default function Cart() {
               </div>
               <div className="flex justify-between text-base font-bold border-t border-stone-100 pt-3">
                 <dt className="text-zinc-900">Total</dt>
-                <dd className="text-zinc-900">₹{subtotal}</dd>
+                <dd className="text-zinc-900">₹{total}</dd>
               </div>
             </dl>
+
+            {/* Promo code */}
+            <div className="mt-4 pt-4 border-t border-stone-100">
+              <div className="flex items-center gap-2">
+                <Tag size={14} className="text-zinc-400" />
+                <input
+                  type="text"
+                  value={promoCode}
+                  onChange={(e) => setPromoCode(e.target.value)}
+                  placeholder="Promo code"
+                  className="flex-1 text-sm px-3 py-2 rounded-full border border-stone-200 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-400 transition-all"
+                  disabled={promoApplied}
+                />
+                <button
+                  onClick={applyPromo}
+                  disabled={promoApplied || !promoCode.trim()}
+                  className="px-4 py-2 rounded-full bg-brand-600 text-white text-sm font-semibold hover:bg-brand-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Apply
+                </button>
+              </div>
+              {promoApplied && (
+                <p className="text-xs text-emerald-600 mt-2">
+                  ✓ FIRST20 applied — 20% discount
+                </p>
+              )}
+            </div>
 
             {/* Trust badges */}
             <div className="mt-4 flex flex-wrap gap-2 text-[11px] text-zinc-500">
@@ -207,6 +259,22 @@ export default function Cart() {
               Continue shopping
             </Link>
           </div>
+        </div>
+      </div>
+
+      {/* Mobile sticky checkout bar */}
+      <div className="fixed bottom-0 inset-x-0 z-50 bg-white border-t border-stone-200 p-3 lg:hidden shadow-[0_-4px_20px_rgba(0,0,0,0.15)]">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="text-xs text-zinc-500">{totalItems} items</div>
+            <div className="text-lg font-bold text-zinc-900">₹{total}</div>
+          </div>
+          <Link
+            to="/r/checkout"
+            className="flex-1 max-w-[200px] py-3 rounded-full bg-brand-600 text-white font-semibold text-sm hover:bg-brand-700 transition-all text-center shadow-[0_4px_6px_-1px_rgba(0,0,0,0.2)]"
+          >
+            Checkout
+          </Link>
         </div>
       </div>
     </div>
