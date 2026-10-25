@@ -23,26 +23,39 @@ export function useFlyingCart() {
     const targetX = cartRect.left + cartRect.width / 2;
     const targetY = cartRect.top + cartRect.height / 2;
 
-    // Create flying clone
-    const clone = document.createElement('div');
-    clone.innerHTML = `
-      <div style="
-        position: fixed;
-        left: ${item.startX}px;
-        top: ${item.startY}px;
-        width: 48px;
-        height: 48px;
-        border-radius: 12px;
-        overflow: hidden;
-        z-index: 9999;
-        pointer-events: none;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-      ">
-        <img src="${item.image}" style="width:100%;height:100%;object-fit:cover;" />
-      </div>
-    `;
-    const el = clone.firstElementChild as HTMLElement;
-    document.body.appendChild(el);
+    // Create flying clone using safe DOM construction (no innerHTML —
+    // item.image is set as a property, not interpolated into HTML string,
+    // preventing attribute-breakout XSS).
+    const wrapper = document.createElement('div');
+    wrapper.style.position = 'fixed';
+    wrapper.style.left = `${item.startX}px`;
+    wrapper.style.top = `${item.startY}px`;
+    wrapper.style.width = '48px';
+    wrapper.style.height = '48px';
+    wrapper.style.borderRadius = '12px';
+    wrapper.style.overflow = 'hidden';
+    wrapper.style.zIndex = '9999';
+    wrapper.style.pointerEvents = 'none';
+    wrapper.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+
+    const img = document.createElement('img');
+    img.style.width = '100%';
+    img.style.height = '100%';
+    img.style.objectFit = 'cover';
+    // Validate image URL before setting as src — allow only https:// or /uploads/
+    try {
+      const u = new URL(item.image, window.location.origin);
+      if (u.protocol === 'https:' || u.protocol === 'http:' || u.pathname.startsWith('/uploads/') || u.pathname.startsWith('/')) {
+        img.src = u.href;
+      } else {
+        img.src = '/uploads/placeholder.png';
+      }
+    } catch {
+      img.src = '/uploads/placeholder.png';
+    }
+    wrapper.appendChild(img);
+    document.body.appendChild(wrapper);
+    const el = wrapper;
 
     // Animate with CSS transitions (lighter than GSAP for this simple use)
     el.style.transition = 'all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)';
