@@ -1,9 +1,10 @@
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useEffect, useState, useRef } from 'react';
-import { PartyPopper, RefreshCw, Star, Send, CheckCircle } from 'lucide-react';
+import { PartyPopper, RefreshCw, Star, Send, CheckCircle, Clock, MapPin, Phone, Share2, Repeat, ShoppingBag, ChevronRight, AlertCircle } from 'lucide-react';
 import { orderService, type OrderView } from '../services/orderService';
 import { useRestaurantPhone, useDeliveryHours } from '../context/RestaurantContext';
 import { useGsapFadeIn } from '../hooks/useGsap';
+import { useToast } from '../context/ToastContext';
 
 const labels: Record<string, string> = { placed: 'Order Placed', confirmed: 'Confirmed', out_for_delivery: 'Out for Delivery', delivered: 'Delivered', completed: 'Completed', cancelled: 'Cancelled' };
 const orderSteps = ['placed', 'confirmed', 'out_for_delivery', 'delivered'];
@@ -18,12 +19,14 @@ const legacyStep: Record<string, string> = { preparing: 'confirmed', ready: 'con
 
 export default function Order() {
   const { id } = useParams();
+  const nav = useNavigate();
   const [order, setOrder] = useState<OrderView | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'missing'>('loading');
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
   const titleRef = useGsapFadeIn({ y: 16 });
   const restaurantPhone = useRestaurantPhone();
   const deliveryHours = useDeliveryHours();
+  const { push } = useToast();
   const [rating, setRating] = useState(0);
   const [hoverRating, setHoverRating] = useState(0);
   const [reviewTitle, setReviewTitle] = useState('');
@@ -58,8 +61,19 @@ export default function Order() {
     return () => { alive = false; clearInterval(interval); };
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (state === 'loading') return <div className="container-page py-12 text-center text-sm text-zinc-500">Loading order…</div>;
-  if (state === 'missing' || !order) return <div className="container-page py-12 text-center"><h2 className="text-xl font-bold">Order not found</h2><p className="text-sm text-zinc-500 mt-1">Check your order ID or place a new order</p><Link to="/r/menu" className="inline-flex mt-4 px-6 py-3 rounded-full bg-brand-600 text-white shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)]">Go to Menu</Link></div>;
+  if (state === 'loading') return (
+    <div className="container-page py-12 text-center text-sm text-zinc-500">
+      <div className="w-8 h-8 mx-auto mb-3 border-2 border-brand-600 border-t-transparent rounded-full animate-spin" />
+      Loading order…
+    </div>
+  );
+  if (state === 'missing' || !order) return (
+    <div className="container-page py-12 text-center">
+      <h2 className="text-xl font-bold">Order not found</h2>
+      <p className="text-sm text-zinc-500 mt-1">Check your order ID or place a new order</p>
+      <Link to="/r/menu" className="inline-flex mt-4 px-6 py-3 rounded-full bg-brand-600 text-white shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)]">Go to Menu</Link>
+    </div>
+  );
 
   const flowStatus = legacyStep[order.status] ?? order.status;
   const statusIndex = Math.max(0, orderSteps.indexOf(flowStatus));
@@ -96,8 +110,27 @@ export default function Order() {
     }
   };
 
+  const handleShare = () => {
+    if (navigator.share) {
+      navigator.share({
+        title: `Order ${order.orderNumber}`,
+        text: `I just ordered from Orange Cheese Pizza! Order #${order.orderNumber}`,
+        url: window.location.href,
+      }).catch(() => {});
+    } else {
+      navigator.clipboard.writeText(window.location.href).then(() => {
+        push({ type: 'success', title: 'Order link copied!' });
+      });
+    }
+  };
+
+  const handleReorder = () => {
+    // Navigate to menu with items pre-filled
+    nav(`/r/menu?reorder=${id}`);
+  };
+
   return (
-    <div className="container-page py-8">
+    <div className="container-page py-8 pb-24 lg:pb-8">
       <div ref={titleRef} className="max-w-3xl mx-auto">
         {(order.status === 'placed' || (order.status === 'confirmed' && Date.now() - new Date(order.createdAt).getTime() < 30 * 60 * 1000)) && (
           <div className="mb-4 rounded-2xl bg-emerald-50 border border-emerald-200 p-5 flex items-start gap-3 animate-slide-in-up">
