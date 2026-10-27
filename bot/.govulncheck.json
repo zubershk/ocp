@@ -1,0 +1,12 @@
+{
+  "ignore": [
+    {
+      "vuln": "GO-2026-6809",
+      "comment": "crypto/x509 standard library vulnerability; fixed in Go 1.27.3 which is not yet released. Pin Go version in CI to include the fix when available."
+    },
+    {
+      "vuln": "GO-2026-6617",
+      "comment": "net/http/internal/http2 standard library vulnerability; fixed in Go 1.27.2 which is not yet released. Pin Go version in CI to include the fix when available."
+    }
+  ]
+}
