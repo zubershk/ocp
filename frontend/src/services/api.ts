@@ -52,13 +52,13 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T> {
 const ADMIN_KEY_STORAGE = 'ocp_admin_key';
 
 export function getAdminKey(): string {
-  if (typeof sessionStorage === 'undefined') return '';
-  return sessionStorage.getItem(ADMIN_KEY_STORAGE) ?? '';
+  if (typeof localStorage === 'undefined') return '';
+  return localStorage.getItem(ADMIN_KEY_STORAGE) ?? '';
 }
 
 export function setAdminKey(key: string): void {
-  if (typeof sessionStorage === 'undefined') return;
-  sessionStorage.setItem(ADMIN_KEY_STORAGE, key);
+  if (typeof localStorage === 'undefined') return;
+  localStorage.setItem(ADMIN_KEY_STORAGE, key);
 }
 
 export class ApiError extends Error {
