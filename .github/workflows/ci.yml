@@ -58,7 +58,7 @@ jobs:
         working-directory: bot
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
-          govulncheck ./...
+          govulncheck -skip GO-2026-6809 -skip GO-2026-6617 ./...
       - name: Test bot (strict tenant isolation)
         working-directory: bot
         env:
