@@ -152,6 +152,7 @@ func ApplyStatusChange(orderID int, newStatus string, evolution *EvolutionClient
 	BroadcastRealtimeFor(order.RestaurantID, order.OutletID, 0, "order.status", map[string]interface{}{
 		"order_id": order.ID, "order_number": order.OrderNumber, "status": newStatus, "restaurant_id": order.RestaurantID, "outlet_id": order.OutletID,
 	})
+	BroadcastOrderStatus(order.ID, order.OrderNumber, newStatus)
 	return order, outcome, nil
 }
 

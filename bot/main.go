@@ -210,6 +210,8 @@ func main() {
 		apiGroup.POST("/contact", handlers.RateLimit(5, time.Minute), contactHandler.SubmitContact)
 		apiGroup.POST("/orders", handlers.RateLimit(20, time.Minute), apiHandler.CreateOrder)
 		apiGroup.GET("/orders/:id", apiHandler.GetOrder)
+		apiGroup.GET("/orders/:id/stream", apiHandler.StreamOrder)
+		apiGroup.POST("/orders/:id/cancel", apiHandler.CancelOrder)
 		// Customer auth — phone synced to WhatsApp bot (customers.whatsapp_number)
 		apiGroup.POST("/auth/send-otp", handlers.RateLimit(3, time.Minute), authHandler.SendOTP)
 		apiGroup.POST("/auth/verify-otp", handlers.RateLimit(10, time.Minute), authHandler.VerifyOTP)

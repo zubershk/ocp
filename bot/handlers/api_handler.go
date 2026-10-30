@@ -205,6 +205,39 @@ func (h *ApiHandler) CreateOrder(c *gin.Context) {
 	})
 }
 
+// CancelOrder handles POST /api/orders/:id/cancel — customer cancellation within window.
+func (h *ApiHandler) CancelOrder(c *gin.Context) {
+	id := c.Param("id")
+	token := c.GetHeader("X-Order-Token")
+	if bearerPhone := customerPhoneFromBearer(c); bearerPhone != "" {
+		// allow bearer-owned orders too
+	}
+	if err := h.orders.Cancel(id, token); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"cancelled": true})
+}
+
+// StreamOrder handles GET /api/orders/:id/stream — SSE feed for a single order.
+func (h *ApiHandler) StreamOrder(c *gin.Context) {
+	id := c.Param("id")
+	token := c.GetHeader("X-Order-Token")
+	order, err := h.orders.Get(id, token)
+	if err != nil || order == nil {
+		if bearerPhone := customerPhoneFromBearer(c); bearerPhone != "" {
+			if owned, e := services.CustomerOrderByIdentifier(bearerPhone, id); e == nil && owned != nil {
+				order = owned
+			}
+		}
+	}
+	if order == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "order not found"})
+		return
+	}
+	services.StreamOrderEvents(c, order.ID)
+}
+
 // GetOrder handles GET /api/orders/:id (numeric ID or order number).
 // Requires the per-order access token OR (SaaS) a valid customer Bearer
 // token whose phone matches the order's customer_phone (syncs web+WhatsApp).

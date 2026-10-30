@@ -85,6 +85,7 @@ type WebsiteOrderResult struct {
 	Discount      float64             `json:"discount"`
 	Total         float64             `json:"total"`
 	CreatedAt     time.Time           `json:"created_at"`
+	ETAminutes    int                 `json:"eta_minutes"`
 	Source        string              `json:"source,omitempty"`
 	AccessToken   string              `json:"access_token,omitempty"`
 	WhatsApp      WhatsAppOutcome     `json:"-"`
@@ -408,6 +409,41 @@ func (s *WebsiteOrderService) CreateFor(req *WebsiteOrderRequest, idempotencyKey
 // orderAccessToken generates a cryptographically random per-order token.
 // Fails closed — panics if crypto/rand is unavailable rather than emitting
 // predictable time-based tokens (which would expose order PII).
+// estimateETA returns remaining minutes until delivery based on status and kitchen load.
+func estimateETA(status string, createdAt time.Time) int {
+	base := map[string]int{
+		"placed":           35,
+		"confirmed":        28,
+		"preparing":        22,
+		"ready":            15,
+		"out_for_delivery": 10,
+		"delivered":        0,
+		"completed":        0,
+		"cancelled":        0,
+	}[status]
+	if base == 0 && status != "delivered" && status != "completed" && status != "cancelled" {
+		base = 30
+	}
+	// kitchen load adjustment
+	var active int
+	if err := database.DB.QueryRow(`SELECT COUNT(*) FROM orders WHERE status IN ('placed','confirmed','preparing','ready','out_for_delivery') AND created_at > NOW() - INTERVAL '2 hours'`).Scan(&active); err == nil {
+		if active > 15 {
+			base += 10
+		} else if active > 8 {
+			base += 5
+		}
+	}
+	// elapsed time reduction
+	elapsed := int(time.Since(createdAt).Minutes())
+	if elapsed > 0 && elapsed < base {
+		base -= elapsed
+	}
+	if base < 0 {
+		base = 0
+	}
+	return base
+}
+
 func orderAccessToken() string {
 	b := make([]byte, 24)
 	if _, err := rand.Read(b); err != nil {
@@ -418,6 +454,31 @@ func orderAccessToken() string {
 
 // Get resolves an order by numeric ID or order number, with items.
 // When the order has an access token, token must match (404 otherwise).
+// Cancel allows the ordering customer to cancel within 5 minutes of placing,
+// only while the order is still in 'placed' or 'confirmed' state.
+func (s *WebsiteOrderService) Cancel(identifier, token string) error {
+	order, err := s.Get(identifier, token)
+	if err != nil {
+		return err
+	}
+	if order == nil {
+		return fmt.Errorf("order not found")
+	}
+	if order.Status != "placed" && order.Status != "confirmed" {
+		return fmt.Errorf("order can no longer be cancelled")
+	}
+	if time.Since(order.CreatedAt) > 5*time.Minute {
+		return fmt.Errorf("cancellation window (5 min) has expired")
+	}
+	_, err = database.DB.Exec(`UPDATE orders SET status='cancelled', updated_at=NOW() WHERE id=$1`, order.ID)
+	if err != nil {
+		return err
+	}
+	_, err = database.DB.Exec(`INSERT INTO order_events (order_id, event_type, description) VALUES ($1, 'cancelled', 'Cancelled by customer')`, order.ID)
+	BroadcastOrderStatus(order.ID, order.OrderNumber, "cancelled")
+	return err
+}
+
 func (s *WebsiteOrderService) Get(identifier string, token string) (*WebsiteOrderResult, error) {
 	var (
 		query string
@@ -469,6 +530,8 @@ func (s *WebsiteOrderService) getByID(orderID int) (*WebsiteOrderResult, error) 
 		&o.AccessToken); err != nil {
 		return nil, err
 	}
+
+	o.ETAminutes = estimateETA(o.Status, o.CreatedAt)
 
 	itemRows, err := database.DB.Query(`
 		SELECT oi.menu_item_id, oi.name, COALESCE(mi.slug, ''), oi.quantity, oi.unit_price, oi.options, oi.subtotal
