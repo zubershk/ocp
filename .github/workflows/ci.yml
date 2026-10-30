@@ -50,7 +50,9 @@ jobs:
           go-version: "1.25" # float patch: stdlib CVE fixes ride the 1.25.x train
       - name: Build bot
         working-directory: bot
-        run: go build -v ./...
+        run: |
+          go mod tidy
+          go build -v ./...
       - name: Vet bot
         working-directory: bot
         run: go vet ./...
