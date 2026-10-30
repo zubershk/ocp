@@ -112,6 +112,7 @@ export type OrderView = {
   discount: number;
   total: number;
   createdAt: string;
+  etaMinutes?: number;
   notification?: { sent: boolean; skipped?: boolean; reason?: string };
 };
 
@@ -146,6 +147,7 @@ function toView(raw: ApiOrderResponse['order'], notification?: ApiOrderResponse[
     discount: raw.discount,
     total: raw.total,
     createdAt: raw.created_at,
+    etaMinutes: (raw as any).eta_minutes ?? 0,
     notification,
   };
 }
@@ -183,6 +185,24 @@ export const orderService = {
   },
 
   /** Loads an order by numeric ID or order number. Returns null on 404. */
+  async cancelOrder(idOrNumber: string): Promise<void> {
+    const token = tokenFor(idOrNumber);
+    const bearer = getCustomerToken();
+    const response = await fetch(`${apiBaseUrl}/api/orders/${encodeURIComponent(idOrNumber)}/cancel`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        ...(token ? { 'X-Order-Token': token } : {}),
+        ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}),
+      },
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => null);
+      throw new Error(data?.error ?? 'Cancel failed');
+    }
+  },
+
   async getOrder(idOrNumber: string): Promise<OrderView | null> {
     try {
       const token = tokenFor(idOrNumber);

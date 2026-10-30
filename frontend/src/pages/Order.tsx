@@ -2,6 +2,9 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useEffect, useState, useRef } from 'react';
 import { PartyPopper, RefreshCw, Star, Send, CheckCircle, Clock, MapPin, Phone, Share2, Repeat, ShoppingBag, ChevronRight, AlertCircle } from 'lucide-react';
 import { orderService, type OrderView } from '../services/orderService';
+import { apiBaseUrl } from '../services/api';
+import { useCart } from '../context/CartContext';
+import { menuService } from '../services/menuService';
 import { useRestaurantPhone, useDeliveryHours } from '../context/RestaurantContext';
 import { useGsapFadeIn } from '../hooks/useGsap';
 import { useToast } from '../context/ToastContext';
@@ -26,6 +29,7 @@ export default function Order() {
   const titleRef = useGsapFadeIn({ y: 16 });
   const restaurantPhone = useRestaurantPhone();
   const deliveryHours = useDeliveryHours();
+  const { addItem, clear } = useCart();
   const { push } = useToast();
   const [rating, setRating] = useState(0);
   const [hoverRating, setHoverRating] = useState(0);
@@ -35,10 +39,20 @@ export default function Order() {
   const [reviewState, setReviewState] = useState<'idle' | 'sending' | 'done' | 'error'>('idle');
   const [reviewError, setReviewError] = useState('');
 
-  // Real-time polling: refetch every 10s if order is still active
+  // Request notification permission once for order updates.
+  useEffect(() => {
+    if (typeof Notification === 'undefined') return;
+    if (Notification.permission === 'default') {
+      // Defer to avoid blocking; request on first interaction is better, but auto-request is acceptable here.
+      const t = setTimeout(() => { Notification.requestPermission().catch(() => {}); }, 2000);
+      return () => clearTimeout(t);
+    }
+  }, []);
+
+  // Real-time updates via SSE; falls back to polling if stream unavailable.
   useEffect(() => {
     let alive = true;
-    let interval: ReturnType<typeof setInterval>;
+    let abortCtrl: AbortController | null = null;
 
     const fetchOrder = () => {
       orderService.getOrder(id!).then((o) => {
@@ -51,14 +65,63 @@ export default function Order() {
 
     fetchOrder();
 
-    // Poll every 10s for active orders
-    interval = setInterval(() => {
-      if (order && !['delivered', 'cancelled'].includes(order.status)) {
-        fetchOrder();
-      }
-    }, 10000);
+    const token = ((): string => {
+      try { return JSON.parse(localStorage.getItem('ocp_order_tokens') || '{}')[id!] ?? ''; }
+      catch { return ''; }
+    })();
+    const bearer = (() => { try { return localStorage.getItem('ocp_customer_token') ?? ''; } catch { return ''; } })();
 
-    return () => { alive = false; clearInterval(interval); };
+    const connectStream = () => {
+      abortCtrl = new AbortController();
+      (async () => {
+        try {
+          const res = await fetch(`${apiBaseUrl}/api/orders/${encodeURIComponent(id!)}/stream`, {
+            headers: {
+              Accept: 'text/event-stream',
+              ...(token ? { 'X-Order-Token': token } : {}),
+              ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}),
+            },
+            signal: abortCtrl!.signal,
+          });
+          if (!res.ok || !res.body) throw new Error('stream failed');
+          const reader = res.body.getReader();
+          const dec = new TextDecoder();
+          let buf = '';
+          for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buf += dec.decode(value, { stream: true });
+            let idx: number;
+            while ((idx = buf.indexOf('\\n\\n')) >= 0) {
+              const chunk = buf.slice(0, idx);
+              buf = buf.slice(idx + 2);
+              for (const line of chunk.split('\\n')) {
+                const t = line.trim();
+                if (!t.startsWith('data:')) continue;
+                try {
+                  const ev = JSON.parse(t.slice(5).trim());
+                  if (ev.type === 'ping' || ev.type === 'hello') continue;
+                  if (ev.status && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+                    try { new Notification('Order update', { body: `Order ${ev.order_number || ''} is now ${String(ev.status).replace(/_/g,' ')}.`, icon: '/favicon.svg' }); } catch {}
+                  }
+                  fetchOrder();
+                } catch {}
+              }
+            }
+          }
+        } catch (e) {
+          if ((e as Error).name === 'AbortError') return;
+        }
+        if (alive) {
+          // fallback poll after stream breaks
+          setTimeout(fetchOrder, 5000);
+        }
+      })();
+    };
+
+    connectStream();
+
+    return () => { alive = false; abortCtrl?.abort(); };
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (state === 'loading') return (
@@ -124,9 +187,48 @@ export default function Order() {
     }
   };
 
-  const handleReorder = () => {
-    // Navigate to menu with items pre-filled
-    nav(`/r/menu?reorder=${id}`);
+  const [reordering, setReordering] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const handleReorder = async () => {
+    if (!order || reordering) return;
+    setReordering(true);
+    try {
+      const menu = await menuService.getMenu();
+      clear();
+      for (const it of order.items) {
+        const mi = menu.find((m) => m.name === it.name);
+        if (!mi) continue;
+        const s = (it.size || '').toLowerCase();
+        const size: 'regular' | 'medium' | 'large' = s.includes('large') ? 'large' : s.includes('medium') ? 'medium' : 'regular';
+        const crust = it.crust || 'tossed';
+        addItem(mi, size, crust, it.quantity || 1);
+      }
+      push({ type: 'success', title: 'Items added to cart' });
+      nav('/r/cart');
+    } catch (e) {
+      push({ type: 'error', title: 'Could not reorder' });
+    } finally {
+      setReordering(false);
+    }
+  };
+
+  const canCancel = order && (order.status === 'placed' || order.status === 'confirmed') &&
+    (Date.now() - new Date(order.createdAt).getTime()) < 5 * 60 * 1000;
+
+  const handleCancel = async () => {
+    if (!order || cancelling) return;
+    if (!window.confirm('Cancel this order?')) return;
+    setCancelling(true);
+    try {
+      await orderService.cancelOrder(id!);
+      push({ type: 'success', title: 'Order cancelled' });
+      const o = await orderService.getOrder(id!);
+      if (o) { setOrder(o); setLastUpdate(new Date()); }
+    } catch (e) {
+      push({ type: 'error', title: e instanceof Error ? e.message : 'Could not cancel' });
+    } finally {
+      setCancelling(false);
+    }
   };
 
   return (
@@ -191,7 +293,7 @@ export default function Order() {
           <div className="mt-8 grid sm:grid-cols-2 gap-4 text-sm">
             <div className="bg-stone-50 rounded-2xl p-4 border border-stone-100">
               <div className="font-semibold">Estimated delivery</div>
-              <div className="text-zinc-600 mt-1">~30 mins from order · Free delivery {deliveryHours || '11 AM - 11 PM'}</div>
+              <div className="text-zinc-600 mt-1">{order.etaMinutes && order.etaMinutes > 0 ? `~${order.etaMinutes} mins remaining` : 'Arriving shortly'} · Free delivery {deliveryHours || '11 AM - 11 PM'}</div>
             </div>
             <div className="bg-stone-50 rounded-2xl p-4 border border-stone-100">
               <div className="font-semibold">{order.deliveryType === 'delivery' ? 'Deliver to' : 'Pickup by'}</div>
@@ -300,14 +402,21 @@ export default function Order() {
           )}
 
           <div className="mt-6 flex gap-2">
-            <Link to="/r/menu" className="flex-1 py-3.5 rounded-full bg-zinc-900 text-white text-center font-semibold hover:bg-zinc-800 transition-colors shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)]">Order Again</Link>
+            <button onClick={handleReorder} disabled={reordering} className="flex-1 py-3.5 rounded-full bg-zinc-900 text-white text-center font-semibold hover:bg-zinc-800 transition-colors shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] disabled:opacity-50">
+              {reordering ? 'Adding…' : 'Order Again'}
+            </button>
             <a href={`https://wa.me/${waNumber}?text=Hi!%20About%20my%20order%20${order.orderNumber}`} target="_blank" rel="noreferrer" className="flex-1 py-3.5 rounded-full bg-emerald-600 text-white text-center font-semibold hover:bg-emerald-700 transition-colors shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)]">WhatsApp Support</a>
           </div>
+          {canCancel && (
+            <button onClick={handleCancel} disabled={cancelling} className="mt-3 w-full py-3 rounded-full border border-red-200 text-red-600 text-sm font-semibold hover:bg-red-50 transition-colors disabled:opacity-50">
+              {cancelling ? 'Cancelling…' : 'Cancel order (within 5 min)'}
+            </button>
+          )}
 
           {/* Last updated */}
           <div className="mt-4 text-center text-[11px] text-zinc-400 flex items-center justify-center gap-1.5">
             <RefreshCw size={10} /> Last updated {lastUpdate.toLocaleTimeString()}
-            {isLive && <span> · Auto-refreshes every 10s</span>}
+            {isLive && <span> · Live updates</span>}
           </div>
         </div>
       </div>
