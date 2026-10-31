@@ -134,9 +134,12 @@ export default function Account() {
                       <Clock size={11} />{new Date(o.created_at).toLocaleString()} - {o.order_type} - {o.payment_method}
                     </div>
                   </div>
-                  <div className="text-right shrink-0 flex flex-col items-end gap-1">
+                  <div className="text-right shrink-0 flex flex-col items-end gap-2">
                     <div className="font-bold tabular-nums text-lg">₹{Number(o.total).toLocaleString('en-IN')}</div>
-                    <Link to={`/r/order/${o.id}`} className="text-xs font-semibold text-orange-600 hover:underline inline-flex items-center gap-1">View details <ArrowRight size={12} /></Link>
+                    <div className="flex items-center gap-2">
+                      <Link to={`/r/order/${o.id}`} className="text-xs font-semibold text-orange-600 hover:underline inline-flex items-center gap-1">View <ArrowRight size={12} /></Link>
+                      <Link to={`/r/order/${o.id}`} className="text-xs font-semibold px-2.5 py-1 rounded-full bg-zinc-900 text-white hover:bg-black inline-flex items-center gap-1">Reorder</Link>
+                    </div>
                   </div>
                 </div>
               ))}
