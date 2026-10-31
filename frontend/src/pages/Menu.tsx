@@ -316,27 +316,27 @@ export default function Menu() {
       )}
 
       {/* Sticky Add to Cart bar for mobile */}
-      <div className="fixed bottom-0 inset-x-0 z-50 bg-white border-t border-stone-200 p-4 shadow-[0_-4px_20px_rgba(0,0,0,0.15)]">
-        {visibleProduct && (
-          <div className="flex items-center gap-3 p-4 shadow-[0_0_20px_rgba(0,0,0,0.1)]">
+      {visibleProduct && (
+        <div className="fixed bottom-0 inset-x-0 z-50 bg-white border-t border-stone-200 p-3 shadow-[0_-4px_20px_rgba(0,0,0,0.15)]">
+          <div className="flex items-center gap-3 max-w-3xl mx-auto">
             <img
               src={visibleProduct.image}
               alt={visibleProduct.name}
-              className="w-14 h-14 rounded-xl object-cover"
+              className="w-12 h-12 rounded-xl object-cover shrink-0"
             />
-            <div className="flex-1">
-              <div className="font-semibold text-sm">{visibleProduct.name}</div>
+            <div className="flex-1 min-w-0">
+              <div className="font-semibold text-sm truncate">{visibleProduct.name}</div>
               <div className="text-xs text-amber-600 font-bold">₹{visibleProduct.price}</div>
             </div>
             <Button
               onClick={() => quickAdd(visibleProduct)}
-              className="bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold px-4 py-2 rounded-lg"
+              className="bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold px-4 py-2 rounded-lg shrink-0"
             >
               Add to Cart
             </Button>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Crust info */}
       {!loading && filtered.length > 0 && (
