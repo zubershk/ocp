@@ -553,12 +553,12 @@ export default function Admin() {
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="font-mono text-[13px] font-bold tracking-tight">{o.order_number}</span>
+                          <span className="font-mono text-base font-extrabold tracking-tight">{o.order_number}</span>
                           {o.source === 'whatsapp' && <Badge variant="secondary" className="gap-1 bg-green-50 text-green-700 border border-green-200"><MessageCircle size={10} />WA</Badge>}
                           {urgent && <Badge variant="destructive" className="gap-1"><Flame size={10} />Urgent</Badge>}
                         </div>
                         <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                          <Badge variant="outline" className={`gap-1.5 ${meta.cls}`}><span className={`w-1.5 h-1.5 rounded-full ${meta.dot}`} />{prettyStatus(o.status)}</Badge>
+                          <Badge variant="outline" className={`gap-1.5 font-semibold text-xs ${meta.cls}`}><span className={`w-2 h-2 rounded-full ${meta.dot}`} />{prettyStatus(o.status)}</Badge>
                           <Badge variant="outline" className="gap-1 bg-muted border-border text-muted-foreground"><Clock size={11} />{timeAgo(o.created_at)}</Badge>
                         </div>
                       </div>
@@ -570,7 +570,7 @@ export default function Admin() {
 
                     <div className="mt-4 rounded-xl bg-muted border border-border p-3">
                       <div className="flex items-center justify-between gap-2">
-                        <div className="font-semibold text-sm truncate" title={o.customer_name}>{o.customer_name}</div>
+                        <div className="font-bold text-base truncate" title={o.customer_name}>{o.customer_name}</div>
                         <Badge variant="outline" className="text-[10px] bg-background border-border">{o.payment_method}</Badge>
                       </div>
                       <div className="mt-2 flex flex-wrap gap-1.5">
@@ -600,7 +600,7 @@ export default function Admin() {
 
                     <div className="mt-4 pt-3 border-t border-border flex items-center justify-between">
                       <div className="text-[11px] font-semibold tracking-wide text-muted-foreground">Total</div>
-                      <div className="text-[18px] font-bold tracking-tight tabular-nums">₹{o.total.toLocaleString('en-IN')}</div>
+                      <div className="text-2xl font-extrabold tracking-tight tabular-nums">₹{o.total.toLocaleString('en-IN')}</div>
                     </div>
                     <div className="text-[11px] text-muted-foreground flex items-center justify-between">
                       <span>Sub ₹{o.subtotal.toLocaleString('en-IN')}{o.delivery_fee ? ` + ₹${o.delivery_fee}` : ' • free delivery'}</span>
