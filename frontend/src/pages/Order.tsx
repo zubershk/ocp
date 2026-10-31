@@ -38,6 +38,8 @@ export default function Order() {
   const [itemRatings, setItemRatings] = useState<Record<string, number>>({});
   const [reviewState, setReviewState] = useState<'idle' | 'sending' | 'done' | 'error'>('idle');
   const [reviewError, setReviewError] = useState('');
+  const [reordering, setReordering] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
 
   // Request notification permission once for order updates.
   useEffect(() => {
@@ -187,8 +189,6 @@ export default function Order() {
     }
   };
 
-  const [reordering, setReordering] = useState(false);
-  const [cancelling, setCancelling] = useState(false);
   const handleReorder = async () => {
     if (!order || reordering) return;
     setReordering(true);
