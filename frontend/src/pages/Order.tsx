@@ -214,188 +214,155 @@ export default function Order() {
 
 
   return (
-    <div className="container-page py-8 pb-24 lg:pb-8">
-      <div ref={titleRef} className="max-w-3xl mx-auto">
+    <div className="container-page py-6 pb-24 lg:pb-8">
+      <div ref={titleRef} className="max-w-2xl mx-auto space-y-4">
+        {/* Thank you banner */}
         {(order.status === 'placed' || (order.status === 'confirmed' && Date.now() - new Date(order.createdAt).getTime() < 30 * 60 * 1000)) && (
-          <div className="mb-4 rounded-2xl bg-emerald-50 border border-emerald-200 p-5 flex items-start gap-3 animate-slide-in-up">
-            <PartyPopper size={22} className="text-emerald-700 shrink-0 mt-0.5" aria-hidden />
+          <div className="rounded-2xl bg-emerald-50 border border-emerald-200 p-4 flex items-start gap-3 animate-slide-in-up">
+            <PartyPopper size={20} className="text-emerald-700 shrink-0 mt-0.5" aria-hidden />
             <div>
-              <h2 className="font-bold text-emerald-900">Thank you, {order.customerName.split(' ')[0]}! Your order is in.</h2>
-              <p className="text-sm text-emerald-800 mt-0.5">The kitchen has been notified — expect delivery in ~30–40 mins. Keep this page to track live progress.</p>
+              <h2 className="font-bold text-emerald-900">Thank you, {order.customerName.split(' ')[0]}! Order placed.</h2>
+              <p className="text-sm text-emerald-800 mt-0.5">Kitchen notified — expect in ~30–40 mins. Keep this page to track.</p>
             </div>
           </div>
         )}
 
-        <div className="bg-white rounded-3xl shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] p-6">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <h1 className="text-xl font-heading font-bold">Order {order.orderNumber}</h1>
-              <p className="text-sm text-zinc-500">{new Date(order.createdAt).toLocaleString()} · {order.deliveryType} · {order.paymentMethod.toUpperCase()}</p>
+        {/* Header card: order number + status + live */}
+        <div className="bg-white rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.06)] p-5">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-xs text-zinc-500 font-medium">Order number</div>
+              <h1 className="text-2xl font-heading font-bold tracking-tight truncate">{order.orderNumber}</h1>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 shrink-0">
               {isLive && (
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-bold">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                   Live
                 </span>
               )}
-              <span className="px-3 py-1 rounded-full bg-brand-100 text-brand-700 text-xs font-bold">{labels[order.status] ?? labels[current] ?? order.status}</span>
+              <span className="px-3 py-1.5 rounded-full bg-brand-100 text-brand-700 text-xs font-bold">
+                {labels[order.status] ?? labels[current] ?? order.status}
+              </span>
             </div>
           </div>
-
-          {/* Live status tracker */}
-          <div className="mt-6">
-            <div className="relative pl-6">
-              <div className="absolute left-[11px] top-2 bottom-2 w-0.5 bg-stone-200" />
-              {orderSteps.map((s, i) => {
-                const active = i <= statusIndex;
-                const isCurrent = i === statusIndex;
-                return (
-                  <div key={s} className="relative flex gap-3 pb-6 last:pb-0">
-                    <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center bg-white ${active ? 'border-brand-600' : 'border-stone-300'} ${isCurrent ? 'ring-4 ring-brand-100' : ''}`}>
-                      <div className={`w-2.5 h-2.5 rounded-full ${active ? 'bg-brand-600' : 'bg-stone-300'}`} />
-                    </div>
-                    <div className={active ? 'text-zinc-900' : 'text-zinc-400'}>
-                      <div className={`text-sm font-semibold ${isCurrent ? 'text-brand-600' : ''}`}>{labels[s]}</div>
-                      <div className="text-xs">{stepHints[i]}{fmtTime(stepTime[s]) ? ` · ${fmtTime(stepTime[s])}` : ''}</div>
-                    </div>
-                    {isCurrent && <span className="ml-auto text-xs px-2 py-1 rounded-full bg-zinc-900 text-white h-fit">now</span>}
-                  </div>
-                );
-              })}
-            </div>
+          <div className="mt-2 text-xs text-zinc-500 flex flex-wrap gap-x-3 gap-y-1">
+            <span>{new Date(order.createdAt).toLocaleString()}</span>
+            <span>· {order.deliveryType === 'delivery' ? 'Delivery' : 'Takeaway'}</span>
+            <span>· {order.paymentMethod.toUpperCase()}</span>
           </div>
 
-          {order.notification && !order.notification.sent && (
-            <div className="mt-4 px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800">
-              WhatsApp notification {order.notification.skipped ? 'skipped' : 'failed'}{order.notification.reason ? `: ${order.notification.reason}` : ''} — your order is safely saved.
+          {/* ETA prominent */}
+          {isLive && (
+            <div className="mt-4 flex items-center gap-3 rounded-xl bg-brand-50 border border-brand-100 px-4 py-3">
+              <Clock size={20} className="text-brand-600 shrink-0" />
+              <div>
+                <div className="text-sm font-bold text-brand-900">
+                  {order.etaMinutes && order.etaMinutes > 0 ? `~${order.etaMinutes} min remaining` : 'Arriving shortly'}
+                </div>
+                <div className="text-xs text-brand-700">Free delivery · {deliveryHours || '11 AM – 11 PM'}</div>
+              </div>
             </div>
           )}
+        </div>
 
-          <div className="mt-8 grid sm:grid-cols-2 gap-4 text-sm">
-            <div className="bg-stone-50 rounded-2xl p-4 border border-stone-100">
-              <div className="font-semibold">Estimated delivery</div>
-              <div className="text-zinc-600 mt-1">{order.etaMinutes && order.etaMinutes > 0 ? `~${order.etaMinutes} mins remaining` : 'Arriving shortly'} · Free delivery {deliveryHours || '11 AM - 11 PM'}</div>
-            </div>
-            <div className="bg-stone-50 rounded-2xl p-4 border border-stone-100">
-              <div className="font-semibold">{order.deliveryType === 'delivery' ? 'Deliver to' : 'Pickup by'}</div>
-              <div className="text-zinc-600 mt-1">{order.customerName} · {order.customerPhone}</div>
-              {order.address && <div className="text-xs text-zinc-500 mt-1">{order.address}{order.landmark ? ` (${order.landmark})` : ''}</div>}
-            </div>
-          </div>
-
-          <div className="mt-6 border-t border-stone-100 pt-6">
-            <h3 className="font-heading font-semibold">Items</h3>
-            <div className="mt-3 space-y-2">
-              {order.items.map((it, idx) => (
-                <div key={idx} className="flex gap-3 text-sm">
-                  <div className="flex-1">
-                    <div className="font-medium">{it.name}{it.size ? ` - ${it.size}` : ''}{it.crust ? ` + ${it.crust}` : ''}</div>
-                    <div className="text-xs text-zinc-500">Qty {it.quantity} × ₹{it.unitPrice}</div>
+        {/* Status tracker - compact */}
+        <div className="bg-white rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.06)] p-5">
+          <div className="relative pl-6">
+            <div className="absolute left-[11px] top-2 bottom-2 w-0.5 bg-stone-200" />
+            {orderSteps.map((s, i) => {
+              const active = i <= statusIndex;
+              const isCurrent = i === statusIndex;
+              return (
+                <div key={s} className="relative flex gap-3 pb-4 last:pb-0">
+                  <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center bg-white ${active ? 'border-brand-600' : 'border-stone-300'} ${isCurrent ? 'ring-4 ring-brand-100' : ''}`}>
+                    <div className={`w-2.5 h-2.5 rounded-full ${active ? 'bg-brand-600' : 'bg-stone-300'}`} />
                   </div>
-                  <div className="font-semibold">₹{it.lineTotal}</div>
-                </div>
-              ))}
-            </div>
-            <div className="mt-4 border-t border-stone-100 pt-3 space-y-1 text-sm">
-              <div className="flex justify-between"><span className="text-zinc-500">Subtotal</span><span>₹{order.subtotal}</span></div>
-              <div className="flex justify-between"><span className="text-zinc-500">Delivery</span><span>{order.deliveryFee === 0 ? 'Free' : `₹${order.deliveryFee}`}</span></div>
-              <div className="flex justify-between font-bold text-base"><span>Total (incl. tax)</span><span>₹{order.total}</span></div>
-            </div>
-          </div>
-
-          {order.status === 'delivered' && (
-            <div className="mt-6 border-t border-stone-100 pt-6">
-              <h3 className="font-heading font-semibold">Rate your order</h3>
-              {reviewState === 'done' ? (
-                <p className="mt-3 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 flex items-center gap-2">
-                  <CheckCircle size={16} /> Thanks! Your review is awaiting moderation.
-                </p>
-              ) : (
-                <div className="mt-3">
-                  <div className="flex items-center gap-1" role="radiogroup" aria-label="Overall rating">
-                    {[1, 2, 3, 4, 5].map((s) => (
-                      <button
-                        key={s}
-                        type="button"
-                        onClick={() => setRating(s)}
-                        onMouseEnter={() => setHoverRating(s)}
-                        onMouseLeave={() => setHoverRating(0)}
-                        className="p-1 cursor-pointer"
-                        aria-label={`${s} star${s > 1 ? 's' : ''}`}
-                      >
-                        <Star
-                          size={26}
-                          className={(hoverRating || rating) >= s ? 'fill-amber-400 text-amber-400' : 'text-stone-300'}
-                        />
-                      </button>
-                    ))}
+                  <div className={`flex-1 ${active ? 'text-zinc-900' : 'text-zinc-400'}`}>
+                    <div className={`text-sm font-semibold ${isCurrent ? 'text-brand-600' : ''}`}>{labels[s]}</div>
+                    <div className="text-xs text-zinc-500">{stepHints[i]}{fmtTime(stepTime[s]) ? ` · ${fmtTime(stepTime[s])}` : ''}</div>
                   </div>
-                  {order.items.filter((it) => it.slug).length > 0 && (
-                    <div className="mt-3 space-y-2">
-                      {order.items.filter((it) => it.slug).map((it, idx) => (
-                        <div key={`${it.slug}-${idx}`} className="flex items-center justify-between gap-3 text-sm">
-                          <span className="text-zinc-600 truncate">{it.name}</span>
-                          <span className="flex items-center gap-0.5 shrink-0">
-                            {[1, 2, 3, 4, 5].map((s) => (
-                              <button
-                                key={s}
-                                type="button"
-                                onClick={() => setItemRatings((m) => ({ ...m, [it.slug!]: s }))}
-                                className="p-0.5 cursor-pointer"
-                                aria-label={`Rate ${it.name} ${s} stars`}
-                              >
-                                <Star
-                                  size={16}
-                                  className={(itemRatings[it.slug!] ?? 0) >= s ? 'fill-amber-400 text-amber-400' : 'text-stone-300'}
-                                />
-                              </button>
-                            ))}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  <input
-                    value={reviewTitle}
-                    onChange={(e) => setReviewTitle(e.target.value)}
-                    placeholder="Headline (optional)"
-                    maxLength={120}
-                    className="mt-3 w-full px-4 py-2.5 rounded-full border border-stone-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                  />
-                  <textarea
-                    value={reviewBody}
-                    onChange={(e) => setReviewBody(e.target.value)}
-                    placeholder="How was the food? (optional)"
-                    rows={3}
-                    maxLength={2000}
-                    className="mt-2 w-full px-4 py-2.5 rounded-full border border-stone-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                  />
-                  {reviewError && <p className="mt-2 text-xs text-red-600">{reviewError}</p>}
-                  <button
-                    onClick={submitReview}
-                    disabled={reviewState === 'sending'}
-                    className="mt-3 inline-flex items-center gap-1.5 px-6 py-3 rounded-full bg-brand-600 text-white text-sm font-semibold hover:bg-brand-700 disabled:opacity-50 transition cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
-                    <Send size={14} /> {reviewState === 'sending' ? 'Sending…' : 'Submit review'}
-                  </button>
+                  {isCurrent && <span className="text-[10px] px-2 py-0.5 rounded-full bg-zinc-900 text-white h-fit self-center">now</span>}
                 </div>
-              )}
-            </div>
-          )}
-
-          <div className="mt-6 flex gap-2">
-            <button onClick={handleReorder} disabled={reordering} className="flex-1 py-3.5 rounded-full bg-zinc-900 text-white text-center font-semibold hover:bg-zinc-800 transition-colors shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] disabled:opacity-50">
-              {reordering ? 'Adding…' : 'Order Again'}
-            </button>
-            <a href={`https://wa.me/${waNumber}?text=Hi!%20About%20my%20order%20${order.orderNumber}`} target="_blank" rel="noreferrer" className="flex-1 py-3.5 rounded-full bg-emerald-600 text-white text-center font-semibold hover:bg-emerald-700 transition-colors shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)]">WhatsApp Support</a>
+              );
+            })}
           </div>
+        </div>
 
-
-          {/* Last updated */}
-          <div className="mt-4 text-center text-[11px] text-zinc-400 flex items-center justify-center gap-1.5">
-            <RefreshCw size={10} /> Last updated {lastUpdate.toLocaleTimeString()}
-            {isLive && <span> · Live updates</span>}
+        {order.notification && !order.notification.sent && (
+          <div className="px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800">
+            WhatsApp notification {order.notification.skipped ? 'skipped' : 'failed'}{order.notification.reason ? `: ${order.notification.reason}` : ''} — order is safely saved.
           </div>
+        )}
+
+        {/* Items + total */}
+        <div className="bg-white rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.06)] p-5">
+          <h3 className="font-heading font-semibold text-sm text-zinc-500 uppercase tracking-wide">Items</h3>
+          <div className="mt-3 space-y-2.5">
+            {order.items.map((it, idx) => (
+              <div key={idx} className="flex items-center gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-sm truncate">{it.name}{it.size ? ` · ${it.size}` : ''}{it.crust && it.crust !== 'tossed' ? ` + ${it.crust}` : ''}</div>
+                  <div className="text-xs text-zinc-500">Qty {it.quantity} × ₹{it.unitPrice}</div>
+                </div>
+                <div className="font-semibold text-sm shrink-0">₹{it.lineTotal}</div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 border-t border-stone-100 pt-3 space-y-1.5 text-sm">
+            <div className="flex justify-between text-zinc-500"><span>Subtotal</span><span>₹{order.subtotal}</span></div>
+            <div className="flex justify-between text-zinc-500"><span>Delivery</span><span>{order.deliveryFee === 0 ? 'Free' : `₹${order.deliveryFee}`}</span></div>
+            <div className="flex justify-between font-bold text-lg pt-1 border-t border-stone-100 mt-1"><span>Total</span><span>₹{order.total}</span></div>
+            <div className="text-[11px] text-zinc-400 text-right">incl. tax</div>
+          </div>
+        </div>
+
+        {/* Delivery / pickup info */}
+        <div className="bg-white rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.06)] p-5 text-sm">
+          <div className="font-semibold mb-1">{order.deliveryType === 'delivery' ? 'Deliver to' : 'Pickup by'}</div>
+          <div className="text-zinc-600">{order.customerName} · {order.customerPhone}</div>
+          {order.address && <div className="text-xs text-zinc-500 mt-1">{order.address}{order.landmark ? ` (${order.landmark})` : ''}</div>}
+        </div>
+
+        {/* Review (delivered) */}
+        {order.status === 'delivered' && (
+          <div className="bg-white rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.06)] p-5">
+            <h3 className="font-heading font-semibold">Rate your order</h3>
+            {reviewState === 'done' ? (
+              <p className="mt-3 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 flex items-center gap-2">
+                <CheckCircle size={16} /> Thanks! Your review is awaiting moderation.
+              </p>
+            ) : (
+              <div className="mt-3">
+                <div className="flex items-center gap-1" role="radiogroup" aria-label="Overall rating">
+                  {[1, 2, 3, 4, 5].map((s) => (
+                    <button key={s} type="button" onClick={() => setRating(s)} onMouseEnter={() => setHoverRating(s)} onMouseLeave={() => setHoverRating(0)} className="p-1 cursor-pointer" aria-label={`${s} star${s > 1 ? 's' : ''}`}>
+                      <Star size={26} className={(hoverRating || rating) >= s ? 'fill-amber-400 text-amber-400' : 'text-stone-300'} />
+                    </button>
+                  ))}
+                </div>
+                <input value={reviewTitle} onChange={(e) => setReviewTitle(e.target.value)} placeholder="Headline (optional)" maxLength={120} className="mt-3 w-full px-4 py-2.5 rounded-full border border-stone-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
+                <textarea value={reviewBody} onChange={(e) => setReviewBody(e.target.value)} placeholder="How was the food? (optional)" rows={3} maxLength={2000} className="mt-2 w-full px-4 py-2.5 rounded-full border border-stone-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
+                {reviewError && <p className="mt-2 text-xs text-red-600">{reviewError}</p>}
+                <button onClick={submitReview} disabled={reviewState === 'sending'} className="mt-3 inline-flex items-center gap-1.5 px-6 py-3 rounded-full bg-brand-600 text-white text-sm font-semibold hover:bg-brand-700 disabled:opacity-50 transition cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
+                  <Send size={14} /> {reviewState === 'sending' ? 'Sending…' : 'Submit review'}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Actions */}
+        <div className="flex gap-2">
+          <button onClick={handleReorder} disabled={reordering} className="flex-1 py-3.5 rounded-full bg-zinc-900 text-white text-center font-semibold hover:bg-zinc-800 transition-colors shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] disabled:opacity-50">
+            {reordering ? 'Adding…' : 'Order Again'}
+          </button>
+          <a href={`https://wa.me/${waNumber}?text=Hi!%20About%20my%20order%20${order.orderNumber}`} target="_blank" rel="noreferrer" className="flex-1 py-3.5 rounded-full bg-emerald-600 text-white text-center font-semibold hover:bg-emerald-700 transition-colors shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)]">WhatsApp Support</a>
+        </div>
+
+        <div className="text-center text-[11px] text-zinc-400 flex items-center justify-center gap-1.5">
+          <RefreshCw size={10} /> Last updated {lastUpdate.toLocaleTimeString()}
+          {isLive && <span> · Live updates</span>}
         </div>
       </div>
     </div>
