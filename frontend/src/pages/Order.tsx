@@ -39,7 +39,6 @@ export default function Order() {
   const [reviewState, setReviewState] = useState<'idle' | 'sending' | 'done' | 'error'>('idle');
   const [reviewError, setReviewError] = useState('');
   const [reordering, setReordering] = useState(false);
-  const [cancelling, setCancelling] = useState(false);
 
   // Request notification permission once for order updates.
   useEffect(() => {
@@ -212,24 +211,7 @@ export default function Order() {
     }
   };
 
-  const canCancel = order && (order.status === 'placed' || order.status === 'confirmed') &&
-    (Date.now() - new Date(order.createdAt).getTime()) < 5 * 60 * 1000;
 
-  const handleCancel = async () => {
-    if (!order || cancelling) return;
-    if (!window.confirm('Cancel this order?')) return;
-    setCancelling(true);
-    try {
-      await orderService.cancelOrder(id!);
-      push({ type: 'success', title: 'Order cancelled' });
-      const o = await orderService.getOrder(id!);
-      if (o) { setOrder(o); setLastUpdate(new Date()); }
-    } catch (e) {
-      push({ type: 'error', title: e instanceof Error ? e.message : 'Could not cancel' });
-    } finally {
-      setCancelling(false);
-    }
-  };
 
   return (
     <div className="container-page py-8 pb-24 lg:pb-8">
@@ -407,11 +389,7 @@ export default function Order() {
             </button>
             <a href={`https://wa.me/${waNumber}?text=Hi!%20About%20my%20order%20${order.orderNumber}`} target="_blank" rel="noreferrer" className="flex-1 py-3.5 rounded-full bg-emerald-600 text-white text-center font-semibold hover:bg-emerald-700 transition-colors shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)]">WhatsApp Support</a>
           </div>
-          {canCancel && (
-            <button onClick={handleCancel} disabled={cancelling} className="mt-3 w-full py-3 rounded-full border border-red-200 text-red-600 text-sm font-semibold hover:bg-red-50 transition-colors disabled:opacity-50">
-              {cancelling ? 'Cancelling…' : 'Cancel order (within 5 min)'}
-            </button>
-          )}
+
 
           {/* Last updated */}
           <div className="mt-4 text-center text-[11px] text-zinc-400 flex items-center justify-center gap-1.5">
