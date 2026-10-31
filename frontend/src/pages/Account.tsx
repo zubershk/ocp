@@ -43,61 +43,61 @@ export default function Account() {
     if (!loading && !customer) nav('/r/login?redirect=/r/account', { replace: true });
   }, [loading, customer, nav]);
 
-  if (loading) return <div className="max-w-3xl mx-auto px-4 py-12 text-center text-sm text-zinc-500">Loading…</div>;
+  if (loading) return <div className="max-w-3xl mx-auto px-4 py-12 text-center text-sm text-zinc-500">Loading...</div>;
   if (!customer) return null;
 
   const orders = (ordersQuery.data ?? []) as OrderRow[];
-  // Derived live from history so the counters can never drift from
-  // what the customer actually sees below.
   const orderCount = orders.length;
   const totalSpent = orders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="flex flex-wrap items-start justify-between gap-4">
+    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
+      <div className="flex items-center justify-between gap-4 mb-6">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Your account</h1>
-          <p className="text-sm text-zinc-500 mt-1">Same number for web &amp; WhatsApp — one history, one tap reorder.</p>
+          <p className="text-sm text-zinc-500 mt-1">Same number for web and WhatsApp - one history, one tap reorder.</p>
         </div>
-        <button onClick={async () => { await logout(); nav('/r/login'); }} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-zinc-200 bg-white text-sm font-semibold hover:bg-zinc-50">
+        <button onClick={async () => { await logout(); nav('/r/login'); }} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-zinc-200 bg-white text-sm font-semibold hover:bg-zinc-50 transition">
           <LogOut size={14} /> Sign out
         </button>
       </div>
 
-      <div className="mt-6 grid lg:grid-cols-[360px_1fr] gap-6">
+      <div className="grid lg:grid-cols-[340px_1fr] gap-6">
         {/* Profile card */}
         <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-hidden h-fit">
-          <div className="h-1.5 bg-zinc-900" />
+          <div className="h-1.5 bg-gradient-to-r from-zinc-900 to-zinc-700" />
           <div className="p-6">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-zinc-900 text-white grid place-items-center"><User size={20} /></div>
-              <div>
-                <div className="font-bold leading-tight">{customer.name || 'Welcome'}</div>
-                <div className="text-xs text-zinc-500 inline-flex items-center gap-1"><Phone size={11} /> +91 {customer.phone}</div>
+              <div className="w-14 h-14 rounded-2xl bg-zinc-900 text-white grid place-items-center text-lg font-bold">
+                {(customer.name || 'U').charAt(0).toUpperCase()}
+              </div>
+              <div className="min-w-0">
+                <div className="font-bold text-lg leading-tight truncate">{customer.name || 'Welcome'}</div>
+                <div className="text-xs text-zinc-500 inline-flex items-center gap-1 mt-0.5"><Phone size={11} /> +91 {customer.phone}</div>
               </div>
             </div>
-            <div className="mt-4 grid grid-cols-2 gap-3">
+            <div className="mt-5 grid grid-cols-2 gap-3">
               <div className="rounded-xl bg-zinc-50 border border-zinc-100 p-3 text-center">
-                <div className="text-[11px] font-semibold tracking-wide text-zinc-500">Orders</div>
-                <div className="text-xl font-bold tabular-nums">{ordersQuery.isLoading ? '—' : orderCount}</div>
+                <div className="text-[10px] font-semibold tracking-wide text-zinc-500 uppercase">Orders</div>
+                <div className="text-2xl font-bold tabular-nums mt-1">{ordersQuery.isLoading ? '-' : orderCount}</div>
               </div>
               <div className="rounded-xl bg-zinc-50 border border-zinc-100 p-3 text-center">
-                <div className="text-[11px] font-semibold tracking-wide text-zinc-500">Spent</div>
-                <div className="text-xl font-bold tabular-nums">₹{ordersQuery.isLoading ? '—' : totalSpent.toLocaleString('en-IN')}</div>
+                <div className="text-[10px] font-semibold tracking-wide text-zinc-500 uppercase">Spent</div>
+                <div className="text-2xl font-bold tabular-nums mt-1">₹{ordersQuery.isLoading ? '-' : totalSpent.toLocaleString('en-IN')}</div>
               </div>
             </div>
-            <div className="mt-4 space-y-2 text-sm">
+            <div className="mt-5 space-y-2 text-sm">
               {customer.email && <div className="flex items-center gap-2 text-zinc-600"><Mail size={14} className="text-zinc-400" />{customer.email}</div>}
               {customer.default_address && <div className="flex gap-2 text-zinc-600"><MapPin size={14} className="text-zinc-400 shrink-0 mt-0.5" /><span className="line-clamp-2">{customer.default_address}</span></div>}
-              {!customer.default_address && <p className="text-xs text-zinc-400">Add an address on your next checkout — we’ll remember it.</p>}
+              {!customer.default_address && <p className="text-xs text-zinc-400 bg-zinc-50 rounded-lg px-3 py-2">Add an address on your next checkout - we will remember it.</p>}
             </div>
             <div className="mt-5 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 flex gap-2">
               <MessageCircle size={14} className="shrink-0 mt-0.5" />
-              <span>WhatsApp bot uses the same number. Chat “hi” on WhatsApp to see this history there too.</span>
+              <span>WhatsApp bot uses the same number. Chat "hi" on WhatsApp to see this history there too.</span>
             </div>
-            <div className="mt-4 flex gap-2">
-              <Link to="/r/menu" className="flex-1 py-2.5 rounded-xl bg-zinc-900 text-white text-center text-sm font-semibold hover:bg-black">Order again</Link>
-              <a href={`https://wa.me/91${restaurantPhone}`} target="_blank" rel="noreferrer" className="flex-1 py-2.5 rounded-xl bg-white border border-zinc-200 text-center text-sm font-semibold hover:bg-zinc-50">Chat on WhatsApp</a>
+            <div className="mt-5 flex gap-2">
+              <Link to="/r/menu" className="flex-1 py-2.5 rounded-xl bg-zinc-900 text-white text-center text-sm font-semibold hover:bg-black transition">Order again</Link>
+              <a href={`https://wa.me/91${restaurantPhone}`} target="_blank" rel="noreferrer" className="flex-1 py-2.5 rounded-xl bg-white border border-zinc-200 text-center text-sm font-semibold hover:bg-zinc-50 transition">Chat on WhatsApp</a>
             </div>
           </div>
         </div>
@@ -111,39 +111,39 @@ export default function Account() {
 
           {ordersQuery.isLoading ? (
             <div className="p-6 space-y-3">
-              {[0, 1, 2].map((i) => <div key={i} className="h-16 bg-zinc-50 rounded-xl animate-pulse border border-zinc-100" />)}
+              {[0, 1, 2].map((i) => <div key={i} className="h-20 bg-zinc-50 rounded-xl animate-pulse border border-zinc-100" />)}
             </div>
           ) : orders.length === 0 ? (
-            <div className="p-10 text-center">
-              <div className="w-14 h-14 mx-auto rounded-2xl bg-zinc-50 border grid place-items-center text-zinc-400"><ShoppingBag size={20} /></div>
-              <p className="font-semibold mt-3">No orders yet</p>
-              <p className="text-sm text-zinc-500 mt-1">Your web and WhatsApp orders will appear here once you order with this number.</p>
-              <Link to="/r/menu" className="inline-flex mt-4 px-5 py-2.5 rounded-xl bg-orange-600 text-white text-sm font-semibold hover:bg-orange-700">Browse menu <ArrowRight size={14} className="ml-1" /></Link>
+            <div className="p-12 text-center">
+              <div className="w-16 h-16 mx-auto rounded-2xl bg-zinc-50 border grid place-items-center text-zinc-400"><ShoppingBag size={24} /></div>
+              <p className="font-semibold mt-4">No orders yet</p>
+              <p className="text-sm text-zinc-500 mt-1 max-w-xs mx-auto">Your web and WhatsApp orders will appear here once you order with this number.</p>
+              <Link to="/r/menu" className="inline-flex mt-5 px-5 py-2.5 rounded-xl bg-orange-600 text-white text-sm font-semibold hover:bg-orange-700">Browse menu <ArrowRight size={14} className="ml-1" /></Link>
             </div>
           ) : (
             <div className="divide-y divide-zinc-100">
               {orders.map((o) => (
-                <div key={o.id} className="px-6 py-4 flex items-center justify-between gap-4 hover:bg-zinc-50/60">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-sm font-bold">{o.order_number}</span>
-                      <span className={`px-2 py-0.5 rounded-full border text-[11px] font-bold ${statusCls[o.status] ?? 'bg-zinc-50 border-zinc-200'}`}>{o.status.replace(/_/g, ' ')}</span>
+                <div key={o.id} className="px-6 py-5 flex items-center justify-between gap-4 hover:bg-zinc-50/60 transition">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-mono text-sm font-bold text-zinc-900">{o.order_number}</span>
+                      <span className={`px-2 py-0.5 rounded-full border text-[11px] font-bold capitalize ${statusCls[o.status] ?? 'bg-zinc-50 border-zinc-200'}`}>{o.status.replace(/_/g, ' ')}</span>
                       {o.source === 'whatsapp' && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-50 border border-green-200 text-green-700 font-bold">WhatsApp</span>}
                     </div>
-                    <div className="text-xs text-zinc-500 flex items-center gap-2 mt-1">
-                      <Clock size={11} />{new Date(o.created_at).toLocaleString()} • {o.order_type} • {o.payment_method}
+                    <div className="text-xs text-zinc-500 flex items-center gap-2 mt-1.5">
+                      <Clock size={11} />{new Date(o.created_at).toLocaleString()} - {o.order_type} - {o.payment_method}
                     </div>
                   </div>
-                  <div className="text-right shrink-0">
-                    <div className="font-bold tabular-nums">₹{Number(o.total).toLocaleString('en-IN')}</div>
-                    <Link to={`/r/order/${o.id}`} className="text-xs font-semibold text-orange-600 hover:underline inline-flex items-center gap-1">View <ArrowRight size={12} /></Link>
+                  <div className="text-right shrink-0 flex flex-col items-end gap-1">
+                    <div className="font-bold tabular-nums text-lg">₹{Number(o.total).toLocaleString('en-IN')}</div>
+                    <Link to={`/r/order/${o.id}`} className="text-xs font-semibold text-orange-600 hover:underline inline-flex items-center gap-1">View details <ArrowRight size={12} /></Link>
                   </div>
                 </div>
               ))}
             </div>
           )}
           <div className="px-6 py-3 bg-zinc-50 border-t text-xs text-zinc-500 flex items-center justify-between">
-            <span>Synced via phone • WhatsApp + web</span>
+            <span>Synced via phone - WhatsApp + web</span>
             <button onClick={() => ordersQuery.refetch()} className="font-semibold text-zinc-700 hover:underline">Refresh</button>
           </div>
         </div>
