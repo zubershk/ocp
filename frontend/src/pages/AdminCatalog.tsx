@@ -470,9 +470,9 @@ export default function AdminCatalog() {
       <>
       {/* Stats */}
       <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <Card className="p-4"><div className="text-[11px] tracking-wide font-semibold text-zinc-500">Items</div><div className="text-2xl font-bold">{items.length}</div></Card>
-        <Card className="p-4"><div className="text-[11px] tracking-wide font-semibold text-zinc-500">Categories</div><div className="text-2xl font-bold">{categories.length}</div></Card>
-        <Card className="p-4"><div className="text-[11px] tracking-wide font-semibold text-zinc-500">Available</div><div className="text-2xl font-bold">{items.filter((i) => i.available).length}</div></Card>
+        <Card className="p-4"><div className="text-[11px] tracking-normal font-semibold text-zinc-500">Items</div><div className="text-2xl font-bold">{items.length}</div></Card>
+        <Card className="p-4"><div className="text-[11px] tracking-normal font-semibold text-zinc-500">Categories</div><div className="text-2xl font-bold">{categories.length}</div></Card>
+        <Card className="p-4"><div className="text-[11px] tracking-normal font-semibold text-zinc-500">Available</div><div className="text-2xl font-bold">{items.filter((i) => i.available).length}</div></Card>
         <Card className="p-4 flex flex-col justify-center"><div className="text-xs text-zinc-500 inline-flex items-center gap-1"><Sparkles size={12} /> Live preview at <Link to="/r/menu" className="text-orange-600 underline">/r/menu</Link></div></Card>
       </div>
 
