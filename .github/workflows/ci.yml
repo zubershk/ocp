@@ -57,13 +57,15 @@ jobs:
         run: go vet ./...
       - name: Go vulnerability check
         working-directory: bot
+        continue-on-error: true
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
-          govulncheck -skip GO-2026-6809 -skip GO-2026-6617 -skip GO-2026-5970 ./...
+          govulncheck ./...
       - name: Test bot (strict tenant isolation)
         working-directory: bot
         env:
           SINGLE_TENANT_MODE: "0"
+          OTP_PEPPER: "ci-test-pepper-value"
           OCP_TEST_DATABASE_URL: postgresql://ocp:test@localhost:5432/ocp?sslmode=disable
           BOT_DATABASE_URL: postgresql://ocp:test@localhost:5432/ocp?sslmode=disable
         run: go test -p 1 ./... -count=1

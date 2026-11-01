@@ -43,13 +43,16 @@ func TestDeleteSessionHashesBothVariants(t *testing.T) {
 	if peppered == legacy {
 		t.Fatalf("peppered and legacy hashes must differ when pepper is set")
 	}
-	// Without pepper they differ via BOT_ADMIN_KEY fallback; at minimum ensure deterministic
+	// OTP_PEPPER is required (fail-closed); hashHex panics when it is empty.
+	// Verify the panic to document the fail-closed security behavior.
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatalf("hashHex should panic when OTP_PEPPER is empty (fail-closed)")
+		}
+	}()
 	t.Setenv("OTP_PEPPER", "")
 	t.Setenv("BOT_ADMIN_KEY", "fallback-pepper")
-	peppered2 := hashHex(token)
-	if peppered2 == legacy {
-		t.Fatalf("peppered (fallback) and legacy must differ")
-	}
+	_ = hashHex(token)
 }
 
 func TestIsStaleLogicForSessions(t *testing.T) {
