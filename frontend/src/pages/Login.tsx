@@ -199,10 +199,10 @@ export default function Login() {
                         inputMode="numeric"
                         maxLength={1}
                         className={`
-                          w-10 sm:w-12 h-12 sm:h-14 text-center text-lg sm:text-xl font-bold rounded-xl border-2 transition-all duration-200
+                          w-11 sm:w-14 h-14 sm:h-16 text-center text-xl sm:text-2xl font-bold rounded-2xl border-2 transition-all duration-200
                           ${d
-                            ? 'border-brand-400 bg-brand-50/30 text-brand-700 ring-2 ring-brand-200/40'
-                            : 'border-stone-200 bg-stone-50 focus:bg-white focus:border-brand-400 focus:ring-2 focus:ring-brand-200/40'
+                            ? 'border-brand-500 bg-brand-50 text-brand-700 ring-4 ring-brand-200/50 scale-105'
+                            : 'border-stone-200 bg-stone-50 focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-200/50'
                           }
                           focus:outline-none
                         `}
