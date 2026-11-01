@@ -348,7 +348,7 @@ export default function Admin() {
           <Card className="stagger-child" style={{ animationDelay: '0ms' }}>
             <CardContent className="p-4">
               <div className="flex items-start justify-between">
-                <div className="w-9 h-9 rounded-xl bg-primary text-primary-foreground grid place-items-center shadow-sm"><Wallet size={16} /></div>
+                <div className="w-9 h-9 rounded-xl bg-foreground text-background grid place-items-center"><Wallet size={16} /></div>
                 <Badge variant="secondary" className="gap-1 bg-emerald-50 text-emerald-700 border border-emerald-200"><TrendingUp size={12} /> Today</Badge>
               </div>
               <div className="mt-3 text-[11px] font-semibold tracking-wide text-muted-foreground">Revenue today</div>
@@ -358,7 +358,7 @@ export default function Admin() {
           </Card>
           <Card className="stagger-child" style={{ animationDelay: '60ms' }}>
             <CardContent className="p-4">
-              <div className="w-9 h-9 rounded-xl bg-brand-50 border border-brand-200 text-brand-600 grid place-items-center"><Flame size={16} /></div>
+              <div className="w-9 h-9 rounded-xl bg-muted border border-border text-muted-foreground grid place-items-center"><Flame size={16} /></div>
               <div className="mt-3 text-[11px] font-semibold tracking-wide text-muted-foreground">Active orders</div>
               <div className="text-[22px] font-bold tracking-tight leading-none mt-1">{activeCountUp}</div>
               <div className="text-[11px] text-muted-foreground mt-1">{counts.placed ?? 0} new • {counts.preparing ?? 0} cooking • {counts.ready ?? 0} ready</div>
@@ -374,7 +374,7 @@ export default function Admin() {
           </Card>
           <Card className="stagger-child" style={{ animationDelay: '180ms' }}>
             <CardContent className="p-4">
-              <div className="w-9 h-9 rounded-xl bg-sky-50 border border-sky-200 text-sky-600 grid place-items-center"><Activity size={16} /></div>
+              <div className="w-9 h-9 rounded-xl bg-muted border border-border text-muted-foreground grid place-items-center"><Activity size={16} /></div>
               <div className="mt-3 text-[11px] font-semibold tracking-wide text-muted-foreground">Throughput</div>
               <div className="text-[22px] font-bold tracking-tight leading-none mt-1">{throughputCountUp}<span className="text-sm font-medium text-muted-foreground"> / 50</span></div>
               <div className="text-[11px] text-muted-foreground mt-1">Last 50 orders • {orders.filter((o) => o.source === 'whatsapp').length} WhatsApp</div>
