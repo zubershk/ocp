@@ -125,7 +125,7 @@ export default function Contact() {
         <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden">
           <div className="aspect-[4/3] bg-stone-100">
             <iframe
-              src={contact.mapEmbedUrl || `https://www.google.com/maps/embed/v1/place?key=AIzaSyBFw0Qbyq9zTFTd-tUY6dZWTgaQzuU17R8&q=${encodeURIComponent(contact.mapAddress)}`}
+              src={contact.mapEmbedUrl || `https://www.google.com/maps?q=${encodeURIComponent(contact.mapAddress)}&output=embed`}
               width="100%"
               height="100%"
               style={{ border: 0 }}
