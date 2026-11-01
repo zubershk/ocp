@@ -138,12 +138,15 @@ func SendOTPFor(phone string, restaurantID int, evolution *EvolutionClient) (str
 		return "", ErrTenantRequired
 	}
 	rid := ResolveRestaurant(restaurantID)
-	// cooldown check per tenant
-	var lastCreated time.Time
-	err = database.DB.QueryRow(`SELECT created_at FROM customer_otps WHERE phone=$1 AND restaurant_id=$2 ORDER BY id DESC LIMIT 1`, normalized, rid).Scan(&lastCreated)
-	if err == nil && time.Since(lastCreated) < otpCooldown {
-		remaining := otpCooldown - time.Since(lastCreated)
-		return "", &ValidationError{Msg: fmt.Sprintf("please wait %d seconds before requesting a new code", int(remaining.Seconds())+1)}
+	// cooldown check per tenant (use DB clock to avoid client/server TZ skew)
+	var secondsAgo float64
+	err = database.DB.QueryRow(`SELECT EXTRACT(EPOCH FROM (NOW() - created_at)) FROM customer_otps WHERE phone=$1 AND restaurant_id=$2 ORDER BY id DESC LIMIT 1`, normalized, rid).Scan(&secondsAgo)
+	if err == nil && secondsAgo < otpCooldown.Seconds() {
+		remaining := otpCooldown.Seconds() - secondsAgo
+		if remaining < 1 {
+			remaining = 1
+		}
+		return "", &ValidationError{Msg: fmt.Sprintf("please wait %d seconds before requesting a new code", int(remaining)+1)}
 	}
 	if err != nil && err != sql.ErrNoRows {
 		return "", fmt.Errorf("otp lookup failed: %w", err)
@@ -178,7 +181,7 @@ func SendOTPFor(phone string, restaurantID int, evolution *EvolutionClient) (str
 		// Log the OTP so it can be used for testing/development.
 		log.Printf("[auth] WhatsApp send failed for %s: %v", normalized, err)
 		log.Printf("[auth] OTP for %s: %s (expires in 5 min)", normalized, code)
-		return code, nil
+		return code, fmt.Errorf("whatsapp send failed: %w", err)
 	}
 	return code, nil
 }
