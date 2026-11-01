@@ -275,7 +275,7 @@ export default function Admin() {
               <h1 className="text-xl font-heading font-bold mt-4 tracking-tight">Operations</h1>
               <p className="text-[13px] text-muted-foreground mt-1">Sign in to manage live orders, kitchen queue and payouts.</p>
               <form onSubmit={(e) => { e.preventDefault(); if (keyInput.trim()) { setAdminKey(keyInput.trim()); setAuthed(true); } }} className="mt-6 text-left space-y-3">
-                <label className="text-[11px] font-semibold tracking-wide text-muted-foreground">Admin key</label>
+                <label className="text-[11px] font-semibold tracking-normal text-muted-foreground">Admin key</label>
                 <div className="relative">
                   <Input type="password" value={keyInput} onChange={(e) => setKeyInput(e.target.value)} placeholder="BOT_ADMIN_KEY" className="font-mono pr-10" autoFocus />
                   <ShieldCheck size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -351,7 +351,7 @@ export default function Admin() {
                 <div className="w-9 h-9 rounded-xl bg-foreground text-background grid place-items-center"><Wallet size={16} /></div>
                 <Badge variant="secondary" className="gap-1 bg-emerald-50 text-emerald-700 border border-emerald-200"><TrendingUp size={12} /> Today</Badge>
               </div>
-              <div className="mt-3 text-[11px] font-semibold tracking-wide text-muted-foreground">Revenue today</div>
+              <div className="mt-3 text-[11px] font-semibold tracking-normal text-muted-foreground">Revenue today</div>
               <div className="text-[22px] font-bold tracking-tight leading-none mt-1 flex items-baseline gap-1"><IndianRupee size={16} className="text-muted-foreground" />{revenueCountUp.toLocaleString('en-IN')}</div>
               <div className="text-[11px] text-muted-foreground mt-1">{kpi.todayCount} orders • avg ₹{kpi.avg.toLocaleString('en-IN')}</div>
             </CardContent>
@@ -359,7 +359,7 @@ export default function Admin() {
           <Card className="stagger-child" style={{ animationDelay: '60ms' }}>
             <CardContent className="p-4">
               <div className="w-9 h-9 rounded-xl bg-muted border border-border text-muted-foreground grid place-items-center"><Flame size={16} /></div>
-              <div className="mt-3 text-[11px] font-semibold tracking-wide text-muted-foreground">Active orders</div>
+              <div className="mt-3 text-[11px] font-semibold tracking-normal text-muted-foreground">Active orders</div>
               <div className="text-[22px] font-bold tracking-tight leading-none mt-1">{activeCountUp}</div>
               <div className="text-[11px] text-muted-foreground mt-1">{counts.placed ?? 0} new • {counts.preparing ?? 0} cooking • {counts.ready ?? 0} ready</div>
             </CardContent>
@@ -367,7 +367,7 @@ export default function Admin() {
           <Card className={`stagger-child ${kpi.urgent ? 'border-red-200 bg-red-50/40' : ''}`} style={{ animationDelay: '120ms' }}>
             <CardContent className="p-4">
               <div className={`w-9 h-9 rounded-xl grid place-items-center border ${kpi.urgent ? 'bg-destructive text-destructive-foreground border-destructive' : 'bg-muted border-border text-muted-foreground'}`}><AlertTriangle size={16} /></div>
-              <div className="mt-3 text-[11px] font-semibold tracking-wide text-muted-foreground">Needs attention</div>
+              <div className="mt-3 text-[11px] font-semibold tracking-normal text-muted-foreground">Needs attention</div>
               <div className={`text-[22px] font-bold tracking-tight leading-none mt-1 ${kpi.urgent ? 'text-red-700' : ''}`}>{urgentCountUp}</div>
               <div className="text-[11px] text-muted-foreground mt-1">{kpi.urgent ? 'Over SLA — act now' : 'All clear'}</div>
             </CardContent>
@@ -375,7 +375,7 @@ export default function Admin() {
           <Card className="stagger-child" style={{ animationDelay: '180ms' }}>
             <CardContent className="p-4">
               <div className="w-9 h-9 rounded-xl bg-muted border border-border text-muted-foreground grid place-items-center"><Activity size={16} /></div>
-              <div className="mt-3 text-[11px] font-semibold tracking-wide text-muted-foreground">Throughput</div>
+              <div className="mt-3 text-[11px] font-semibold tracking-normal text-muted-foreground">Throughput</div>
               <div className="text-[22px] font-bold tracking-tight leading-none mt-1">{throughputCountUp}<span className="text-sm font-medium text-muted-foreground"> / 50</span></div>
               <div className="text-[11px] text-muted-foreground mt-1">Last 50 orders • {orders.filter((o) => o.source === 'whatsapp').length} WhatsApp</div>
             </CardContent>
@@ -421,7 +421,7 @@ export default function Admin() {
                 <div className="relative flex-1 lg:w-[320px]">
                   <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                   <Input ref={searchRef} value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search order, customer, phone…" className="pl-9 pr-16" />
-                  <span className="hidden sm:inline-flex absolute right-1.5 top-1/2 -translate-y-1/2 items-center gap-1 px-1.5 py-1 rounded-lg bg-background border border-border text-[10px] font-bold tracking-wide text-muted-foreground">⌘K</span>
+                  <span className="hidden sm:inline-flex absolute right-1.5 top-1/2 -translate-y-1/2 items-center gap-1 px-1.5 py-1 rounded-lg bg-background border border-border text-[10px] font-bold tracking-normal text-muted-foreground">⌘K</span>
                   {search && <Button variant="ghost" size="icon" aria-label="Clear search" className="absolute right-8 sm:right-[52px] top-1/2 -translate-y-1/2 h-7 w-7" onClick={() => setSearch('')}><XCircle size={14} /></Button>}
                 </div>
                 <div className="hidden sm:flex items-center rounded-lg border border-border overflow-hidden">
@@ -599,7 +599,7 @@ export default function Admin() {
                     </div>
 
                     <div className="mt-4 pt-3 border-t border-border flex items-center justify-between">
-                      <div className="text-[11px] font-semibold tracking-wide text-muted-foreground">Total</div>
+                      <div className="text-[11px] font-semibold tracking-normal text-muted-foreground">Total</div>
                       <div className="text-2xl font-extrabold tracking-tight tabular-nums">₹{o.total.toLocaleString('en-IN')}</div>
                     </div>
                     <div className="text-[11px] text-muted-foreground flex items-center justify-between">
