@@ -35,15 +35,15 @@ function authHeaders(): Record<string, string> {
   return t ? { Authorization: `Bearer ${t}` } : {};
 }
 
-export async function sendOtp(phone: string): Promise<{ delivered: boolean; message: string }> {
+export async function sendOtp(phone: string): Promise<{ delivered: boolean; message: string; devCode?: string }> {
   const res = await fetch(`${apiBaseUrl}/api/auth/send-otp`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify({ phone }),
   });
-  const data = (await res.json().catch(() => null)) as { delivered?: boolean; message?: string; error?: string } | null;
+  const data = (await res.json().catch(() => null)) as { delivered?: boolean; message?: string; error?: string; dev_code?: string } | null;
   if (!res.ok) throw new Error(data?.error ?? `HTTP ${res.status}`);
-  return { delivered: data?.delivered ?? true, message: data?.message ?? 'code sent' };
+  return { delivered: data?.delivered ?? true, message: data?.message ?? 'code sent', devCode: data?.dev_code };
 }
 
 export async function verifyOtp(phone: string, code: string, name?: string): Promise<{ token: string; customer: Customer }> {

@@ -37,6 +37,7 @@ export default function Login() {
   const [error, setError] = useState('');
   const [cooldown, setCooldown] = useState(0);
   const [delivered, setDelivered] = useState(true);
+  const [devCode, setDevCode] = useState('');
   const [success, setSuccess] = useState(false);
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
 
@@ -54,6 +55,7 @@ export default function Login() {
     try {
       const result = await sendOtp(normalizedPhone);
       setDelivered(result.delivered);
+      setDevCode(result.devCode || '');
       setStep('otp');
       setCooldown(30);
       if (result.delivered) {
@@ -138,13 +140,21 @@ export default function Login() {
                     ? "We'll send a 6-digit code to your WhatsApp."
                     : delivered
                       ? <>Code sent to <span className="font-medium text-zinc-700">+91 {normalizedPhone}</span> on WhatsApp.</>
-                      : <>Code generated for <span className="font-medium text-zinc-700">+91 {normalizedPhone}</span>. WhatsApp delivery unavailable - check the server console for the code (dev mode).</>
+                      : <>Code generated for <span className="font-medium text-zinc-700">+91 {normalizedPhone}</span>. WhatsApp delivery unavailable (dev mode).</>
                   }
                 </p>
 
             {error && (
               <div role="alert" className="mt-4 px-4 py-3 rounded-xl bg-red-50 border border-red-200/60 text-sm text-red-700 flex items-start gap-2">
                 <span className="shrink-0 mt-0.5 text-red-500 font-bold">!</span> {error}
+              </div>
+            )}
+
+            {!delivered && devCode && (
+              <div className="mt-4 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-sm text-amber-800">
+                <div className="font-semibold">Dev mode code</div>
+                <div className="mt-1 font-mono text-2xl font-bold tracking-widest text-amber-900">{devCode}</div>
+                <div className="text-xs mt-1 text-amber-700">WhatsApp not connected. Use this code to verify.</div>
               </div>
             )}
 
