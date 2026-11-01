@@ -36,6 +36,7 @@ export default function Login() {
   const [verifying, setVerifying] = useState(false);
   const [error, setError] = useState('');
   const [cooldown, setCooldown] = useState(0);
+  const [delivered, setDelivered] = useState(true);
   const [success, setSuccess] = useState(false);
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
 
@@ -51,10 +52,15 @@ export default function Login() {
     if (normalizedPhone.length !== 10) { setError('Enter a 10-digit mobile number.'); return; }
     setSending(true);
     try {
-      await sendOtp(normalizedPhone);
+      const result = await sendOtp(normalizedPhone);
+      setDelivered(result.delivered);
       setStep('otp');
       setCooldown(30);
-      push({ type: 'success', title: 'Code sent on WhatsApp' });
+      if (result.delivered) {
+        push({ type: 'success', title: 'Code sent on WhatsApp' });
+      } else {
+        push({ type: 'info', title: 'Code generated - check server console (dev mode)' });
+      }
       setTimeout(() => otpRefs.current[0]?.focus(), 100);
     } catch (err) { setError(err instanceof Error ? err.message : 'Could not send code'); }
     finally { setSending(false); }
@@ -130,7 +136,9 @@ export default function Login() {
                 <p className="text-sm text-zinc-500 mt-1.5 leading-relaxed">
                   {step === 'phone'
                     ? "We'll send a 6-digit code to your WhatsApp."
-                    : <>Code sent to <span className="font-medium text-zinc-700">+91 {normalizedPhone}</span></>
+                    : delivered
+                      ? <>Code sent to <span className="font-medium text-zinc-700">+91 {normalizedPhone}</span> on WhatsApp.</>
+                      : <>Code generated for <span className="font-medium text-zinc-700">+91 {normalizedPhone}</span>. WhatsApp delivery unavailable - check the server console for the code (dev mode).</>
                   }
                 </p>
 

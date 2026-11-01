@@ -36,17 +36,19 @@ func (h *AuthHandler) SendOTP(c *gin.Context) {
 		return
 	}
 	rid, _ := services.RequireRestaurant(c)
-	_, err := services.SendOTPFor(req.Phone, rid, h.evolution)
+	code, err := services.SendOTPFor(req.Phone, rid, h.evolution)
 	if err != nil {
 		if ve, ok := err.(*services.ValidationError); ok {
 			c.JSON(http.StatusBadRequest, gin.H{"error": ve.Msg})
 			return
 		}
 		// WhatsApp send failure: OTP is already stored and verifiable.
-		// Return success to avoid phone-enumeration via response differences.
 		log.Printf("[auth] whatsapp send failed for %s: %v", req.Phone, err)
+		log.Printf("[auth] OTP for %s: %s (expires in 5 min) — deliver via server log", req.Phone, code)
+		c.JSON(http.StatusOK, gin.H{"sent": false, "delivered": false, "message": "code generated — check server logs (dev mode)"})
+		return
 	}
-	c.JSON(http.StatusOK, gin.H{"sent": true, "message": "code sent on WhatsApp"})
+	c.JSON(http.StatusOK, gin.H{"sent": true, "delivered": true, "message": "code sent on WhatsApp"})
 }
 
 // VerifyOTP handles POST /api/auth/verify-otp

@@ -35,14 +35,15 @@ function authHeaders(): Record<string, string> {
   return t ? { Authorization: `Bearer ${t}` } : {};
 }
 
-export async function sendOtp(phone: string): Promise<void> {
+export async function sendOtp(phone: string): Promise<{ delivered: boolean; message: string }> {
   const res = await fetch(`${apiBaseUrl}/api/auth/send-otp`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify({ phone }),
   });
-  const data = await res.json().catch(() => null);
-  if (!res.ok) throw new Error((data as { error?: string })?.error ?? `HTTP ${res.status}`);
+  const data = (await res.json().catch(() => null)) as { delivered?: boolean; message?: string; error?: string } | null;
+  if (!res.ok) throw new Error(data?.error ?? `HTTP ${res.status}`);
+  return { delivered: data?.delivered ?? true, message: data?.message ?? 'code sent' };
 }
 
 export async function verifyOtp(phone: string, code: string, name?: string): Promise<{ token: string; customer: Customer }> {
@@ -82,6 +83,16 @@ export async function logout(): Promise<void> {
   }
   setCustomerToken('');
   setStoredCustomer(null);
+}
+
+export async function updateProfile(fields: { name?: string; email?: string; default_address?: string }): Promise<void> {
+  const res = await fetch(`${apiBaseUrl}/api/auth/me`, {
+    method: 'PATCH',
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(fields),
+  });
+  const data = (await res.json().catch(() => null)) as { error?: string } | null;
+  if (!res.ok) throw new Error(data?.error ?? `HTTP ${res.status}`);
 }
 
 export async function fetchMyOrders(): Promise<unknown[]> {
