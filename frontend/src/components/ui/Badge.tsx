@@ -29,7 +29,7 @@ export default function Badge({ children, variant = 'neutral', size = 'sm', icon
   return (
     <span
       className={`
-        inline-flex items-center font-semibold rounded-full ring-1 ring-inset
+        inline-flex items-center font-semibold rounded-full ring-1 ring-inset shadow-[0_2px_8px_rgba(0,0,0,0.06)]
         ${variantStyles[variant]}
         ${sizeStyles[size]}
         ${className}

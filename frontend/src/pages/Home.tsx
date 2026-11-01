@@ -76,7 +76,7 @@ function HomeSkeleton() {
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-5">
           {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="bg-white rounded-2xl border border-stone-100 overflow-hidden">
+            <div key={i} className="bg-white rounded-3xl shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] overflow-hidden">
               <div className="h-40 skeleton" />
               <div className="p-3.5 space-y-2.5">
                 <div className="h-4 w-3/4 skeleton" />
@@ -207,7 +207,7 @@ export default function Home() {
 
       {packCount > 0 && (
         <div className="container-page mt-10 reveal-item">
-          <Link to="/r/offers" className="block bg-zinc-900 rounded-2xl p-6 sm:p-8 lg:p-10 group hover:shadow-lg transition-shadow">
+          <Link to="/r/offers" className="block bg-zinc-900 rounded-3xl p-6 sm:p-8 lg:p-10 group hover:shadow-lg transition-shadow shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)]">
             <div className="flex flex-col sm:flex-row sm:items-center gap-4">
               <div className="flex-1">
                 <p className="text-zinc-400 text-xs font-bold tracking-widest uppercase">Feeding the whole family?</p>
@@ -216,7 +216,7 @@ export default function Home() {
                 </h3>
                 <p className="text-zinc-400 mt-2 text-sm">Complete meals from ₹515, tax included.</p>
               </div>
-              <div className="shrink-0 inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-white text-zinc-900 font-bold group-hover:bg-stone-50 transition-colors text-sm">
+              <div className="shrink-0 inline-flex items-center gap-2 px-6 py-3.5 rounded-full bg-white text-zinc-900 font-bold group-hover:bg-stone-50 transition-colors text-sm shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
                 See the Packs <ArrowRight size={16} />
               </div>
             </div>
@@ -235,8 +235,8 @@ export default function Home() {
           ].map((f) => {
             const Icon = f.icon;
             return (
-              <div key={f.title} className="bg-white rounded-2xl border border-stone-100 p-5 card-lift">
-                <div className="w-10 h-10 rounded-xl bg-stone-50 border border-stone-200 flex items-center justify-center">
+              <div key={f.title} className="bg-white rounded-3xl shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] p-5 card-lift">
+                <div className="w-10 h-10 rounded-full bg-stone-50 border border-stone-200 flex items-center justify-center shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
                   <Icon size={18} className="text-zinc-600" strokeWidth={1.5} />
                 </div>
                 <h3 className="font-semibold mt-3 text-sm text-zinc-900">{f.title}</h3>
@@ -260,17 +260,17 @@ export default function Home() {
       </div>
 
       <div className="container-page mt-10">
-        <div className="bg-zinc-900 rounded-2xl p-6 sm:p-8 lg:p-10 text-center">
+        <div className="bg-zinc-900 rounded-3xl p-6 sm:p-8 lg:p-10 text-center shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)]">
           <h3 className="text-white text-xl sm:text-2xl font-heading font-bold">Ready to order?</h3>
           <p className="text-zinc-400 mt-2 max-w-md mx-auto text-sm">
             Pay by cash or UPI when your food arrives. Free delivery {deliveryHours}.
           </p>
           <div className="mt-5 flex flex-wrap justify-center gap-3">
-            <Link to="/r/menu" className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-brand-600 text-white font-semibold hover:bg-brand-700 transition-all">
+            <Link to="/r/menu" className="inline-flex items-center gap-2 px-7 py-3.5 rounded-full bg-brand-600 text-white font-semibold hover:bg-brand-700 transition-all shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)]">
               Start Your Order <ArrowRight size={16} />
             </Link>
             {restaurantPhone && (
-              <a href={`tel:+91${restaurantPhone}`} className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-white/10 text-white font-semibold hover:bg-white/20 transition-all">
+              <a href={`tel:+91${restaurantPhone}`} className="inline-flex items-center gap-2 px-6 py-3.5 rounded-full bg-white/10 text-white font-semibold hover:bg-white/20 transition-all">
                 <Phone size={16} /> {restaurantPhone}
               </a>
             )}

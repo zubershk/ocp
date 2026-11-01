@@ -118,7 +118,7 @@ export default function Footer() {
               </div>
               <Link
                 to="/r/locations"
-                className="inline-flex items-center gap-1.5 mt-4 px-4 py-2 rounded-xl text-white text-xs font-semibold hover:opacity-90 transition-all duration-200"
+                className="inline-flex items-center gap-1.5 mt-4 px-5 py-2.5 rounded-full text-white text-xs font-semibold hover:opacity-90 transition-all duration-200 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)]"
                 style={{ backgroundColor: brand.primaryColor }}
               >
                 View All Locations

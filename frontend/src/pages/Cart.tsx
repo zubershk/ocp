@@ -36,7 +36,7 @@ export default function Cart() {
       <p className="text-sm text-zinc-500 mt-2 max-w-xs mx-auto">Add some cheesy pizzas and sides to get started</p>
       <Link
         to="/r/menu"
-        className="inline-flex items-center gap-2 mt-8 px-8 py-3.5 rounded-2xl bg-brand-600 text-white font-semibold hover:bg-brand-700 transition-all duration-200 shadow-sm hover:shadow-md"
+        className="inline-flex items-center gap-2 mt-8 px-8 py-3.5 rounded-full bg-brand-600 text-white font-semibold hover:bg-brand-700 transition-all duration-200 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)]"
       >
         Browse Menu <ArrowRight size={16} />
       </Link>
@@ -66,7 +66,7 @@ export default function Cart() {
               <li
                 key={it.id}
                 className={`
-                  bg-white rounded-2xl border border-stone-100 p-4 flex gap-4 shadow-sm transition-all duration-300
+                  bg-white rounded-3xl shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] p-4 flex gap-4 transition-all duration-300
                   ${removingIds.has(it.id) ? 'cart-item-exit' : 'cart-item-enter hover:shadow-card'}
                 `}
                 style={{ animationDelay: `${i * 40}ms` }}
@@ -89,16 +89,14 @@ export default function Cart() {
                     <button
                       onClick={() => updateQty(it.id, it.quantity - 1)}
                       aria-label={`Decrease ${it.name}`}
-                      className="w-11 h-11 rounded-xl border border-stone-200 flex items-center justify-center hover:bg-stone-50 transition-colors cursor-pointer"
-                    >
+                      className="w-11 h-11 rounded-full border border-stone-200 flex items-center justify-center hover:bg-stone-50 transition-colors cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
                       <Minus size={14} />
                     </button>
                     <span className="w-8 text-center text-sm font-bold" aria-live="polite">{it.quantity}</span>
                     <button
                       onClick={() => updateQty(it.id, it.quantity + 1)}
                       aria-label={`Increase ${it.name}`}
-                      className="w-11 h-11 rounded-xl border border-stone-200 flex items-center justify-center hover:bg-stone-50 transition-colors cursor-pointer"
-                    >
+                      className="w-11 h-11 rounded-full border border-stone-200 flex items-center justify-center hover:bg-stone-50 transition-colors cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
                       <Plus size={14} />
                     </button>
                     <button
@@ -125,7 +123,7 @@ export default function Cart() {
                 {suggestions.map((s) => (
                   <div
                     key={s.id}
-                    className="bg-white rounded-2xl border border-stone-100 overflow-hidden flex items-center gap-3 pr-3 card-lift"
+                    className="bg-white rounded-3xl shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] overflow-hidden flex items-center gap-3 pr-3 card-lift"
                   >
                     <Link to={`/r/menu/item/${s.id}`} aria-label={`View ${s.name}`}>
                       <div className="overflow-hidden shrink-0">
@@ -147,8 +145,7 @@ export default function Cart() {
                     <button
                       onClick={() => { addItem(s, 'regular', defaultCrust, 1); push({ type: 'success', title: `Added ${s.name} to cart` }); }}
                       aria-label={`Add ${s.name} to cart`}
-                      className="shrink-0 w-10 h-10 rounded-xl bg-brand-600 text-white flex items-center justify-center hover:bg-brand-700 active:scale-95 transition-all duration-150 cursor-pointer"
-                    >
+                      className="shrink-0 w-10 h-10 rounded-full bg-brand-600 text-white flex items-center justify-center hover:bg-brand-700 active:scale-95 transition-all duration-150 cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
                       <PlusIcon size={15} />
                     </button>
                   </div>
@@ -160,7 +157,7 @@ export default function Cart() {
 
         {/* Order Summary */}
         <div className="lg:col-span-1">
-          <div className="bg-white rounded-2xl border border-stone-100 p-6 sticky top-20 shadow-sm">
+          <div className="bg-white rounded-3xl shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] p-6 sticky top-20">
             <h2 className="font-heading font-semibold text-lg text-zinc-900">Order Summary</h2>
             <dl className="mt-5 space-y-3 text-sm">
               <div className="flex justify-between">
@@ -183,10 +180,10 @@ export default function Cart() {
 
             {/* Trust badges */}
             <div className="mt-4 flex flex-wrap gap-2 text-[11px] text-zinc-500">
-              <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 px-2 py-1 rounded-lg font-medium">
+              <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-full font-medium shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
                 <ShieldCheck size={12} /> Secure checkout
               </span>
-              <span className="inline-flex items-center gap-1 bg-brand-50 text-brand-700 px-2 py-1 rounded-lg font-medium">
+              <span className="inline-flex items-center gap-1 bg-brand-50 text-brand-700 px-3 py-1.5 rounded-full font-medium shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
                 <Clock size={12} /> Free delivery
               </span>
             </div>
@@ -197,7 +194,7 @@ export default function Cart() {
 
             <Link
               to="/r/checkout"
-              className="block w-full mt-5 py-3.5 rounded-2xl bg-brand-600 text-white font-semibold hover:bg-brand-700 transition-all duration-200 text-center shadow-sm hover:shadow-md inline-flex items-center justify-center gap-2"
+              className="block w-full mt-5 py-3.5 rounded-full bg-brand-600 text-white font-semibold hover:bg-brand-700 transition-all duration-200 text-center shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] inline-flex items-center justify-center gap-2"
             >
               Proceed to Checkout <ArrowRight size={16} />
             </Link>

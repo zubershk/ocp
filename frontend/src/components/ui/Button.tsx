@@ -20,10 +20,10 @@ const variantStyles: Record<Variant, string> = {
 };
 
 const sizeStyles: Record<Size, string> = {
-  sm: 'h-8 px-3 text-xs rounded-lg gap-1.5',
-  md: 'h-10 min-h-[44px] px-4 text-sm rounded-xl gap-2',
-  lg: 'h-12 min-h-[44px] px-6 text-base rounded-xl gap-2.5',
-  icon: 'h-10 w-10 rounded-xl p-0 justify-center',
+  sm: 'h-8 px-4 text-xs rounded-full gap-1.5',
+  md: 'h-10 min-h-[44px] px-5 text-sm rounded-full gap-2',
+  lg: 'h-12 min-h-[44px] px-7 text-base rounded-full gap-2.5',
+  icon: 'h-10 w-10 rounded-full p-0 justify-center',
 };
 
 // Ripple microinteraction: purposeful click feedback (100-150ms micro-feedback)

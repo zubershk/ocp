@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ShieldCheck, Bike, Store, Banknote, Smartphone, User, LogIn, MapPin, CreditCard, ShoppingCart } from 'lucide-react';
+import { ShieldCheck, Bike, Store, Banknote, Smartphone, User, LogIn, MapPin, CreditCard, ShoppingCart, ShoppingBag, ArrowRight } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { orderService } from '../services/orderService';
@@ -68,13 +68,13 @@ export default function Checkout() {
 
   if (items.length === 0) return (
     <div className="container-page py-20 text-center">
-      <div className="w-20 h-20 mx-auto rounded-3xl bg-stone-100 flex items-center justify-center mb-4">
-        <ShoppingCart size={32} className="text-stone-300" />
+      <div className="w-24 h-24 mx-auto rounded-3xl bg-stone-100 flex items-center justify-center mb-6">
+        <ShoppingBag size={40} className="text-stone-300" />
       </div>
-      <h2 className="text-xl font-heading font-bold">Your cart is empty</h2>
-      <p className="text-sm text-zinc-500 mt-1">Add items before checking out</p>
-      <Link to="/r/menu" className="inline-flex items-center gap-2 mt-6 px-6 py-3 rounded-2xl bg-brand-600 text-white font-semibold hover:bg-brand-700 transition-all duration-200">
-        Browse Menu
+      <h2 className="text-2xl font-heading font-bold">Your cart is empty</h2>
+      <p className="text-sm text-zinc-500 mt-2 max-w-xs mx-auto">Add some cheesy pizzas and sides to get started</p>
+      <Link to="/r/menu" className="inline-flex items-center gap-2 mt-8 px-8 py-3.5 rounded-full bg-brand-600 text-white font-semibold hover:bg-brand-700 transition-all duration-200 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)]">
+        Browse Menu <ArrowRight size={16} />
       </Link>
     </div>
   );
@@ -164,8 +164,7 @@ export default function Checkout() {
               <span className="text-sm text-brand-800">Sign in to sync with WhatsApp &amp; reorder faster</span>
               <Link
                 to="/r/login?redirect=/r/checkout"
-                className="inline-flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-xl bg-brand-600 text-white hover:bg-brand-700 transition-colors"
-              >
+                className="inline-flex items-center gap-1 text-xs font-bold px-4 py-2 rounded-full bg-brand-600 text-white hover:bg-brand-700 transition-colors shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
                 <LogIn size={12} /> Login
               </Link>
             </div>
@@ -193,7 +192,7 @@ export default function Checkout() {
           </div>
 
           {/* Customer info */}
-          <section className="bg-white rounded-2xl border border-stone-100 p-6 shadow-sm">
+          <section className="bg-white rounded-3xl shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] p-6">
             <h2 className="font-heading font-semibold text-lg text-zinc-900 flex items-center gap-2">
               <span className="w-7 h-7 rounded-lg bg-brand-100 flex items-center justify-center">
                 <User size={14} className="text-brand-600" />
@@ -211,7 +210,7 @@ export default function Checkout() {
                   autoComplete="name"
                   aria-invalid={!!showFieldError('name')}
                   aria-describedby={showFieldError('name') ? 'err-name' : undefined}
-                  className={`mt-1.5 w-full px-3.5 py-2.5 rounded-xl border focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-400 transition-all text-sm ${showFieldError('name') ? 'border-red-300 bg-red-50/50' : 'border-stone-200'}`}
+                  className={`mt-1.5 w-full px-3.5 py-2.5 rounded-full border focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-400 transition-all text-sm ${showFieldError('name') ? 'border-red-300 bg-red-50/50' : 'border-stone-200'}`}
                   placeholder="Your name"
                 />
                 {showFieldError('name') && <p id="err-name" className="text-xs text-red-600 mt-1">{showFieldError('name')}</p>}
@@ -229,7 +228,7 @@ export default function Checkout() {
                   maxLength={13}
                   aria-invalid={!!showFieldError('phone')}
                   aria-describedby={showFieldError('phone') ? 'err-phone' : undefined}
-                  className={`mt-1.5 w-full px-3.5 py-2.5 rounded-xl border focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-400 transition-all text-sm ${showFieldError('phone') ? 'border-red-300 bg-red-50/50' : 'border-stone-200'}`}
+                  className={`mt-1.5 w-full px-3.5 py-2.5 rounded-full border focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-400 transition-all text-sm ${showFieldError('phone') ? 'border-red-300 bg-red-50/50' : 'border-stone-200'}`}
                   placeholder="10-digit mobile"
                 />
                 {showFieldError('phone') && <p id="err-phone" className="text-xs text-red-600 mt-1">{showFieldError('phone')}</p>}
@@ -246,7 +245,7 @@ export default function Checkout() {
                   autoComplete="email"
                   aria-invalid={!!showFieldError('email')}
                   aria-describedby={showFieldError('email') ? 'err-email' : undefined}
-                  className={`mt-1.5 w-full px-3.5 py-2.5 rounded-xl border focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-400 transition-all text-sm ${showFieldError('email') ? 'border-red-300 bg-red-50/50' : 'border-stone-200'}`}
+                  className={`mt-1.5 w-full px-3.5 py-2.5 rounded-full border focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-400 transition-all text-sm ${showFieldError('email') ? 'border-red-300 bg-red-50/50' : 'border-stone-200'}`}
                   placeholder="For order updates"
                 />
                 {showFieldError('email') && <p id="err-email" className="text-xs text-red-600 mt-1">{showFieldError('email')}</p>}
@@ -255,7 +254,7 @@ export default function Checkout() {
           </section>
 
           {/* Delivery method */}
-          <fieldset className="bg-white rounded-2xl border border-stone-100 p-6 shadow-sm">
+          <fieldset className="bg-white rounded-3xl shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] p-6">
             <legend className="font-heading font-semibold text-lg px-1 text-zinc-900 flex items-center gap-2">
               <span className="w-7 h-7 rounded-lg bg-brand-100 flex items-center justify-center">
                 <MapPin size={14} className="text-brand-600" />
@@ -308,7 +307,7 @@ export default function Checkout() {
                     id="field-landmark"
                     value={form.landmark}
                     onChange={(e) => update({ landmark: e.target.value })}
-                    className="mt-1.5 w-full px-3.5 py-2.5 rounded-xl border border-stone-200 focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-400 transition-all text-sm"
+                    className="mt-1.5 w-full px-3.5 py-2.5 rounded-full border border-stone-200 focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-400 transition-all text-sm"
                     placeholder="Near..."
                   />
                 </div>
@@ -322,7 +321,7 @@ export default function Checkout() {
                     autoComplete="address-level2"
                     aria-invalid={!!showFieldError('city')}
                     aria-describedby={showFieldError('city') ? 'err-city' : undefined}
-                    className={`mt-1.5 w-full px-3.5 py-2.5 rounded-xl border focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-400 transition-all text-sm ${showFieldError('city') ? 'border-red-300 bg-red-50/50' : 'border-stone-200'}`}
+                    className={`mt-1.5 w-full px-3.5 py-2.5 rounded-full border focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-400 transition-all text-sm ${showFieldError('city') ? 'border-red-300 bg-red-50/50' : 'border-stone-200'}`}
                     placeholder="Your area or city"
                   />
                   {showFieldError('city') && <p id="err-city" className="text-xs text-red-600 mt-1">{showFieldError('city')}</p>}
@@ -340,7 +339,7 @@ export default function Checkout() {
                     maxLength={6}
                     aria-invalid={!!showFieldError('postal')}
                     aria-describedby={showFieldError('postal') ? 'err-postal' : undefined}
-                    className={`mt-1.5 w-full px-3.5 py-2.5 rounded-xl border focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-400 transition-all text-sm ${showFieldError('postal') ? 'border-red-300 bg-red-50/50' : 'border-stone-200'}`}
+                    className={`mt-1.5 w-full px-3.5 py-2.5 rounded-full border focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-400 transition-all text-sm ${showFieldError('postal') ? 'border-red-300 bg-red-50/50' : 'border-stone-200'}`}
                     placeholder="401107"
                   />
                   {showFieldError('postal') && <p id="err-postal" className="text-xs text-red-600 mt-1">{showFieldError('postal')}</p>}
@@ -356,7 +355,7 @@ export default function Checkout() {
           </fieldset>
 
           {/* Payment */}
-          <fieldset className="bg-white rounded-2xl border border-stone-100 p-6 shadow-sm">
+          <fieldset className="bg-white rounded-3xl shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] p-6">
             <legend className="font-heading font-semibold text-lg px-1 text-zinc-900 flex items-center gap-2">
               <span className="w-7 h-7 rounded-lg bg-brand-100 flex items-center justify-center">
                 <CreditCard size={14} className="text-brand-600" />
@@ -395,7 +394,7 @@ export default function Checkout() {
             <button
               type="submit"
               disabled={submitting}
-              className="w-full mt-6 py-4 rounded-2xl bg-brand-600 text-white font-semibold hover:bg-brand-700 disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200 shadow-sm hover:shadow-md cursor-pointer"
+              className="w-full mt-6 py-4 rounded-full bg-brand-600 text-white font-semibold hover:bg-brand-700 disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] cursor-pointer"
             >
               {submitting ? 'Placing your order…' : `Place Order · ₹${subtotal}`}
             </button>
@@ -405,7 +404,7 @@ export default function Checkout() {
 
         {/* Order summary sidebar */}
         <aside className="lg:col-span-1" aria-label="Order summary">
-          <div className="bg-white rounded-2xl border border-stone-100 p-6 sticky top-20 shadow-sm">
+          <div className="bg-white rounded-3xl shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] p-6 sticky top-20">
             <h2 className="font-heading font-semibold text-lg text-zinc-900">Order Summary</h2>
             <ul className="mt-4 space-y-3">
               {items.map((it) => (

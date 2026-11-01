@@ -59,7 +59,7 @@ export default function Order() {
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (state === 'loading') return <div className="container-page py-12 text-center text-sm text-zinc-500">Loading order…</div>;
-  if (state === 'missing' || !order) return <div className="container-page py-12 text-center"><h2 className="text-xl font-bold">Order not found</h2><p className="text-sm text-zinc-500 mt-1">Check your order ID or place a new order</p><Link to="/r/menu" className="inline-flex mt-4 px-5 py-2 rounded-xl bg-brand-600 text-white">Go to Menu</Link></div>;
+  if (state === 'missing' || !order) return <div className="container-page py-12 text-center"><h2 className="text-xl font-bold">Order not found</h2><p className="text-sm text-zinc-500 mt-1">Check your order ID or place a new order</p><Link to="/r/menu" className="inline-flex mt-4 px-6 py-3 rounded-full bg-brand-600 text-white shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)]">Go to Menu</Link></div>;
 
   const flowStatus = legacyStep[order.status] ?? order.status;
   const statusIndex = Math.max(0, orderSteps.indexOf(flowStatus));
@@ -109,7 +109,7 @@ export default function Order() {
           </div>
         )}
 
-        <div className="bg-white rounded-2xl border border-stone-100 p-6 shadow-sm">
+        <div className="bg-white rounded-3xl shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] p-6">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <h1 className="text-xl font-heading font-bold">Order {order.orderNumber}</h1>
@@ -156,11 +156,11 @@ export default function Order() {
           )}
 
           <div className="mt-8 grid sm:grid-cols-2 gap-4 text-sm">
-            <div className="bg-stone-50 rounded-xl p-4 border border-stone-100">
+            <div className="bg-stone-50 rounded-2xl p-4 border border-stone-100">
               <div className="font-semibold">Estimated delivery</div>
-              <div className="text-zinc-600 mt-1">~30 mins from order · Free delivery {deliveryHours || '11AM–4AM'}</div>
+              <div className="text-zinc-600 mt-1">~30 mins from order · Free delivery {deliveryHours || '11 AM - 4 AM'}</div>
             </div>
-            <div className="bg-stone-50 rounded-xl p-4 border border-stone-100">
+            <div className="bg-stone-50 rounded-2xl p-4 border border-stone-100">
               <div className="font-semibold">{order.deliveryType === 'delivery' ? 'Deliver to' : 'Pickup by'}</div>
               <div className="text-zinc-600 mt-1">{order.customerName} · {order.customerPhone}</div>
               {order.address && <div className="text-xs text-zinc-500 mt-1">{order.address}{order.landmark ? ` (${order.landmark})` : ''}</div>}
@@ -244,7 +244,7 @@ export default function Order() {
                     onChange={(e) => setReviewTitle(e.target.value)}
                     placeholder="Headline (optional)"
                     maxLength={120}
-                    className="mt-3 w-full px-3 py-2 rounded-xl border border-stone-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    className="mt-3 w-full px-4 py-2.5 rounded-full border border-stone-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
                   />
                   <textarea
                     value={reviewBody}
@@ -252,14 +252,13 @@ export default function Order() {
                     placeholder="How was the food? (optional)"
                     rows={3}
                     maxLength={2000}
-                    className="mt-2 w-full px-3 py-2 rounded-xl border border-stone-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    className="mt-2 w-full px-4 py-2.5 rounded-full border border-stone-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
                   />
                   {reviewError && <p className="mt-2 text-xs text-red-600">{reviewError}</p>}
                   <button
                     onClick={submitReview}
                     disabled={reviewState === 'sending'}
-                    className="mt-3 inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-brand-600 text-white text-sm font-semibold hover:bg-brand-700 disabled:opacity-50 transition cursor-pointer"
-                  >
+                    className="mt-3 inline-flex items-center gap-1.5 px-6 py-3 rounded-full bg-brand-600 text-white text-sm font-semibold hover:bg-brand-700 disabled:opacity-50 transition cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
                     <Send size={14} /> {reviewState === 'sending' ? 'Sending…' : 'Submit review'}
                   </button>
                 </div>
@@ -268,8 +267,8 @@ export default function Order() {
           )}
 
           <div className="mt-6 flex gap-2">
-            <Link to="/r/menu" className="flex-1 py-3 rounded-xl bg-zinc-900 text-white text-center font-semibold hover:bg-zinc-800 transition-colors">Order Again</Link>
-            <a href={`https://wa.me/${waNumber}?text=Hi!%20About%20my%20order%20${order.orderNumber}`} target="_blank" rel="noreferrer" className="flex-1 py-3 rounded-xl bg-emerald-600 text-white text-center font-semibold hover:bg-emerald-700 transition-colors">WhatsApp Support</a>
+            <Link to="/r/menu" className="flex-1 py-3.5 rounded-full bg-zinc-900 text-white text-center font-semibold hover:bg-zinc-800 transition-colors shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)]">Order Again</Link>
+            <a href={`https://wa.me/${waNumber}?text=Hi!%20About%20my%20order%20${order.orderNumber}`} target="_blank" rel="noreferrer" className="flex-1 py-3.5 rounded-full bg-emerald-600 text-white text-center font-semibold hover:bg-emerald-700 transition-colors shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)]">WhatsApp Support</a>
           </div>
 
           {/* Last updated */}

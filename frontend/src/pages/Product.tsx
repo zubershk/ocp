@@ -55,7 +55,7 @@ export default function Product() {
         <ShoppingCart size={28} className="text-stone-300" />
       </div>
       <h2 className="text-xl font-heading font-bold">Product not found</h2>
-      <Link to="/r/menu" className="text-brand-600 hover:underline mt-2 inline-block">Back to menu</Link>
+      <Link to="/r/menu" className="inline-flex items-center gap-1.5 mt-2 px-5 py-2.5 rounded-full bg-brand-600 text-white text-sm font-semibold hover:bg-brand-700 transition-all shadow-[0_2px_8px_rgba(0,0,0,0.06)]">Back to menu</Link>
     </div>
   );
 
@@ -86,7 +86,7 @@ export default function Product() {
       <div className="grid lg:grid-cols-2 gap-6 lg:gap-12 mt-6 pb-24 lg:pb-0">
         {/* Image */}
         <div className="animate-fade-in">
-          <div className="relative overflow-hidden rounded-3xl bg-orange-50">
+          <div className="relative overflow-hidden rounded-3xl bg-orange-50 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)]">
             <img
               src={item.image}
               alt=""
@@ -167,7 +167,7 @@ export default function Product() {
                       onClick={() => setSize(s)}
                       aria-pressed={size === s}
                       className={`
-                        p-3.5 rounded-2xl border-2 text-sm font-medium transition-all duration-200 cursor-pointer
+                        p-3.5 rounded-full border-2 text-sm font-medium transition-all duration-200 cursor-pointer
                         ${size === s
                           ? 'bg-brand-600 text-white border-brand-600 shadow-sm shadow-brand-600/20'
                           : 'bg-white border-stone-200 hover:border-brand-300 hover:bg-brand-50/30'
@@ -199,7 +199,7 @@ export default function Product() {
                     onClick={() => setCrust(activeCrust === c.slug ? defaultCrust : c.slug)}
                     aria-pressed={activeCrust === c.slug}
                     className={`
-                      text-left p-3.5 rounded-2xl border-2 transition-all duration-200 cursor-pointer
+                      text-left p-3.5 rounded-3xl border-2 transition-all duration-200 cursor-pointer
                       ${activeCrust === c.slug
                         ? 'bg-zinc-900 text-white border-zinc-900 shadow-sm'
                         : 'bg-white border-stone-200 hover:border-brand-300 hover:bg-brand-50/30'
@@ -225,16 +225,14 @@ export default function Product() {
                 <button
                   onClick={() => setQty(Math.max(1, qty - 1))}
                   aria-label="Decrease quantity"
-                  className="w-11 h-11 rounded-xl border border-stone-200 flex items-center justify-center hover:bg-stone-50 transition-colors cursor-pointer"
-                >
+                  className="w-11 h-11 rounded-full border border-stone-200 flex items-center justify-center hover:bg-stone-50 transition-colors cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
                   <Minus size={16} />
                 </button>
                 <span className="w-8 text-center font-bold text-lg" aria-live="polite">{qty}</span>
                 <button
                   onClick={() => setQty(qty + 1)}
                   aria-label="Increase quantity"
-                  className="w-11 h-11 rounded-xl border border-stone-200 flex items-center justify-center hover:bg-stone-50 transition-colors cursor-pointer"
-                >
+                  className="w-11 h-11 rounded-full border border-stone-200 flex items-center justify-center hover:bg-stone-50 transition-colors cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
                   <Plus size={16} />
                 </button>
               </div>
@@ -255,7 +253,7 @@ export default function Product() {
           <div className="hidden lg:flex mt-8 gap-3">
             <button
               onClick={addNow}
-              className={`flex-1 py-4 rounded-2xl font-semibold transition-all duration-300 shadow-sm cursor-pointer inline-flex items-center justify-center gap-2 ${
+              className={`flex-1 py-4 rounded-full font-semibold transition-all duration-300 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] cursor-pointer inline-flex items-center justify-center gap-2 ${
                 justAdded
                   ? 'bg-emerald-600 text-white shadow-emerald-600/20 scale-[0.98]'
                   : 'bg-brand-600 text-white hover:bg-brand-700 hover:shadow-md active:scale-[0.99]'
@@ -269,8 +267,7 @@ export default function Product() {
             </button>
             <button
               onClick={() => { addItem(item, size, activeCrust, qty); nav('/r/checkout'); }}
-              className="px-8 py-4 rounded-2xl bg-zinc-900 text-white font-semibold hover:bg-zinc-800 transition-all duration-200 cursor-pointer inline-flex items-center gap-2"
-            >
+              className="px-8 py-4 rounded-full bg-zinc-900 text-white font-semibold hover:bg-zinc-800 transition-all duration-200 cursor-pointer inline-flex items-center gap-2 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)]">
               <Zap size={16} /> Buy Now
             </button>
           </div>
@@ -287,7 +284,7 @@ export default function Product() {
           <h2 className="text-xl sm:text-2xl font-heading font-bold">Complete Your Meal</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-5">
             {sides.map((s: MenuItem) => (
-              <div key={s.id} className="bg-white rounded-2xl border border-stone-100 overflow-hidden group flex flex-col card-lift stagger-child">
+              <div key={s.id} className="bg-white rounded-3xl shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] overflow-hidden group flex flex-col card-lift stagger-child">
                 <Link to={`/r/menu/item/${s.id}`} aria-label={`View ${s.name}`} className="block">
                   <div className="overflow-hidden">
                     <img
@@ -308,8 +305,7 @@ export default function Product() {
                     <button
                       onClick={() => { addItem(s, 'regular', defaultCrust, 1); push({ type: 'success', title: `Added ${s.name} to cart` }); }}
                       aria-label={`Add ${s.name} to cart`}
-                      className="inline-flex items-center gap-1 text-xs bg-brand-600 text-white px-3 py-2 rounded-lg font-semibold hover:bg-brand-700 active:scale-95 transition-all duration-150 cursor-pointer touch-target"
-                    >
+                      className="inline-flex items-center gap-1 text-xs bg-brand-600 text-white px-4 py-2 rounded-full font-semibold hover:bg-brand-700 active:scale-95 transition-all duration-150 cursor-pointer touch-target shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
                       <Plus size={12} /> Add
                     </button>
                   </div>
@@ -329,7 +325,7 @@ export default function Product() {
         <div className="flex-1 flex gap-2 justify-end">
           <button
             onClick={addNow}
-            className={`flex-1 max-w-[220px] inline-flex items-center justify-center gap-2 py-3.5 rounded-2xl font-semibold transition-all duration-300 shadow-sm cursor-pointer ${
+            className={`flex-1 max-w-[220px] inline-flex items-center justify-center gap-2 py-3.5 rounded-full font-semibold transition-all duration-300 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] cursor-pointer ${
               justAdded
                 ? 'bg-emerald-600 text-white shadow-emerald-600/20'
                 : 'bg-brand-600 text-white hover:bg-brand-700 active:scale-[0.99]'

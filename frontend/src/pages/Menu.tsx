@@ -90,8 +90,7 @@ export default function Menu() {
             onClick={() => setShowFilters(!showFilters)}
             aria-expanded={showFilters}
             aria-label="Toggle filters"
-            className="p-2.5 rounded-xl border border-stone-200 lg:hidden cursor-pointer hover:bg-stone-50 transition-colors shrink-0"
-          >
+            className="p-2.5 rounded-full border border-stone-200 lg:hidden cursor-pointer hover:bg-stone-50 transition-colors shrink-0 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
             <SlidersHorizontal size={16} />
           </button>
         </div>
@@ -121,7 +120,7 @@ export default function Menu() {
               className={`
                 px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 cursor-pointer
                 ${cat === c.id
-                  ? 'bg-brand-600 text-white shadow-sm shadow-brand-600/20'
+                  ? 'bg-brand-600 text-white shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)]'
                   : 'bg-white text-zinc-600 border border-stone-200 hover:border-brand-300 hover:text-brand-600 hover:bg-brand-50/30'
                 }
               `}
@@ -148,7 +147,7 @@ export default function Menu() {
           id="sort-menu"
           value={sort}
           onChange={(e) => setSort(e.target.value as any)}
-          className="px-3 py-2 rounded-xl border border-stone-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-400 transition-all"
+          className="px-4 py-2 rounded-full border border-stone-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-400 transition-all"
         >
           <option value="popular">Most Popular</option>
           <option value="price-low">Price: Low to High</option>
@@ -161,7 +160,7 @@ export default function Menu() {
       {loading ? (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 mt-6">
           {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
-            <div key={i} className="bg-white rounded-2xl border border-stone-100 overflow-hidden stagger-child" style={{ animationDelay: `${i * 50}ms` }}>
+            <div key={i} className="bg-white rounded-3xl shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] overflow-hidden stagger-child" style={{ animationDelay: `${i * 50}ms` }}>
               <div className="h-44 skeleton" />
               <div className="p-4 space-y-3">
                 <div className="flex gap-2">
@@ -180,7 +179,7 @@ export default function Menu() {
           ))}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="mt-12 text-center py-16 bg-white rounded-3xl border border-stone-100 animate-fade-up">
+        <div className="mt-12 text-center py-16 bg-white rounded-3xl shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] animate-fade-up">
           <div className="w-20 h-20 mx-auto rounded-3xl bg-stone-100 flex items-center justify-center">
             <Pizza size={32} className="text-stone-300" />
           </div>
@@ -198,16 +197,14 @@ export default function Menu() {
           <div className="mt-6 flex flex-wrap justify-center gap-2">
             <button
               onClick={() => { setQ(''); setCat('all'); setVegOnly(false); }}
-              className="px-5 py-2.5 rounded-xl bg-brand-600 text-white text-sm font-semibold hover:bg-brand-700 transition-all cursor-pointer"
-            >
+              className="px-6 py-3 rounded-full bg-brand-600 text-white text-sm font-semibold hover:bg-brand-700 transition-all cursor-pointer shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)]">
               Clear filters
             </button>
             {q && (
               <Link
                 to="/r/menu"
                 onClick={() => { setQ(''); setCat('all'); }}
-                className="px-5 py-2.5 rounded-xl bg-white border border-stone-200 text-sm font-semibold hover:bg-stone-50 transition-all inline-flex items-center gap-1.5"
-              >
+                className="px-6 py-3 rounded-full bg-white border border-stone-200 text-sm font-semibold hover:bg-stone-50 transition-all inline-flex items-center gap-1.5 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
                 Browse menu <ArrowRight size={14} />
               </Link>
             )}
@@ -246,7 +243,7 @@ export default function Menu() {
       {/* Crust info */}
       {!loading && filtered.length > 0 && (
         <details className="mt-8 group">
-          <summary className="flex items-center gap-2 px-5 py-3.5 rounded-2xl bg-amber-50/80 border border-amber-200/60 text-sm text-amber-800 font-medium cursor-pointer hover:bg-amber-50 transition-colors list-none [&::-webkit-details-marker]:hidden">
+          <summary className="flex items-center gap-2 px-5 py-3.5 rounded-full bg-amber-50/80 border border-amber-200/60 text-sm text-amber-800 font-medium cursor-pointer hover:bg-amber-50 transition-colors list-none [&::-webkit-details-marker]:hidden">
             <ChevronDown size={16} className="transition-transform group-open:rotate-180" />
             <strong>6 Delicious Crusts</strong> — Tossed (base) · Italian Thin · Wheat Thin · Cheese Burst · Double Cheese Crunch
           </summary>

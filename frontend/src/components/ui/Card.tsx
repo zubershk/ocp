@@ -20,7 +20,7 @@ export default function Card({ children, className = '', hover = false, padding 
     <div
       onClick={onClick}
       className={`
-        bg-white rounded-2xl border border-stone-100
+        bg-white rounded-3xl shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)]
         ${hover ? 'card-lift cursor-pointer' : ''}
         ${padStyles[padding]}
         ${className}
