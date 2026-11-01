@@ -64,7 +64,12 @@ export default function Login() {
         push({ type: 'info', title: 'Code generated - check server console (dev mode)' });
       }
       setTimeout(() => otpRefs.current[0]?.focus(), 100);
-    } catch (err) { setError(err instanceof Error ? err.message : 'Could not send code'); }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Could not send code';
+      setError(msg);
+      const m = msg.match(/please wait (\d+) seconds/i);
+      if (m) setCooldown(parseInt(m[1], 10));
+    }
     finally { setSending(false); }
   };
 
@@ -146,7 +151,8 @@ export default function Login() {
 
             {error && (
               <div role="alert" className="mt-4 px-4 py-3 rounded-xl bg-red-50 border border-red-200/60 text-sm text-red-700 flex items-start gap-2">
-                <span className="shrink-0 mt-0.5 text-red-500 font-bold">!</span> {error}
+                <span className="shrink-0 mt-0.5 text-red-500 font-bold">!</span>
+                {cooldown > 0 ? `Please wait ${cooldown}s before requesting a new code` : error}
               </div>
             )}
 
