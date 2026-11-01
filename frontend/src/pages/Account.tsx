@@ -95,37 +95,50 @@ export default function Account() {
       </div>
 
       {/* Profile hero card */}
-      <div className="bg-gradient-to-br from-zinc-900 via-zinc-800 to-zinc-900 rounded-3xl p-6 sm:p-8 text-white shadow-[0_8px_30px_rgba(0,0,0,0.12)] mb-6">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">
-          <div className="w-20 h-20 rounded-2xl bg-white/10 backdrop-blur border border-white/20 grid place-items-center text-3xl font-bold shrink-0">
-            {(customer.name || 'U').charAt(0).toUpperCase()}
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-xs text-white/60 font-medium uppercase tracking-wide">Welcome back</div>
-            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight mt-1 truncate">{customer.name || 'Welcome'}</h2>
-            <div className="flex flex-wrap items-center gap-3 mt-2 text-sm text-white/80">
-              <span className="inline-flex items-center gap-1.5"><Phone size={13} /> +91 {customer.phone}</span>
-              {customer.email && <span className="inline-flex items-center gap-1.5"><Mail size={13} /> {customer.email}</span>}
+      <div className="relative overflow-hidden rounded-3xl p-6 sm:p-8 text-white shadow-[0_12px_40px_rgba(0,0,0,0.18)] mb-6">
+        {/* Background gradient + pattern */}
+        <div className="absolute inset-0 bg-gradient-to-br from-zinc-900 via-zinc-800 to-orange-900" />
+        <div className="absolute inset-0 opacity-30" style={{ backgroundImage: 'radial-gradient(circle at 20% 20%, rgba(234,88,12,0.4) 0%, transparent 50%), radial-gradient(circle at 80% 80%, rgba(251,146,60,0.3) 0%, transparent 50%)' }} />
+        <div className="absolute -top-20 -right-20 w-60 h-60 bg-orange-500/20 rounded-full blur-3xl" />
+        <div className="absolute -bottom-20 -left-20 w-60 h-60 bg-amber-500/10 rounded-full blur-3xl" />
+
+        <div className="relative">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">
+            <div className="relative">
+              <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-3xl bg-gradient-to-br from-orange-400 to-orange-600 grid place-items-center text-3xl sm:text-4xl font-bold shadow-lg ring-4 ring-white/20">
+                {(customer.name || 'U').charAt(0).toUpperCase()}
+              </div>
+              <div className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-emerald-500 border-2 border-zinc-900 grid place-items-center">
+                <Award size={14} className="text-white" />
+              </div>
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-xs text-orange-300 font-semibold uppercase tracking-widest">Welcome back</div>
+              <h2 className="text-2xl sm:text-3xl font-bold tracking-tight mt-1 truncate">{customer.name || 'Welcome'}</h2>
+              <div className="flex flex-wrap items-center gap-3 mt-2 text-sm text-white/80">
+                <span className="inline-flex items-center gap-1.5"><Phone size={13} /> +91 {customer.phone}</span>
+                {customer.email && <span className="inline-flex items-center gap-1.5"><Mail size={13} /> {customer.email}</span>}
+              </div>
+            </div>
+            <div className="flex gap-2 shrink-0">
+              <Link to="/r/menu" className="px-4 py-2.5 rounded-xl bg-white text-zinc-900 text-sm font-semibold hover:bg-orange-50 transition shadow-lg">Order again</Link>
+              <a href={`https://wa.me/91${restaurantPhone}`} target="_blank" rel="noreferrer" className="px-4 py-2.5 rounded-xl bg-emerald-500 text-white text-sm font-semibold hover:bg-emerald-600 transition shadow-lg">Chat</a>
             </div>
           </div>
-          <div className="flex gap-2 shrink-0">
-            <Link to="/r/menu" className="px-4 py-2.5 rounded-xl bg-white text-zinc-900 text-sm font-semibold hover:bg-zinc-100 transition">Order again</Link>
-            <a href={`https://wa.me/91${restaurantPhone}`} target="_blank" rel="noreferrer" className="px-4 py-2.5 rounded-xl bg-emerald-500 text-white text-sm font-semibold hover:bg-emerald-600 transition">Chat</a>
-          </div>
-        </div>
-        {/* Stats row */}
-        <div className="grid grid-cols-3 gap-3 mt-6">
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-4 text-center backdrop-blur">
-            <div className="text-[10px] font-semibold tracking-wide text-white/60 uppercase">Orders</div>
-            <div className="text-2xl sm:text-3xl font-bold tabular-nums mt-1">{ordersQuery.isLoading ? '-' : orderCount}</div>
-          </div>
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-4 text-center backdrop-blur">
-            <div className="text-[10px] font-semibold tracking-wide text-white/60 uppercase">Spent</div>
-            <div className="text-2xl sm:text-3xl font-bold tabular-nums mt-1">₹{ordersQuery.isLoading ? '-' : totalSpent.toLocaleString('en-IN')}</div>
-          </div>
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-4 text-center backdrop-blur">
-            <div className="text-[10px] font-semibold tracking-wide text-white/60 uppercase">Avg order</div>
-            <div className="text-2xl sm:text-3xl font-bold tabular-nums mt-1">₹{ordersQuery.isLoading ? '-' : avgOrder.toLocaleString('en-IN')}</div>
+          {/* Stats row */}
+          <div className="grid grid-cols-3 gap-3 mt-6">
+            <div className="bg-white/10 backdrop-blur border border-white/15 rounded-2xl p-4 text-center hover:bg-white/15 transition">
+              <div className="text-[10px] font-semibold tracking-wide text-white/60 uppercase">Orders</div>
+              <div className="text-2xl sm:text-3xl font-bold tabular-nums mt-1">{ordersQuery.isLoading ? '-' : orderCount}</div>
+            </div>
+            <div className="bg-white/10 backdrop-blur border border-white/15 rounded-2xl p-4 text-center hover:bg-white/15 transition">
+              <div className="text-[10px] font-semibold tracking-wide text-white/60 uppercase">Spent</div>
+              <div className="text-2xl sm:text-3xl font-bold tabular-nums mt-1">₹{ordersQuery.isLoading ? '-' : totalSpent.toLocaleString('en-IN')}</div>
+            </div>
+            <div className="bg-white/10 backdrop-blur border border-white/15 rounded-2xl p-4 text-center hover:bg-white/15 transition">
+              <div className="text-[10px] font-semibold tracking-wide text-white/60 uppercase">Avg order</div>
+              <div className="text-2xl sm:text-3xl font-bold tabular-nums mt-1">₹{ordersQuery.isLoading ? '-' : avgOrder.toLocaleString('en-IN')}</div>
+            </div>
           </div>
         </div>
       </div>
