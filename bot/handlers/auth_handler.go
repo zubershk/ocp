@@ -3,7 +3,6 @@ package handlers
 import (
 	"log"
 	"net/http"
-	"os"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -46,12 +45,7 @@ func (h *AuthHandler) SendOTP(c *gin.Context) {
 		// WhatsApp send failure: OTP is already stored and verifiable.
 		log.Printf("[auth] whatsapp send failed for %s: %v", req.Phone, err)
 		log.Printf("[auth] OTP for %s: %s (expires in 5 min) — deliver via server log", req.Phone, code)
-		resp := gin.H{"sent": false, "delivered": false, "message": "code generated — check server logs (dev mode)"}
-		// Only expose the code in dev mode (no WhatsApp instance configured) to ease local testing.
-		if strings.TrimSpace(os.Getenv("EVOLUTION_INSTANCE_TOKEN")) == "" {
-			resp["dev_code"] = code
-		}
-		c.JSON(http.StatusOK, resp)
+		c.JSON(http.StatusOK, gin.H{"sent": false, "delivered": false, "message": "code generated — check server logs (dev mode)"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"sent": true, "delivered": true, "message": "code sent on WhatsApp"})

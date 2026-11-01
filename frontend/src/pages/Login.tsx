@@ -37,7 +37,6 @@ export default function Login() {
   const [error, setError] = useState('');
   const [cooldown, setCooldown] = useState(0);
   const [delivered, setDelivered] = useState(true);
-  const [devCode, setDevCode] = useState('');
   const [success, setSuccess] = useState(false);
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
 
@@ -55,7 +54,6 @@ export default function Login() {
     try {
       const result = await sendOtp(normalizedPhone);
       setDelivered(result.delivered);
-      setDevCode(result.devCode || '');
       setStep('otp');
       setCooldown(30);
       if (result.delivered) {
@@ -156,13 +154,7 @@ export default function Login() {
               </div>
             )}
 
-            {!delivered && devCode && (
-              <div className="mt-4 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-sm text-amber-800">
-                <div className="font-semibold">Dev mode code</div>
-                <div className="mt-1 font-mono text-2xl font-bold tracking-widest text-amber-900">{devCode}</div>
-                <div className="text-xs mt-1 text-amber-700">WhatsApp not connected. Use this code to verify.</div>
-              </div>
-            )}
+
 
             {step === 'phone' ? (
               <form onSubmit={onSend} className="mt-6 space-y-4">
