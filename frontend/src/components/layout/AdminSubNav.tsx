@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Pizza, MessageCircle, Settings, BarChart3, Users, ScrollText, LayoutGrid, Megaphone, Image, Tag, Bot, Store, Package, Star, Check, Menu as MenuIcon, X, ExternalLink, PanelLeftClose, PanelLeftOpen, ChevronDown, History, Monitor } from 'lucide-react';
+import { Pizza, MessageCircle, Settings, BarChart3, Users, ScrollText, LayoutGrid, Megaphone, Image, Tag, Bot, Store, Package, Star, Check, Menu as MenuIcon, X, ExternalLink, PanelLeftClose, PanelLeftOpen, ChevronDown, History, Monitor, Home } from 'lucide-react';
 import { adminFetch, getAdminKey } from '../../services/api';
 
 const items = [
@@ -13,6 +13,7 @@ const items = [
   { to: '/admin/family-packs', label: 'Packs', icon: Package, group: 'Marketing', roles: ['owner', 'manager', 'viewer'] },
   { to: '/admin/banners', label: 'Banners', icon: Image, group: 'Marketing', roles: ['owner', 'manager', 'viewer'] },
   { to: '/admin/brand', label: 'Brand', icon: Megaphone, group: 'Marketing', roles: ['owner', 'manager', 'viewer'] },
+  { to: '/admin/homepage', label: 'Homepage', icon: Home, group: 'Marketing', roles: ['owner', 'manager', 'viewer'] },
   { to: '/admin/analytics', label: 'Analytics', icon: BarChart3, group: 'Insights', roles: ['owner', 'manager', 'viewer'] },
   { to: '/admin/reviews', label: 'Reviews', icon: Star, group: 'Insights', badge: 'reviews', roles: ['owner', 'manager', 'viewer'] },
   { to: '/admin/logs', label: 'Audit', icon: ScrollText, group: 'Insights', roles: ['owner', 'manager'] },

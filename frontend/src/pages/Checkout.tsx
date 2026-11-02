@@ -7,6 +7,7 @@ import { orderService } from '../services/orderService';
 import { useToast } from '../context/ToastContext';
 import AddressAutocomplete from '../components/ui/AddressAutocomplete';
 import { useDeliveryHours, useRestaurantAddress, usePrimaryOutlet } from '../context/RestaurantContext';
+import { useHomepage } from '../context/SiteSettingsContext';
 
 type FormState = {
   name: string; phone: string; email: string;
@@ -45,6 +46,7 @@ export default function Checkout() {
   const nav = useNavigate();
   const { push } = useToast();
   const deliveryHours = useDeliveryHours();
+  const hp = useHomepage();
   const restaurantAddress = useRestaurantAddress();
   const primaryOutlet = usePrimaryOutlet();
   const [form, setForm] = useState<FormState>(initialForm);
@@ -71,10 +73,10 @@ export default function Checkout() {
       <div className="w-24 h-24 mx-auto rounded-3xl bg-stone-100 flex items-center justify-center mb-6">
         <ShoppingBag size={40} className="text-stone-300" />
       </div>
-      <h2 className="text-2xl font-heading font-bold">Your cart is empty</h2>
-      <p className="text-sm text-zinc-500 mt-2 max-w-xs mx-auto">Add some cheesy pizzas and sides to get started</p>
+      <h2 className="text-2xl font-heading font-bold">{hp.emptyCartTitle}</h2>
+      <p className="text-sm text-zinc-500 mt-2 max-w-xs mx-auto">{hp.emptyCartSubtitle}</p>
       <Link to="/r/menu" className="inline-flex items-center gap-2 mt-8 px-8 py-3.5 rounded-full bg-brand-600 text-white font-semibold hover:bg-brand-700 transition-all duration-200 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)]">
-        Browse Menu <ArrowRight size={16} />
+        {hp.browseMenuText} <ArrowRight size={16} />
       </Link>
     </div>
   );

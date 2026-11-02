@@ -36,11 +36,31 @@ interface FooterSettings {
   [key: string]: unknown;
 }
 
+interface HomepageSettings {
+  hero_title?: string;
+  hero_subtitle?: string;
+  search_placeholder?: string;
+  popular_title?: string;
+  popular_subtitle?: string;
+  categories_title?: string;
+  cta_title?: string;
+  cta_subtitle?: string;
+  cta_button_text?: string;
+  empty_cart_title?: string;
+  empty_cart_subtitle?: string;
+  browse_menu_text?: string;
+  menu_title?: string;
+  menu_subtitle?: string;
+  complete_meal_title?: string;
+  [key: string]: unknown;
+}
+
 interface SiteSettingsResponse {
   brand: BrandSettings;
   seo: SEOSettings;
   social: SocialSettings;
   footer: FooterSettings;
+  homepage: HomepageSettings;
   notifications?: Record<string, unknown>;
   [key: string]: unknown;
 }
@@ -129,12 +149,14 @@ const BRAND_DEFAULTS: BrandSettings = {
 const SEO_DEFAULTS: SEOSettings = {};
 const SOCIAL_DEFAULTS: SocialSettings = {};
 const FOOTER_DEFAULTS: FooterSettings = {};
+const HOMEPAGE_DEFAULTS: HomepageSettings = {};
 
 const SETTINGS_DEFAULTS: SiteSettingsResponse = {
   brand: BRAND_DEFAULTS,
   seo: SEO_DEFAULTS,
   social: SOCIAL_DEFAULTS,
   footer: FOOTER_DEFAULTS,
+  homepage: HOMEPAGE_DEFAULTS,
 };
 
 const SiteSettingsContext = createContext<SiteSettingsData>({
@@ -285,6 +307,28 @@ export function useFooter() {
     tagline: f.tagline ?? '',
     extraLinks: f.extra_links ?? [],
   }), [f]);
+}
+
+export function useHomepage() {
+  const { settings } = useSiteSettings();
+  const h = settings.homepage ?? {};
+  return useMemo(() => ({
+    heroTitle: h.hero_title ?? 'Order food you love',
+    heroSubtitle: h.hero_subtitle ?? '',
+    searchPlaceholder: h.search_placeholder ?? 'Search for a dish or cuisine...',
+    popularTitle: h.popular_title ?? 'Popular Right Now',
+    popularSubtitle: h.popular_subtitle ?? 'Customer favourites — add in one tap',
+    categoriesTitle: h.categories_title ?? 'Browse by Category',
+    ctaTitle: h.cta_title ?? 'Ready to order?',
+    ctaSubtitle: h.cta_subtitle ?? '',
+    ctaButtonText: h.cta_button_text ?? 'Start Your Order',
+    emptyCartTitle: h.empty_cart_title ?? 'Your cart is empty',
+    emptyCartSubtitle: h.empty_cart_subtitle ?? 'Add some cheesy pizzas and sides to get started',
+    browseMenuText: h.browse_menu_text ?? 'Browse Menu',
+    menuTitle: h.menu_title ?? 'Our Menu',
+    menuSubtitle: h.menu_subtitle ?? '',
+    completeMealTitle: h.complete_meal_title ?? 'Complete Your Meal',
+  }), [h]);
 }
 
 export function useNotifications() {

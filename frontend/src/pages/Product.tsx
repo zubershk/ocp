@@ -8,6 +8,7 @@ import { useToast } from '../context/ToastContext';
 import ImageZoom from '../components/ui/ImageZoom';
 import StarRating from '../components/ui/StarRating';
 import { useDeliveryHours } from '../context/RestaurantContext';
+import { useHomepage } from '../context/SiteSettingsContext';
 import type { MenuItem } from '../types';
 
 export default function Product() {
@@ -19,6 +20,7 @@ export default function Product() {
   const { addItem } = useCart();
   const { push } = useToast();
   const deliveryHours = useDeliveryHours();
+  const hp = useHomepage();
   const [size, setSize] = useState<'regular' | 'medium' | 'large'>('regular');
   const [crust, setCrust] = useState('tossed');
   // If the selected crust was deactivated in admin, fall back to the
@@ -281,7 +283,7 @@ export default function Product() {
       {/* Complete your meal */}
       {sides.length > 0 && (
         <section className="mt-12 pb-8">
-          <h2 className="text-xl sm:text-2xl font-heading font-bold">Complete Your Meal</h2>
+          <h2 className="text-xl sm:text-2xl font-heading font-bold">{hp.completeMealTitle}</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-5">
             {sides.map((s: MenuItem) => (
               <div key={s.id} className="bg-white rounded-3xl shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] overflow-hidden group flex flex-col card-lift stagger-child">

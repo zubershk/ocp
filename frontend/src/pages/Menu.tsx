@@ -8,6 +8,7 @@ import { useToast } from '../context/ToastContext';
 import { useGsapReveal } from '../hooks/useGsap';
 import SearchAutocomplete from '../components/ui/SearchAutocomplete';
 import { useDeliveryHours } from '../context/RestaurantContext';
+import { useHomepage } from '../context/SiteSettingsContext';
 import { ProductCard } from '@/components/shadcn-space/blocks/product-listing-01/product-card';
 
 const categories: { id: string; label: string; filter: (m: any) => boolean }[] = [
@@ -38,6 +39,7 @@ export default function Menu() {
   const { push } = useToast();
   const navigate = useNavigate();
   const deliveryHours = useDeliveryHours();
+  const hp = useHomepage();
   const categoryBarRef = useRef<HTMLDivElement>(null);
   const [isCategoryBarSticky, setIsCategoryBarSticky] = useState(false);
 
@@ -76,7 +78,7 @@ export default function Menu() {
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl sm:text-4xl font-heading font-bold">Our Menu</h1>
+          <h1 className="text-3xl sm:text-4xl font-heading font-bold">{hp.menuTitle}</h1>
           <p className="text-zinc-500 mt-1.5 text-sm sm:text-base">
             100% Real Mozzarella · All prices include tax · Free delivery {deliveryHours || '11 AM – 4 AM'}
           </p>
