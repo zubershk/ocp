@@ -80,11 +80,12 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-white">
       {/* ── Hero Section (Zomato style) ── */}
-      <section className="relative bg-gradient-to-b from-orange-50 via-orange-50/50 to-white pt-8 pb-12 sm:pt-12 sm:pb-16 overflow-hidden">
+      <section className="relative bg-gradient-to-b from-orange-50/80 via-orange-50/40 to-white pt-8 pb-12 sm:pt-12 sm:pb-16 overflow-hidden">
         {/* Background food image */}
-        <div className="absolute inset-0 opacity-5 pointer-events-none">
-          <img src="/images/hero-food.jpg" alt="" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+        <div className="absolute inset-0 opacity-20 pointer-events-none">
+          <img src="https://images.unsplash.com/photo-1513104890138-7c749659a591?w=1920&h=600&fit=crop" alt="" className="w-full h-full object-cover" />
         </div>
+        <div className="absolute inset-0 bg-gradient-to-b from-white/60 via-white/40 to-white pointer-events-none" />
         <div className="container-page">
           {/* Logo + Location */}
           <div className="flex items-center justify-between mb-6 sm:mb-8">
