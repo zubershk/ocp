@@ -92,6 +92,7 @@ export interface PublicBanner {
   id: string;
   title: string;
   subtitle: string;
+  badge?: string;
   background: string;
   accent: string;
   buttonText: string;

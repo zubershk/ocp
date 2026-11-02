@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Search, MapPin, ChevronRight, ShoppingCart, Star, Phone, ArrowRight, X, SlidersHorizontal } from 'lucide-react';
 import { useMenuItems } from '../hooks/useMenu';
 import { pickPopular } from '../services/menuService';
@@ -7,7 +7,7 @@ import { useRestaurantName, useDeliveryHours, useOutletsList, useRestaurantPhone
 import { useCart } from '../context/CartContext';
 import { useCrusts } from '../context/CrustContext';
 import { useToast } from '../context/ToastContext';
-import { useMenuCategories, useBrand, useHomepage } from '../context/SiteSettingsContext';
+import { useMenuCategories, useBrand, useHomepage, useSiteSettings } from '../context/SiteSettingsContext';
 import SearchAutocomplete from '../components/ui/SearchAutocomplete';
 import CategoryScroll from '../components/ui/CategoryScroll';
 import { ProductCard } from '@/components/shadcn-space/blocks/product-listing-01/product-card';
@@ -34,7 +34,10 @@ export default function Home() {
   const restaurantPhone = useRestaurantPhone();
   const brand = useBrand();
   const hp = useHomepage();
+  const { banners } = useSiteSettings();
   const siteCategories = useMenuCategories();
+  const navigate = useNavigate();
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     const onScroll = () => setShowBackToTop(window.scrollY > 400);
@@ -115,30 +118,35 @@ export default function Home() {
 
           {/* Search Bar (Zomato style) */}
           <div className="max-w-2xl mx-auto">
-            <div className="relative flex items-center bg-white rounded-full shadow-[0_4px_24px_rgba(0,0,0,0.12)] border border-stone-200 overflow-hidden">
+            <form
+              onSubmit={(e) => { e.preventDefault(); if (searchQuery.trim()) navigate(`/r/menu?q=${encodeURIComponent(searchQuery.trim())}`); }}
+              className="relative flex items-center bg-white rounded-full shadow-[0_4px_24px_rgba(0,0,0,0.12)] border border-stone-200 overflow-hidden"
+            >
               <div className="pl-5 pr-2">
                 <Search size={20} className="text-zinc-400" />
               </div>
               <input
                 type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder={hp.searchPlaceholder}
                 className="flex-1 py-4 text-base text-zinc-900 placeholder:text-zinc-400 bg-transparent outline-none"
               />
-              <button className="m-1.5 px-6 py-2.5 rounded-full bg-brand-600 text-white font-semibold text-sm hover:bg-brand-700 transition-all shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1)]">
+              <button type="submit" className="m-1.5 px-6 py-2.5 rounded-full bg-brand-600 text-white font-semibold text-sm hover:bg-brand-700 transition-all shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1)]">
                 Search
               </button>
-            </div>
+            </form>
           </div>
 
           {/* Quick Category Pills */}
           <div className="flex flex-wrap justify-center gap-2 mt-6 sm:mt-8">
-            {['Pizza', 'Burgers', 'Pasta', 'Momos', 'Desserts'].map((cat) => (
+            {siteCategories.filter(c => c.active !== false).slice(0, 6).map((cat) => (
               <Link
-                key={cat}
-                to={`/r/menu?cat=${cat.toLowerCase().replace(' ', '-')}`}
+                key={cat.id}
+                to={`/r/menu?cat=${cat.slug}`}
                 className="px-4 py-2 rounded-full bg-white border border-stone-200 text-sm font-medium text-zinc-700 hover:border-brand-300 hover:bg-brand-50 hover:text-brand-600 transition-all shadow-[0_2px_8px_rgba(0,0,0,0.06)]"
               >
-                {cat}
+                {cat.name}
               </Link>
             ))}
           </div>
@@ -146,22 +154,28 @@ export default function Home() {
       </section>
 
       {/* ── Promotional Banner (Domino's style) ── */}
-      <section className="container-page py-6 sm:py-8">
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-brand-600 to-brand-500 p-6 sm:p-8 text-white shadow-[0_4px_24px_rgba(234,88,12,0.25)]">
-          <div className="relative z-10 max-w-lg">
-            <span className="inline-block px-3 py-1 rounded-full bg-white/20 text-xs font-bold uppercase tracking-wider mb-3">Limited Time</span>
-            <h2 className="text-2xl sm:text-3xl font-heading font-bold leading-tight">Family Packs from ₹515</h2>
-            <p className="text-white/80 mt-2 text-sm sm:text-base">Pizza + Garlic Bread + Choco Lava. Complete meals, tax included.</p>
-            <Link
-              to="/r/offers"
-              className="inline-flex items-center gap-2 mt-4 px-6 py-3 rounded-full bg-white text-brand-600 font-bold text-sm hover:bg-stone-50 transition-all shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1)]"
-            >
-              Order Now <ArrowRight size={16} />
-            </Link>
-          </div>
-          <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-white/5 skew-x-[-12deg] translate-x-8" />
-        </div>
-      </section>
+      {banners.length > 0 ? (
+        <section className="container-page py-6 sm:py-8">
+          {banners.slice(0, 1).map((banner) => (
+            <div key={banner.id} className="relative overflow-hidden rounded-3xl p-6 sm:p-8 text-white shadow-[0_4px_24px_rgba(234,88,12,0.25)]" style={{ background: banner.background || 'linear-gradient(to right, #ea580c, #f97316)' }}>
+              <div className="relative z-10 max-w-lg">
+                {banner.badge && <span className="inline-block px-3 py-1 rounded-full bg-white/20 text-xs font-bold uppercase tracking-wider mb-3">{banner.badge}</span>}
+                <h2 className="text-2xl sm:text-3xl font-heading font-bold leading-tight">{banner.title}</h2>
+                {banner.subtitle && <p className="text-white/80 mt-2 text-sm sm:text-base">{banner.subtitle}</p>}
+                {banner.buttonText && (
+                  <Link
+                    to={banner.buttonLink || '/r/offers'}
+                    className="inline-flex items-center gap-2 mt-4 px-6 py-3 rounded-full bg-white text-brand-600 font-bold text-sm hover:bg-stone-50 transition-all shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1)]"
+                  >
+                    {banner.buttonText} <ArrowRight size={16} />
+                  </Link>
+                )}
+              </div>
+              <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-white/5 skew-x-[-12deg] translate-x-8" />
+            </div>
+          ))}
+        </section>
+      ) : null}
 
       {/* ── Popular Right Now ── */}
       <section className="container-page py-6 sm:py-8">
@@ -235,7 +249,7 @@ export default function Home() {
                 {cat.image_url ? (
                   <img src={cat.image_url} alt={cat.name} className="w-full h-full object-cover" loading="lazy" />
                 ) : (
-                  <span className="text-2xl">🍕</span>
+                  <span className="text-xl font-bold text-brand-600">{cat.name.charAt(0)}</span>
                 )}
               </div>
               <span className="text-xs sm:text-sm font-medium text-zinc-700 group-hover:text-brand-600 transition-colors text-center line-clamp-1">{cat.name}</span>
