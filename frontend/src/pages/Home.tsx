@@ -23,7 +23,7 @@ function quickAdd(item: MenuItem, addItem: ReturnType<typeof useCart>['addItem']
 export default function Home() {
   const { items, loading } = useMenuItems();
   const popular = pickPopular(items);
-  const { addItem } = useCart();
+  const { addItem, count } = useCart();
   const { push } = useToast();
   const { defaultCrust } = useCrusts();
   const [activeFilter, setActiveFilter] = useState('all');
@@ -105,7 +105,11 @@ export default function Home() {
               </button>
               <Link to="/r/cart" className="relative p-2.5 rounded-full hover:bg-stone-100 transition-colors">
                 <ShoppingCart size={20} className="text-zinc-600" />
-                {/* cart count would go here */}
+                {count > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 bg-brand-600 text-white text-[10px] min-w-[18px] h-[18px] rounded-full flex items-center justify-center font-bold shadow-sm">
+                    {count > 99 ? '99+' : count}
+                  </span>
+                )}
               </Link>
             </div>
           </div>
