@@ -80,7 +80,11 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-white">
       {/* ── Hero Section (Zomato style) ── */}
-      <section className="relative bg-gradient-to-b from-orange-50 to-white pt-8 pb-12 sm:pt-12 sm:pb-16">
+      <section className="relative bg-gradient-to-b from-orange-50 via-orange-50/50 to-white pt-8 pb-12 sm:pt-12 sm:pb-16 overflow-hidden">
+        {/* Background food image */}
+        <div className="absolute inset-0 opacity-5 pointer-events-none">
+          <img src="/images/hero-food.jpg" alt="" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+        </div>
         <div className="container-page">
           {/* Logo + Location */}
           <div className="flex items-center justify-between mb-6 sm:mb-8">
@@ -243,13 +247,15 @@ export default function Home() {
             <Link
               key={cat.id}
               to={`/r/menu?cat=${cat.slug}`}
-              className="group flex flex-col items-center gap-2 p-3 sm:p-4 rounded-3xl bg-white hover:shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] transition-all"
+              className="group relative flex flex-col items-center gap-2 p-3 sm:p-4 rounded-3xl bg-white hover:shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] transition-all overflow-hidden"
             >
-              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-stone-100 overflow-hidden flex items-center justify-center">
+              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl overflow-hidden flex items-center justify-center relative">
                 {cat.image_url ? (
-                  <img src={cat.image_url} alt={cat.name} className="w-full h-full object-cover" loading="lazy" />
+                  <img src={cat.image_url} alt={cat.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" loading="lazy" />
                 ) : (
-                  <span className="text-xl font-bold text-brand-600">{cat.name.charAt(0)}</span>
+                  <div className="w-full h-full bg-gradient-to-br from-brand-100 to-brand-200 flex items-center justify-center">
+                    <span className="text-2xl font-bold text-brand-600">{cat.name.charAt(0)}</span>
+                  </div>
                 )}
               </div>
               <span className="text-xs sm:text-sm font-medium text-zinc-700 group-hover:text-brand-600 transition-colors text-center line-clamp-1">{cat.name}</span>
