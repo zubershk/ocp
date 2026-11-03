@@ -81,8 +81,8 @@ export default function Home() {
     <div className="min-h-screen bg-white">
       {/* ── Hero Section (Zomato style) ── */}
       <section className="relative pt-8 pb-12 sm:pt-12 sm:pb-16 overflow-hidden" style={{ backgroundImage: 'url(https://images.unsplash.com/photo-1513104890138-7c749659a591?w=1920&h=600&fit=crop)', backgroundSize: 'cover', backgroundPosition: 'center' }}>
-        {/* Dark overlay for text readability */}
-        <div className="absolute inset-0 bg-white/70 pointer-events-none" />
+        {/* Light overlay for text readability */}
+        <div className="absolute inset-0 bg-white/50 pointer-events-none" />
         <div className="container-page">
           {/* Logo + Location */}
           <div className="flex items-center justify-between mb-6 sm:mb-8">
