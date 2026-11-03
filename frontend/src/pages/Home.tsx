@@ -88,7 +88,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-white">
       {/* ── Hero Section (Zomato style) ── */}
-      <section className="relative pt-12 pb-16 sm:pt-20 sm:pb-24 overflow-hidden" style={{ backgroundImage: `url(${hp.heroImageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }}>
+      <section className="relative pt-12 pb-16 sm:pt-20 sm:pb-24" style={{ backgroundImage: `url(${hp.heroImageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }}>
         {/* Dark overlay for text readability */}
         <div className="absolute inset-0 bg-black/20 pointer-events-none" />
         <div className="relative z-10">
