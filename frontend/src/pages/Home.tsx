@@ -80,11 +80,10 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-white">
       {/* ── Hero Section (Zomato style) ── */}
-      <section className="relative bg-gradient-to-br from-orange-50 via-white to-orange-50/30 pt-8 pb-12 sm:pt-12 sm:pb-16 overflow-hidden">
-        {/* Decorative food image (right side) */}
-        <div className="absolute right-0 top-0 bottom-0 w-1/3 hidden lg:block opacity-20 pointer-events-none">
-          <img src="https://images.unsplash.com/photo-1513104890138-7c749659a591?w=800&h=600&fit=crop" alt="" className="w-full h-full object-cover" />
-        </div>
+      <section className="relative pt-12 pb-16 sm:pt-20 sm:pb-24 overflow-hidden" style={{ backgroundImage: 'url(https://images.unsplash.com/photo-1513104890138-7c749659a591?w=1920&h=700&fit=crop)', backgroundSize: 'cover', backgroundPosition: 'center' }}>
+        {/* Dark overlay for text readability */}
+        <div className="absolute inset-0 bg-black/20 pointer-events-none" />
+        <div className="relative z-10">
         <div className="container-page">
           {/* Logo + Location */}
           <div className="flex items-center justify-between mb-6 sm:mb-8">
@@ -159,6 +158,7 @@ export default function Home() {
             ))}
           </div>
         </div>
+      </div>
       </section>
 
       {/* ── Promotional Banner (Domino's style) ── */}
