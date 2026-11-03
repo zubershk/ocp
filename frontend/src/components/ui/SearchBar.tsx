@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../../context/CartContext';
 import { useToast } from '../../context/ToastContext';
-import { useSearch } from '../../hooks/useSearch';
+import { useSearch, DietaryFilter } from '../../hooks/useSearch';
 import type { MenuItem } from '../../types';
 
 interface SearchBarProps {
@@ -11,9 +11,11 @@ interface SearchBarProps {
   placeholder?: string;
   onSelect?: (item: MenuItem) => void;
   className?: string;
+  initialQuery?: string;
+  initialCategory?: string | null;
 }
 
-export function SearchBar({ items, placeholder = 'Search for a dish or cuisine...', onSelect, className }: SearchBarProps) {
+export function SearchBar({ items, placeholder = 'Search for a dish or cuisine...', onSelect, className, initialQuery, initialCategory }: SearchBarProps) {
   const { addItem } = useCart();
   const { push } = useToast();
   const navigate = useNavigate();
@@ -32,7 +34,18 @@ export function SearchBar({ items, placeholder = 'Search for a dish or cuisine..
     setHighlightedIndex,
     openDropdown,
     setOpenDropdown,
-  } = useSearch(items);
+    dietaryFilter,
+    setDietaryFilter,
+    categoryFilter,
+    setCategoryFilter,
+  } = useSearch(items, initialQuery);
+
+  // Set initial category filter from prop
+  useEffect(() => {
+    if (initialCategory !== null && initialCategory !== undefined) {
+      setCategoryFilter(initialCategory);
+    }
+  }, [initialCategory, setCategoryFilter]);
 
   const handleSelect = useCallback(
     (item: MenuItem) => {
@@ -90,6 +103,12 @@ export function SearchBar({ items, placeholder = 'Search for a dish or cuisine..
   const handleBlur = useCallback(() => {
     setTimeout(() => setOpenDropdown(false), 150);
   }, []);
+
+  const dietaryLabel: Record<DietaryFilter, string> = {
+    all: 'All',
+    veg: 'Veg',
+    nonveg: 'Non-Veg',
+  };
 
   // Scroll highlighted item into view
   useEffect(() => {
@@ -150,6 +169,28 @@ export function SearchBar({ items, placeholder = 'Search for a dish or cuisine..
       {/* Dropdown */}
       {openDropdown && (
         <div className="absolute top-full left-0 right-0 mt-1 z-50 bg-white rounded-2xl shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1)] border border-stone-100 overflow-hidden">
+          {/* Dietary filter chips */}
+          {!debouncedQuery.trim() && recentSearches.length === 0 && (
+            <div className="px-4 py-3 border-b border-stone-50">
+              <span className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2 block">Dietary</span>
+              <div className="flex gap-2">
+                {(['all', 'veg', 'nonveg'] as const).map((d) => (
+                  <button
+                    key={d}
+                    onClick={() => setDietaryFilter(d)}
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                      dietaryFilter === d
+                        ? 'bg-brand-600 text-white shadow-[0_2px_8px_rgba(0,0,0,0.1)]'
+                        : 'bg-white text-zinc-600 border border-stone-200 hover:bg-stone-50'
+                    }`}
+                  >
+                    {dietaryLabel[d]}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Recent Searches */}
           {!debouncedQuery.trim() && recentSearches.length > 0 && (
             <div className="px-4 py-3 border-b border-stone-50">
@@ -184,8 +225,17 @@ export function SearchBar({ items, placeholder = 'Search for a dish or cuisine..
           {(debouncedQuery.trim() || isSearching) && (
             <div className="max-h-[400px] overflow-y-auto">
               {isSearching && (
-                <div className="p-4 text-center text-xs text-zinc-500 animate-pulse">
-                  Searching...
+                <div className="p-4 space-y-3">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="flex items-center gap-3">
+                      <div className="w-12 h-12 rounded-xl bg-stone-100 animate-pulse" />
+                      <div className="flex-1 space-y-2">
+                        <div className="h-8 w-3/4 rounded bg-stone-100 animate-pulse" />
+                        <div className="h-4 w-1/2 rounded bg-stone-100 animate-pulse" />
+                        <div className="h-4 w-1/3 rounded bg-stone-100 animate-pulse" />
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
               {!isSearching && results.length === 0 && debouncedQuery.trim() && (
@@ -236,6 +286,11 @@ export function SearchBar({ items, placeholder = 'Search for a dish or cuisine..
                               <span className="w-2 h-2 rounded-full bg-white" />
                             </span>
                           )}
+                          {item.dietary === 'nonveg' && (
+                            <span className="absolute bottom-0 right-0 w-4 h-4 rounded-full bg-red-600 border-2 border-white flex items-center justify-center">
+                              <span className="w-2 h-2 rounded-full bg-white" />
+                            </span>
+                          )}
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex justify-between items-start">
@@ -244,22 +299,24 @@ export function SearchBar({ items, placeholder = 'Search for a dish or cuisine..
                             </h4>
                             <span className="text-xs font-bold text-brand-600">₹{item.price}</span>
                           </div>
+                          <div className="flex items-center gap-1 text-[10px] text-zinc-500 mt-0.5">
+                            <span className="flex items-center gap-1">
+                              <span className="w-1 h-1 rounded-full" style={{ backgroundColor: item.dietary === 'veg' ? '#10b981' : '#ef4444' }} />
+                              {item.dietary === 'veg' ? 'Veg' : 'Non-Veg'}
+                            </span>
+                            {item.category && <span>· {item.category.replace(/-/g, ' ')}</span>}
+                            {item.preparationTime && <span>· {item.preparationTime} min</span>}
+                            {item.rating > 0 && (
+                              <span>
+                                ⭐ {item.rating.toFixed(1)}
+                              </span>
+                            )}
+                          </div>
                           {item.description && (
                             <p className="text-xs text-zinc-500 mt-0.5 line-clamp-1">
                               {item.description}
                             </p>
                           )}
-                          <div className="flex items-center gap-2 mt-1">
-                            {item.preparationTime && (
-                              <span className="text-[10px] text-zinc-400 flex items-center gap-1">
-                                <Clock size={10} /> {item.preparationTime} min
-                              </span>
-                            )}
-                            <span className="ml-auto text-[10px] text-brand-600 font-medium">
-                              Add
-                              <ArrowRight size={12} className="ml-0.5" />
-                            </span>
-                          </div>
                         </div>
                       </div>
                     );

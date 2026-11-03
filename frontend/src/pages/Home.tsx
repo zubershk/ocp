@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { MapPin, ChevronRight, ShoppingCart, Star, Phone, ArrowRight } from 'lucide-react';
 import { useMenuItems } from '../hooks/useMenu';
 import { pickPopular } from '../services/menuService';
@@ -36,6 +36,16 @@ export default function Home() {
   const hp = useHomepage();
   const { banners } = useSiteSettings();
   const siteCategories = useMenuCategories();
+  const [searchParams] = useSearchParams();
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+
+  // Read URL query param on mount and prefill search
+  useEffect(() => {
+    const q = searchParams.get('q');
+    if (q) {
+      // The SearchBar will handle this via initialQuery
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     const onScroll = () => setShowBackToTop(window.scrollY > 400);
@@ -123,19 +133,30 @@ export default function Home() {
 
           {/* Search Bar (Zomato style with autocomplete) */}
           <div className="max-w-2xl mx-auto">
-            <SearchBar items={items} placeholder={hp.searchPlaceholder} />
+            <SearchBar
+              items={items}
+              placeholder={hp.searchPlaceholder}
+              initialQuery={searchParams.get('q') ?? undefined}
+              initialCategory={selectedCategory}
+            />
           </div>
 
           {/* Quick Category Pills */}
           <div className="flex flex-wrap justify-center gap-2 mt-6 sm:mt-8">
             {siteCategories.filter(c => c.active !== false).slice(0, 6).map((cat) => (
-              <Link
+              <button
                 key={cat.id}
-                to={`/r/menu?cat=${cat.slug}`}
-                className="px-4 py-2 rounded-full bg-white/20 border border-white/30 text-sm font-medium text-white hover:bg-white/30 transition-all shadow-[0_2px_8px_rgba(0,0,0,0.1)]"
+                onClick={() => {
+                  setSelectedCategory(cat.slug);
+                }}
+                className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
+                  selectedCategory === cat.slug
+                    ? 'bg-brand-600 text-white shadow-[0_2px_8px_rgba(0,0,0,0.1)]'
+                    : 'bg-white/20 border border-white/30 text-white hover:bg-white/30'
+                }`}
               >
                 {cat.name}
-              </Link>
+              </button>
             ))}
           </div>
         </div>

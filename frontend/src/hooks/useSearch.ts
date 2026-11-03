@@ -5,6 +5,8 @@ const RECENT_KEY = 'ocp_recent_searches';
 const MAX_RECENTS = 5;
 const DEBOUNCE_MS = 300;
 
+export type DietaryFilter = 'all' | 'veg' | 'nonveg';
+
 export interface UseSearchReturn {
   query: string;
   setQuery: (v: string) => void;
@@ -18,18 +20,25 @@ export interface UseSearchReturn {
   setHighlightedIndex: (v: SetStateAction<number>) => void;
   openDropdown: boolean;
   setOpenDropdown: (b: boolean) => void;
+  dietaryFilter: DietaryFilter;
+  setDietaryFilter: (v: DietaryFilter) => void;
+  categoryFilter: string | null;
+  setCategoryFilter: (v: string | null) => void;
 }
 
-export function useSearch(items: MenuItem[]): UseSearchReturn {
-  const [query, setQuery] = useState('');
+export function useSearch(items: MenuItem[], initialQuery?: string): UseSearchReturn {
+  const [query, setQuery] = useState(initialQuery ?? '');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [results, setResults] = useState<MenuItem[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [highlightedIndex, setHighlightedIndex] = useState<number>(-1);
   const [openDropdown, setOpenDropdown] = useState(false);
+  const [dietaryFilter, setDietaryFilter] = useState<DietaryFilter>('all');
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
 
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const initialized = useRef(false);
 
   // Load recent searches from localStorage
   useEffect(() => {
@@ -42,6 +51,16 @@ export function useSearch(items: MenuItem[]): UseSearchReturn {
       // ignore
     }
   }, []);
+
+  // Initialize query from URL param on first mount
+  useEffect(() => {
+    if (initialized.current || typeof window === 'undefined') return;
+    initialized.current = true;
+    if (initialQuery) {
+      setQuery(initialQuery);
+      setOpenDropdown(true);
+    }
+  }, [initialQuery]);
 
   const addRecent = useCallback((q: string) => {
     const trimmed = q.trim();
@@ -67,7 +86,7 @@ export function useSearch(items: MenuItem[]): UseSearchReturn {
     }
   }, []);
 
-  // Debounced search
+  // Debounced search with dietary + category filters
   useEffect(() => {
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
     setIsSearching(true);
@@ -79,19 +98,26 @@ export function useSearch(items: MenuItem[]): UseSearchReturn {
         return;
       }
       const q = query.toLowerCase();
-      const filtered = items.filter(
-        (item) =>
+      const filtered = items.filter((item) => {
+        // Dietary filter
+        if (dietaryFilter === 'veg' && item.dietary !== 'veg') return false;
+        if (dietaryFilter === 'nonveg' && item.dietary !== 'nonveg') return false;
+        // Category filter
+        if (categoryFilter && item.category !== categoryFilter) return false;
+        // Text search
+        return (
           item.name.toLowerCase().includes(q) ||
           item.description.toLowerCase().includes(q) ||
-          item.ingredients.some((i) => i.toLowerCase().includes(q)),
-      );
+          item.ingredients.some((i) => i.toLowerCase().includes(q))
+        );
+      });
       setResults(filtered);
       setIsSearching(false);
     }, DEBOUNCE_MS);
     return () => {
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
     };
-  }, [query, items]);
+  }, [query, items, dietaryFilter, categoryFilter]);
 
   // Reset highlight when query or results change
   useEffect(() => {
@@ -111,5 +137,9 @@ export function useSearch(items: MenuItem[]): UseSearchReturn {
     setHighlightedIndex,
     openDropdown,
     setOpenDropdown,
+    dietaryFilter,
+    setDietaryFilter,
+    categoryFilter,
+    setCategoryFilter,
   };
 }
