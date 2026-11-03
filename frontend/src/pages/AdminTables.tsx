@@ -89,7 +89,7 @@ export default function AdminTables() {
                     <Badge variant={t.active ? 'default' : 'secondary'}>{t.status} {t.active ? '' : '(inactive)'}</Badge>
                   </div>
                   <div className="text-xs text-muted-foreground mt-1">Cap {t.capacity} · Pos {t.position} · #{t.id}</div>
-                  {editing?.id === t.id ? (
+                  {editing && editing.id === t.id ? (
                     <div className="mt-3 space-y-2">
                       <Input value={editing.name} onChange={e => setEditing({ ...editing, name: e.target.value })} placeholder="Name" />
                       <div className="flex gap-2">
