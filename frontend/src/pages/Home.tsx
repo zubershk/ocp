@@ -1,103 +1,29 @@
 import { useMemo, useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
-import { ShieldCheck, MapPin, Star, ChevronRight, Phone, ArrowRight, Leaf, ChefHat, Truck, Settings2, ArrowUp } from 'lucide-react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { MapPin, ChevronRight, ShoppingCart, Star, Phone, ArrowRight } from 'lucide-react';
 import { useMenuItems } from '../hooks/useMenu';
 import { pickPopular } from '../services/menuService';
 import { useRestaurantName, useDeliveryHours, useOutletsList, useRestaurantPhone } from '../context/RestaurantContext';
 import { useCart } from '../context/CartContext';
 import { useCrusts } from '../context/CrustContext';
 import { useToast } from '../context/ToastContext';
-import { useMenuCategories } from '../context/SiteSettingsContext';
-import LocationPill from '../components/ui/LocationPill';
-import SearchAutocomplete from '../components/ui/SearchAutocomplete';
-import OffersStrip from '../components/ui/OffersStrip';
+import { useMenuCategories, useBrand, useHomepage, useSiteSettings } from '../context/SiteSettingsContext';
+import { SearchBar } from '../components/ui/SearchBar';
 import CategoryScroll from '../components/ui/CategoryScroll';
-import FoodMoodCards from '../components/ui/FoodMoodCards';
-import FloatingCartBar from '../components/ui/FloatingCartBar';
-import FilterChips from '../components/ui/FilterChips';
-import BannerCarousel from '../components/ui/BannerCarousel';
+import { ProductCard } from '@/components/shadcn-space/blocks/product-listing-01/product-card';
 import { useGsapReveal } from '../hooks/useGsap';
 import type { MenuItem } from '../types';
-import { ProductCard } from '@/components/shadcn-space/blocks/product-listing-01/product-card';
+import FloatingCartBar from '../components/ui/FloatingCartBar';
 
 function quickAdd(item: MenuItem, addItem: ReturnType<typeof useCart>['addItem'], push: ReturnType<typeof useToast>['push'], crust: string) {
   addItem(item, 'regular', crust, 1);
   push({ type: 'success', title: `Added ${item.name} to cart` });
 }
 
-const filters = [
-  { id: 'all', label: 'All' },
-  { id: 'veg', label: 'Pure Veg' },
-  { id: 'popular', label: 'Best Sellers' },
-  { id: 'budget', label: 'Under ₹200' },
-  { id: 'family', label: 'Family Packs' },
-  { id: 'spicy', label: 'Spicy' },
-];
-
-function HomeSkeleton() {
-  return (
-    <div className="pb-24 lg:pb-0">
-      <div className="sticky top-0 z-40 bg-white border-b border-stone-200">
-        <div className="container-page py-3 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-          <div className="h-10 w-48 skeleton rounded-xl" />
-          <div className="flex-1 h-10 skeleton rounded-xl" />
-        </div>
-      </div>
-      <div className="container-page mt-4">
-        <div className="flex gap-3 overflow-hidden">
-          {[1, 2, 3].map((i) => <div key={i} className="h-20 flex-1 skeleton rounded-xl shrink-0" />)}
-        </div>
-      </div>
-      <div className="container-page mt-4">
-        <div className="h-40 sm:h-52 skeleton rounded-2xl" />
-      </div>
-      <div className="container-page mt-8">
-        <div className="h-6 w-48 skeleton rounded-lg mb-4" />
-        <div className="flex gap-3 overflow-hidden">
-          {[1, 2, 3, 4, 5, 6].map((i) => (
-            <div key={i} className="w-20 h-20 skeleton rounded-2xl shrink-0" />
-          ))}
-        </div>
-      </div>
-      <div className="container-page mt-8">
-        <div className="h-6 w-40 skeleton rounded-lg mb-4" />
-        <div className="flex gap-3 overflow-hidden">
-          {[1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="h-10 w-24 skeleton rounded-full shrink-0" />
-          ))}
-        </div>
-      </div>
-      <div className="container-page mt-10">
-        <div className="flex items-end justify-between mb-4">
-          <div>
-            <div className="h-6 w-44 skeleton rounded-lg" />
-            <div className="h-4 w-64 skeleton rounded-lg mt-2" />
-          </div>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-5">
-          {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="bg-white rounded-3xl shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] overflow-hidden">
-              <div className="h-40 skeleton" />
-              <div className="p-3.5 space-y-2.5">
-                <div className="h-4 w-3/4 skeleton" />
-                <div className="h-3 w-1/2 skeleton" />
-                <div className="flex justify-between items-center pt-1">
-                  <div className="h-5 w-14 skeleton" />
-                  <div className="h-8 w-16 skeleton rounded-lg" />
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export default function Home() {
   const { items, loading } = useMenuItems();
   const popular = pickPopular(items);
-  const { addItem } = useCart();
+  const { addItem, count } = useCart();
   const { push } = useToast();
   const { defaultCrust } = useCrusts();
   const [activeFilter, setActiveFilter] = useState('all');
@@ -106,7 +32,20 @@ export default function Home() {
   const deliveryHours = useDeliveryHours();
   const outlets = useOutletsList();
   const restaurantPhone = useRestaurantPhone();
+  const brand = useBrand();
+  const hp = useHomepage();
+  const { banners } = useSiteSettings();
   const siteCategories = useMenuCategories();
+  const [searchParams] = useSearchParams();
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+
+  // Read URL query param on mount and prefill search
+  useEffect(() => {
+    const q = searchParams.get('q');
+    if (q) {
+      // The SearchBar will handle this via initialQuery
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     const onScroll = () => setShowBackToTop(window.scrollY > 400);
@@ -118,71 +57,172 @@ export default function Home() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 
-  const sectionRef = useGsapReveal('.reveal-item', { stagger: 0.06, y: 20 });
-  // Single base pool (popular first) so every filter tab draws from the same items.
   const baseList = useMemo(() => {
     const rest = items.filter((i) => !popular.some((p) => p.id === i.id));
     return [...popular, ...rest];
   }, [popular, items]);
+
   const filteredPopular = useMemo(() => {
-    if (activeFilter === 'all') return baseList.slice(0, 12);
-    if (activeFilter === 'veg') return baseList.filter((i) => i.dietary === 'veg');
-    if (activeFilter === 'budget') return baseList.filter((i) => i.price < 200);
+    if (activeFilter === 'all') return baseList.slice(0, 8);
+    if (activeFilter === 'veg') return baseList.filter((i) => i.dietary === 'veg').slice(0, 8);
+    if (activeFilter === 'budget') return baseList.filter((i) => i.price < 200).slice(0, 8);
     if (activeFilter === 'family') return baseList.filter((i) => i.category === 'family-packs').slice(0, 4);
-    if (activeFilter === 'spicy') return baseList.filter((i) => i.isSpicy);
-    return baseList.slice(0, 12);
+    if (activeFilter === 'spicy') return baseList.filter((i) => i.isSpicy).slice(0, 8);
+    return baseList.slice(0, 8);
   }, [activeFilter, baseList]);
 
-  const packCount = items.filter((i) => i.category === ('family-packs' as MenuItem['category'])).length;
-
-  if (loading) return <HomeSkeleton />;
-
-  return (
-    <div className="pb-24 lg:pb-0">
-      {/* ── Top bar: Location + Search ── */}
-      <div className="sticky top-0 z-40 bg-white border-b border-stone-200">
-        <div className="container-page py-3 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-          <LocationPill />
-          <div className="flex-1">
-            <SearchAutocomplete items={items} />
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-white">
+        <div className="h-[40vh] bg-stone-100 animate-pulse" />
+        <div className="container-page py-8">
+          <div className="h-6 w-48 skeleton rounded-lg mb-4" />
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[0,1,2,3].map(i => <div key={i} className="h-48 skeleton rounded-3xl" />)}
           </div>
         </div>
       </div>
+    );
+  }
 
-      <div className="container-page mt-4 stagger-child" style={{ animationDelay: '0ms' }}>
-        <OffersStrip />
+  return (
+    <div className="min-h-screen bg-white">
+      {/* ── Hero Section (Zomato style) ── */}
+      <section className="relative pt-12 pb-16 sm:pt-20 sm:pb-24" style={{ backgroundImage: `url(${hp.heroImageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }}>
+        {/* Dark overlay for text readability */}
+        <div className="absolute inset-0 bg-black/20 pointer-events-none" />
+        <div className="relative z-10">
+        <div className="container-page">
+          {/* Logo + Location */}
+          <div className="flex items-center justify-between mb-6 sm:mb-8">
+            <div className="flex items-center gap-2.5">
+              {brand.logoUrl ? (
+                <img src={brand.logoUrl} alt={restaurantName} className="h-10 w-auto object-contain rounded-xl" />
+              ) : (
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-lg" style={{ backgroundColor: brand.primaryColor }}>
+                  {restaurantName.charAt(0)}
+                </div>
+              )}
+              <span className="font-heading font-bold text-xl text-white hidden sm:block">{restaurantName}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button className="hidden sm:inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium text-white border border-white/30 hover:bg-white/20 transition-colors">
+                <MapPin size={14} className="text-white" />
+                {outlets[0]?.name || 'Select Location'}
+              </button>
+              <Link to="/r/cart" className="relative p-2.5 rounded-full hover:bg-stone-100 transition-colors">
+                <ShoppingCart size={20} className="text-white" />
+                {count > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 bg-brand-600 text-white text-[10px] min-w-[18px] h-[18px] rounded-full flex items-center justify-center font-bold shadow-sm">
+                    {count > 99 ? '99+' : count}
+                  </span>
+                )}
+              </Link>
+            </div>
+          </div>
+
+          {/* Hero Headline */}
+          <div className="text-center mb-6 sm:mb-8">
+            <h1 className="text-3xl sm:text-5xl lg:text-6xl font-heading font-bold text-white leading-tight tracking-tight">
+              {hp.heroTitle}
+            </h1>
+            <p className="text-white/90 mt-2 sm:mt-3 text-base sm:text-lg max-w-md mx-auto">
+              {hp.heroSubtitle || `Free delivery ${deliveryHours || '11 AM – 4 AM'} · Pay on arrival`}
+            </p>
+          </div>
+
+          {/* Search Bar (Zomato style with autocomplete) */}
+          <div className="max-w-2xl mx-auto">
+            <SearchBar
+              items={items}
+              placeholder={hp.searchPlaceholder}
+              initialQuery={searchParams.get('q') ?? undefined}
+              initialCategory={selectedCategory}
+            />
+          </div>
+
+          {/* Quick Category Pills */}
+          <div className="flex flex-wrap justify-center gap-2 mt-6 sm:mt-8">
+            {siteCategories.filter(c => c.active !== false).slice(0, 6).map((cat) => (
+              <button
+                key={cat.id}
+                onClick={() => {
+                  setSelectedCategory(cat.slug);
+                }}
+                className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
+                  selectedCategory === cat.slug
+                    ? 'bg-brand-600 text-white shadow-[0_2px_8px_rgba(0,0,0,0.1)]'
+                    : 'bg-white/20 border border-white/30 text-white hover:bg-white/30'
+                }`}
+              >
+                {cat.name}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
+      </section>
 
-      <div className="container-page mt-4 stagger-child" style={{ animationDelay: '60ms' }}>
-        <BannerCarousel />
-      </div>
+      {/* ── Promotional Banner (Domino's style) ── */}
+      {banners.length > 0 ? (
+        <section className="container-page py-6 sm:py-8">
+          {banners.slice(0, 1).map((banner) => (
+            <div key={banner.id} className="relative overflow-hidden rounded-3xl p-6 sm:p-8 text-white shadow-[0_4px_24px_rgba(234,88,12,0.25)]" style={{ background: banner.background || 'linear-gradient(to right, #ea580c, #f97316)' }}>
+              <div className="relative z-10 max-w-lg">
+                {banner.badge && <span className="inline-block px-3 py-1 rounded-full bg-white/20 text-xs font-bold uppercase tracking-wider mb-3">{banner.badge}</span>}
+                <h2 className="text-2xl sm:text-3xl font-heading font-bold leading-tight">{banner.title}</h2>
+                {banner.subtitle && <p className="text-white/80 mt-2 text-sm sm:text-base">{banner.subtitle}</p>}
+                {banner.buttonText && (
+                  <Link
+                    to={banner.buttonLink || '/r/offers'}
+                    className="inline-flex items-center gap-2 mt-4 px-6 py-3 rounded-full bg-white text-brand-600 font-bold text-sm hover:bg-stone-50 transition-all shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1)]"
+                  >
+                    {banner.buttonText} <ArrowRight size={16} />
+                  </Link>
+                )}
+              </div>
+              <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-white/5 skew-x-[-12deg] translate-x-8" />
+            </div>
+          ))}
+        </section>
+      ) : null}
 
-      <div className="container-page mt-8 stagger-child" style={{ animationDelay: '120ms' }}>
-        <FoodMoodCards items={items} />
-      </div>
-
-      <div className="container-page mt-8 stagger-child" style={{ animationDelay: '180ms' }}>
-        <div className="flex items-end justify-between mb-4">
-          <h2 className="text-lg sm:text-xl font-heading font-bold">Browse Categories</h2>
+      {/* ── Popular Right Now ── */}
+      <section className="container-page py-6 sm:py-8">
+        <div className="flex items-end justify-between mb-4 sm:mb-6">
+          <div>
+            <h2 className="text-xl sm:text-2xl font-heading font-bold text-zinc-900">{hp.popularTitle}</h2>
+            <p className="text-zinc-500 text-sm mt-0.5">{hp.popularSubtitle}</p>
+          </div>
           <Link to="/r/menu" className="text-sm font-semibold text-brand-600 hover:text-brand-700 inline-flex items-center gap-1 transition-colors">
             See all <ChevronRight size={14} />
           </Link>
         </div>
-        <CategoryScroll />
-      </div>
 
-      <div className="container-page mt-10" ref={sectionRef}>
-        <div className="flex items-end justify-between gap-4 mb-4">
-          <div>
-            <h2 className="text-lg sm:text-xl font-heading font-bold">Popular Right Now</h2>
-            <p className="text-zinc-500 mt-0.5 text-sm">Customer favourites — add in one tap</p>
-          </div>
-          <Link to="/r/menu" className="shrink-0 text-sm font-semibold text-brand-600 hover:text-brand-700 inline-flex items-center gap-1 transition-colors">
-            Full menu <ChevronRight size={14} />
-          </Link>
+        {/* Filter chips */}
+        <div className="flex gap-2 overflow-x-auto pb-3 mb-4 scrollbar-hide">
+          {[
+            { id: 'all', label: 'All' },
+            { id: 'veg', label: 'Pure Veg' },
+            { id: 'popular', label: 'Bestsellers' },
+            { id: 'budget', label: 'Under ₹200' },
+            { id: 'spicy', label: 'Spicy' },
+          ].map((f) => (
+            <button
+              key={f.id}
+              onClick={() => setActiveFilter(f.id)}
+              className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all ${
+                activeFilter === f.id
+                  ? 'bg-brand-600 text-white shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1)]'
+                  : 'bg-white text-zinc-600 border border-stone-200 hover:border-brand-300 hover:bg-brand-50'
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
         </div>
-        <FilterChips filters={filters} active={activeFilter} onChange={setActiveFilter} />
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 mt-5 justify-items-center">
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
           {filteredPopular.map((item) => (
             <ProductCard
               key={item.id}
@@ -199,101 +239,64 @@ export default function Home() {
               originalPrice={item.originalPrice}
               badge={item.isSpicy ? { text: "Spicy" } : item.isPopular ? { text: "Bestseller" } : undefined}
               onAddToCart={() => quickAdd(item, addItem, push, defaultCrust)}
-              className="reveal-item w-[270px] h-[410px]"
+              className="w-full"
             />
           ))}
         </div>
-      </div>
+      </section>
 
-      {packCount > 0 && (
-        <div className="container-page mt-10 reveal-item">
-          <Link to="/r/offers" className="block bg-zinc-900 rounded-3xl p-6 sm:p-8 lg:p-10 group hover:shadow-lg transition-shadow shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)]">
-            <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-              <div className="flex-1">
-                <p className="text-zinc-400 text-xs font-bold tracking-widest uppercase">Feeding the whole family?</p>
-                <h3 className="text-white text-xl sm:text-2xl mt-2 font-heading font-bold">
-                  Family Packs — pizza, garlic bread & choco lava, sorted.
-                </h3>
-                <p className="text-zinc-400 mt-2 text-sm">Complete meals from ₹515, tax included.</p>
+      {/* ── Categories Grid (Domino's style) ── */}
+      <section className="container-page py-6 sm:py-8">
+        <h2 className="text-xl sm:text-2xl font-heading font-bold text-zinc-900 mb-4 sm:mb-6">{hp.categoriesTitle}</h2>
+        <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-4">
+          {siteCategories.filter(c => c.active !== false).slice(0, 12).map((cat) => (
+            <Link
+              key={cat.id}
+              to={`/r/menu?cat=${cat.slug}`}
+              className="group relative flex flex-col items-center gap-2 p-3 sm:p-4 rounded-3xl bg-white hover:shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] transition-all overflow-hidden"
+            >
+              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl overflow-hidden flex items-center justify-center relative">
+                {cat.image_url ? (
+                  <img src={cat.image_url} alt={cat.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" loading="lazy" />
+                ) : (
+                  <div className="w-full h-full bg-gradient-to-br from-brand-100 to-brand-200 flex items-center justify-center">
+                    <span className="text-2xl font-bold text-brand-600">{cat.name.charAt(0)}</span>
+                  </div>
+                )}
               </div>
-              <div className="shrink-0 inline-flex items-center gap-2 px-6 py-3.5 rounded-full bg-white text-zinc-900 font-bold group-hover:bg-stone-50 transition-colors text-sm shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
-                See the Packs <ArrowRight size={16} />
-              </div>
-            </div>
-          </Link>
+              <span className="text-xs sm:text-sm font-medium text-zinc-700 group-hover:text-brand-600 transition-colors text-center line-clamp-1">{cat.name}</span>
+            </Link>
+          ))}
         </div>
-      )}
+      </section>
 
-      <div className="container-page mt-10 reveal-item">
-        <h2 className="text-lg sm:text-xl font-heading font-bold mb-4">Why {restaurantName}?</h2>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          {[
-            { icon: Leaf, title: 'Fresh Ingredients', desc: 'Locally sourced, delivered daily.' },
-            { icon: ChefHat, title: 'Made to Order', desc: 'Every pizza prepared fresh.' },
-            { icon: Truck, title: 'Free Delivery', desc: `${deliveryHours}, no minimum.` },
-            { icon: Settings2, title: '6 Crusts', desc: 'Tossed to Cheese Burst.' },
-          ].map((f) => {
-            const Icon = f.icon;
-            return (
-              <div key={f.title} className="bg-white rounded-3xl shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] p-5 card-lift">
-                <div className="w-10 h-10 rounded-full bg-stone-50 border border-stone-200 flex items-center justify-center shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
-                  <Icon size={18} className="text-zinc-600" strokeWidth={1.5} />
-                </div>
-                <h3 className="font-semibold mt-3 text-sm text-zinc-900">{f.title}</h3>
-                <p className="text-xs text-zinc-500 mt-0.5">{f.desc}</p>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="container-page mt-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-zinc-500">
-        <span className="inline-flex items-center gap-1.5">
-          <ShieldCheck size={13} className="text-emerald-600" /> All prices include tax
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <MapPin size={13} className="text-brand-600" /> {outlets[0]?.name || 'Order Online'}
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <Star size={12} className="text-amber-500" fill="currentColor" /> Signature, Supreme & Desi Tadka
-        </span>
-      </div>
-
-      <div className="container-page mt-10">
-        <div className="bg-zinc-900 rounded-3xl p-6 sm:p-8 lg:p-10 text-center shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)]">
-          <h3 className="text-white text-xl sm:text-2xl font-heading font-bold">Ready to order?</h3>
+      {/* ── Single CTA Banner (Domino's style) ── */}
+      <section className="container-page py-6 sm:py-8">
+        <div className="bg-zinc-900 rounded-3xl p-6 sm:p-8 lg:p-10 text-center shadow-[0_4px_24px_rgba(0,0,0,0.15)]">
+          <h3 className="text-white text-xl sm:text-2xl font-heading font-bold">{hp.ctaTitle}</h3>
           <p className="text-zinc-400 mt-2 max-w-md mx-auto text-sm">
-            Pay by cash or UPI when your food arrives. Free delivery {deliveryHours}.
+            {hp.ctaSubtitle || `Pay by cash or UPI when your food arrives. Free delivery ${deliveryHours || '11 AM – 4 AM'}.`}
           </p>
           <div className="mt-5 flex flex-wrap justify-center gap-3">
-            <Link to="/r/menu" className="inline-flex items-center gap-2 px-7 py-3.5 rounded-full bg-brand-600 text-white font-semibold hover:bg-brand-700 transition-all shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)]">
-              Start Your Order <ArrowRight size={16} />
+            <Link
+              to="/r/menu"
+              className="inline-flex items-center gap-2 px-8 py-3.5 rounded-full bg-brand-600 text-white font-bold hover:bg-brand-700 transition-all shadow-[0_4px_6px_-1px_rgba(0,0,0,0.2)]"
+            >
+              {hp.ctaButtonText} <ArrowRight size={16} />
             </Link>
             {restaurantPhone && (
-              <a href={`tel:+91${restaurantPhone}`} className="inline-flex items-center gap-2 px-6 py-3.5 rounded-full bg-white/10 text-white font-semibold hover:bg-white/20 transition-all">
-                <Phone size={16} /> {restaurantPhone}
+              <a
+                href={`tel:+91${restaurantPhone}`}
+                className="inline-flex items-center gap-2 px-6 py-3.5 rounded-full bg-white/10 text-white font-semibold hover:bg-white/20 transition-all"
+              >
+                <Phone size={16} /> Call Us
               </a>
             )}
           </div>
         </div>
-      </div>
+      </section>
 
       <FloatingCartBar />
-
-      {/* Back to top */}
-      <button
-        onClick={scrollToTop}
-        aria-label="Back to top"
-        className={`
-          fixed bottom-20 right-4 z-40 w-11 h-11 rounded-full bg-white border border-stone-200 shadow-lg
-          flex items-center justify-center text-zinc-600 hover:text-zinc-900 hover:shadow-xl
-          transition-all duration-300 ease-out
-          ${showBackToTop ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-4 pointer-events-none'}
-          lg:bottom-8
-        `}
-      >
-        <ArrowUp size={18} />
-      </button>
     </div>
   );
 }

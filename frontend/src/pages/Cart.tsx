@@ -6,6 +6,7 @@ import { useCrusts } from '../context/CrustContext';
 import { useMenuItems } from '../hooks/useMenu';
 import { useToast } from '../context/ToastContext';
 import { useDeliveryHours } from '../context/RestaurantContext';
+import { useHomepage } from '../context/SiteSettingsContext';
 
 export default function Cart() {
   const { items, updateQty, removeItem, clear, subtotal, addItem } = useCart();
@@ -13,6 +14,7 @@ export default function Cart() {
   const { items: menuItems } = useMenuItems();
   const { push } = useToast();
   const deliveryHours = useDeliveryHours();
+  const hp = useHomepage();
   const [removingIds, setRemovingIds] = useState<Set<string>>(new Set());
 
   const totalItems = items.reduce((a, b) => a + b.quantity, 0);
@@ -32,13 +34,13 @@ export default function Cart() {
       <div className="w-24 h-24 mx-auto rounded-3xl bg-stone-100 flex items-center justify-center mb-6">
         <ShoppingBag size={40} className="text-stone-300" />
       </div>
-      <h2 className="text-2xl font-heading font-bold">Your cart is empty</h2>
-      <p className="text-sm text-zinc-500 mt-2 max-w-xs mx-auto">Add some cheesy pizzas and sides to get started</p>
+      <h2 className="text-2xl font-heading font-bold">{hp.emptyCartTitle}</h2>
+      <p className="text-sm text-zinc-500 mt-2 max-w-xs mx-auto">{hp.emptyCartSubtitle}</p>
       <Link
         to="/r/menu"
         className="inline-flex items-center gap-2 mt-8 px-8 py-3.5 rounded-full bg-brand-600 text-white font-semibold hover:bg-brand-700 transition-all duration-200 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)]"
       >
-        Browse Menu <ArrowRight size={16} />
+        {hp.browseMenuText} <ArrowRight size={16} />
       </Link>
     </div>
   );

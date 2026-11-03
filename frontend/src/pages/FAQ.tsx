@@ -36,7 +36,7 @@ export default function FAQ() {
   const defaultFaqs: FAQItem[] = [
     {
       q: 'What are your delivery hours?',
-      a: `We deliver ${deliveryHours || 'from 11:00 AM to 04:00 AM'} daily. Our kitchen is open from 11 AM to 11 PM.`,
+      a: `We deliver ${deliveryHours || '11 AM - 11 PM'} daily. Our kitchen is open from 11 AM to 11 PM.`,
     },
     {
       q: 'Which outlet handles online orders?',
@@ -68,7 +68,7 @@ export default function FAQ() {
     },
     {
       q: 'Is delivery really free?',
-      a: `Yes! We offer free home delivery during our delivery hours (${deliveryHours || '11 AM to 4 AM'}). No minimum order value required.`,
+      a: `Yes! We offer free home delivery during our delivery hours (${deliveryHours || '11 AM - 11 PM'}). No minimum order value required.`,
     },
     {
       q: 'Do you have Jain options?',

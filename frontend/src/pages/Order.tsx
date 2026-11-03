@@ -158,7 +158,7 @@ export default function Order() {
           <div className="mt-8 grid sm:grid-cols-2 gap-4 text-sm">
             <div className="bg-stone-50 rounded-2xl p-4 border border-stone-100">
               <div className="font-semibold">Estimated delivery</div>
-              <div className="text-zinc-600 mt-1">~30 mins from order · Free delivery {deliveryHours || '11 AM - 4 AM'}</div>
+              <div className="text-zinc-600 mt-1">~30 mins from order · Free delivery {deliveryHours || '11 AM - 11 PM'}</div>
             </div>
             <div className="bg-stone-50 rounded-2xl p-4 border border-stone-100">
               <div className="font-semibold">{order.deliveryType === 'delivery' ? 'Deliver to' : 'Pickup by'}</div>
