@@ -80,7 +80,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-white">
       {/* ── Hero Section (Zomato style) ── */}
-      <section className="relative pt-12 pb-16 sm:pt-20 sm:pb-24 overflow-hidden" style={{ backgroundImage: 'url(https://images.unsplash.com/photo-1513104890138-7c749659a591?w=1920&h=700&fit=crop)', backgroundSize: 'cover', backgroundPosition: 'center' }}>
+      <section className="relative pt-12 pb-16 sm:pt-20 sm:pb-24 overflow-hidden" style={{ backgroundImage: `url(${hp.heroImageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }}>
         {/* Dark overlay for text readability */}
         <div className="absolute inset-0 bg-black/20 pointer-events-none" />
         <div className="relative z-10">
@@ -95,15 +95,15 @@ export default function Home() {
                   {restaurantName.charAt(0)}
                 </div>
               )}
-              <span className="font-heading font-bold text-xl text-zinc-900 hidden sm:block">{restaurantName}</span>
+              <span className="font-heading font-bold text-xl text-white hidden sm:block">{restaurantName}</span>
             </div>
             <div className="flex items-center gap-2">
-              <button className="hidden sm:inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium text-zinc-600 border border-stone-200 hover:bg-stone-50 transition-colors">
-                <MapPin size={14} className="text-brand-600" />
+              <button className="hidden sm:inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium text-white border border-white/30 hover:bg-white/20 transition-colors">
+                <MapPin size={14} className="text-white" />
                 {outlets[0]?.name || 'Select Location'}
               </button>
               <Link to="/r/cart" className="relative p-2.5 rounded-full hover:bg-stone-100 transition-colors">
-                <ShoppingCart size={20} className="text-zinc-600" />
+                <ShoppingCart size={20} className="text-white" />
                 {count > 0 && (
                   <span className="absolute -top-0.5 -right-0.5 bg-brand-600 text-white text-[10px] min-w-[18px] h-[18px] rounded-full flex items-center justify-center font-bold shadow-sm">
                     {count > 99 ? '99+' : count}
@@ -115,10 +115,10 @@ export default function Home() {
 
           {/* Hero Headline */}
           <div className="text-center mb-6 sm:mb-8">
-            <h1 className="text-3xl sm:text-5xl lg:text-6xl font-heading font-bold text-zinc-900 leading-tight tracking-tight">
+            <h1 className="text-3xl sm:text-5xl lg:text-6xl font-heading font-bold text-white leading-tight tracking-tight">
               {hp.heroTitle}
             </h1>
-            <p className="text-zinc-500 mt-2 sm:mt-3 text-base sm:text-lg max-w-md mx-auto">
+            <p className="text-white/90 mt-2 sm:mt-3 text-base sm:text-lg max-w-md mx-auto">
               {hp.heroSubtitle || `Free delivery ${deliveryHours || '11 AM – 4 AM'} · Pay on arrival`}
             </p>
           </div>
@@ -151,7 +151,7 @@ export default function Home() {
               <Link
                 key={cat.id}
                 to={`/r/menu?cat=${cat.slug}`}
-                className="px-4 py-2 rounded-full bg-white border border-stone-200 text-sm font-medium text-zinc-700 hover:border-brand-300 hover:bg-brand-50 hover:text-brand-600 transition-all shadow-[0_2px_8px_rgba(0,0,0,0.06)]"
+                className="px-4 py-2 rounded-full bg-white/20 border border-white/30 text-sm font-medium text-white hover:bg-white/30 transition-all shadow-[0_2px_8px_rgba(0,0,0,0.1)]"
               >
                 {cat.name}
               </Link>

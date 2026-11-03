@@ -12,6 +12,7 @@ import { Skeleton } from '@/components/shadcn/skeleton';
 interface HomepageSettings {
   hero_title: string;
   hero_subtitle: string;
+  hero_image_url: string;
   search_placeholder: string;
   popular_title: string;
   popular_subtitle: string;
@@ -30,6 +31,7 @@ interface HomepageSettings {
 const DEFAULTS: HomepageSettings = {
   hero_title: 'Order food you love',
   hero_subtitle: '',
+  hero_image_url: 'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=1920&h=700&fit=crop',
   search_placeholder: 'Search for a dish or cuisine...',
   popular_title: 'Popular Right Now',
   popular_subtitle: 'Customer favourites — add in one tap',
@@ -91,6 +93,7 @@ export default function AdminHomepage() {
   const fields: { key: keyof HomepageSettings; label: string; placeholder: string }[] = [
     { key: 'hero_title', label: 'Hero Title', placeholder: 'Order food you love' },
     { key: 'hero_subtitle', label: 'Hero Subtitle', placeholder: 'Free delivery ... Pay on arrival' },
+    { key: 'hero_image_url', label: 'Hero Background Image URL', placeholder: 'https://images.unsplash.com/...' },
     { key: 'search_placeholder', label: 'Search Placeholder', placeholder: 'Search for a dish or cuisine...' },
     { key: 'popular_title', label: 'Popular Section Title', placeholder: 'Popular Right Now' },
     { key: 'popular_subtitle', label: 'Popular Section Subtitle', placeholder: 'Customer favourites — add in one tap' },

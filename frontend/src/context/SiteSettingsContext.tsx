@@ -39,6 +39,7 @@ interface FooterSettings {
 interface HomepageSettings {
   hero_title?: string;
   hero_subtitle?: string;
+  hero_image_url?: string;
   search_placeholder?: string;
   popular_title?: string;
   popular_subtitle?: string;
@@ -329,6 +330,7 @@ export function useHomepage() {
     menuTitle: h.menu_title ?? 'Our Menu',
     menuSubtitle: h.menu_subtitle ?? '',
     completeMealTitle: h.complete_meal_title ?? 'Complete Your Meal',
+    heroImageUrl: h.hero_image_url ?? 'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=1920&h=700&fit=crop',
   }), [h]);
 }
 
