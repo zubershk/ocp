@@ -8,6 +8,7 @@ import { useToast } from '../context/ToastContext';
 import { useGsapReveal } from '../hooks/useGsap';
 import SearchAutocomplete from '../components/ui/SearchAutocomplete';
 import { useDeliveryHours } from '../context/RestaurantContext';
+import { useHomepage } from '../context/SiteSettingsContext';
 import { ProductCard } from '@/components/shadcn-space/blocks/product-listing-01/product-card';
 
 const categories: { id: string; label: string; filter: (m: any) => boolean }[] = [
@@ -38,6 +39,7 @@ export default function Menu() {
   const { push } = useToast();
   const navigate = useNavigate();
   const deliveryHours = useDeliveryHours();
+  const hp = useHomepage();
   const categoryBarRef = useRef<HTMLDivElement>(null);
   const [isCategoryBarSticky, setIsCategoryBarSticky] = useState(false);
 
@@ -76,9 +78,9 @@ export default function Menu() {
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl sm:text-4xl font-heading font-bold">Our Menu</h1>
+          <h1 className="text-3xl sm:text-4xl font-heading font-bold">{hp.menuTitle}</h1>
           <p className="text-zinc-500 mt-1.5 text-sm sm:text-base">
-            100% Real Mozzarella · All prices include tax · Free delivery {deliveryHours || '11 AM – 4 AM'}
+            100% Real Mozzarella Ã‚Â· All prices include tax Ã‚Â· Free delivery {deliveryHours || '11 AM - 11 PM'}
           </p>
         </div>
         <div className="flex items-center gap-2.5 w-full lg:w-auto">
@@ -191,7 +193,7 @@ export default function Menu() {
               ? 'Try a different search term or browse our full menu'
               : cat !== 'all'
                 ? 'Try a different category or view our full menu'
-                : 'We are updating our menu — check back soon'
+                : 'We are updating our menu Ã¢â‚¬â€ check back soon'
             }
           </p>
           <div className="mt-6 flex flex-wrap justify-center gap-2">
@@ -213,7 +215,7 @@ export default function Menu() {
       ) : (
         <div ref={menuGridRef} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 mt-6 justify-items-center">
           {filtered.map((item) => {
-            // Sized items need a size choice — send the user to the detail page
+            // Sized items need a size choice Ã¢â‚¬â€ send the user to the detail page
             // instead of silently adding a default size.
             const needsSize = !!item.priceBySize;
             return (
@@ -245,13 +247,13 @@ export default function Menu() {
         <details className="mt-8 group">
           <summary className="flex items-center gap-2 px-5 py-3.5 rounded-full bg-amber-50/80 border border-amber-200/60 text-sm text-amber-800 font-medium cursor-pointer hover:bg-amber-50 transition-colors list-none [&::-webkit-details-marker]:hidden">
             <ChevronDown size={16} className="transition-transform group-open:rotate-180" />
-            <strong>6 Delicious Crusts</strong> — Tossed (base) · Italian Thin · Wheat Thin · Cheese Burst · Double Cheese Crunch
+            <strong>6 Delicious Crusts</strong> Ã¢â‚¬â€ Tossed (base) Ã‚Â· Italian Thin Ã‚Â· Wheat Thin Ã‚Â· Cheese Burst Ã‚Â· Double Cheese Crunch
           </summary>
           <div className="mt-2 px-5 py-4 rounded-2xl bg-amber-50/50 border border-amber-200/40 text-sm text-amber-800 leading-relaxed">
-            <strong>Tossed (base)</strong> · Italian Thin · Wheat Thin (+₹30 Reg / ₹60 Med) · Cheese Burst (+₹85/₹110/₹135) · Double Cheese Crunch (+₹120 Med)
+            <strong>Tossed (base)</strong> Ã‚Â· Italian Thin Ã‚Â· Wheat Thin (+Ã¢â€šÂ¹30 Reg / Ã¢â€šÂ¹60 Med) Ã‚Â· Cheese Burst (+Ã¢â€šÂ¹85/Ã¢â€šÂ¹110/Ã¢â€šÂ¹135) Ã‚Â· Double Cheese Crunch (+Ã¢â€šÂ¹120 Med)
             <br />
             <strong className="mt-2 block">Extra toppings:</strong>
-            Extra Cheese ₹60/95/125 · Veg ₹45/80/110 · Chicken ₹60/95/125
+            Extra Cheese Ã¢â€šÂ¹60/95/125 Ã‚Â· Veg Ã¢â€šÂ¹45/80/110 Ã‚Â· Chicken Ã¢â€šÂ¹60/95/125
           </div>
         </details>
       )}

@@ -42,6 +42,7 @@ const AdminAnalytics = lazy(() => import('./pages/AdminAnalytics'));
 const AdminTeam = lazy(() => import('./pages/AdminTeam'));
 const AdminAudit = lazy(() => import('./pages/AdminAudit'));
 const AdminBrand = lazy(() => import('./pages/AdminBrand'));
+const AdminHomepage = lazy(() => import('./pages/AdminHomepage'));
 const AdminPages = lazy(() => import('./pages/AdminPages'));
 const AdminOffers = lazy(() => import('./pages/AdminOffers'));
 const AdminBanners = lazy(() => import('./pages/AdminBanners'));
@@ -112,7 +113,6 @@ function Layout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen flex flex-col bg-[#fefcf8]">
       <Navbar />
-      <NotificationCenter />
       <main className="flex-1">{children}</main>
       <Footer />
     </div>
@@ -183,6 +183,7 @@ function AppRoutes() {
       <Route path="/admin/team" element={<AdminSuspense><AdminPageShell><AdminTeam /></AdminPageShell></AdminSuspense>} />
       <Route path="/admin/logs" element={<AdminSuspense><AdminPageShell><AdminAudit /></AdminPageShell></AdminSuspense>} />
       <Route path="/admin/brand" element={<AdminSuspense><AdminPageShell><AdminBrand /></AdminPageShell></AdminSuspense>} />
+      <Route path="/admin/homepage" element={<AdminSuspense><AdminPageShell><AdminHomepage /></AdminPageShell></AdminSuspense>} />
       <Route path="/admin/pages" element={<AdminSuspense><AdminPageShell><AdminPages /></AdminPageShell></AdminSuspense>} />
       <Route path="/admin/offers" element={<AdminSuspense><AdminPageShell><AdminOffers /></AdminPageShell></AdminSuspense>} />
       <Route path="/admin/banners" element={<AdminSuspense><AdminPageShell><AdminBanners /></AdminPageShell></AdminSuspense>} />

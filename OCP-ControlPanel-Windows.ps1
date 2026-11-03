@@ -13,9 +13,11 @@ $script:RepoRoot = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Pa
 # ── Load .env ──
 $script:EnvFile = Join-Path $RepoRoot '.env'
 if (Test-Path $EnvFile) {
-    Get-Content $EnvFile | Where-Object { $_ -match '^([^=#]+)=(.*)$' } | ForEach-Object {
-        $varName = $Matches[1]
-        $varValue = $Matches[2]
+    Get-Content $EnvFile -Encoding UTF8 | Where-Object { $_ -match '^\s*([^=#\s]+)\s*=\s*(.*)$' } | ForEach-Object {
+        $varName = $Matches[1].Trim()
+        $varValue = $Matches[2].Trim()
+        # Remove inline comments
+        if ($varValue -match '^([^#]+)#') { $varValue = $Matches[1].Trim() }
         Set-Item -Path "env:$varName" -Value $varValue -ErrorAction SilentlyContinue
     }
 }
@@ -99,8 +101,18 @@ function Start-Bot() {
         Log "[ERR] Bot executable not found: $($script:BotExe)"
         return
     }
-    $env:BOT_DATABASE_URL = "postgresql://postgres:ocp_db_password@localhost:5432/ocp?sslmode=disable"
-    Start-Process -FilePath $script:BotExe -ArgumentList '' -RedirectStandardOutput $script:BotLog -RedirectStandardError $script:BotLog -WindowStyle Hidden -ErrorAction SilentlyContinue
+    # Load env vars from .env (already loaded at startup, but ensure DB vars are set)
+    if (-not $env:BOT_DATABASE_URL) {
+        $dbPass = if ($env:DB_PASSWORD) { $env:DB_PASSWORD } else { '9f4a2c1e8b6d3f7a1c5e9b2d4f6a8c3e' }
+        $env:BOT_DATABASE_URL = "postgresql://ocp:${dbPass}@localhost:5432/ocp?sslmode=disable"
+    }
+    if (-not $env:BOT_ADMIN_KEY) { $env:BOT_ADMIN_KEY = 'a7b3c9d1e5f7a2b4c6d8e0f1a3b5c7d9' }
+    if (-not $env:EVOLUTION_WEBHOOK_SECRET) { $env:EVOLUTION_WEBHOOK_SECRET = 'f4e6d8c0a2b1d3f5a7b9c1d3e5f7a9b1' }
+    if (-not $env:OTP_PEPPER) { $env:OTP_PEPPER = '3c5e7a9b1d3f5a7c9e0b2d4f6a8c1e3f' }
+    if (-not $env:BOT_PORT) { $env:BOT_PORT = $script:BotPort }
+    # Clear old log
+    if (Test-Path $script:BotLog) { Remove-Item $script:BotLog -Force -ErrorAction SilentlyContinue }
+    Start-Process -FilePath $script:BotExe -WorkingDirectory (Split-Path $script:BotExe) -RedirectStandardOutput $script:BotLog -RedirectStandardError "$($script:BotLog).err" -WindowStyle Hidden -ErrorAction SilentlyContinue
     Start-Sleep -Seconds 3
     if (Test-Health "http://localhost:$($script:BotPort)/health") {
         Log "[OK] Bot healthy on :$($script:BotPort)"
@@ -111,6 +123,11 @@ function Start-Bot() {
 
 function Stop-Bot() {
     Get-Process -Name 'bot-ocp' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    # Also kill by port if process name doesn't match
+    $pid = Get-PortPid $script:BotPort
+    if ($pid) {
+        try { Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue } catch {}
+    }
     Log "[OK] Bot stopped"
 }
 
@@ -123,7 +140,10 @@ function Start-Frontend() {
         Log "[ERR] Frontend dir not found: $($script:FrontendDir)"
         return
     }
-    Start-Process -FilePath 'cmd.exe' -ArgumentList "/c title OCP Frontend && cd /d `"$($script:FrontendDir)`" && call npm run dev -- --host 0.0.0.0 --port 5173 --strictPort" -RedirectStandardOutput $script:FrontendLog -RedirectStandardError $script:FrontendLog -WindowStyle Minimized -ErrorAction SilentlyContinue
+    if (Test-Path $script:FrontendLog) { Remove-Item $script:FrontendLog -Force -ErrorAction SilentlyContinue }
+    $feErrLog = "$($script:FrontendLog).err"
+    if (Test-Path $feErrLog) { Remove-Item $feErrLog -Force -ErrorAction SilentlyContinue }
+    Start-Process -FilePath 'cmd.exe' -ArgumentList "/c cd /d `"$($script:FrontendDir)`" && npm run dev -- --host 0.0.0.0 --port 5173 --strictPort" -RedirectStandardOutput $script:FrontendLog -RedirectStandardError $feErrLog -WindowStyle Minimized -ErrorAction SilentlyContinue
     Start-Sleep -Seconds 5
     if (Test-Health 'http://localhost:5173/') {
         Log "[OK] Frontend healthy on :5173"
@@ -139,6 +159,11 @@ function Stop-Frontend() {
             $cmd -like "*vite*"
         } catch { $false }
     } | Stop-Process -Force -ErrorAction SilentlyContinue
+    # Also kill by port
+    $pid = Get-PortPid 5173
+    if ($pid) {
+        try { Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue } catch {}
+    }
     Log "[OK] Frontend stopped"
 }
 
@@ -151,7 +176,10 @@ function Start-Campaign() {
         Log "[ERR] Campaign dir not found: $($script:CampaignDir)"
         return
     }
-    Start-Process -FilePath 'cmd.exe' -ArgumentList "/c title OCP Campaign && cd /d `"$($script:CampaignDir)`" && call node server/index.js" -RedirectStandardOutput $script:CampaignLog -RedirectStandardError $script:CampaignLog -WindowStyle Minimized -ErrorAction SilentlyContinue
+    if (Test-Path $script:CampaignLog) { Remove-Item $script:CampaignLog -Force -ErrorAction SilentlyContinue }
+    $campErrLog = "$($script:CampaignLog).err"
+    if (Test-Path $campErrLog) { Remove-Item $campErrLog -Force -ErrorAction SilentlyContinue }
+    Start-Process -FilePath 'cmd.exe' -ArgumentList "/c cd /d `"$($script:CampaignDir)`" && node server/index.js" -RedirectStandardOutput $script:CampaignLog -RedirectStandardError $campErrLog -WindowStyle Minimized -ErrorAction SilentlyContinue
     Start-Sleep -Seconds 5
     if (Test-Health 'http://localhost:3001/health') {
         Log "[OK] Campaign Runner healthy on :3001"
@@ -167,6 +195,11 @@ function Stop-Campaign() {
             $cmd -like "*server/index.js*"
         } catch { $false }
     } | Stop-Process -Force -ErrorAction SilentlyContinue
+    # Also kill by port
+    $pid = Get-PortPid 3001
+    if ($pid) {
+        try { Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue } catch {}
+    }
     Log "[OK] Campaign Runner stopped"
 }
 
@@ -366,6 +399,20 @@ $btnStopAll.Add_Click({
     Stop-Campaign
     Set-Buttons $true
     Log "[OK] Stop ALL initiated"
+})
+
+$btnRestart.Add_Click({
+    Set-Buttons $false
+    $lblFooter.Text = 'Restarting all services...'
+    Stop-Bot
+    Stop-Frontend
+    Stop-Campaign
+    Start-Sleep -Seconds 2
+    Start-Bot
+    Start-Frontend
+    Start-Campaign
+    Set-Buttons $true
+    Log "[OK] Restart ALL completed"
 })
 
 # website shortcuts

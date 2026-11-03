@@ -18,6 +18,7 @@ interface ApiCategory {
   name: string;
   slug: string;
   description: string;
+  image_url?: string;
   sort_order: number;
 }
 
@@ -164,7 +165,7 @@ async function fetchFromApi(): Promise<MenuSnapshot> {
     name: c.name,
     description: c.description ?? '',
     image:
-      CATEGORY_IMAGE_BY_SLUG[c.slug] ?? '',
+      c.image_url || CATEGORY_IMAGE_BY_SLUG[c.slug] || '',
     itemCount: counts.get(mapMenuCategory(c.slug)) ?? 0,
   }));
 

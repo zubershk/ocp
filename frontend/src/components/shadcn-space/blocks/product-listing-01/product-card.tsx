@@ -174,7 +174,7 @@ export function ProductCard({
                 ))}
               </div>
               <small className="text-sm text-foreground">{rating}</small>
-              <small className="text-sm text-foreground">({reviews})</small>
+              {reviews > 0 && <small className="text-sm text-foreground">({reviews})</small>}
             </div>
           )}
           <div className="flex items-center gap-2">

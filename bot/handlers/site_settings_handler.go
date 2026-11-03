@@ -21,7 +21,7 @@ func NewSiteSettingsHandler() *SiteSettingsHandler {
 }
 
 // publicKeys are the settings keys exposed to the public API.
-var publicKeys = []string{"brand", "seo", "social", "footer"}
+var publicKeys = []string{"brand", "seo", "social", "footer", "homepage"}
 
 // --- Public endpoints ---
 
