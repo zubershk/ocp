@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect, useCallback } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { Search, MapPin, ChevronRight, ShoppingCart, Star, Phone, ArrowRight, X, SlidersHorizontal } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { MapPin, ChevronRight, ShoppingCart, Star, Phone, ArrowRight } from 'lucide-react';
 import { useMenuItems } from '../hooks/useMenu';
 import { pickPopular } from '../services/menuService';
 import { useRestaurantName, useDeliveryHours, useOutletsList, useRestaurantPhone } from '../context/RestaurantContext';
@@ -8,7 +8,7 @@ import { useCart } from '../context/CartContext';
 import { useCrusts } from '../context/CrustContext';
 import { useToast } from '../context/ToastContext';
 import { useMenuCategories, useBrand, useHomepage, useSiteSettings } from '../context/SiteSettingsContext';
-import SearchAutocomplete from '../components/ui/SearchAutocomplete';
+import { SearchBar } from '../components/ui/SearchBar';
 import CategoryScroll from '../components/ui/CategoryScroll';
 import { ProductCard } from '@/components/shadcn-space/blocks/product-listing-01/product-card';
 import { useGsapReveal } from '../hooks/useGsap';
@@ -36,8 +36,6 @@ export default function Home() {
   const hp = useHomepage();
   const { banners } = useSiteSettings();
   const siteCategories = useMenuCategories();
-  const navigate = useNavigate();
-  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     const onScroll = () => setShowBackToTop(window.scrollY > 400);
@@ -123,26 +121,9 @@ export default function Home() {
             </p>
           </div>
 
-          {/* Search Bar (Zomato style) */}
+          {/* Search Bar (Zomato style with autocomplete) */}
           <div className="max-w-2xl mx-auto">
-            <form
-              onSubmit={(e) => { e.preventDefault(); if (searchQuery.trim()) navigate(`/r/menu?q=${encodeURIComponent(searchQuery.trim())}`); }}
-              className="relative flex items-center bg-white rounded-full shadow-[0_4px_24px_rgba(0,0,0,0.12)] border border-stone-200 overflow-hidden"
-            >
-              <div className="pl-5 pr-2">
-                <Search size={20} className="text-zinc-400" />
-              </div>
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder={hp.searchPlaceholder}
-                className="flex-1 py-4 text-base text-zinc-900 placeholder:text-zinc-400 bg-transparent outline-none"
-              />
-              <button type="submit" className="m-1.5 px-6 py-2.5 rounded-full bg-brand-600 text-white font-semibold text-sm hover:bg-brand-700 transition-all shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1)]">
-                Search
-              </button>
-            </form>
+            <SearchBar items={items} placeholder={hp.searchPlaceholder} />
           </div>
 
           {/* Quick Category Pills */}
