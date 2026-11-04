@@ -26,6 +26,18 @@ interface HomepageSettings {
   menu_title: string;
   menu_subtitle: string;
   complete_meal_title: string;
+  // Crust & toppings
+  crust_title: string;
+  crust_subtitle: string;
+  crust_tossed: string;
+  crust_italian_thin: string;
+  crust_wheat_thin: string;
+  crust_cheese_burst: string;
+  crust_double_cheese_crunch: string;
+  extra_toppings_title: string;
+  extra_cheese_price: string;
+  extra_veg_price: string;
+  extra_chicken_price: string;
 }
 
 const DEFAULTS: HomepageSettings = {
@@ -45,6 +57,18 @@ const DEFAULTS: HomepageSettings = {
   menu_title: 'Our Menu',
   menu_subtitle: '',
   complete_meal_title: 'Complete Your Meal',
+  // Crust & toppings
+  crust_title: '6 Delicious Crusts',
+  crust_subtitle: 'Choose your base',
+  crust_tossed: 'Tossed (base)',
+  crust_italian_thin: 'Italian Thin',
+  crust_wheat_thin: 'Wheat Thin',
+  crust_cheese_burst: 'Cheese Burst',
+  crust_double_cheese_crunch: 'Double Cheese Crunch',
+  extra_toppings_title: 'Extra toppings:',
+  extra_cheese_price: 'Extra Cheese ₹60/95/125',
+  extra_veg_price: 'Veg ₹45/80/110',
+  extra_chicken_price: 'Chicken ₹60/95/125',
 };
 
 export default function AdminHomepage() {
@@ -107,6 +131,18 @@ export default function AdminHomepage() {
     { key: 'menu_title', label: 'Menu Page Title', placeholder: 'Our Menu' },
     { key: 'menu_subtitle', label: 'Menu Page Subtitle', placeholder: '100% Real Mozzarella...' },
     { key: 'complete_meal_title', label: 'Complete Meal Title', placeholder: 'Complete Your Meal' },
+    // Crust & toppings
+    { key: 'crust_title', label: 'Crust Section Title', placeholder: '6 Delicious Crusts' },
+    { key: 'crust_subtitle', label: 'Crust Section Subtitle', placeholder: 'Choose your base' },
+    { key: 'crust_tossed', label: 'Tossed Crust Text', placeholder: 'Tossed (base)' },
+    { key: 'crust_italian_thin', label: 'Italian Thin Crust Text', placeholder: 'Italian Thin' },
+    { key: 'crust_wheat_thin', label: 'Wheat Thin Crust Text', placeholder: 'Wheat Thin' },
+    { key: 'crust_cheese_burst', label: 'Cheese Burst Crust Text', placeholder: 'Cheese Burst' },
+    { key: 'crust_double_cheese_crunch', label: 'Double Cheese Crunch Text', placeholder: 'Double Cheese Crunch' },
+    { key: 'extra_toppings_title', label: 'Extra Toppings Section Title', placeholder: 'Extra toppings:' },
+    { key: 'extra_cheese_price', label: 'Extra Cheese Price Line', placeholder: 'Extra Cheese ₹60/95/125' },
+    { key: 'extra_veg_price', label: 'Extra Veg Price Line', placeholder: 'Veg ₹45/80/110' },
+    { key: 'extra_chicken_price', label: 'Extra Chicken Price Line', placeholder: 'Chicken ₹60/95/125' },
   ];
 
   return (
