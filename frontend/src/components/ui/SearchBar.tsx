@@ -142,7 +142,7 @@ export function SearchBar({ items, placeholder = 'Search for a dish or cuisine..
               setHighlightedIndex(-1);
               inputRef.current?.focus();
             }}
-            className="mr-2 text-zinc-400 hover:text-zinc-600"
+            className="mr-2 text-zinc-400 hover:text-zinc-600 touch-target"
           >
             <X size={16} />
           </button>
@@ -159,7 +159,7 @@ export function SearchBar({ items, placeholder = 'Search for a dish or cuisine..
               navigate(`/r/menu?q=${encodeURIComponent(query.trim())}`);
             }
           }}
-          className="m-1.5 px-6 py-2.5 rounded-full bg-brand-600 text-white font-semibold text-sm hover:bg-brand-700 transition-all shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1)] disabled:opacity-60 disabled:cursor-not-allowed"
+          className="m-1.5 px-6 py-2.5 rounded-full bg-brand-600 text-white font-semibold text-sm hover:bg-brand-700 transition-all shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1)] disabled:opacity-60 disabled:cursor-not-allowed touch-target"
           disabled={!query.trim()}
         >
           {isSearching ? <ArrowRight size={18} className="animate-spin" /> : <ArrowRight size={18} />}

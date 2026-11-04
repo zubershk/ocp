@@ -122,7 +122,7 @@ export default function Home() {
                 <MapPin size={14} className="text-white" />
                 {outlets[0]?.name || 'Select Location'}
               </button>
-              <Link to="/r/cart" className="relative p-2.5 rounded-full hover:bg-stone-100 transition-colors">
+              <Link to="/r/cart" className="relative p-2.5 rounded-full hover:bg-stone-100 transition-colors touch-target">
                 <ShoppingCart size={20} className="text-white" />
                 {count > 0 && (
                   <span className="absolute -top-0.5 -right-0.5 bg-brand-600 text-white text-[10px] min-w-[18px] h-[18px] rounded-full flex items-center justify-center font-bold shadow-sm">

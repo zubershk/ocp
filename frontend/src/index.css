@@ -75,6 +75,12 @@
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 
+  /* Fluid typography via clamp */
+  --font-size-base: clamp(1rem, 0.95rem + 0.25vw, 1.125rem);
+  --font-size-h1: clamp(2rem, 1.5rem + 2.5vw, 4rem);
+  --font-size-h2: clamp(1.75rem, 1.25rem + 2vw, 3rem);
+  --font-size-h3: clamp(1.5rem, 1rem + 1.5vw, 2rem);
+
   --animate-fade-up: fade-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
   --animate-fade-in: fade-in 0.4s ease-out both;
   --animate-slide-in-right: slide-in-right 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
@@ -270,6 +276,10 @@
     font-feature-settings: 'cv02','cv03','cv04','cv11';
     line-height: 1.6;
     overflow-x: clip;
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-top: env(safe-area-inset-top);
   }
 
   h1 {
