@@ -265,7 +265,7 @@ export function SearchBar({ items, placeholder = 'Search for a dish or cuisine..
                         id={`search-result-${idx}`}
                         onClick={() => handleSelect(item)}
                         onMouseEnter={() => setHighlightedIndex(idx)}
-                        className={`flex items-center gap-3 p-3 transition-colors cursor-pointer border-b border-stone-50 last:border-0 ${
+                        className={`flex items-center gap-3 p-3 transition-colors cursor-pointer border-b border-stone-50 last:border-0 animate-scale-in ${idx % 2 === 0 ? 'delay-75' : ''} ${
                           isHighlighted
                             ? 'bg-brand-50 border-brand-100'
                             : 'hover:bg-stone-50'

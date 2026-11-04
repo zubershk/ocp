@@ -1,9 +1,9 @@
-import { createContext, useContext, useState, useCallback, ReactNode, useRef } from 'react';
+import { createContext, useContext, useState, useCallback, ReactNode, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { CheckCircle2, AlertCircle, Info, X } from 'lucide-react';
 import type { Toast } from '../types';
 
-type ToastInput = Omit<Toast, 'id'> & { action?: { label: string; to: string } | { label: string; onClick: () => void } };
+type ToastInput = Omit<Toast, 'id'> & { action?: { label: string; to: string } | { label: string; onClick: () => void }; duration?: number };
 const Ctx = createContext<{ toasts: Toast[]; push: (t: ToastInput) => void; dismiss: (id: string) => void }>(null!);
 export const useToast = () => useContext(Ctx);
 
@@ -15,7 +15,7 @@ const typeConfig = {
 };
 
 export function ToastProvider({ children }: { children: ReactNode }) {
-  const [toasts, setToasts] = useState<(Toast & { action?: { label: string; to?: string; onClick?: () => void }; dismissing?: boolean })[]>([]);
+  const [toasts, setToasts] = useState<(Toast & { action?: { label: string; to?: string; onClick?: () => void }; dismissing?: boolean; duration?: number })[]>([]);
 
   const dismiss = useCallback((id: string) => {
     setToasts((prev) => prev.map((t) => t.id === id ? { ...t, dismissing: true } : t));
@@ -24,7 +24,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   const push = useCallback((t: ToastInput) => {
     const id = Math.random().toString(36).slice(2);
-    setToasts((prev) => [...prev.slice(-4), { ...t, id, action: t.action }]);
+    setToasts((prev) => [...prev.slice(-4), { ...t, id, action: t.action, duration: t.duration ?? 3200 }]);
     setTimeout(() => dismiss(id), t.duration ?? 3200);
   }, [dismiss]);
 
@@ -35,6 +35,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         {toasts.map((t, i) => {
           const cfg = typeConfig[t.type] ?? typeConfig.info;
           const Icon = cfg.icon;
+          const duration = t.duration ?? 3200;
           return (
             <div
               key={t.id}
@@ -43,7 +44,16 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               aria-live="polite"
             >
               <Icon size={16} className="shrink-0" />
-              <span className="flex-1 min-w-0">{t.title}</span>
+              <div className="flex-1 min-w-0 flex items-center gap-2">
+                <span className="flex-1 min-w-0">{t.title}</span>
+                {/* Progress bar for auto-dismiss */}
+                <div className="h-1 w-12 rounded-full bg-white/20 shrink-0 flex-shrink-0">
+                  <div
+                    className="h-full bg-white rounded-full transition-all duration-[3200ms] ease-linear"
+                    style={{ width: t.dismissing ? '0%' : '100%', transitionDuration: t.dismissing ? '200ms' : `${duration}ms` }}
+                  />
+                </div>
+              </div>
               {t.action && (
                 'to' in t.action && t.action.to ? (
                   <Link

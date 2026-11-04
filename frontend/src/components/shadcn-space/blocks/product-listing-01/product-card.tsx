@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Heart, Star } from "lucide-react";
+import { Heart, Star, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/shadcn/badge";
 import { Button } from "@/components/shadcn/button";
@@ -46,6 +46,18 @@ export function ProductCard({
   onWishlist,
 }: ProductCardProps) {
   const [isWishlisted, setIsWishlisted] = useState(false);
+  const [isAdding, setIsAdding] = useState(false);
+  const [added, setAdded] = useState(false);
+
+  const handleAddToCart = async () => {
+    setIsAdding(true);
+    await onAddToCart?.();
+    setAdded(true);
+    setTimeout(() => {
+      setIsAdding(false);
+      setAdded(false);
+    }, 1500);
+  };
 
   const getBadgeStyles = (text: string) => {
     const lowercaseText = text.toLowerCase();
@@ -68,7 +80,7 @@ export function ProductCard({
   };
 
   return (
-    <Card className={cn("group flex w-full max-w-[270px] flex-col gap-0 rounded-2xl bg-card p-0 transition-all overflow-hidden ring-0 border h-[410px] shrink-0 justify-self-stretch", className,)}>
+    <Card className={cn("group flex w-full max-w-[270px] flex-col gap-0 rounded-2xl bg-card p-0 transition-all overflow-hidden ring-0 border h-[410px] shrink-0 justify-self-stretch", className,)} data-testid="product-card">
       <div className="relative overflow-hidden bg-muted/50 h-[170px] shrink-0">
         {dietary && (
           <span
@@ -93,7 +105,7 @@ export function ProductCard({
           type="button"
           size="icon-sm"
           aria-pressed={isWishlisted}
-          className="group/wishlist absolute right-4 top-4 z-10 size-8 rounded-full bg-background transition-transform hover:scale-110 cursor-pointer"
+          className="group/wishlist absolute right-4 top-4 z-10 size-8 rounded-full bg-background transition-transform hover:scale-110 cursor-pointer active:scale-95"
           onClick={() => {
             const next = !isWishlisted;
             setIsWishlisted(next);
@@ -102,10 +114,10 @@ export function ProductCard({
         >
           <Heart
             className={cn(
-              "size-4 transition-all duration-300",
+              "size-4 transition-all duration-200 ease-out",
               isWishlisted
-                ? "fill-red-500 text-red-500 scale-110"
-                : "text-foreground",
+                ? "fill-red-500 text-red-500 scale-125"
+                : "text-foreground scale-100",
             )}
           />
           <span className="sr-only">{isWishlisted ? "Remove from wishlist" : "Add to wishlist"}</span>
@@ -119,7 +131,7 @@ export function ProductCard({
               height={300}
               loading="lazy"
               decoding="async"
-              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
             />
           </Link>
         ) : (
@@ -130,7 +142,7 @@ export function ProductCard({
             height={300}
             loading="lazy"
             decoding="async"
-            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
           />
         )}
       </div>
@@ -190,10 +202,23 @@ export function ProductCard({
         </div>
         <Button
           type="button"
-          className="w-full gap-2 h-10 cursor-pointer hover:bg-primary/80 mt-auto shrink-0"
-          onClick={onAddToCart}
+          className="w-full gap-2 h-10 cursor-pointer hover:bg-primary/80 mt-auto shrink-0 transition-all duration-200"
+          onClick={handleAddToCart}
+          disabled={isAdding}
         >
-          {actionLabel}
+          {isAdding ? (
+            <span className="flex items-center gap-2">
+              <span className="h-3 w-3 rounded-full border-2 border-current border-t-transparent animate-spin" />
+              Adding…
+            </span>
+          ) : added ? (
+            <span className="flex items-center gap-2">
+              <Check size={14} className="text-emerald-400" />
+              Added!
+            </span>
+          ) : (
+            actionLabel
+          )}
         </Button>
       </CardContent>
     </Card>

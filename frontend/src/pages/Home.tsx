@@ -11,6 +11,7 @@ import { useMenuCategories, useBrand, useHomepage, useSiteSettings } from '../co
 import { SearchBar } from '../components/ui/SearchBar';
 import CategoryScroll from '../components/ui/CategoryScroll';
 import { ProductCard } from '@/components/shadcn-space/blocks/product-listing-01/product-card';
+import { MenuCardSkeleton } from '../components/ui/Skeleton';
 import { useGsapReveal } from '../hooks/useGsap';
 import type { MenuItem } from '../types';
 import FloatingCartBar from '../components/ui/FloatingCartBar';
@@ -74,11 +75,22 @@ export default function Home() {
   if (loading) {
     return (
       <div className="min-h-screen bg-white">
-        <div className="h-[40vh] bg-stone-100 animate-pulse" />
         <div className="container-page py-8">
-          <div className="h-6 w-48 skeleton rounded-lg mb-4" />
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {[0,1,2,3].map(i => <div key={i} className="h-48 skeleton rounded-3xl" />)}
+          <div className="flex items-start gap-4 mb-6">
+            <div className="w-1/3">
+              <MenuCardSkeleton />
+            </div>
+            <div className="w-1/3">
+              <MenuCardSkeleton />
+            </div>
+            <div className="w-1/3">
+              <MenuCardSkeleton />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 mt-6">
+            {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+              <MenuCardSkeleton key={i} />
+            ))}
           </div>
         </div>
       </div>
