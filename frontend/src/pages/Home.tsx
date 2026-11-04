@@ -161,10 +161,10 @@ export default function Home() {
                 onClick={() => {
                   setSelectedCategory(cat.slug);
                 }}
-                className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
+                className={`px-4 py-2 rounded-full text-sm font-medium transition-all ring-1 ${
                   selectedCategory === cat.slug
-                    ? 'bg-brand-600 text-white shadow-[0_2px_8px_rgba(0,0,0,0.1)]'
-                    : 'bg-white/20 border border-white/30 text-white hover:bg-white/30'
+                    ? 'bg-secondary-accent-900 text-white ring-secondary-accent-500 shadow-[0_2px_8px_rgba(0,0,0,0.1)] border-transparent'
+                    : 'bg-white/20 border-white/30 text-white ring-white/20 hover:bg-white/30 hover:border-white/50'
                 }`}
               >
                 {cat.name}
@@ -225,7 +225,7 @@ export default function Home() {
               onClick={() => setActiveFilter(f.id)}
               className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all ${
                 activeFilter === f.id
-                  ? 'bg-brand-600 text-white shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1)]'
+                  ? 'bg-secondary-accent-900 text-white shadow-md'
                   : 'bg-white text-zinc-600 border border-stone-200 hover:border-brand-300 hover:bg-brand-50'
               }`}
             >
@@ -265,7 +265,7 @@ export default function Home() {
             <Link
               key={cat.id}
               to={`/r/menu?cat=${cat.slug}`}
-              className="group relative flex flex-col items-center gap-2 p-3 sm:p-4 rounded-3xl bg-white hover:shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] transition-all overflow-hidden"
+              className="group relative flex flex-col items-center gap-2 p-3 sm:p-4 rounded-3xl bg-white ring-1 ring-secondary-accent-900/10 hover:ring-secondary-accent-900/30 hover:shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] transition-all overflow-hidden"
             >
               <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl overflow-hidden flex items-center justify-center relative">
                 {cat.image_url ? (
@@ -299,7 +299,7 @@ export default function Home() {
             {restaurantPhone && (
               <a
                 href={`tel:+91${restaurantPhone}`}
-                className="inline-flex items-center gap-2 px-6 py-3.5 rounded-full bg-white/10 text-white font-semibold hover:bg-white/20 transition-all"
+                className="inline-flex items-center gap-2 px-6 py-3.5 rounded-full bg-white/10 text-white font-semibold hover:bg-white/20 transition-all ring-1 ring-secondary-accent-900/30"
               >
                 <Phone size={16} /> Call Us
               </a>
