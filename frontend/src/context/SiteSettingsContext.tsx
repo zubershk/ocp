@@ -53,6 +53,18 @@ interface HomepageSettings {
   menu_title?: string;
   menu_subtitle?: string;
   complete_meal_title?: string;
+  // Crust & toppings info (configurable from admin)
+  crust_title?: string;
+  crust_subtitle?: string;
+  crust_tossed?: string;
+  crust_italian_thin?: string;
+  crust_wheat_thin?: string;
+  crust_cheese_burst?: string;
+  crust_double_cheese_crunch?: string;
+  extra_toppings_title?: string;
+  extra_cheese_price?: string;
+  extra_veg_price?: string;
+  extra_chicken_price?: string;
   [key: string]: unknown;
 }
 
@@ -151,7 +163,19 @@ const BRAND_DEFAULTS: BrandSettings = {
 const SEO_DEFAULTS: SEOSettings = {};
 const SOCIAL_DEFAULTS: SocialSettings = {};
 const FOOTER_DEFAULTS: FooterSettings = {};
-const HOMEPAGE_DEFAULTS: HomepageSettings = {};
+const HOMEPAGE_DEFAULTS: HomepageSettings = {
+  crust_title: '6 Delicious Crusts',
+  crust_subtitle: 'Choose your base',
+  crust_tossed: 'Tossed (base)',
+  crust_italian_thin: 'Italian Thin',
+  crust_wheat_thin: 'Wheat Thin',
+  crust_cheese_burst: 'Cheese Burst',
+  crust_double_cheese_crunch: 'Double Cheese Crunch',
+  extra_toppings_title: 'Extra toppings:',
+  extra_cheese_price: 'Extra Cheese ₹60/95/125',
+  extra_veg_price: 'Veg ₹45/80/110',
+  extra_chicken_price: 'Chicken ₹60/95/125',
+};
 
 const SETTINGS_DEFAULTS: SiteSettingsResponse = {
   brand: BRAND_DEFAULTS,
@@ -331,6 +355,18 @@ export function useHomepage() {
     menuSubtitle: h.menu_subtitle ?? '',
     completeMealTitle: h.complete_meal_title ?? 'Complete Your Meal',
     heroImageUrl: h.hero_image_url ?? 'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=1920&h=700&fit=crop',
+    // Crust & toppings info
+    crustTitle: h.crust_title ?? '6 Delicious Crusts',
+    crustSubtitle: h.crust_subtitle ?? 'Choose your base',
+    crustTossed: h.crust_tossed ?? 'Tossed (base)',
+    crustItalianThin: h.crust_italian_thin ?? 'Italian Thin',
+    crustWheatThin: h.crust_wheat_thin ?? 'Wheat Thin',
+    crustCheeseBurst: h.crust_cheese_burst ?? 'Cheese Burst',
+    crustDoubleCheeseCrunch: h.crust_double_cheese_crunch ?? 'Double Cheese Crunch',
+    extraToppingsTitle: h.extra_toppings_title ?? 'Extra toppings:',
+    extraCheesePrice: h.extra_cheese_price ?? 'Extra Cheese ₹60/95/125',
+    extraVegPrice: h.extra_veg_price ?? 'Veg ₹45/80/110',
+    extraChickenPrice: h.extra_chicken_price ?? 'Chicken ₹60/95/125',
   }), [h]);
 }
 
