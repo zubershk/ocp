@@ -79,7 +79,7 @@ export function ProductCard({
   return (
     <Card
       className={cn(
-        "group relative max-w-[270px] flex flex-col gap-0 rounded-3xl bg-card p-0 transition-all overflow-hidden ring-0 border border-stone-200/50 shrink-0 justify-self-center",
+        "group relative max-w-[270px] flex flex-col gap-0 rounded-3xl bg-card p-0 transition-all overflow-hidden ring-0 border border-stone-200/50 shrink-0 justify-self-center h-[440px] sm:h-[520px]",
         className,
       )}
       data-testid="product-card"
