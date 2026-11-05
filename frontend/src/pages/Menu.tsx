@@ -316,7 +316,7 @@ export default function Menu() {
       )}
 
       {/* Sticky Add to Cart bar for mobile */}
-      <div className="fixed bottom-0 inset-x-0 z-50 bg-white border-t border-stone-200 p-4 lg:hidden">
+      <div className="fixed bottom-0 inset-x-0 z-50 bg-white border-t border-stone-200 p-4 shadow-[0_-4px_20px_rgba(0,0,0,0.15)]">
         {visibleProduct && (
           <div className="flex items-center gap-3 p-4 shadow-[0_0_20px_rgba(0,0,0,0.1)]">
             <img
