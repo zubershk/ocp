@@ -80,8 +80,15 @@ export function ProductCard({
   };
 
   return (
-    <Card className={cn("group flex max-w-[270px] flex-col gap-0 rounded-2xl bg-card p-0 transition-all overflow-hidden ring-0 border shrink-0 justify-self-center", className,)} data-testid="product-card">
-      <div className="relative overflow-hidden bg-muted/50 h-[120px] sm:h-[170px] shrink-0">
+    <Card
+      className={cn(
+        "group relative max-w-[270px] flex flex-col gap-0 rounded-3xl bg-card p-0 transition-all overflow-hidden ring-0 border border-stone-100 shrink-0 h-[430px]",
+        className,
+      )}
+      data-testid="product-card"
+    >
+      {/* Image area - fixed height */}
+      <div className="relative overflow-hidden bg-stone-50 h-[150px] sm:h-[200px] shrink-0">
         {dietary && (
           <span
             className={`absolute bottom-2 left-2 z-10 flex h-4 w-4 items-center justify-center rounded-sm border-2 bg-white ${dietary === 'veg' ? 'border-emerald-600' : 'border-red-600'}`}
@@ -105,7 +112,7 @@ export function ProductCard({
           type="button"
           size="icon-sm"
           aria-pressed={isWishlisted}
-          className="group/wishlist absolute right-2 top-2 z-10 size-7 rounded-full bg-background transition-transform hover:scale-110 cursor-pointer active:scale-95"
+          className="group/wishlist absolute right-2 top-2 z-10 size-7 rounded-full bg-white/90 transition-transform hover:scale-110 cursor-pointer active:scale-95"
           onClick={() => {
             const next = !isWishlisted;
             setIsWishlisted(next);
@@ -117,7 +124,7 @@ export function ProductCard({
               "size-3.5 transition-all duration-200 ease-out",
               isWishlisted
                 ? "fill-red-500 text-red-500 scale-125"
-                : "text-foreground scale-100",
+                : "text-stone-600 scale-100",
             )}
           />
           <span className="sr-only">{isWishlisted ? "Remove from wishlist" : "Add to wishlist"}</span>
@@ -146,31 +153,41 @@ export function ProductCard({
           />
         )}
       </div>
-      <CardContent className="flex flex-col gap-2 p-4 flex-1 min-h-0">
+
+      {/* Content area - fixed structure, consistent height */}
+      <CardContent className="p-4 flex flex-col justify-between flex-1 shrink-0">
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between gap-2">
-            <span className="text-xs text-muted-foreground capitalize sm:text-sm">
+            <span className="text-[10px] text-muted-foreground capitalize sm:text-xs">
               {category.replace(/-/g, " ")}
             </span>
             {preparationTime ? (
-              <span className="text-[10px] text-zinc-400 font-medium sm:text-xs">{preparationTime} min</span>
+              <span className="text-[10px] text-muted-foreground font-medium sm:text-xs">
+                {preparationTime} min
+              </span>
             ) : null}
           </div>
           {id ? (
             <Link to={`/r/menu/item/${id}`} className="hover:text-primary transition-colors">
-              <p className="line-clamp-1 text-base sm:text-lg font-medium text-foreground">
+              <p className="line-clamp-1 text-base sm:text-lg font-semibold text-foreground leading-tight">
                 {name}
               </p>
             </Link>
           ) : (
-            <p className="line-clamp-1 text-base sm:text-lg font-medium text-foreground">
+            <p className="line-clamp-1 text-base sm:text-lg font-semibold text-foreground leading-tight">
               {name}
             </p>
           )}
           {description ? (
-            <p className="line-clamp-1 text-xs text-muted-foreground">{description}</p>
-          ) : null}
-          {rating > 0 && (
+            <p className="line-clamp-2 text-[11px] text-muted-foreground leading-relaxed">
+              {description}
+            </p>
+          ) : (
+            <p className="line-clamp-2 text-[11px] text-muted-foreground leading-relaxed">
+              Freshly prepared with quality ingredients.
+            </p>
+          )}
+          {rating > 0 ? (
             <div className="flex items-center gap-1">
               <div className="flex items-center">
                 {[...Array(5)].map((_, i) => (
@@ -180,29 +197,48 @@ export function ProductCard({
                       "h-3 w-3 sm:h-3.5 sm:w-3.5",
                       i < Math.floor(rating)
                         ? "fill-orange-400 text-orange-400"
-                        : "fill-muted text-orange-400",
+                        : "fill-stone-200 text-stone-200",
                     )}
                   />
                 ))}
               </div>
-              <small className="text-xs sm:text-sm text-foreground">{rating}</small>
-              {reviews > 0 && <small className="text-xs sm:text-sm text-foreground">({reviews})</small>}
+              <span className="text-xs sm:text-sm font-medium text-foreground">
+                {rating.toFixed(1)}
+              </span>
+              {reviews > 0 && (
+                <span className="text-[10px] text-muted-foreground">({reviews})</span>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center gap-1 h-4">
+              <div className="flex items-center">
+                {[...Array(5)].map((_, i) => (
+                  <Star
+                    key={i}
+                    className="h-3 w-3 sm:h-3.5 sm:w-3.5 fill-stone-200 text-stone-200"
+                  />
+                ))}
+              </div>
+              <span className="text-[10px] text-muted-foreground font-medium">
+                0.0
+              </span>
+              <span className="text-[10px] text-muted-foreground">(0)</span>
             </div>
           )}
-          <div className="flex items-center gap-1">
-            <small className="text-base sm:text-lg font-medium text-foreground">
+          <div className="flex items-center gap-1 mt-0.5">
+            <span className="text-base sm:text-lg font-bold text-foreground">
               ₹{price}
-            </small>
+            </span>
             {originalPrice && (
-              <small className="text-xs sm:text-sm font-medium text-muted-foreground line-through">
+              <span className="text-[10px] text-muted-foreground line-through">
                 ₹{originalPrice}
-              </small>
+              </span>
             )}
           </div>
         </div>
         <Button
           type="button"
-          className="w-full gap-2 h-10 cursor-pointer hover:bg-primary/80 mt-auto shrink-0 transition-all duration-200 touch-target"
+          className="w-full gap-2 h-10 cursor-pointer hover:bg-brand-600/10 mt-auto shrink-0 transition-all duration-200 touch-target border border-transparent hover:border-brand-600/20"
           onClick={handleAddToCart}
           disabled={isAdding}
         >
