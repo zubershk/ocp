@@ -79,13 +79,13 @@ export function ProductCard({
   return (
     <Card
       className={cn(
-        "group relative max-w-[270px] md:max-w-[300px] lg:max-w-[340px] flex flex-col gap-0 rounded-3xl bg-card p-0 transition-all overflow-hidden ring-0 border border-stone-200/50 shrink-0 justify-self-center h-[440px] sm:h-[520px]",
+        "group relative w-full max-w-[340px] flex flex-col gap-0 rounded-3xl bg-card p-0 transition-all overflow-hidden ring-0 border border-stone-200/50 shrink-0 justify-self-center h-[520px]",
         className,
       )}
       data-testid="product-card"
     >
       {/* Image area - premium product photography */}
-      <div className="relative overflow-hidden bg-stone-50 h-[170px] sm:h-[220px] lg:h-[260px] shrink-0">
+      <div className="relative overflow-hidden bg-stone-50 h-[260px] shrink-0">
         {/* Subtle gradient overlay for depth */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-black/10 to-transparent" />
         {dietary && (
