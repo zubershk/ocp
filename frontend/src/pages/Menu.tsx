@@ -10,6 +10,7 @@ import SearchAutocomplete from '../components/ui/SearchAutocomplete';
 import { useDeliveryHours } from '../context/RestaurantContext';
 import { useHomepage } from '../context/SiteSettingsContext';
 import { ProductCard } from '@/components/shadcn-space/blocks/product-listing-01/product-card';
+import { Button } from '@/components/shadcn/button';
 
 const categories: { id: string; label: string; filter: (m: any) => boolean }[] = [
   { id: 'all', label: 'All', filter: () => true },
@@ -38,6 +39,8 @@ export default function Menu() {
   const [cat, setCat] = useState(initialCat);
   const [dietary, setDietary] = useState<'all' | 'veg' | 'nonveg'>('all');
   const [sort, setSort] = useState<'popular' | 'price-low' | 'price-high'>('popular');
+  const [visibleProduct, setVisibleProduct] = useState<typeof menuItems[number] | null>(null);
+  const visibleProductRef = useRef<HTMLElement | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const { items: menuItems, loading } = useMenuItems();
   const { addItem } = useCart();
@@ -91,6 +94,26 @@ export default function Menu() {
   };
 
   const menuGridRef = useGsapReveal('.menu-card', { stagger: 0.04, y: 20 });
+
+  useEffect(() => {
+    const visibleProductObserver = new IntersectionObserver(
+      (entries) => {
+        const visibleEntry = entries.find((entry) => entry.isIntersecting);
+        if (visibleEntry) {
+          const productId = visibleEntry.target.getAttribute('data-product-id');
+          const product = menuItems.find((item) => item.id === productId);
+          if (product) {
+            setVisibleProduct(product);
+          }
+        }
+      },
+      { threshold: 0.1, rootMargin: '0px 0px 80px 0px' }
+    );
+
+    const cards = document.querySelectorAll('[data-product-id]');
+    cards.forEach((card) => visibleProductObserver.observe(card));
+    return () => visibleProductObserver.disconnect();
+  }, [menuItems]);
 
   return (
     <div className="container-page py-6 sm:py-8">
@@ -278,11 +301,35 @@ export default function Menu() {
                 actionLabel={needsSize ? "Choose size" : undefined}
                 onAddToCart={needsSize ? () => navigate(`/r/menu/item/${item.id}`) : () => quickAdd(item)}
                 className="menu-card"
+                data-product-id={item.id}
               />
             );
           })}
         </div>
       )}
+
+      {/* Sticky Add to Cart bar for mobile */}
+      <div className="fixed bottom-0 inset-x-0 z-50 bg-white border-t border-stone-200 p-4 lg:hidden">
+        {visibleProduct && (
+          <div className="flex items-center gap-3 p-4 shadow-[0_0_20px_rgba(0,0,0,0.1)]">
+            <img
+              src={visibleProduct.image}
+              alt={visibleProduct.name}
+              className="w-14 h-14 rounded-xl object-cover"
+            />
+            <div className="flex-1">
+              <div className="font-semibold text-sm">{visibleProduct.name}</div>
+              <div className="text-xs text-amber-600 font-bold">₹{visibleProduct.price}</div>
+            </div>
+            <Button
+              onClick={() => quickAdd(visibleProduct)}
+              className="bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold px-4 py-2 rounded-lg"
+            >
+              Add to Cart
+            </Button>
+          </div>
+        )}
+      </div>
 
       {/* Crust info */}
       {!loading && filtered.length > 0 && (
