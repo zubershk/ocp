@@ -123,7 +123,7 @@ export default function Menu() {
   }, [menuItems]);
 
   return (
-    <div className="container-page py-6 sm:py-8">
+    <div className="container-page py-6 sm:py-8 pb-28 lg:pb-8">
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
         <div>
