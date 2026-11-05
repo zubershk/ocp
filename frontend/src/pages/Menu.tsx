@@ -87,7 +87,7 @@ export default function Menu() {
   const menuGridRef = useGsapReveal('.menu-card', { stagger: 0.04, y: 20 });
 
   return (
-    <div className="container-page py-8">
+    <div className="container-page py-6 sm:py-8">
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
         <div>
@@ -105,7 +105,7 @@ export default function Menu() {
             onClick={() => setShowFilters(!showFilters)}
             aria-expanded={showFilters}
             aria-label="Toggle filters"
-            className="p-2.5 rounded-full border border-stone-200 lg:hidden cursor-pointer hover:bg-stone-50 transition-colors shrink-0 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
+            className="p-2.5 rounded-full border border-stone-200 lg:hidden cursor-pointer hover:bg-stone-50 transition-colors shrink-0 shadow-[0_2px_8px_rgba(0,0,0,0.06)] touch-target">
             <SlidersHorizontal size={16} />
           </button>
         </div>
@@ -120,7 +120,7 @@ export default function Menu() {
       <div ref={categoryBarRef} className="mt-6">
         <div
           className={`
-            flex flex-wrap gap-2 py-2 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 transition-all duration-300
+            flex flex-wrap gap-2 py-2 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 transition-all duration-300 overflow-x-auto scrollbar-hide
             ${isCategoryBarSticky ? 'sticky-category-bar' : ''}
           `}
           role="tablist"
@@ -133,9 +133,9 @@ export default function Menu() {
               role="tab"
               aria-selected={cat === c.id}
               className={`
-                px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 cursor-pointer
+                px-4 py-2.5 rounded-full text-sm font-semibold transition-all duration-200 cursor-pointer touch-target
                 ${cat === c.id
-                  ? 'bg-brand-600 text-white shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)]'
+                  ? 'bg-brand-600 text-white shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] ring-2 ring-brand-600/20'
                   : 'bg-white text-zinc-600 border border-stone-200 hover:border-brand-300 hover:text-brand-600 hover:bg-brand-50/30'
                 }
               `}
@@ -143,11 +143,38 @@ export default function Menu() {
               {c.label}
             </button>
           ))}
+          {categories.length > 6 && (
+            <div className="flex items-center px-2 py-2 -mx-1">
+              <span className="text-[10px] text-zinc-400 font-medium">→ Swipe for more</span>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Filters row */}
-      <div className={`mt-4 flex flex-wrap gap-3 items-center ${showFilters ? 'flex' : 'hidden lg:flex'}`}>
+      {/* Filters row - always visible on mobile */}
+      <div className={`mt-4 flex flex-wrap gap-3 items-center`}>
+        {cat !== 'all' && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-full bg-brand-50 border border-brand-200 text-sm font-medium text-brand-700">
+            <span>{categories.find(c => c.id === cat)?.label}</span>
+            <button
+              onClick={() => setCat('all')}
+              className="ml-2 text-xs font-bold text-brand-600 hover:text-brand-700"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+        {vegOnly && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-full bg-brand-50 border border-brand-200 text-sm font-medium text-brand-700">
+            <span>Veg only</span>
+            <button
+              onClick={() => setVegOnly(false)}
+              className="ml-2 text-xs font-bold text-brand-600 hover:text-brand-700"
+            >
+              ✕
+            </button>
+          </div>
+        )}
         <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
           <input
             type="checkbox"
@@ -162,7 +189,7 @@ export default function Menu() {
           id="sort-menu"
           value={sort}
           onChange={(e) => setSort(e.target.value as any)}
-          className="px-4 py-2 rounded-full border border-stone-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-400 transition-all"
+          className="px-3 py-2 rounded-full border border-stone-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-400 transition-all"
         >
           <option value="popular">Most Popular</option>
           <option value="price-low">Price: Low to High</option>
@@ -194,11 +221,11 @@ export default function Menu() {
           ))}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="mt-12 text-center py-16 bg-white rounded-3xl shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] animate-fade-up">
+        <div className="mt-8 sm:mt-12 text-center py-6 sm:py-16 bg-white rounded-3xl shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] animate-fade-up">
           <div className="w-20 h-20 mx-auto rounded-3xl bg-stone-100 flex items-center justify-center">
             <Pizza size={32} className="text-stone-300" />
           </div>
-          <h3 className="font-heading font-bold text-xl mt-5">
+          <h3 className="font-heading font-bold text-xl sm:text-2xl mt-4 sm:mt-5">
             {q ? `No results for "${q}"` : cat !== 'all' ? `No ${categories.find(c => c.id === cat)?.label || ''} items` : 'No items found'}
           </h3>
           <p className="text-sm text-zinc-500 mt-2 max-w-sm mx-auto leading-relaxed">
@@ -209,17 +236,17 @@ export default function Menu() {
                 : 'We are updating our menu — check back soon'
             }
           </p>
-          <div className="mt-6 flex flex-wrap justify-center gap-2">
+          <div className="mt-6 sm:mt-8 flex flex-wrap justify-center gap-2 w-full">
             <button
               onClick={() => { setQ(''); setCat('all'); setVegOnly(false); }}
-              className="px-6 py-3 rounded-full bg-brand-600 text-white text-sm font-semibold hover:bg-brand-700 transition-all cursor-pointer shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)]">
+              className="flex-1 sm:flex-none px-6 py-3 rounded-full bg-brand-600 text-white text-sm sm:text-base font-semibold hover:bg-brand-700 transition-all cursor-pointer shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)]">
               Clear filters
             </button>
             {q && (
               <Link
                 to="/r/menu"
                 onClick={() => { setQ(''); setCat('all'); }}
-                className="px-6 py-3 rounded-full bg-white border border-stone-200 text-sm font-semibold hover:bg-stone-50 transition-all inline-flex items-center gap-1.5 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
+                className="flex-1 sm:flex-none px-6 py-3 rounded-full bg-white border border-stone-200 text-sm sm:text-base font-semibold hover:bg-stone-50 transition-all inline-flex items-center justify-center gap-1.5 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
                 Browse menu <ArrowRight size={14} />
               </Link>
             )}
