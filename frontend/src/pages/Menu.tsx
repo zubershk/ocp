@@ -24,12 +24,19 @@ const categories: { id: string; label: string; filter: (m: any) => boolean }[] =
   { id: 'desserts', label: 'Desserts', filter: (m) => m.category === 'desserts' },
 ];
 
+const DIETARY_OPTIONS: { id: 'all' | 'veg' | 'nonveg'; label: string }[] = [
+  { id: 'all', label: 'All' },
+  { id: 'veg', label: 'Veg' },
+  { id: 'nonveg', label: 'Non-Veg' },
+];
+
 export default function Menu() {
   const [params] = useSearchParams();
   const initialQ = params.get('q') || '';
   const initialCat = categories.some((c) => c.id === params.get('cat')) ? params.get('cat')! : 'all';
   const [q, setQ] = useState(initialQ);
   const [cat, setCat] = useState(initialCat);
+  const [dietary, setDietary] = useState<'all' | 'veg' | 'nonveg'>('all');
   const [vegOnly, setVegOnly] = useState(false);
   const [sort, setSort] = useState<'popular' | 'price-low' | 'price-high'>('popular');
   const [showFilters, setShowFilters] = useState(false);
@@ -73,6 +80,7 @@ export default function Menu() {
       const qq = q.toLowerCase();
       list = list.filter((m) => m.name.toLowerCase().includes(qq) || m.description.toLowerCase().includes(qq));
     }
+    if (dietary !== 'all') list = list.filter((m) => m.dietary === dietary);
     if (vegOnly) list = list.filter((m) => m.dietary === 'veg');
     if (sort === 'price-low') list = [...list].sort((a, b) => a.price - b.price);
     if (sort === 'price-high') list = [...list].sort((a, b) => b.price - a.price);
@@ -149,6 +157,22 @@ export default function Menu() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Dietary filter chips - prominent */}
+      <div className="mt-4 flex flex-wrap gap-2 -mx-4 px-4 sm:-mx-6 sm:px-6 overflow-x-auto scrollbar-hide">
+        {DIETARY_OPTIONS.map((option) => (
+          <button
+            key={option.id}
+            onClick={() => setDietary(option.id)}
+            className={`px-4 py-2 rounded-full text-sm font-medium transition-all cursor-pointer touch-target ${dietary === option.id
+              ? 'bg-brand-600 text-white shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] ring-2 ring-brand-600/20'
+              : 'bg-white text-zinc-600 border border-stone-200 hover:border-brand-300 hover:text-brand-600 hover:bg-brand-50/30'
+            }`}
+          >
+            {option.label}
+          </button>
+        ))}
       </div>
 
       {/* Filters row - always visible on mobile */}

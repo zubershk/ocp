@@ -20,7 +20,7 @@ export default function FloatingCartBar() {
         <div className="flex items-center gap-3">
           <div className="relative">
             <ShoppingBag size={20} />
-            <span className="absolute -top-2 -right-2 bg-white text-brand-600 text-[10px] min-w-[18px] h-[18px] rounded-full flex items-center justify-center font-bold badge-pulse">
+            <span className="absolute -top-2 -right-2 bg-white text-brand-600 text-[10px] min-w-[18px] h-[18px] rounded-full flex items-center justify-center font-bold badge-pulse animate-bounce">
               {count}
             </span>
           </div>
