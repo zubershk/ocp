@@ -173,7 +173,7 @@ export default function Menu() {
 
       {/* Loading skeleton */}
       {loading ? (
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 mt-6">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5 mt-6">
           {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
             <div key={i} className="bg-white rounded-3xl shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] overflow-hidden stagger-child" style={{ animationDelay: `${i * 50}ms` }}>
               <div className="h-44 skeleton" />
@@ -226,7 +226,7 @@ export default function Menu() {
           </div>
         </div>
       ) : (
-        <div ref={menuGridRef} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 mt-6 justify-items-center">
+        <div ref={menuGridRef} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5 mt-6 justify-items-center">
           {filtered.map((item) => {
             // Sized items need a size choice — send the user to the detail page
             // instead of silently adding a default size.
@@ -248,7 +248,7 @@ export default function Menu() {
                 badge={item.isSpicy ? { text: "Spicy" } : item.isPopular ? { text: "Bestseller" } : undefined}
                 actionLabel={needsSize ? "Choose size" : undefined}
                 onAddToCart={needsSize ? () => navigate(`/r/menu/item/${item.id}`) : () => quickAdd(item)}
-                className="menu-card w-[270px] h-[410px]"
+                className="menu-card w-full max-w-[270px] shrink-0"
               />
             );
           })}
