@@ -37,7 +37,6 @@ export default function Menu() {
   const [q, setQ] = useState(initialQ);
   const [cat, setCat] = useState(initialCat);
   const [dietary, setDietary] = useState<'all' | 'veg' | 'nonveg'>('all');
-  const [vegOnly, setVegOnly] = useState(false);
   const [sort, setSort] = useState<'popular' | 'price-low' | 'price-high'>('popular');
   const [showFilters, setShowFilters] = useState(false);
   const { items: menuItems, loading } = useMenuItems();
@@ -81,11 +80,10 @@ export default function Menu() {
       list = list.filter((m) => m.name.toLowerCase().includes(qq) || m.description.toLowerCase().includes(qq));
     }
     if (dietary !== 'all') list = list.filter((m) => m.dietary === dietary);
-    if (vegOnly) list = list.filter((m) => m.dietary === 'veg');
     if (sort === 'price-low') list = [...list].sort((a, b) => a.price - b.price);
     if (sort === 'price-high') list = [...list].sort((a, b) => b.price - a.price);
     return list;
-  }, [menuItems, q, cat, vegOnly, sort]);
+  }, [menuItems, q, cat, dietary, sort]);
 
   const quickAdd = (item: (typeof menuItems)[number]) => {
     addItem(item, 'regular', defaultCrust, 1);
@@ -188,26 +186,6 @@ export default function Menu() {
             </button>
           </div>
         )}
-        {vegOnly && (
-          <div className="flex items-center gap-2 px-3 py-2 rounded-full bg-brand-50 border border-brand-200 text-sm font-medium text-brand-700">
-            <span>Veg only</span>
-            <button
-              onClick={() => setVegOnly(false)}
-              className="ml-2 text-xs font-bold text-brand-600 hover:text-brand-700"
-            >
-              ✕
-            </button>
-          </div>
-        )}
-        <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
-          <input
-            type="checkbox"
-            checked={vegOnly}
-            onChange={(e) => setVegOnly(e.target.checked)}
-            className="rounded border-stone-300 text-brand-600 focus:ring-brand-500"
-          />
-          Veg only
-        </label>
         <label className="sr-only" htmlFor="sort-menu">Sort menu</label>
         <select
           id="sort-menu"
@@ -262,7 +240,7 @@ export default function Menu() {
           </p>
           <div className="mt-6 sm:mt-8 flex flex-wrap justify-center gap-2 w-full">
             <button
-              onClick={() => { setQ(''); setCat('all'); setVegOnly(false); }}
+              onClick={() => { setQ(''); setCat('all'); }}
               className="flex-1 sm:flex-none px-6 py-3 rounded-full bg-brand-600 text-white text-sm sm:text-base font-semibold hover:bg-brand-700 transition-all cursor-pointer shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)]">
               Clear filters
             </button>
