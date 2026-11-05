@@ -39,10 +39,10 @@ export default function Menu() {
   const [cat, setCat] = useState(initialCat);
   const [dietary, setDietary] = useState<'all' | 'veg' | 'nonveg'>('all');
   const [sort, setSort] = useState<'popular' | 'price-low' | 'price-high'>('popular');
-  const [visibleProduct, setVisibleProduct] = useState<typeof menuItems[number] | null>(null);
-  const visibleProductRef = useRef<HTMLElement | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const { items: menuItems, loading } = useMenuItems();
+  const [visibleProduct, setVisibleProduct] = useState<typeof menuItems[number] | null>(null);
+  const visibleProductRef = useRef<HTMLElement | null>(null);
   const { addItem } = useCart();
   const { defaultCrust } = useCrusts();
   const { push } = useToast();
@@ -87,6 +87,13 @@ export default function Menu() {
     if (sort === 'price-high') list = [...list].sort((a, b) => b.price - a.price);
     return list;
   }, [menuItems, q, cat, dietary, sort]);
+
+  // Initialize visibleProduct with first product
+  useEffect(() => {
+    if (filtered.length > 0 && !visibleProduct) {
+      setVisibleProduct(filtered[0]);
+    }
+  }, [filtered, visibleProduct]);
 
   const quickAdd = (item: (typeof menuItems)[number]) => {
     addItem(item, 'regular', defaultCrust, 1);
