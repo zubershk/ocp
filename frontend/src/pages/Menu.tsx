@@ -248,7 +248,7 @@ export default function Menu() {
                 badge={item.isSpicy ? { text: "Spicy" } : item.isPopular ? { text: "Bestseller" } : undefined}
                 actionLabel={needsSize ? "Choose size" : undefined}
                 onAddToCart={needsSize ? () => navigate(`/r/menu/item/${item.id}`) : () => quickAdd(item)}
-                className="menu-card max-w-[270px] shrink-0"
+                className="menu-card"
               />
             );
           })}

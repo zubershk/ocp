@@ -80,7 +80,7 @@ export function ProductCard({
   };
 
   return (
-    <Card className={cn("group flex w-full max-w-[270px] flex-col gap-0 rounded-2xl bg-card p-0 transition-all overflow-hidden ring-0 border shrink-0 justify-self-stretch", className,)} data-testid="product-card">
+    <Card className={cn("group flex max-w-[270px] flex-col gap-0 rounded-2xl bg-card p-0 transition-all overflow-hidden ring-0 border shrink-0 justify-self-center", className,)} data-testid="product-card">
       <div className="relative overflow-hidden bg-muted/50 h-[120px] sm:h-[170px] shrink-0">
         {dietary && (
           <span
