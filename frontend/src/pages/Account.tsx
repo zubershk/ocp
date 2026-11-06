@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { User, LogOut, Package, Phone, Mail, MapPin, Clock, ArrowRight, ShoppingBag, MessageCircle, Award, TrendingUp, Heart, Settings } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { fetchMyOrders } from '../services/authService';
+import { fetchMyOrders, updateProfile, fetchMe, getCustomerToken } from '../services/authService';
 import { useRestaurantPhone } from '../context/RestaurantContext';
 
 interface OrderRow {
@@ -33,6 +33,27 @@ export default function Account() {
   const nav = useNavigate();
   const restaurantPhone = useRestaurantPhone();
   const [activeTab, setActiveTab] = useState<'overview' | 'orders' | 'settings'>('overview');
+  const [settingsName, setSettingsName] = useState(customer?.name || '');
+  const [settingsEmail, setSettingsEmail] = useState(customer?.email || '');
+  const [settingsAddress, setSettingsAddress] = useState(customer?.default_address || '');
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState('');
+  const { setCustomer } = useAuth();
+
+  const saveSettings = async () => {
+    setSaving(true);
+    setSaveMsg('');
+    try {
+      await updateProfile({ name: settingsName, email: settingsEmail, default_address: settingsAddress });
+      const fresh = await fetchMe();
+      setCustomer(fresh, getCustomerToken());
+      setSaveMsg('Saved!');
+    } catch (e) {
+      setSaveMsg(e instanceof Error ? e.message : 'Save failed');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const ordersQuery = useQuery({
     queryKey: ['my-orders'],
@@ -43,6 +64,13 @@ export default function Account() {
   useEffect(() => {
     if (!loading && !customer) nav('/r/login?redirect=/r/account', { replace: true });
   }, [loading, customer, nav]);
+  useEffect(() => {
+    if (customer) {
+      setSettingsName(customer.name || '');
+      setSettingsEmail(customer.email || '');
+      setSettingsAddress(customer.default_address || '');
+    }
+  }, [customer]);
 
   if (loading) return <div className="max-w-3xl mx-auto px-4 py-12 text-center text-sm text-zinc-500">Loading...</div>;
   if (!customer) return null;
@@ -227,23 +255,27 @@ export default function Account() {
           <div className="space-y-4">
             <div>
               <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wide">Name</label>
-              <input value={customer.name || ''} readOnly className="mt-1.5 w-full px-4 py-2.5 rounded-xl border border-zinc-200 bg-zinc-50 text-sm" />
+              <input value={settingsName} onChange={(e) => setSettingsName(e.target.value)} className="mt-1.5 w-full px-4 py-2.5 rounded-xl border border-zinc-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
             </div>
             <div>
               <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wide">Phone</label>
               <input value={`+91 ${customer.phone}`} readOnly className="mt-1.5 w-full px-4 py-2.5 rounded-xl border border-zinc-200 bg-zinc-50 text-sm font-mono" />
+              <p className="text-[11px] text-zinc-400 mt-1">Phone is your identity and cannot be changed.</p>
             </div>
             <div>
               <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wide">Email</label>
-              <input value={customer.email || 'Not set'} readOnly className="mt-1.5 w-full px-4 py-2.5 rounded-xl border border-zinc-200 bg-zinc-50 text-sm" />
+              <input value={settingsEmail} onChange={(e) => setSettingsEmail(e.target.value)} placeholder="you@example.com" className="mt-1.5 w-full px-4 py-2.5 rounded-xl border border-zinc-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
             </div>
             <div>
               <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wide">Default address</label>
-              <textarea value={customer.default_address || 'Not set'} readOnly rows={2} className="mt-1.5 w-full px-4 py-2.5 rounded-xl border border-zinc-200 bg-zinc-50 text-sm resize-none" />
+              <textarea value={settingsAddress} onChange={(e) => setSettingsAddress(e.target.value)} rows={2} placeholder="Your delivery address" className="mt-1.5 w-full px-4 py-2.5 rounded-xl border border-zinc-200 bg-white text-sm resize-none focus:outline-none focus:ring-2 focus:ring-brand-500" />
             </div>
           </div>
-          <div className="pt-4 border-t border-zinc-100">
-            <p className="text-xs text-zinc-400">To update your details, place a new order with the correct info - we will sync automatically.</p>
+          <div className="pt-4 border-t border-zinc-100 flex items-center justify-between gap-3">
+            <p className="text-xs text-zinc-400">{saveMsg || 'Changes save to your profile.'}</p>
+            <button onClick={saveSettings} disabled={saving} className="px-5 py-2.5 rounded-xl bg-zinc-900 text-white text-sm font-semibold hover:bg-black transition disabled:opacity-50">
+              {saving ? 'Saving...' : 'Save changes'}
+            </button>
           </div>
         </div>
       )}

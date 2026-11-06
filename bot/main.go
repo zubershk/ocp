@@ -216,6 +216,7 @@ func main() {
 		apiGroup.POST("/auth/send-otp", handlers.RateLimit(3, time.Minute), authHandler.SendOTP)
 		apiGroup.POST("/auth/verify-otp", handlers.RateLimit(10, time.Minute), authHandler.VerifyOTP)
 		apiGroup.GET("/auth/me", authHandler.Me)
+		apiGroup.PATCH("/auth/me", authHandler.UpdateMe)
 		apiGroup.POST("/auth/logout", authHandler.Logout)
 		apiGroup.GET("/auth/orders", authHandler.Orders)
 	}

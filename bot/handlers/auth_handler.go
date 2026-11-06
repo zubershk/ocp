@@ -95,6 +95,40 @@ func (h *AuthHandler) Me(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"customer": resp})
 }
 
+// UpdateMe handles PATCH /api/auth/me — update customer profile (name, email, address).
+func (h *AuthHandler) UpdateMe(c *gin.Context) {
+	phone, _, ok := customerFromHeader(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized — please log in"})
+		return
+	}
+	var req struct {
+		Name           string `json:"name"`
+		Email          string `json:"email"`
+		DefaultAddress string `json:"default_address"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
+		return
+	}
+	rid, _ := services.RequireRestaurant(c)
+	fields := map[string]string{}
+	if strings.TrimSpace(req.Name) != "" {
+		fields["name"] = strings.TrimSpace(req.Name)
+	}
+	if strings.TrimSpace(req.Email) != "" {
+		fields["email"] = strings.TrimSpace(req.Email)
+	}
+	if strings.TrimSpace(req.DefaultAddress) != "" {
+		fields["default_address"] = strings.TrimSpace(req.DefaultAddress)
+	}
+	if err := services.UpdateCustomerProfileFor(phone, rid, fields); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "update failed"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"updated": true})
+}
+
 // Logout handles POST /api/auth/logout
 func (h *AuthHandler) Logout(c *gin.Context) {
 	token := bearerToken(c)
