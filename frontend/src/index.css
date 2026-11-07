@@ -61,13 +61,12 @@
   --shadow-xs: 0 1px 2px rgba(0,0,0,0.05);
   --shadow-card: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.1);
   --shadow-card-hover: 0 10px 25px -5px rgba(0,0,0,0.1), 0 4px 6px -4px rgba(0,0,0,0.05);
-  --shadow-glow: 0 0 20px rgba(234,88,12,0.15);
-  --shadow-glow-lg: 0 0 40px rgba(234,88,12,0.2);
+  --shadow-glow: none;
+  --shadow-glow-lg: none;
   --shadow-elevated: 0 20px 25px -5px rgba(0,0,0,0.08), 0 8px 10px -6px rgba(0,0,0,0.04);
 
   --spacing-18: 4.5rem;
   --spacing-88: 22rem;
-  --spacing-128: 32rem;
 
   --text-2xs: 0.625rem;
   --text-2xs--line-height: 0.875rem;
@@ -356,41 +355,30 @@
   }
 
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 font-semibold rounded-xl
-           transition-all duration-200 ease-out cursor-pointer select-none
-           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2;
+    @apply inline-flex items-center justify-center gap-2 font-semibold rounded-xl border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4;
     background: var(--brand-primary);
     color: white;
     padding: 0.75rem 1.5rem;
     font-size: 0.9375rem;
     min-height: 44px;
-    box-shadow: 0 1px 3px rgba(234,88,12,0.3), 0 1px 2px rgba(234,88,12,0.2);
   }
-  .btn-primary:hover {
-    background: var(--brand-primary-dark);
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(234,88,12,0.35), 0 2px 4px rgba(234,88,12,0.2);
-  }
-  .btn-primary:active { transform: translateY(0); box-shadow: 0 1px 2px rgba(234,88,12,0.3); }
+  .btn-primary:hover { background: var(--brand-primary-dark); }
+  .btn-primary:active { transform: translateY(0); }
   .btn-primary:disabled { @apply opacity-50 cursor-not-allowed; transform: none; box-shadow: none; }
 
   .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 font-semibold rounded-xl
-           transition-all duration-200 ease-out cursor-pointer select-none
-           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2;
+    @apply inline-flex items-center justify-center gap-2 font-semibold rounded-xl border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4;
     background: var(--color-surface);
     color: var(--color-text);
-    border: 1.5px solid var(--color-border);
+    border-color: var(--color-border);
     padding: 0.75rem 1.5rem;
     font-size: 0.9375rem;
     min-height: 44px;
   }
-  .btn-secondary:hover { background: var(--color-bg-subtle); border-color: var(--brand-primary-light); color: var(--brand-primary); }
+  .btn-secondary:hover { background: var(--color-bg-subtle); }
 
   .btn-ghost {
-    @apply inline-flex items-center justify-center gap-2 font-medium rounded-lg
-           transition-all duration-150 cursor-pointer select-none
-           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2;
+    @apply inline-flex items-center justify-center gap-2 font-medium rounded-lg border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4;
     color: var(--color-text-secondary);
     padding: 0.625rem 1rem;
     font-size: 0.875rem;

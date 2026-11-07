@@ -58,6 +58,8 @@ export default function Order() {
     const fetchOrder = () => {
       orderService.getOrder(id!).then((o) => {
         if (!alive) return;
+        // Only update if order data actually changed to prevent infinite re-renders
+        if (o && order && order.id === o.id && order.status === o.status && order.total === o.total) return;
         setOrder(o);
         setState(o ? 'ready' : 'missing');
         setLastUpdate(new Date());

@@ -155,7 +155,7 @@ export default function Navbar() {
               {/* CTA */}
               <Link
                 to="/r/menu"
-                className="hidden sm:inline-flex items-center gap-1.5 ml-1 px-5 py-2.5 rounded-full text-white text-sm font-semibold hover:opacity-90 transition-all duration-200 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] active:scale-[0.98]"
+                className="inline-flex items-center gap-1 ml-1 px-3 py-2 sm:px-5 sm:py-2.5 rounded-full text-white text-xs sm:text-sm font-semibold hover:opacity-90 transition-all duration-200 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] active:scale-[0.98]"
                 style={{ backgroundColor: brand.primaryColor }}
               >
                 Order Now

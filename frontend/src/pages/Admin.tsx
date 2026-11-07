@@ -43,13 +43,13 @@ const STATUS_TABS = [
 ];
 
 const STATUS_META: Record<string, { cls: string; dot: string }> = {
-  placed: { cls: 'bg-orange-50 text-orange-700 border-orange-200', dot: 'bg-orange-500' },
-  confirmed: { cls: 'bg-sky-50 text-sky-700 border-sky-200', dot: 'bg-sky-500' },
-  preparing: { cls: 'bg-amber-50 text-amber-700 border-amber-200', dot: 'bg-amber-500' },
-  ready: { cls: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500' },
-  out_for_delivery: { cls: 'bg-violet-50 text-violet-700 border-violet-200', dot: 'bg-violet-500' },
+  placed: { cls: 'bg-zinc-50 text-zinc-600 border-zinc-200', dot: 'bg-zinc-400' },
+  confirmed: { cls: 'bg-zinc-50 text-zinc-600 border-zinc-200', dot: 'bg-zinc-400' },
+  preparing: { cls: 'bg-zinc-50 text-zinc-600 border-zinc-200', dot: 'bg-zinc-400' },
+  ready: { cls: 'bg-zinc-50 text-zinc-600 border-zinc-200', dot: 'bg-zinc-400' },
+  out_for_delivery: { cls: 'bg-zinc-50 text-zinc-600 border-zinc-200', dot: 'bg-zinc-400' },
   delivered: { cls: 'bg-zinc-50 text-zinc-600 border-zinc-200', dot: 'bg-zinc-400' },
-  completed: { cls: 'bg-teal-50 text-teal-700 border-teal-200', dot: 'bg-teal-500' },
+  completed: { cls: 'bg-zinc-50 text-zinc-600 border-zinc-200', dot: 'bg-zinc-400' },
   cancelled: { cls: 'bg-red-50 text-red-700 border-red-200', dot: 'bg-red-500' },
 };
 
@@ -92,7 +92,7 @@ export default function Admin() {
   const [search, setSearch] = useState('');
   const [view, setView] = useState<'board' | 'list'>(() => (typeof window !== 'undefined' && window.innerWidth < 768 ? 'board' : 'board'));
   const [soundOn, setSoundOn] = useState(() => { try { return localStorage.getItem('ocp_admin_sound') !== 'off'; } catch { return true; } });
-  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [autoRefresh, setAutoRefresh] = useState(() => { try { return localStorage.getItem('ocp_admin_autorefresh') !== 'off'; } catch { return true; } });
   const queryClient = useQueryClient();
   const prevIdsRef = useRef<Set<number>>(new Set());
   const searchRef = useRef<HTMLInputElement>(null);
@@ -117,6 +117,8 @@ export default function Admin() {
     queryFn: () => adminFetch<AdminOrder[]>('/admin/orders?limit=50'),
     enabled: authed,
     refetchInterval: autoRefresh && !live ? 8000 : false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     retry: 1,
     placeholderData: (prev) => prev,
   });
@@ -301,12 +303,12 @@ export default function Admin() {
       <div className="sticky top-0 z-30 bg-card border-b">
         <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 h-[56px] flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-8 h-8 rounded-xl bg-primary text-primary-foreground grid place-items-center shadow-sm"><Pizza size={16} /></div>
+            <div className="w-8 h-8 rounded-xl bg-zinc-100 text-zinc-800 grid place-items-center"><Pizza size={16} /></div>
             <div className="hidden sm:block h-6 w-px bg-border" />
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <h1 className="text-[14px] font-bold tracking-tight leading-none">Operations</h1>
-                <Badge variant="secondary" className="hidden sm:inline-flex gap-1.5 bg-emerald-50 text-emerald-700 border-emerald-200"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />Live</Badge>
+                <Badge variant="outline" className="hidden sm:inline-flex gap-1.5 border-border text-zinc-600"><Activity size={12} className="text-zinc-600" />Live</Badge>
                 <span className="hidden md:inline-flex items-center gap-1 text-[11px] text-muted-foreground"><Activity size={12} />{lastUpdated}</span>
               </div>
               <div className="hidden lg:flex items-center gap-1.5 text-[11px] text-muted-foreground"><span className="w-1 h-1 rounded-full bg-muted-foreground/30" /> Mira Road • Vasai • Bhayandar</div>
@@ -314,11 +316,11 @@ export default function Admin() {
           </div>
 
           <div className="flex items-center gap-2">
-            <Badge variant="secondary" className="hidden md:inline-flex gap-1.5 bg-primary text-primary-foreground">
+            <Badge variant="outline" className="hidden md:inline-flex gap-1.5 border-border text-zinc-600">
               <Flame size={12} /> {kpi.active} active
             </Badge>
             {kpi.urgent > 0 && (
-              <Badge variant="destructive" className="hidden sm:inline-flex gap-1.5">
+              <Badge variant="outline" className="hidden sm:inline-flex gap-1.5 border-red-200 text-red-700">
                 <AlertTriangle size={12} /> {kpi.urgent} urgent
               </Badge>
             )}
@@ -348,8 +350,8 @@ export default function Admin() {
           <Card className="stagger-child" style={{ animationDelay: '0ms' }}>
             <CardContent className="p-4">
               <div className="flex items-start justify-between">
-                <div className="w-9 h-9 rounded-xl bg-foreground text-background grid place-items-center"><Wallet size={16} /></div>
-                <Badge variant="secondary" className="gap-1 bg-emerald-50 text-emerald-700 border border-emerald-200"><TrendingUp size={12} /> Today</Badge>
+                <div className="w-9 h-9 rounded-xl bg-zinc-100 text-zinc-800 grid place-items-center"><Wallet size={16} /></div>
+                <Badge variant="outline" className="gap-1 border-border text-zinc-600"><TrendingUp size={12} /> Today</Badge>
               </div>
               <div className="mt-3 text-[11px] font-semibold tracking-normal text-muted-foreground">Revenue today</div>
               <div className="text-[22px] font-bold tracking-tight leading-none mt-1 flex items-baseline gap-1"><IndianRupee size={16} className="text-muted-foreground" />{revenueCountUp.toLocaleString('en-IN')}</div>
@@ -364,17 +366,17 @@ export default function Admin() {
               <div className="text-[11px] text-muted-foreground mt-1">{counts.placed ?? 0} new • {counts.preparing ?? 0} cooking • {counts.ready ?? 0} ready</div>
             </CardContent>
           </Card>
-          <Card className={`stagger-child ${kpi.urgent ? 'border-red-200 bg-red-50/40' : ''}`} style={{ animationDelay: '120ms' }}>
+          <Card className="stagger-child" style={{ animationDelay: '120ms' }}>
             <CardContent className="p-4">
-              <div className={`w-9 h-9 rounded-xl grid place-items-center border ${kpi.urgent ? 'bg-destructive text-destructive-foreground border-destructive' : 'bg-muted border-border text-muted-foreground'}`}><AlertTriangle size={16} /></div>
+              <div className="w-9 h-9 rounded-xl grid place-items-center border border-border text-muted-foreground"><AlertTriangle size={16} /></div>
               <div className="mt-3 text-[11px] font-semibold tracking-normal text-muted-foreground">Needs attention</div>
               <div className={`text-[22px] font-bold tracking-tight leading-none mt-1 ${kpi.urgent ? 'text-red-700' : ''}`}>{urgentCountUp}</div>
               <div className="text-[11px] text-muted-foreground mt-1">{kpi.urgent ? 'Over SLA — act now' : 'All clear'}</div>
             </CardContent>
           </Card>
-          <Card className="stagger-child" style={{ animationDelay: '180ms' }}>
+          <Card className="stagger-child">
             <CardContent className="p-4">
-              <div className="w-9 h-9 rounded-xl bg-muted border border-border text-muted-foreground grid place-items-center"><Activity size={16} /></div>
+              <div className="w-9 h-9 rounded-xl bg-zinc-100 text-zinc-800 grid place-items-center"><Activity size={16} /></div>
               <div className="mt-3 text-[11px] font-semibold tracking-normal text-muted-foreground">Throughput</div>
               <div className="text-[22px] font-bold tracking-tight leading-none mt-1">{throughputCountUp}<span className="text-sm font-medium text-muted-foreground"> / 50</span></div>
               <div className="text-[11px] text-muted-foreground mt-1">Last 50 orders • {orders.filter((o) => o.source === 'whatsapp').length} WhatsApp</div>
