@@ -33,6 +33,8 @@ interface FooterSettings {
   copyright_text?: string;
   tagline?: string;
   extra_links?: Array<{ label: string; url: string }>;
+  promo_strip_text?: string;
+  promo_strip_subtext?: string;
   // Footer quick links (configurable from admin)
   quick_links_title?: string;
   quick_links?: Array<{ label: string; url: string }>;
@@ -56,10 +58,31 @@ interface HomepageSettings {
   hero_title?: string;
   hero_subtitle?: string;
   hero_image_url?: string;
+  locations_map_address?: string;
+  locations_map_embed_url?: string;
   search_placeholder?: string;
+  // Promo cards displayed on login page (configurable from admin)
+  promos?: Array<{
+    id: string;
+    icon: string;
+    badge: string;
+    title: string;
+    desc: string;
+    to: string;
+    active: boolean;
+  }>;
   popular_title?: string;
   popular_subtitle?: string;
   categories_title?: string;
+  offers_title?: string;
+  offers_subtitle?: string;
+  offers_phone_text?: string;
+  offers_cta_title?: string;
+  offers_cta_text?: string;
+  offers_cta_button?: string;
+  locations_title?: string;
+  locations_subtitle?: string;
+  locations_note?: string;
   cta_title?: string;
   cta_subtitle?: string;
   cta_button_text?: string;
@@ -217,6 +240,15 @@ const HOMEPAGE_DEFAULTS: HomepageSettings = {
   extra_cheese_price: 'Extra Cheese ₹60/95/125',
   extra_veg_price: 'Veg ₹45/80/110',
   extra_chicken_price: 'Chicken ₹60/95/125',
+  // Login page promo cards (configurable from admin)
+  promos: [
+    { id: 'family-pack', icon: 'Gift', badge: 'Family Pack', title: 'Family Pack from ₹1,515', desc: '2 pizzas + garlic bread + choco lava cake', to: '/r/offers', active: true },
+    { id: 'free-delivery', icon: 'Truck', badge: 'Free Delivery', title: 'Free delivery 11 AM – 4 AM', desc: 'No minimum order value', to: '/r/locations', active: true },
+    { id: 'real-mozzarella', icon: 'Award', badge: 'Real Mozzarella', title: '100% real mozzarella', desc: 'Fresh, never processed cheese on every pizza', to: '/r/about', active: true },
+    { id: 'bogo', icon: 'Clock3', badge: 'BOGO', title: 'Buy 1, Get 2nd at Special Price', desc: '2nd pizza from ₹1,150 – call or WhatsApp', to: '/r/offers', active: true },
+    { id: '6-crusts', icon: 'UtensilsCrossed', badge: '6 Crusts', title: '6 Crusts · Tossed to Cheese Burst', desc: 'Choose your base, same pricing online & in-store', to: '/r/menu', active: true },
+    { id: 'outlets', icon: 'MapPin', badge: 'Outlets', title: 'Visit Our Outlets', desc: 'Same menu, same pricing across all kitchens', to: '/r/locations', active: true },
+  ],
 };
 
 const CONTACT_DEFAULTS: ContactSettings = {
@@ -398,6 +430,8 @@ export function useFooter() {
   return useMemo(() => ({
     copyrightText: f.copyright_text ?? '',
     tagline: f.tagline ?? '',
+    promoStripText: f.promo_strip_text ?? 'Free delivery on all orders · {hours}',
+    promoStripSubtext: f.promo_strip_subtext ?? 'Pay cash or UPI on arrival',
     extraLinks: f.extra_links ?? [],
     // Configurable footer content
     quickLinksTitle: f.quick_links_title ?? 'Quick Links',
@@ -437,6 +471,15 @@ export function useHomepage() {
     popularTitle: h.popular_title ?? 'Popular Right Now',
     popularSubtitle: h.popular_subtitle ?? 'Customer favourites — add in one tap',
     categoriesTitle: h.categories_title ?? 'Browse by Category',
+    offersTitle: h.offers_title ?? 'Offers & Family Packs',
+    offersSubtitle: h.offers_subtitle ?? 'Current promotions from {restaurant} {outlet}. All prices include tax.',
+    offersPhoneText: h.offers_phone_text ?? 'These offers are available on phone and WhatsApp orders. Call us and we\'ll get it started.',
+    offersCtaTitle: h.offers_cta_title ?? 'Feeding a crowd?',
+    offersCtaText: h.offers_cta_text ?? 'Build your own feast from {count} items on the menu — everything is tax-inclusive.',
+    offersCtaButton: h.offers_cta_button ?? 'Browse Full Menu',
+    locationsTitle: h.locations_title ?? 'Our Locations',
+    locationsSubtitle: h.locations_subtitle ?? 'Visit us at any of our outlets.',
+    locationsNote: h.locations_note ?? 'Online ordering through this website is currently available only for the {primary} outlet. Please call your nearest outlet directly for {others}.',
     ctaTitle: h.cta_title ?? 'Ready to order?',
     ctaSubtitle: h.cta_subtitle ?? '',
     ctaButtonText: h.cta_button_text ?? 'Start Your Order',
@@ -447,6 +490,8 @@ export function useHomepage() {
     menuSubtitle: h.menu_subtitle ?? '',
     completeMealTitle: h.complete_meal_title ?? 'Complete Your Meal',
     heroImageUrl: h.hero_image_url ?? 'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=1920&h=700&fit=crop',
+    locationsMapAddress: h.locations_map_address ?? 'Mira Road East, Mumbai',
+    locationsMapEmbedUrl: h.locations_map_embed_url ?? '',
     // Crust & toppings info
     crustTitle: h.crust_title ?? '6 Delicious Crusts',
     crustSubtitle: h.crust_subtitle ?? 'Choose your base',
@@ -459,6 +504,8 @@ export function useHomepage() {
     extraCheesePrice: h.extra_cheese_price ?? 'Extra Cheese ₹60/95/125',
     extraVegPrice: h.extra_veg_price ?? 'Veg ₹45/80/110',
     extraChickenPrice: h.extra_chicken_price ?? 'Chicken ₹60/95/125',
+    // Login page promo cards
+    promos: Array.isArray(h.promos) ? h.promos : [],
   }), [h]);
 }
 

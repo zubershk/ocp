@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { Phone, MessageCircle, ShoppingBag, Tag, Copy, Check } from 'lucide-react';
 import { useState } from 'react';
 import { useAllPhones, useRestaurantPhone, useDeliveryHours, useOutletNames, useRestaurantName } from '../context/RestaurantContext';
-import { useSiteSettings } from '../context/SiteSettingsContext';
+import { useSiteSettings, useHomepage } from '../context/SiteSettingsContext';
 import { useMenuItems } from '../hooks/useMenu';
 
 const inr = (n: number) => `Rs.${n.toLocaleString('en-IN')}`;
@@ -10,6 +10,7 @@ const inr = (n: number) => `Rs.${n.toLocaleString('en-IN')}`;
 export default function Offers() {
   const { items } = useMenuItems();
   const { offers: adminOffers, familyPacks } = useSiteSettings();
+  const hp = useHomepage();
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const allPhones = useAllPhones();
   const restaurantPhone = useRestaurantPhone();
@@ -32,10 +33,11 @@ export default function Offers() {
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-      <h1 className="text-3xl">Offers &amp; Family Packs</h1>
+      <h1 className="text-3xl">{hp.offersTitle}</h1>
       <p className="text-zinc-500 mt-2">
-        Current promotions from {restaurantName || 'our restaurant'} {primaryOutlet}.
-        All prices include tax.
+        {(hp.offersSubtitle || 'Current promotions from {restaurant} {outlet}. All prices include tax.')
+          .replace('{restaurant}', restaurantName || 'our restaurant')
+          .replace('{outlet}', primaryOutlet)}
       </p>
 
       {anyOrderable ? (
@@ -45,7 +47,7 @@ export default function Offers() {
         </div>
       ) : (
         <div className="bg-orange-50 border border-orange-200 rounded-2xl p-4 mt-6 text-sm text-orange-800">
-          These offers are available on phone and WhatsApp orders. Call us and we&apos;ll get it started.
+          {hp.offersPhoneText}
         </div>
       )}
 
@@ -152,9 +154,9 @@ export default function Offers() {
       </div>
 
       <div className="mt-10 bg-zinc-900 rounded-[2rem] p-8 text-center">
-        <h2 className="text-white text-xl lg:text-2xl font-bold">Feeding a crowd?</h2>
-        <p className="text-zinc-400 text-sm mt-2 max-w-md mx-auto">Build your own feast from {items.length} items on the menu — everything is tax-inclusive.</p>
-        <Link to="/r/menu" className="inline-flex mt-5 px-6 py-3 rounded-xl bg-orange-600 text-white font-semibold hover:bg-orange-700 transition">Browse Full Menu</Link>
+        <h2 className="text-white text-xl lg:text-2xl font-bold">{hp.offersCtaTitle}</h2>
+        <p className="text-zinc-400 text-sm mt-2 max-w-md mx-auto">{(hp.offersCtaText || 'Build your own feast from {count} items on the menu — everything is tax-inclusive.').replace('{count}', String(items.length))}</p>
+        <Link to="/r/menu" className="inline-flex mt-5 px-6 py-3 rounded-xl bg-orange-600 text-white font-semibold hover:bg-orange-700 transition">{hp.offersCtaButton}</Link>
       </div>
     </div>
   );

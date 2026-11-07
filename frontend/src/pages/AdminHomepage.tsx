@@ -17,6 +17,15 @@ interface HomepageSettings {
   popular_title: string;
   popular_subtitle: string;
   categories_title: string;
+  offers_title: string;
+  offers_subtitle: string;
+  offers_phone_text: string;
+  offers_cta_title: string;
+  offers_cta_text: string;
+  offers_cta_button: string;
+  locations_title: string;
+  locations_subtitle: string;
+  locations_note: string;
   cta_title: string;
   cta_subtitle: string;
   cta_button_text: string;
@@ -60,6 +69,17 @@ interface HomepageSettings {
   contact_other_outlets_title: string;
   contact_map_address: string;
   contact_map_embed_url: string;
+  locations_map_address: string;
+  locations_map_embed_url: string;
+  promos: Array<{
+    id: string;
+    icon: string;
+    badge: string;
+    title: string;
+    desc: string;
+    to: string;
+    active: boolean;
+  }>;
 }
 
 const DEFAULTS: HomepageSettings = {
@@ -70,6 +90,15 @@ const DEFAULTS: HomepageSettings = {
   popular_title: 'Popular Right Now',
   popular_subtitle: 'Customer favourites — add in one tap',
   categories_title: 'Browse by Category',
+  offers_title: 'Offers & Family Packs',
+  offers_subtitle: 'Current promotions from {restaurant} {outlet}. All prices include tax.',
+  offers_phone_text: 'These offers are available on phone and WhatsApp orders. Call us and we\'ll get it started.',
+  offers_cta_title: 'Feeding a crowd?',
+  offers_cta_text: 'Build your own feast from {count} items on the menu — everything is tax-inclusive.',
+  offers_cta_button: 'Browse Full Menu',
+  locations_title: 'Our Locations',
+  locations_subtitle: 'Visit us at any of our outlets.',
+  locations_note: 'Online ordering through this website is currently available only for the {primary} outlet. Please call your nearest outlet directly for {others}.',
   cta_title: 'Ready to order?',
   cta_subtitle: '',
   cta_button_text: 'Start Your Order',
@@ -113,6 +142,16 @@ const DEFAULTS: HomepageSettings = {
   contact_other_outlets_title: 'Other Outlets',
   contact_map_address: 'Mira Road East, Mumbai',
   contact_map_embed_url: '',
+  locations_map_address: 'Mira Road East, Mumbai',
+  locations_map_embed_url: '',
+  promos: [
+    { id: 'family-pack', icon: 'Gift', badge: 'Family Pack', title: 'Family Pack from ₹1,515', desc: '2 pizzas + garlic bread + choco lava cake', to: '/r/offers', active: true },
+    { id: 'free-delivery', icon: 'Truck', badge: 'Free Delivery', title: 'Free delivery 11 AM – 4 AM', desc: 'No minimum order value', to: '/r/locations', active: true },
+    { id: 'real-mozzarella', icon: 'Award', badge: 'Real Mozzarella', title: '100% real mozzarella', desc: 'Fresh, never processed cheese on every pizza', to: '/r/about', active: true },
+    { id: 'bogo', icon: 'Clock3', badge: 'BOGO', title: 'Buy 1, Get 2nd at Special Price', desc: '2nd pizza from ₹1,150 – call or WhatsApp', to: '/r/offers', active: true },
+    { id: '6-crusts', icon: 'UtensilsCrossed', badge: '6 Crusts', title: '6 Crusts · Tossed to Cheese Burst', desc: 'Choose your base, same pricing online & in-store', to: '/r/menu', active: true },
+    { id: 'outlets', icon: 'MapPin', badge: 'Outlets', title: 'Visit Our Outlets', desc: 'Same menu, same pricing across all kitchens', to: '/r/locations', active: true },
+  ],
 };
 
 export default function AdminHomepage() {
@@ -156,7 +195,17 @@ export default function AdminHomepage() {
     );
   }
 
-  const update = (key: keyof HomepageSettings, value: string) => setForm((prev) => ({ ...prev, [key]: value }));
+  const update = (key: keyof HomepageSettings, value: string) => {
+    if (key === 'promos') {
+      try {
+        setForm((prev) => ({ ...prev, [key]: JSON.parse(value) }));
+      } catch {
+        // ignore invalid JSON
+      }
+      return;
+    }
+    setForm((prev) => ({ ...prev, [key]: value }));
+  };
 
   const fields: { key: keyof HomepageSettings; label: string; placeholder: string }[] = [
     { key: 'hero_title', label: 'Hero Title', placeholder: 'Order food you love' },
@@ -166,6 +215,15 @@ export default function AdminHomepage() {
     { key: 'popular_title', label: 'Popular Section Title', placeholder: 'Popular Right Now' },
     { key: 'popular_subtitle', label: 'Popular Section Subtitle', placeholder: 'Customer favourites — add in one tap' },
     { key: 'categories_title', label: 'Categories Section Title', placeholder: 'Browse by Category' },
+    { key: 'offers_title', label: 'Offers Page Title', placeholder: 'Offers & Family Packs' },
+    { key: 'offers_subtitle', label: 'Offers Page Subtitle', placeholder: 'Current promotions from ...' },
+    { key: 'offers_phone_text', label: 'Offers Phone Notice', placeholder: 'These offers are available on phone...' },
+    { key: 'offers_cta_title', label: 'Offers CTA Title', placeholder: 'Feeding a crowd?' },
+    { key: 'offers_cta_text', label: 'Offers CTA Text', placeholder: 'Build your own feast from {count} items...' },
+    { key: 'offers_cta_button', label: 'Offers CTA Button', placeholder: 'Browse Full Menu' },
+    { key: 'locations_title', label: 'Locations Page Title', placeholder: 'Our Locations' },
+    { key: 'locations_subtitle', label: 'Locations Page Subtitle', placeholder: 'Visit us at any of our outlets.' },
+    { key: 'locations_note', label: 'Locations Note', placeholder: 'Online ordering available only for...' },
     { key: 'cta_title', label: 'CTA Title', placeholder: 'Ready to order?' },
     { key: 'cta_subtitle', label: 'CTA Subtitle', placeholder: 'Pay by cash or UPI...' },
     { key: 'cta_button_text', label: 'CTA Button Text', placeholder: 'Start Your Order' },
@@ -209,6 +267,9 @@ export default function AdminHomepage() {
     { key: 'contact_other_outlets_title', label: 'Other Outlets Title', placeholder: 'Other Outlets' },
     { key: 'contact_map_address', label: 'Map Search Address', placeholder: 'Mira Road East, Mumbai' },
     { key: 'contact_map_embed_url', label: 'Map Embed URL (full Google Maps embed URL)', placeholder: 'https://www.google.com/maps/embed/v1/...' },
+    { key: 'locations_map_address', label: 'Locations Map Search Address', placeholder: 'Mira Road East, Mumbai' },
+    { key: 'locations_map_embed_url', label: 'Locations Map Embed URL (full Google Maps embed URL)', placeholder: 'https://www.google.com/maps/embed/v1/...' },
+    { key: 'promos', label: 'Login Page Promo Cards (JSON)', placeholder: 'JSON array of promo cards...' },
   ];
 
   return (
@@ -227,17 +288,30 @@ export default function AdminHomepage() {
               <Skeleton className="mt-3 h-64" />
             ) : (
               <div className="mt-4 space-y-4">
-                {fields.map(({ key, label, placeholder }) => (
-                  <div key={key}>
-                    <label className="text-xs font-semibold text-zinc-700">{label}</label>
-                    <Input
-                      value={form[key] ?? ''}
-                      onChange={(e) => update(key, e.target.value)}
-                      placeholder={placeholder}
-                      className="mt-1.5"
-                    />
-                  </div>
-                ))}
+                {fields.map(({ key, label, placeholder }) => {
+                  const isPromos = key === 'promos';
+                  return (
+                    <div key={key}>
+                      <label className="text-xs font-semibold text-zinc-700">{label}</label>
+                      {isPromos ? (
+                        <textarea
+                          value={typeof form[key] === 'string' ? form[key] : JSON.stringify(form[key], null, 2)}
+                          onChange={(e) => update(key, e.target.value)}
+                          placeholder={placeholder}
+                          rows={6}
+                          className="mt-1.5 w-full px-4 py-2.5 rounded-xl border border-stone-200 bg-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-500"
+                        />
+                      ) : (
+                        <Input
+                          value={form[key] ?? ''}
+                          onChange={(e) => update(key, e.target.value)}
+                          placeholder={placeholder}
+                          className="mt-1.5"
+                        />
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </Card>

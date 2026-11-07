@@ -1,14 +1,16 @@
 import { MapPin, Phone, Clock, CheckCircle, XCircle } from 'lucide-react';
 import { useOutletsList, useOutletNames } from '../context/RestaurantContext';
+import { useHomepage } from '../context/SiteSettingsContext';
 
 export default function Locations() {
   const outlets = useOutletsList();
   const outletNames = useOutletNames();
+  const hp = useHomepage();
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-      <h1 className="text-3xl font-bold mb-2">Our Locations</h1>
+      <h1 className="text-3xl font-bold mb-2">{hp.locationsTitle}</h1>
       <p className="text-zinc-500 mb-8">
-        Visit us at any of our outlets{outletNames.length > 0 ? ` across ${outletNames.join(', ')}` : ''}.
+        {hp.locationsSubtitle}{outletNames.length > 0 ? ` across ${outletNames.join(', ')}` : ''}.
       </p>
 
       <div className="space-y-6">
@@ -66,9 +68,22 @@ export default function Locations() {
       </div>
 
       <div className="mt-8 bg-amber-50 border border-amber-200 rounded-2xl p-4 text-sm text-amber-800">
-        <strong>Note:</strong> Online ordering through this website is currently available
-        only for the {outletNames[0] || 'primary'} outlet. Please call your nearest outlet directly for
-        {outletNames.length > 1 ? ` orders at ${outletNames.slice(1).join(' or ')}` : ''}.
+        <strong>Note:</strong> {(hp.locationsNote || 'Online ordering through this website is currently available only for the {primary} outlet. Please call your nearest outlet directly for {others}.')
+          .replace('{primary}', outletNames[0] || 'primary')
+          .replace('{others}', outletNames.length > 1 ? `orders at ${outletNames.slice(1).join(' or ')}` : '')}
+      </div>
+
+      {/* Google Maps view */}
+      <div className="mt-8 rounded-2xl overflow-hidden border border-stone-200 shadow-sm">
+        <iframe
+          title="Store location map"
+          src={hp.locationsMapEmbedUrl || `https://www.google.com/maps?q=${encodeURIComponent(hp.locationsMapAddress || (outlets[0]?.address_lines ?? ['Mira Road East, Mumbai']).join(' '))}&output=embed`}
+          width="100%"
+          height="320"
+          style={{ border: 0 }}
+          loading="lazy"
+          referrerPolicy="no-referrer-when-downgrade"
+        />
       </div>
     </div>
   );

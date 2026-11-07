@@ -29,8 +29,8 @@ export default function Footer() {
           <div className="flex items-center gap-2.5 text-center sm:text-left">
             <Zap size={18} className="shrink-0 hidden sm:block" />
             <div>
-              <span className="font-semibold text-sm sm:text-base">Free delivery on all orders · {deliveryHours || '11 AM – 4 AM'}</span>
-              <span className="block text-xs text-white/70 sm:inline sm:ml-2">Pay cash or UPI on arrival</span>
+              <span className="font-semibold text-sm sm:text-base">{(footer.promoStripText || 'Free delivery on all orders · {hours}').replace('{hours}', deliveryHours || '11 AM – 4 AM')}</span>
+              <span className="block text-xs text-white/70 sm:inline sm:ml-2">{footer.promoStripSubtext || 'Pay cash or UPI on arrival'}</span>
             </div>
           </div>
           <Link
@@ -266,10 +266,10 @@ export default function Footer() {
         {/* Back to top */}
         <button
           onClick={scrollToTop}
-          className="fixed bottom-6 right-6 z-40 w-10 h-10 rounded-full bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700 flex items-center justify-center transition-all shadow-lg"
+          className="fixed bottom-6 right-6 z-40 w-11 h-11 rounded-full bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700 flex items-center justify-center transition-all shadow-lg group"
           aria-label="Back to top"
         >
-          <ArrowUp size={16} />
+          <Pizza size={18} className="transition-transform duration-500 group-hover:rotate-[360deg] group-hover:scale-110" />
         </button>
       </div>
     </footer>

@@ -12,6 +12,8 @@ import { Skeleton } from '@/components/shadcn/skeleton';
 interface FooterSettings {
   copyright_text: string;
   tagline: string;
+  promo_strip_text: string;
+  promo_strip_subtext: string;
   quick_links_title: string;
   delivery_hours_text: string;
   payment_label: string;
@@ -25,6 +27,8 @@ interface FooterSettings {
 const DEFAULTS: FooterSettings = {
   copyright_text: '',
   tagline: '100% Real Mozzarella · All prices include tax · Free delivery {hours}',
+  promo_strip_text: 'Free delivery on all orders · {hours}',
+  promo_strip_subtext: 'Pay cash or UPI on arrival',
   quick_links_title: 'Quick Links',
   delivery_hours_text: 'Delivery {hours} daily',
   payment_label: 'Payments:',
@@ -80,6 +84,8 @@ export default function AdminFooter() {
 
   const fields: { key: keyof FooterSettings; label: string; placeholder: string }[] = [
     { key: 'tagline', label: 'Footer Tagline', placeholder: '100% Real Mozzarella · All prices include tax' },
+    { key: 'promo_strip_text', label: 'Promo Strip Text', placeholder: 'Free delivery on all orders · {hours}' },
+    { key: 'promo_strip_subtext', label: 'Promo Strip Subtext', placeholder: 'Pay cash or UPI on arrival' },
     { key: 'quick_links_title', label: 'Quick Links Section Title', placeholder: 'Quick Links' },
     { key: 'delivery_hours_text', label: 'Delivery Hours Text', placeholder: 'Delivery {hours} daily' },
     { key: 'payment_label', label: 'Payment Label', placeholder: 'Payments:' },
