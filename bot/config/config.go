@@ -37,7 +37,11 @@ type Config struct {
 // DatabaseConfig owns persistence connection values. URL has no safe
 // default: missing means fatal, never silent localhost.
 type DatabaseConfig struct {
-	BotDatabaseURL string
+	BotDatabaseURL      string
+	MaxOpenConns        int
+	MaxIdleConns        int
+	ConnMaxLifetimeSecs int
+	ConnMaxIdleTimeSecs int
 }
 
 // HTTPConfig owns the listen socket, proxy trust, CORS, and timeouts.
@@ -46,6 +50,10 @@ type HTTPConfig struct {
 	CORSAllowedOrigins    string
 	CORSAllowedOriginsSet bool // true when CORS_ALLOWED_ORIGINS was explicitly provided
 	TrustedProxies        string
+	ReadTimeoutSecs       int
+	WriteTimeoutSecs      int
+	IdleTimeoutSecs       int
+	MaxHeaderBytes        int
 	StaleMessageTTLSecs   int // max age of an inbound WhatsApp message before it is held silently
 	CustomerSessionTTLSecs int // customer session lifetime in seconds (default 30d)
 	LogLevel              string
@@ -95,13 +103,21 @@ func Load() *Config {
 
 	return &Config{
 		DatabaseConfig: DatabaseConfig{
-			BotDatabaseURL: botDatabaseURL,
+			BotDatabaseURL:      botDatabaseURL,
+			MaxOpenConns:        getEnvInt("DB_MAX_OPEN_CONNS", 25),
+			MaxIdleConns:        getEnvInt("DB_MAX_IDLE_CONNS", 5),
+			ConnMaxLifetimeSecs: getEnvInt("DB_CONN_MAX_LIFETIME_SECS", 300),
+			ConnMaxIdleTimeSecs: getEnvInt("DB_CONN_MAX_IDLE_TIME_SECS", 120),
 		},
 		HTTPConfig: HTTPConfig{
 			BotPort:                getEnv("BOT_PORT", "8090"),
 			CORSAllowedOrigins:     getEnv("CORS_ALLOWED_ORIGINS", ""),
 			CORSAllowedOriginsSet:  os.Getenv("CORS_ALLOWED_ORIGINS") != "",
 			TrustedProxies:         getEnv("TRUSTED_PROXIES", ""),
+			ReadTimeoutSecs:        getEnvInt("HTTP_READ_TIMEOUT_SECS", 30),
+			WriteTimeoutSecs:       getEnvInt("HTTP_WRITE_TIMEOUT_SECS", 60),
+			IdleTimeoutSecs:        getEnvInt("HTTP_IDLE_TIMEOUT_SECS", 120),
+			MaxHeaderBytes:         getEnvInt("HTTP_MAX_HEADER_BYTES", 1<<20),
 			StaleMessageTTLSecs:    getEnvInt("STALE_MESSAGE_TTL_SECONDS", 120),
 			CustomerSessionTTLSecs: getEnvInt("CUSTOMER_SESSION_TTL_SECONDS", 30*24*3600),
 			LogLevel:               getEnv("LOG_LEVEL", "info"),

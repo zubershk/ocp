@@ -45,8 +45,11 @@ func RunMigrations() error {
 		return fmt.Errorf("failed to create %s: %w", migrationsTableName, err)
 	}
 	// advisory lock to prevent concurrent runners (k8s/Docker multiple replicas)
-	if _, err := DB.Exec(`SELECT pg_try_advisory_lock(87654321)`); err != nil {
-		log.Printf("warning: advisory lock failed: %v", err)
+	var locked bool
+	if err := DB.QueryRow(`SELECT pg_try_advisory_lock(87654321)`).Scan(&locked); err != nil {
+		log.Printf("warning: advisory lock query failed: %v", err)
+	} else if !locked {
+		return fmt.Errorf("another migration runner holds the advisory lock; aborting")
 	} else {
 		defer func() {
 			_, _ = DB.Exec(`SELECT pg_advisory_unlock(87654321)`)
@@ -85,13 +88,20 @@ func RunMigrations() error {
 		if err != nil {
 			return fmt.Errorf("failed to read migration %s: %w", entry.Name(), err)
 		}
-		if _, err := DB.Exec(string(content)); err != nil {
+		tx, err := DB.Begin()
+		if err != nil {
+			return fmt.Errorf("failed to begin transaction for %s: %w", entry.Name(), err)
+		}
+		if _, err := tx.Exec(string(content)); err != nil {
+			_ = tx.Rollback()
 			return fmt.Errorf("failed to execute migration %s: %w", entry.Name(), err)
 		}
-		if _, err := DB.Exec(
-			`INSERT INTO `+migrationsTableName+` (name) VALUES ($1) ON CONFLICT DO NOTHING`,
-			entry.Name()); err != nil {
+		if err := markApplied(tx, entry.Name()); err != nil {
+			_ = tx.Rollback()
 			return fmt.Errorf("failed to record migration %s: %w", entry.Name(), err)
+		}
+		if err := tx.Commit(); err != nil {
+			return fmt.Errorf("failed to commit migration %s: %w", entry.Name(), err)
 		}
 		log.Printf("migration applied: %s", entry.Name())
 	}

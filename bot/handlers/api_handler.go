@@ -384,9 +384,14 @@ func customerPhoneFromBearer(c *gin.Context) string {
 	if token == "" {
 		return ""
 	}
-	phone, _, err := services.ValidateSession(token)
+	rid, _ := services.RequireRestaurant(c)
+	phone, _, err := services.ValidateSessionFor(token, rid)
 	if err != nil {
-		return ""
+		// fallback to global for open-source single-tenant transition
+		phone, _, err = services.ValidateSession(token)
+		if err != nil {
+			return ""
+		}
 	}
 	return phone
 }

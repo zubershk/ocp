@@ -99,7 +99,7 @@ func (h *AuthHandler) Me(c *gin.Context) {
 
 // UpdateMe handles PATCH /api/auth/me — update customer profile (name, email, address).
 func (h *AuthHandler) UpdateMe(c *gin.Context) {
-	phone, cust, ok := customerFromHeader(c)
+	_, cust, ok := customerFromHeader(c)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized — please log in"})
 		return
@@ -107,6 +107,7 @@ func (h *AuthHandler) UpdateMe(c *gin.Context) {
 	var req struct {
 		Name           string `json:"name"`
 		Email          string `json:"email"`
+		Phone          string `json:"phone"`
 		DefaultAddress string `json:"default_address"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -131,10 +132,15 @@ func (h *AuthHandler) UpdateMe(c *gin.Context) {
 		fields["email"] = strings.TrimSpace(req.Email)
 		fields["email_verified"] = "false" // Reset verification until new email is confirmed
 	}
+	if strings.TrimSpace(req.Phone) != "" {
+		// Allow adding/updating phone for email-registered accounts
+		fields["whatsapp_number"] = strings.TrimSpace(req.Phone)
+	}
 	if strings.TrimSpace(req.DefaultAddress) != "" {
 		fields["default_address"] = strings.TrimSpace(req.DefaultAddress)
 	}
-	if err := services.UpdateCustomerProfileFor(phone, rid, fields); err != nil {
+	if err := services.UpdateCustomerProfileByID(cust.ID, rid, fields); err != nil {
+		log.Printf("update me failed: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "update failed"})
 		return
 	}
@@ -151,13 +157,16 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		Name     string `json:"name"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Printf("register bind error: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
 		return
 	}
 	rid, _ := services.RequireRestaurant(c)
 	cust, err := services.RegisterCustomer(req.Email, req.Password, req.Phone, req.Name, rid)
 	if err != nil {
+		log.Printf("register failed: %v", err)
 		if ve, ok := err.(*services.ValidationError); ok {
+			log.Printf("register validation: %s", ve.Msg)
 			c.JSON(http.StatusBadRequest, gin.H{"error": ve.Msg})
 			return
 		}
@@ -167,7 +176,9 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	// Auto-login after registration
 	token, cust2, err := services.LoginCustomer(req.Email, req.Password, rid)
 	if err != nil {
+		log.Printf("register auto-login failed: %v", err)
 		if ve, ok := err.(*services.ValidationError); ok {
+			log.Printf("register auto-login validation: %s", ve.Msg)
 			c.JSON(http.StatusBadRequest, gin.H{"error": ve.Msg})
 			return
 		}

@@ -212,21 +212,19 @@ func main() {
 		apiGroup.GET("/orders/:id", apiHandler.GetOrder)
 		apiGroup.GET("/orders/:id/stream", apiHandler.StreamOrder)
 		apiGroup.POST("/orders/:id/cancel", apiHandler.CancelOrder)
-		// Customer auth — phone synced to WhatsApp bot (customers.whatsapp_number)
+		// Customer auth - phone synced to WhatsApp bot (customers.whatsapp_number)
 		apiGroup.POST("/auth/send-otp", handlers.RateLimit(3, time.Minute), authHandler.SendOTP)
 		apiGroup.POST("/auth/verify-otp", handlers.RateLimit(10, time.Minute), authHandler.VerifyOTP)
-		apiGroup.POST("/auth/send-otp", handlers.RateLimit(3, time.Minute), authHandler.SendOTP, handlers.RequireCSRF())
-		apiGroup.POST("/auth/verify-otp", handlers.RateLimit(10, time.Minute), authHandler.VerifyOTP, handlers.RequireCSRF())
-		apiGroup.POST("/auth/register", handlers.RateLimit(10, time.Minute), authHandler.Register, handlers.RequireCSRF())
-		apiGroup.POST("/auth/login", handlers.RateLimit(10, time.Minute), authHandler.Login, handlers.RequireCSRF())
-		apiGroup.POST("/auth/change-password", handlers.RateLimit(10, time.Minute), authHandler.ChangePassword, handlers.RequireCSRF())
-		apiGroup.POST("/auth/request-password-reset", handlers.RateLimit(3, time.Minute), authHandler.RequestPasswordReset, handlers.RequireCSRF())
-		apiGroup.POST("/auth/reset-password", handlers.RateLimit(10, time.Minute), authHandler.ResetPassword, handlers.RequireCSRF())
-		apiGroup.POST("/auth/request-email-verification", handlers.RateLimit(3, time.Minute), authHandler.RequestEmailVerification, handlers.RequireCSRF())
-		apiGroup.POST("/auth/verify-email", handlers.RateLimit(10, time.Minute), authHandler.VerifyEmail, handlers.RequireCSRF())
+		apiGroup.POST("/auth/register", handlers.RateLimit(10, time.Minute), authHandler.Register)
+		apiGroup.POST("/auth/login", handlers.RateLimit(10, time.Minute), authHandler.Login)
+		apiGroup.POST("/auth/change-password", handlers.RateLimit(10, time.Minute), authHandler.ChangePassword, handlers.RequireCustomerAuth())
+		apiGroup.POST("/auth/request-password-reset", handlers.RateLimit(3, time.Minute), authHandler.RequestPasswordReset)
+		apiGroup.POST("/auth/reset-password", handlers.RateLimit(10, time.Minute), authHandler.ResetPassword)
+		apiGroup.POST("/auth/request-email-verification", handlers.RateLimit(3, time.Minute), authHandler.RequestEmailVerification, handlers.RequireCustomerAuth())
+		apiGroup.POST("/auth/verify-email", handlers.RateLimit(10, time.Minute), authHandler.VerifyEmail)
 		apiGroup.GET("/auth/me", authHandler.Me)
-		apiGroup.PATCH("/auth/me", authHandler.UpdateMe, handlers.RequireCSRF())
-		apiGroup.POST("/auth/logout", authHandler.Logout, handlers.RequireCSRF())
+		apiGroup.PATCH("/auth/me", authHandler.UpdateMe, handlers.RequireCustomerAuth())
+		apiGroup.POST("/auth/logout", authHandler.Logout, handlers.RequireCustomerAuth())
 		apiGroup.GET("/auth/orders", authHandler.Orders)
 	}
 
@@ -398,7 +396,14 @@ func main() {
 
 	// Start server — SaaS graceful shutdown (drains in-flight orders)
 	addr := ":" + cfg.BotPort
-	srv := &http.Server{Addr: addr, Handler: router}
+	srv := &http.Server{
+		Addr:           addr,
+		Handler:        router,
+		ReadTimeout:    time.Duration(cfg.ReadTimeoutSecs) * time.Second,
+		WriteTimeout:   time.Duration(cfg.WriteTimeoutSecs) * time.Second,
+		IdleTimeout:    time.Duration(cfg.IdleTimeoutSecs) * time.Second,
+		MaxHeaderBytes: cfg.MaxHeaderBytes,
+	}
 	brand := cfg.RestaurantName
 if brand == "" {
 	brand = cfg.InitialOrgName

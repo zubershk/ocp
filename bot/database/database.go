@@ -3,6 +3,7 @@ package database
 import (
 	"database/sql"
 	"fmt"
+	"time"
 
 	_ "github.com/lib/pq"
 	"orangecheesepizza/bot/config"
@@ -16,10 +17,10 @@ func Init(cfg *config.Config) error {
 	if err != nil {
 		return fmt.Errorf("failed to open database: %w", err)
 	}
-	DB.SetMaxOpenConns(20)
-	DB.SetMaxIdleConns(5)
-	DB.SetConnMaxLifetime(5 * 60 * 1e9) // 5m
-	DB.SetConnMaxIdleTime(2 * 60 * 1e9) // 2m
+	DB.SetMaxOpenConns(cfg.MaxOpenConns)
+	DB.SetMaxIdleConns(cfg.MaxIdleConns)
+	DB.SetConnMaxLifetime(time.Duration(cfg.ConnMaxLifetimeSecs) * time.Second)
+	DB.SetConnMaxIdleTime(time.Duration(cfg.ConnMaxIdleTimeSecs) * time.Second)
 	if err = DB.Ping(); err != nil {
 		return fmt.Errorf("failed to ping database: %w", err)
 	}

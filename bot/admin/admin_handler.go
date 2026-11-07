@@ -978,12 +978,16 @@ func (h *AdminHandler) GetOrders(c *gin.Context) {
 		return
 	}
 
-	// Embed items so the restaurant board renders full tickets.
-	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
+	// Embed items so the restaurant board renders full tickets (batched to avoid N+1).
+	ids := make([]int, 0, len(orders))
 	for i := range orders {
-		full, err := h.orderService.GetOrderByID(orders[i].ID, rid)
-		if err == nil && full != nil {
-			orders[i].Items = full.Items
+		ids = append(ids, orders[i].ID)
+	}
+	if itemsByOrder, err := h.orderService.GetOrderItemsByOrderIDs(ids); err == nil {
+		for i := range orders {
+			if its, ok := itemsByOrder[orders[i].ID]; ok {
+				orders[i].Items = its
+			}
 		}
 	}
 

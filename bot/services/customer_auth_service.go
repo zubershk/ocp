@@ -334,7 +334,9 @@ func ValidateSessionFor(token string, restaurantID int) (string, *Customer, erro
 	// Sliding rotation: if more than half the TTL has elapsed, extend expiry to now+TTL.
 	// This keeps active users logged in without extending idle sessions indefinitely.
 	ttl := sessionTTL()
-	if time.Until(expiresAt) < ttl/2 {
+	// Only rotate when the session is within the last quarter of its TTL,
+	// cutting DB write amplification on active sessions ~4x.
+	if time.Until(expiresAt) < ttl/4 {
 		newExp := time.Now().Add(ttl)
 		_, _ = database.DB.Exec(`UPDATE customer_sessions SET expires_at=$1 WHERE token=$2`, newExp, hashed)
 		expiresAt = newExp
@@ -636,11 +638,15 @@ func GetCustomerByEmail(email string, restaurantID int) (*Customer, error) {
 	`, strings.TrimSpace(email), rid)
 
 	var c Customer
-	err := row.Scan(&c.ID, &c.WhatsAppNumber, &c.Name, &c.Email,
+	var wa sql.NullString
+	err := row.Scan(&c.ID, &wa, &c.Name, &c.Email,
 		&c.DefaultAddress, &c.Landmark, &c.TotalOrders, &c.TotalSpent,
 		&c.PasswordHash)
 	if err != nil {
 		return nil, err
+	}
+	if wa.Valid {
+		c.WhatsAppNumber = wa.String
 	}
 	c.FirstName = c.displayName()
 	return &c, nil
@@ -662,9 +668,13 @@ func getCustomerByID(id, restaurantID int) (*Customer, error) {
 	`, id, rid)
 
 	var c Customer
-	err := row.Scan(&c.ID, &c.WhatsAppNumber, &c.Name, &c.Email,
+	var wa sql.NullString
+	err := row.Scan(&c.ID, &wa, &c.Name, &c.Email,
 		&c.DefaultAddress, &c.Landmark, &c.TotalOrders, &c.TotalSpent,
 		&c.PasswordHash)
+	if err == nil && wa.Valid {
+		c.WhatsAppNumber = wa.String
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -720,20 +730,26 @@ func RegisterCustomer(email, password, phone, name string, restaurantID int) (*C
 		authProvider = "both"
 	}
 
-	// Insert new customer
+	// Insert new customer. Use NULL for whatsapp_number when no phone is
+	// provided so the (whatsapp_number, restaurant_id) unique constraint
+	// does not collide on empty strings.
+	var phoneVal interface{}
+	if hasPhone {
+		phoneVal = whatsappNumber
+	}
 	var id int
 	err = database.DB.QueryRow(`
 		INSERT INTO customers (email, password_hash, whatsapp_number, auth_provider, name, last_seen_at, restaurant_id)
 		VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, $6)
 		RETURNING id
-	`, email, hashedPassword, whatsappNumber, authProvider, name, rid).Scan(&id)
+	`, email, hashedPassword, phoneVal, authProvider, name, rid).Scan(&id)
 	if err != nil {
 		// Fallback for DBs still on old global unique (pre-027) during transition
 		_, _ = database.DB.Exec(`
 			INSERT INTO customers (email, password_hash, whatsapp_number, auth_provider, name, last_seen_at)
 			VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
 			ON CONFLICT (email) DO NOTHING
-		`, email, hashedPassword, whatsappNumber, authProvider, name)
+		`, email, hashedPassword, phoneVal, authProvider, name)
 		var id2 int
 		err = database.DB.QueryRow(`SELECT id FROM customers WHERE email = $1`, email).Scan(&id2)
 		if err != nil {
@@ -803,13 +819,13 @@ func LoginCustomer(email, password string, restaurantID int) (string, *Customer,
 	hashedToken := hashHex(token)
 
 	_, err = database.DB.Exec(`
-		INSERT INTO customer_sessions (email, token, expires_at, restaurant_id)
-		VALUES ($1,$2,$3,$4)
-	`, email, hashedToken, expires, rid)
+		INSERT INTO customer_sessions (phone, email, token, expires_at, restaurant_id)
+		VALUES ($1,$2,$3,$4,$5)
+	`, cust.WhatsAppNumber, email, hashedToken, expires, rid)
 	if err != nil {
 		if _, err2 := database.DB.Exec(`
-			INSERT INTO customer_sessions (email, token, expires_at)
-			VALUES ($1,$2,$3)`, email, hashedToken, expires); err2 != nil {
+			INSERT INTO customer_sessions (phone, email, token, expires_at)
+			VALUES ($1,$2,$3,$4)`, cust.WhatsAppNumber, email, hashedToken, expires); err2 != nil {
 			return "", nil, err2
 		}
 	}

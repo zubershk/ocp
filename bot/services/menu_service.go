@@ -3,6 +3,8 @@ package services
 import (
 	"database/sql"
 	"encoding/json"
+	"strconv"
+	"strings"
 
 	"orangecheesepizza/bot/database"
 	"orangecheesepizza/bot/models"
@@ -63,16 +65,53 @@ func (s *MenuService) GetItemsByCategory(categoryID, restaurantID int) ([]models
 	defer rows.Close()
 
 	var items []models.MenuItem
+	var ids []int
 	for rows.Next() {
 		var item models.MenuItem
 		if err := rows.Scan(&item.ID, &item.CategoryID, &item.Name, &item.Description, &item.Price, &item.ImageURL, &item.Available, &item.SortOrder, &item.Active, &item.CreatedAt, &item.UpdatedAt); err != nil {
 			return nil, err
 		}
-		// Load options for each item
-		item.Options, _ = s.GetOptionsByItemID(item.ID)
 		items = append(items, item)
+		ids = append(ids, item.ID)
+	}
+	// Batch-load options in one query (avoid N+1).
+	optsByItem, _ := s.GetOptionsByItemIDs(ids)
+	for i := range items {
+		if opts, ok := optsByItem[items[i].ID]; ok {
+			items[i].Options = opts
+		}
 	}
 	return items, nil
+}
+
+// GetOptionsByItemIDs loads options for multiple items in one query.
+func (s *MenuService) GetOptionsByItemIDs(ids []int) (map[int][]models.MenuItemOption, error) {
+	result := map[int][]models.MenuItemOption{}
+	if len(ids) == 0 {
+		return result, nil
+	}
+	placeholders := make([]string, len(ids))
+	args := make([]interface{}, len(ids))
+	for i, id := range ids {
+		placeholders[i] = "$" + strconv.Itoa(i+1)
+		args[i] = id
+	}
+	rows, err := database.DB.Query(`
+		SELECT id, menu_item_id, name, option_type, price_delta, active, created_at, updated_at
+		FROM menu_item_options WHERE menu_item_id IN (`+strings.Join(placeholders, ",")+`) AND active = true
+	`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var opt models.MenuItemOption
+		if err := rows.Scan(&opt.ID, &opt.MenuItemID, &opt.Name, &opt.OptionType, &opt.PriceDelta, &opt.Active, &opt.CreatedAt, &opt.UpdatedAt); err != nil {
+			continue
+		}
+		result[opt.MenuItemID] = append(result[opt.MenuItemID], opt)
+	}
+	return result, nil
 }
 
 func (s *MenuService) GetItemByID(id, restaurantID int) (*models.MenuItem, error) {
@@ -395,6 +434,46 @@ func (s *OrderService) GetOrdersByPhone(phone string, restaurantID int) ([]model
 		orders = append(orders, order)
 	}
 	return orders, nil
+}
+
+// GetOrderItemsByOrderIDs loads items for multiple orders in one query,
+// avoiding N+1 when listing orders.
+func (s *OrderService) GetOrderItemsByOrderIDs(ids []int) (map[int][]models.OrderItem, error) {
+	result := map[int][]models.OrderItem{}
+	if len(ids) == 0 {
+		return result, nil
+	}
+	placeholders := make([]string, len(ids))
+	args := make([]interface{}, len(ids))
+	for i, id := range ids {
+		placeholders[i] = "$" + strconv.Itoa(i+1)
+		args[i] = id
+	}
+	rows, err := database.DB.Query(`
+		SELECT id, order_id, menu_item_id, name, quantity, unit_price, options, subtotal, created_at, COALESCE(addons_snapshot, '[]'::jsonb)
+		FROM order_items WHERE order_id IN (`+strings.Join(placeholders, ",")+`)
+	`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var item models.OrderItem
+		var optionsJSON, addonsJSON []byte
+		if err := rows.Scan(&item.ID, &item.OrderID, &item.MenuItemID, &item.Name, &item.Quantity, &item.UnitPrice, &optionsJSON, &item.Subtotal, &item.CreatedAt, &addonsJSON); err != nil {
+			continue
+		}
+		_ = json.Unmarshal(optionsJSON, &item.Options)
+		_ = json.Unmarshal(addonsJSON, &item.Addons)
+		var opts map[string]string
+		if json.Unmarshal(optionsJSON, &opts) == nil {
+			item.Size = opts["size"]
+			item.Crust = opts["crust"]
+		}
+		item.LineTotal = item.Subtotal
+		result[item.OrderID] = append(result[item.OrderID], item)
+	}
+	return result, nil
 }
 
 func (s *OrderService) UpdateOrderStatus(orderID int, status string) error {
