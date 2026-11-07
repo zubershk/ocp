@@ -396,6 +396,31 @@ func (s *WebsiteOrderService) CreateFor(req *WebsiteOrderRequest, idempotencyKey
 	// ---- lifetime stats (post-commit, best effort) ----
 	_ = RecordCustomerOrderFor(phone, rid, total)
 
+	// ---- auto-print receipt if printer is configured ----
+	go func() {
+		printed, err := PrintOrderReceipt(&models.Order{
+			ID:            orderID,
+			OrderNumber:   orderNumber,
+			CustomerName:  name,
+			CustomerPhone: phone,
+			OrderType:     req.DeliveryType,
+			PaymentMethod: req.PaymentMethod,
+			Subtotal:      subtotal,
+			DeliveryFee:   deliveryFee,
+			Discount:      discount,
+			Total:         total,
+			Status:        "confirmed",
+			CreatedAt:     createdAt,
+			RestaurantID:  rid,
+			OutletID:      outletID,
+		}, s.cfg.RestaurantName)
+		if err != nil {
+			log.Printf("[printer] auto-print failed for order %s: %v", orderNumber, err)
+		} else if printed {
+			log.Printf("[printer] auto-printed order %s", orderNumber)
+		}
+	}()
+
 	BroadcastRealtimeFor(rid, outletID, 0, "order.created", map[string]interface{}{
 		"order_id": orderID, "order_number": orderNumber, "total": total, "restaurant_id": rid, "outlet_id": outletID,
 	})

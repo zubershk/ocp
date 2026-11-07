@@ -148,6 +148,16 @@ func ApplyStatusChange(orderID int, newStatus string, evolution *EvolutionClient
 
 	order.Status = newStatus
 
+	// Auto-print receipt when an order is completed (POS orders flow here).
+	go func() {
+		printed, err := PrintOrderReceipt(order, cfg.RestaurantName)
+		if err != nil {
+			log.Printf("[printer] auto-print failed for order %s: %v", order.OrderNumber, err)
+		} else if printed {
+			log.Printf("[printer] auto-printed order %s", order.OrderNumber)
+		}
+	}()
+
 	outcome := notifyCustomerStatus(order.OrderNumber, order.CustomerPhone, newStatus, evolution.ForRestaurant(order.RestaurantID), cfg)
 	BroadcastRealtimeFor(order.RestaurantID, order.OutletID, 0, "order.status", map[string]interface{}{
 		"order_id": order.ID, "order_number": order.OrderNumber, "status": newStatus, "restaurant_id": order.RestaurantID, "outlet_id": order.OutletID,

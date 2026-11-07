@@ -303,7 +303,7 @@ export default function AdminHomepage() {
                         />
                       ) : (
                         <Input
-                          value={form[key] ?? ''}
+                          value={String(form[key] ?? '')}
                           onChange={(e) => update(key, e.target.value)}
                           placeholder={placeholder}
                           className="mt-1.5"
@@ -326,6 +326,7 @@ export default function AdminHomepage() {
               Changes will be reflected on the customer-facing website immediately after saving.
             </p>
           </Card>
+
         </div>
       </div>
     </div>
