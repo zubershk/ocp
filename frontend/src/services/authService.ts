@@ -46,6 +46,39 @@ export async function sendOtp(phone: string): Promise<{ delivered: boolean; mess
   return { delivered: data?.delivered ?? true, message: data?.message ?? 'code sent' };
 }
 
+export async function register(payload: {
+  email: string;
+  password: string;
+  phone?: string;
+  name?: string;
+}): Promise<{ token: string; customer: Customer }> {
+  const res = await fetch(`${apiBaseUrl}/api/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const result = (await res.json().catch(() => null)) as { token?: string; customer?: Customer; error?: string } | null;
+  if (!res.ok) throw new Error(result?.error ?? `HTTP ${res.status}`);
+  if (!result?.token || !result?.customer) throw new Error('Invalid response');
+  setCustomerToken(result.token);
+  setStoredCustomer(result.customer);
+  return { token: result.token, customer: result.customer };
+}
+
+export async function login(email: string, password: string): Promise<{ token: string; customer: Customer }> {
+  const res = await fetch(`${apiBaseUrl}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+  const data = (await res.json().catch(() => null)) as { token?: string; customer?: Customer; error?: string } | null;
+  if (!res.ok) throw new Error(data?.error ?? `HTTP ${res.status}`);
+  if (!data?.token || !data?.customer) throw new Error('Invalid response');
+  setCustomerToken(data.token);
+  setStoredCustomer(data.customer);
+  return { token: data.token, customer: data.customer };
+}
+
 export async function verifyOtp(phone: string, code: string, name?: string): Promise<{ token: string; customer: Customer }> {
   const res = await fetch(`${apiBaseUrl}/api/auth/verify-otp`, {
     method: 'POST',

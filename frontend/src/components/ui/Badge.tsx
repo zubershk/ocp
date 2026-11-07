@@ -1,3 +1,4 @@
+import { cn } from '@/lib/utils';
 import type { ReactNode } from 'react';
 
 type BadgeVariant = 'success' | 'warning' | 'error' | 'neutral' | 'brand' | 'veg' | 'nonveg';
@@ -28,12 +29,12 @@ const sizeStyles = {
 export default function Badge({ children, variant = 'neutral', size = 'sm', icon, className = '' }: BadgeProps) {
   return (
     <span
-      className={`
-        inline-flex items-center font-semibold rounded-full ring-1 ring-inset shadow-[0_2px_8px_rgba(0,0,0,0.06)]
-        ${variantStyles[variant]}
-        ${sizeStyles[size]}
-        ${className}
-      `}
+      className={cn(
+        'inline-flex items-center font-semibold rounded-[var(--radius-full)] ring-1 ring-inset shadow-[0_2px_8px_rgba(0,0,0,0.06)]',
+        variantStyles[variant],
+        sizeStyles[size],
+        className,
+      )}
     >
       {icon && <span className="shrink-0">{icon}</span>}
       {children}

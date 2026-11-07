@@ -196,7 +196,7 @@ export default function ReceiptModal({
                     <Button variant="secondary" className="flex-1" onClick={() => setRefundId(null)}>
                       Back
                     </Button>
-                    <Button variant="danger" className="flex-1" loading={refunding} onClick={submitRefund}>
+                    <Button variant="destructive" className="flex-1" loading={refunding} onClick={submitRefund}>
                       Confirm refund
                     </Button>
                   </div>

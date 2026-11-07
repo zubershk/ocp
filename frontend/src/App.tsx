@@ -16,6 +16,7 @@ import Product from './pages/Product';
 import Cart from './pages/Cart';
 import Checkout from './pages/Checkout';
 import Order from './pages/Order';
+import Register from './pages/Register';
 import About from './pages/About';
 import Offers from './pages/Offers';
 import Locations from './pages/Locations';
@@ -158,6 +159,7 @@ function AppRoutes() {
       <Route path="/r/privacy" element={<PageShell><Layout><Privacy /></Layout></PageShell>} />
       <Route path="/r/terms" element={<PageShell><Layout><Terms /></Layout></PageShell>} />
       <Route path="/r/login" element={<PageShell><Layout><Login /></Layout></PageShell>} />
+      <Route path="/r/register" element={<PageShell><Layout><Register /></Layout></PageShell>} />
       <Route path="/r/account" element={<PageShell><Layout><Account /></Layout></PageShell>} />
       {/* Tenant-slug local fallback for open-source multi-tenant: /r/:slug/* */}
       <Route path="/r/:restaurantSlug" element={<PageShell><Layout><Home /></Layout></PageShell>} />

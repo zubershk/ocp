@@ -23,6 +23,7 @@ type Customer struct {
 	Landmark       sql.NullString `json:"-"`
 	TotalOrders    int            `json:"total_orders"`
 	TotalSpent     float64        `json:"total_spent"`
+	PasswordHash   sql.NullString `json:"-"`
 	FirstName      string         `json:"name,omitempty"`
 }
 

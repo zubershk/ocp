@@ -81,12 +81,12 @@ func (h *AuthHandler) VerifyOTP(c *gin.Context) {
 
 // Me handles GET /api/auth/me — requires Bearer token.
 func (h *AuthHandler) Me(c *gin.Context) {
-	phone, cust, ok := customerFromHeader(c)
+	_, cust, ok := customerFromHeader(c)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized — please log in"})
 		return
 	}
-	resp := gin.H{"phone": phone}
+	resp := gin.H{"phone": cust.WhatsAppNumber}
 	if cust != nil {
 		resp["name"] = cust.FirstName
 		resp["total_orders"] = cust.TotalOrders
@@ -99,7 +99,7 @@ func (h *AuthHandler) Me(c *gin.Context) {
 
 // UpdateMe handles PATCH /api/auth/me — update customer profile (name, email, address).
 func (h *AuthHandler) UpdateMe(c *gin.Context) {
-	phone, _, ok := customerFromHeader(c)
+	phone, cust, ok := customerFromHeader(c)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized — please log in"})
 		return
@@ -118,8 +118,18 @@ func (h *AuthHandler) UpdateMe(c *gin.Context) {
 	if strings.TrimSpace(req.Name) != "" {
 		fields["name"] = strings.TrimSpace(req.Name)
 	}
-	if strings.TrimSpace(req.Email) != "" {
+	if strings.TrimSpace(req.Email) != "" && strings.TrimSpace(req.Email) != cust.Email.String {
+		// Email change requires verification
+		if err := services.RequestEmailVerification(strings.TrimSpace(req.Email), rid); err != nil {
+			if ve, ok := err.(*services.ValidationError); ok {
+				c.JSON(http.StatusBadRequest, gin.H{"error": ve.Msg})
+				return
+			}
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to request email verification"})
+			return
+		}
 		fields["email"] = strings.TrimSpace(req.Email)
+		fields["email_verified"] = "false" // Reset verification until new email is confirmed
 	}
 	if strings.TrimSpace(req.DefaultAddress) != "" {
 		fields["default_address"] = strings.TrimSpace(req.DefaultAddress)
@@ -128,7 +138,206 @@ func (h *AuthHandler) UpdateMe(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "update failed"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"updated": true})
+	c.JSON(http.StatusOK, gin.H{"updated": true, "email_verified": false})
+}
+
+// Register handles POST /api/auth/register - creates account with email + password.
+// Phone is optional for WhatsApp sync. Name is optional.
+func (h *AuthHandler) Register(c *gin.Context) {
+	var req struct {
+		Email    string `json:"email" binding:"required"`
+		Password string `json:"password" binding:"required"`
+		Phone    string `json:"phone"`
+		Name     string `json:"name"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
+		return
+	}
+	rid, _ := services.RequireRestaurant(c)
+	cust, err := services.RegisterCustomer(req.Email, req.Password, req.Phone, req.Name, rid)
+	if err != nil {
+		if ve, ok := err.(*services.ValidationError); ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": ve.Msg})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "registration failed"})
+		return
+	}
+	// Auto-login after registration
+	token, cust2, err := services.LoginCustomer(req.Email, req.Password, rid)
+	if err != nil {
+		if ve, ok := err.(*services.ValidationError); ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": ve.Msg})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "registration succeeded but login failed"})
+		return
+	}
+	_ = cust2
+	c.JSON(http.StatusOK, gin.H{
+		"token": token,
+		"customer": gin.H{
+			"id":             cust.ID,
+			"whatsapp_number": cust.WhatsAppNumber,
+			"email":          cust.Email.String,
+			"name":           cust.FirstName,
+			"total_orders":   cust.TotalOrders,
+			"total_spent":    cust.TotalSpent,
+		},
+	})
+}
+
+// Login handles POST /api/auth/login - email + password authentication.
+func (h *AuthHandler) Login(c *gin.Context) {
+	var req struct {
+		Email    string `json:"email" binding:"required"`
+		Password string `json:"password" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
+		return
+	}
+	rid, _ := services.RequireRestaurant(c)
+	token, cust, err := services.LoginCustomer(req.Email, req.Password, rid)
+	if err != nil {
+		if ve, ok := err.(*services.ValidationError); ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": ve.Msg})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "login failed"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"token": token,
+		"customer": gin.H{
+			"id":             cust.ID,
+			"whatsapp_number": cust.WhatsAppNumber,
+			"email":          cust.Email.String,
+			"name":           cust.FirstName,
+			"total_orders":   cust.TotalOrders,
+			"total_spent":    cust.TotalSpent,
+		},
+	})
+}
+
+// RequestPasswordReset handles POST /api/auth/request-password-reset
+func (h *AuthHandler) RequestPasswordReset(c *gin.Context) {
+	var req struct {
+		Email string `json:"email" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
+		return
+	}
+	rid, _ := services.RequireRestaurant(c)
+	if err := services.RequestPasswordReset(req.Email, rid); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to process request"})
+		return
+	}
+	// Always return success to prevent email enumeration
+	c.JSON(http.StatusOK, gin.H{"message": "If an account exists, a reset link has been sent"})
+}
+
+// ResetPassword handles POST /api/auth/reset-password
+func (h *AuthHandler) ResetPassword(c *gin.Context) {
+	var req struct {
+		Token    string `json:"token" binding:"required"`
+		Password string `json:"password" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
+		return
+	}
+	rid, _ := services.RequireRestaurant(c)
+	if err := services.ResetPassword(req.Token, req.Password, rid); err != nil {
+		if ve, ok := err.(*services.ValidationError); ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": ve.Msg})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "reset failed"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "password reset successful"})
+}
+
+// RequestEmailVerification handles POST /api/auth/request-email-verification
+func (h *AuthHandler) RequestEmailVerification(c *gin.Context) {
+	var req struct {
+		Email string `json:"email" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
+		return
+	}
+	rid, _ := services.RequireRestaurant(c)
+	if err := services.RequestEmailVerification(req.Email, rid); err != nil {
+		if ve, ok := err.(*services.ValidationError); ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": ve.Msg})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to send verification email"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "verification email sent"})
+}
+
+// ChangePassword handles POST /api/auth/change-password — requires current password + new password.
+// Requires authenticated customer (session token).
+func (h *AuthHandler) ChangePassword(c *gin.Context) {
+	var req struct {
+		CurrentPassword string `json:"current_password" binding:"required"`
+		NewPassword     string `json:"new_password" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
+		return
+	}
+	_, cust, ok := customerFromHeader(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized — please log in"})
+		return
+	}
+	rid, _ := services.RequireRestaurant(c)
+	// Verify current password using customer ID
+	if err := services.VerifyPassword(cust.ID, req.CurrentPassword, rid); err != nil {
+		if ve, ok := err.(*services.ValidationError); ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": ve.Msg})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "password change failed"})
+		return
+	}
+	if err := services.ChangePassword(cust.ID, req.CurrentPassword, req.NewPassword); err != nil {
+		if ve, ok := err.(*services.ValidationError); ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": ve.Msg})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "password change failed"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "password changed successfully"})
+}
+
+// VerifyEmail handles POST /api/auth/verify-email
+func (h *AuthHandler) VerifyEmail(c *gin.Context) {
+	var req struct {
+		Token string `json:"token" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
+		return
+	}
+	rid, _ := services.RequireRestaurant(c)
+	if err := services.VerifyEmail(req.Token, rid); err != nil {
+		if ve, ok := err.(*services.ValidationError); ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": ve.Msg})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "verification failed"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "email verified successfully"})
 }
 
 // Logout handles POST /api/auth/logout
@@ -193,6 +402,40 @@ func RequireCustomerAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if _, _, ok := customerFromHeader(c); !ok {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "please log in"})
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
+}
+
+// RequireCSRF middleware validates CSRF token on state-changing requests.
+// The token must be sent as X-CSRF-Token header.
+func RequireCSRF() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if c.Request.Method == http.MethodGet || c.Request.Method == http.MethodHead || c.Request.Method == http.MethodOptions {
+			c.Next()
+			return
+		}
+		token := c.GetHeader("X-CSRF-Token")
+		if token == "" {
+			c.JSON(http.StatusForbidden, gin.H{"error": "CSRF token required"})
+			c.Abort()
+			return
+		}
+		_, cust, ok := customerFromHeader(c)
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized — please log in"})
+			c.Abort()
+			return
+		}
+		_, _ = services.RequireRestaurant(c)
+		if err := services.ValidateCSRFToken(cust.ID, token); err != nil {
+			if ve, ok := err.(*services.ValidationError); ok {
+				c.JSON(http.StatusBadRequest, gin.H{"error": ve.Msg})
+			} else {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "csrf validation failed"})
+			}
 			c.Abort()
 			return
 		}
