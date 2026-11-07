@@ -337,6 +337,11 @@ func main() {
 		// POS config foundation — admin-configurable, no behavior change until POS wiring (PR 3)
 		adminGroup.GET("/pos/config", adminHandler.RequirePermission("pos.read"), adminHandler.GetPOSConfig)
 		adminGroup.PUT("/pos/config", adminHandler.RequireRole("owner", "manager"), adminHandler.UpdatePOSConfig)
+		// Printer configuration — hardware ESC/POS / virtual thermal printer support
+		adminGroup.GET("/printer/config", adminHandler.RequirePermission("pos.read"), adminHandler.GetPrinterConfig)
+		adminGroup.PUT("/printer/config", adminHandler.RequireRole("owner", "manager"), adminHandler.UpdatePrinterConfig)
+		adminGroup.POST("/printer/test", adminHandler.RequireRole("owner", "manager"), adminHandler.TestPrinterConnection)
+		adminGroup.POST("/orders/:id/print", adminHandler.RequireRole("owner", "manager", "cashier"), adminHandler.RequirePermission("pos.update_order"), adminHandler.ManualPrintOrder)
 		// PR #2 foundation: addon groups/items (catalog), tables, payments, customer fields
 		adminGroup.GET("/addon-groups", adminHandler.RequirePermission("pos.read"), adminHandler.ListAddonGroups)
 		adminGroup.POST("/addon-groups", adminHandler.RequireRole("owner", "manager"), adminHandler.CreateAddonGroup)
