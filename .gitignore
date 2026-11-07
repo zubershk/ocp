@@ -56,8 +56,17 @@ Thumbs.db
 .idea/
 .vscode/
 *.log
+*.log.err
 *.tmp
 *.swp
+*~
+
+# Temp env files
+.env.new
+.env.bak
+
+# Evolution GO binaries
+evolution-go/*.exe
 
 # OpenCode / AI tooling
 .opencode/
