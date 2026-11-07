@@ -48,6 +48,9 @@ export function ProductCard({
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
   const [added, setAdded] = useState(false);
+  const [imgFailed, setImgFailed] = useState(false);
+  const FALLBACK_IMG = 'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=400&h=300&fit=crop';
+  const imgSrc = !image || imgFailed ? FALLBACK_IMG : image;
 
   const handleAddToCart = async () => {
     setIsAdding(true);
@@ -131,8 +134,9 @@ export function ProductCard({
         {id ? (
           <Link to={`/r/menu/item/${id}`} className="block w-full h-full">
             <img
-              src={image}
+              src={imgSrc}
               alt={name}
+              onError={() => setImgFailed(true)}
               width={400}
               height={300}
               loading="lazy"
@@ -142,12 +146,13 @@ export function ProductCard({
           </Link>
         ) : (
           <img
-            src={image}
+            src={imgSrc}
             alt={name}
             width={400}
             height={300}
             loading="lazy"
             decoding="async"
+            onError={() => setImgFailed(true)}
             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
           />
         )}

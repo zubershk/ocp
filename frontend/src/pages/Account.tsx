@@ -35,6 +35,7 @@ export default function Account() {
   const [activeTab, setActiveTab] = useState<'overview' | 'orders' | 'settings'>('overview');
   const [settingsName, setSettingsName] = useState(customer?.name || '');
   const [settingsEmail, setSettingsEmail] = useState(customer?.email || '');
+  const [settingsPhone, setSettingsPhone] = useState(customer?.phone || '');
   const [settingsAddress, setSettingsAddress] = useState(customer?.default_address || '');
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
@@ -44,7 +45,7 @@ export default function Account() {
     setSaving(true);
     setSaveMsg('');
     try {
-      await updateProfile({ name: settingsName, email: settingsEmail, default_address: settingsAddress });
+      await updateProfile({ name: settingsName, email: settingsEmail, phone: settingsPhone, default_address: settingsAddress });
       const fresh = await fetchMe();
       setCustomer(fresh, getCustomerToken());
       setSaveMsg('Saved!');
@@ -68,6 +69,7 @@ export default function Account() {
     if (customer) {
       setSettingsName(customer.name || '');
       setSettingsEmail(customer.email || '');
+      setSettingsPhone(customer.phone || '');
       setSettingsAddress(customer.default_address || '');
     }
   }, [customer]);
@@ -105,7 +107,7 @@ export default function Account() {
               <div className="text-xs text-zinc-400 font-medium">{customer.email ? customer.email : 'Member'}</div>
               <h2 className="text-2xl sm:text-3xl font-bold tracking-tight mt-1 truncate">{customer.name || 'Welcome'}</h2>
               <div className="flex flex-wrap items-center gap-3 mt-2 text-sm text-zinc-300">
-                <span className="inline-flex items-center gap-1.5"><Phone size={13} /> +91 {customer.phone}</span>
+                <span className="inline-flex items-center gap-1.5"><Phone size={13} /> {customer.phone ? `+91 ${customer.phone}` : 'Not provided'}</span>
               </div>
             </div>
             <div className="flex gap-2 shrink-0">
@@ -260,8 +262,12 @@ export default function Account() {
             </div>
             <div>
               <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wide">Phone</label>
-              <input value={`+91 ${customer.phone}`} readOnly className="mt-1.5 w-full px-4 py-2.5 rounded-xl border border-zinc-200 bg-zinc-50 text-sm font-mono" />
-              <p className="text-[11px] text-zinc-400 mt-1">Phone is your identity and cannot be changed.</p>
+              {customer.phone ? (
+                <input value={`+91 ${customer.phone}`} readOnly className="mt-1.5 w-full px-4 py-2.5 rounded-xl border border-zinc-200 bg-zinc-50 text-sm font-mono" />
+              ) : (
+                <input value={settingsPhone} onChange={(e) => setSettingsPhone(e.target.value)} placeholder="10-digit mobile number" className="mt-1.5 w-full px-4 py-2.5 rounded-xl border border-zinc-200 bg-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-500" />
+              )}
+              <p className="text-[11px] text-zinc-400 mt-1">{customer.phone ? 'Phone is your identity and cannot be changed.' : 'Add a phone number to sync with WhatsApp orders.'}</p>
             </div>
             <div>
               <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wide">Email</label>

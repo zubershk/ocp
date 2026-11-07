@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { MessageCircle, ArrowLeft, RefreshCw, Gift, Truck, Clock3, Award, UtensilsCrossed, MapPin, Shield, ChevronRight, Mail, Lock, User, Phone, ArrowRight, ArrowLeft as ArrowLeftIcon } from 'lucide-react';
+import { MessageCircle, ArrowLeft, RefreshCw, Gift, Truck, Clock3, Award, UtensilsCrossed, MapPin, Shield, ChevronRight, Mail, Lock, User, Phone, ArrowRight, ArrowLeft as ArrowLeftIcon, Star, Flame } from 'lucide-react';
 import { sendOtp, verifyOtp, register, login } from '../services/authService';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { useOutletNames, useDeliveryHours } from '../context/RestaurantContext';
+import { useOutletNames } from '../context/RestaurantContext';
+import { useHomepage } from '../context/SiteSettingsContext';
 
 export default function Login() {
   const nav = useNavigate();
@@ -16,18 +17,20 @@ export default function Login() {
   const { customer, setCustomer } = useAuth();
   const { push } = useToast();
   const outletNames = useOutletNames();
-  const deliveryHours = useDeliveryHours();
 
-  const outletList = outletNames.length > 0 ? outletNames.join(' A� ') : 'Mira Road A� Vasai A� Bhayandar';
+  const outletList = outletNames.length > 0 ? outletNames.join(' · ') : 'Mira Road · Vasai · Bhayandar';
 
-  const PROMOS = useMemo(() => [
-    { icon: Gift, badge: 'Family Pack', title: 'Family Pack from �,1515', desc: '2 pizzas + garlic bread + choco lava cake', to: '/r/offers' },
-    { icon: Truck, badge: 'Free Delivery', title: `Free delivery ${deliveryHours || '11 AM �?" 4 AM'}`, desc: `${outletList} �?" no minimum`, to: '/r/locations' },
-    { icon: Award, badge: 'Real Mozzarella', title: '100% real mozzarella', desc: 'Fresh, never processed cheese on every pizza', to: '/r/about' },
-    { icon: Clock3, badge: 'BOGO', title: 'Buy 1, Get 2nd at Special Price', desc: '2nd pizza from �,1150 �?" call or WhatsApp', to: '/r/offers' },
-    { icon: UtensilsCrossed, badge: '6 Crusts', title: '6 Crusts A� Tossed to Cheese Burst', desc: 'Choose your base, same pricing online & in-store', to: '/r/menu' },
-    { icon: MapPin, badge: `${outletNames.length || 3} Outlets`, title: outletList, desc: 'Same menu, same pricing across all kitchens', to: '/r/locations' },
-  ], [deliveryHours, outletList, outletNames.length]);
+  const ICON_MAP: Record<string, any> = {
+    Gift, Truck, Clock3, Award, UtensilsCrossed, MapPin, Star, Flame, Shield, Phone, Mail,
+  };
+
+  const hp = useHomepage();
+  const promos = useMemo(() => {
+    return (hp.promos ?? []).filter((p) => p.active !== false).map((p) => ({
+      ...p,
+      Icon: ICON_MAP[p.icon] || Star,
+    }));
+  }, [hp.promos]);
 
   // Auth method tabs: 'email' | 'whatsapp'
   const [authMethod, setAuthMethod] = useState<'email' | 'whatsapp'>('email');
@@ -51,8 +54,6 @@ export default function Login() {
 
   useEffect(() => { if (customer) nav(redirect, { replace: true }); }, [customer, nav, redirect]);
   useEffect(() => { if (otpCooldown <= 0) return; const id = setTimeout(() => setOtpCooldown((c) => c - 1), 1000); return () => clearTimeout(id); }, [otpCooldown]);
-
-  const promo = useMemo(() => PROMOS[Math.floor(Math.random() * PROMOS.length)], []);
 
   // ============ Email + Password ============
   const handleEmailLogin = async (e: React.FormEvent) => {
@@ -251,9 +252,9 @@ export default function Login() {
                   <p className="text-[11px] text-zinc-500 mb-2">Or sign in with WhatsApp</p>
                   <button
                     onClick={() => setAuthMethod('whatsapp')}
-                    className="w-full py-3 rounded-full border border-emerald-200 text-emerald-600 text-sm font-semibold hover:bg-emerald-50 transition-colors"
+                    className="w-full py-3 rounded-xl bg-emerald-600 text-white font-semibold hover:bg-emerald-700 hover:shadow-[0_4px_6px_-1px_rgba(16,185,129,0.25)] transition-all duration-200 active:scale-[0.98] shadow-sm inline-flex items-center justify-center gap-2"
                   >
-                    <Phone size={14} className="mr-2" /> Send OTP to WhatsApp
+                    <Phone size={14} /> Send OTP on WhatsApp
                   </button>
                 </div>
               </div>
@@ -366,9 +367,9 @@ export default function Login() {
                 <p className="text-[11px] text-zinc-500 mb-2">Or sign in with email</p>
                 <button
                   onClick={() => setAuthMethod('email')}
-                  className="w-full py-3 rounded-full border border-zinc-200 text-zinc-600 text-sm font-semibold hover:bg-zinc-50 transition-colors"
+                  className="w-full py-3 rounded-xl bg-zinc-900 text-white font-semibold hover:bg-zinc-800 hover:shadow-[0_4px_6px_-1px_rgba(0,0,0,0.25)] transition-all duration-200 active:scale-[0.98] shadow-sm inline-flex items-center justify-center gap-2"
                 >
-                  <Mail size={14} className="mr-2" /> Email &amp; Password
+                  <Mail size={14} /> Email &amp; Password
                 </button>
               </div>
             )}
@@ -389,10 +390,12 @@ export default function Login() {
 
         {/* Promo card */}
         {(() => {
-          const Icon = promo.icon;
+          const randomPromo = promos.length > 0 ? promos[Math.floor(Math.random() * promos.length)] : null;
+          if (!randomPromo) return null;
+          const Icon = randomPromo.Icon;
           return (
             <Link
-              to={promo.to}
+              to={randomPromo.to}
               className="mt-4 flex gap-3.5 p-4 rounded-2xl bg-white border border-stone-100 shadow-card hover:shadow-card-hover hover:border-stone-200 transition-all duration-300 group"
             >
               <div className="w-11 h-11 rounded-xl bg-brand-50 border border-brand-100/60 text-brand-600 grid place-items-center shrink-0">
@@ -400,14 +403,14 @@ export default function Login() {
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-bold tracking-wide px-2 py-0.5 rounded-full bg-zinc-900 text-white">{promo.badge}</span>
+                  <span className="text-[10px] font-bold tracking-wide px-2 py-0.5 rounded-full bg-zinc-900 text-white">{randomPromo.badge}</span>
                   <span className="text-xs text-zinc-400 group-hover:text-brand-600 transition-colors inline-flex items-center gap-0.5">
-                    {promo.to === '/offers' ? 'See offers' : promo.to === '/locations' ? 'View outlets' : promo.to === '/about' ? 'About OCP' : 'Explore'}
+                    {randomPromo.to === '/offers' ? 'See offers' : randomPromo.to === '/locations' ? 'View outlets' : randomPromo.to === '/about' ? 'About OCP' : 'Explore'}
                     <ChevronRight size={12} />
                   </span>
                 </div>
-                <div className="text-sm font-semibold leading-tight mt-1.5 text-zinc-900">{promo.title}</div>
-                <div className="text-xs text-zinc-500 leading-relaxed mt-0.5">{promo.desc}</div>
+                <div className="text-sm font-semibold leading-tight mt-1.5 text-zinc-900">{randomPromo.title}</div>
+                <div className="text-xs text-zinc-500 leading-relaxed mt-0.5">{randomPromo.desc}</div>
               </div>
             </Link>
           );

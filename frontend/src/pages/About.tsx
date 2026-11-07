@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Leaf, ChefHat, Truck, Award } from 'lucide-react';
 import { useRestaurantName, useDeliveryHours } from '../context/RestaurantContext';
+import { useHomepage } from '../context/SiteSettingsContext';
 import { apiGet } from '../services/api';
 
 interface AboutContent {
@@ -16,6 +17,7 @@ interface AboutContent {
 export default function About() {
   const restaurantName = useRestaurantName();
   const deliveryHours = useDeliveryHours();
+  const hp = useHomepage();
   const [content, setContent] = useState<AboutContent | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -69,7 +71,7 @@ export default function About() {
             )}
           </div>
         </div>
-        <img src={content?.image_url || '/uploads/94a2c1d2cd873119.jpg'} alt="Restaurant" className="w-full h-[380px] object-cover rounded-[2rem]"/>
+        <img src={content?.image_url || 'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=800&h=380&fit=crop'} alt="Restaurant" className="w-full h-[380px] object-cover rounded-[2rem]"/>
       </div>
 
       <div className="grid md:grid-cols-4 gap-4 mt-12">
@@ -92,11 +94,11 @@ export default function About() {
             {content?.philosophy || 'We believe great pizza starts with great cheese — that\u2019s why every pizza uses 100% real mozzarella. Our Makhani sauce, Hyderabadi & Lucknowi seasonings, and Korean spicy sauce are made in-house. Vegetarian and non-vegetarian kitchens are handled with care, and Jain options like Hara Bhara are available.'}
           </p>
           <div className="mt-4 grid sm:grid-cols-2 gap-3 text-xs">
-            <div className="bg-zinc-50 rounded-xl p-3"><strong>Crusts:</strong> Tossed, Italian Thin, Wheat Thin (+₹30/₹60), Cheese Burst (+₹85/₹110/₹135), DCC (+₹120)</div>
-            <div className="bg-zinc-50 rounded-xl p-3"><strong>Toppings:</strong> Extra Cheese ₹60/95/125 • Veg ₹45/80/110 • Chicken ₹60/95/125</div>
+            <div className="bg-zinc-50 rounded-xl p-3"><strong>{hp.crustTitle}:</strong> {hp.crustTossed}, {hp.crustItalianThin}, {hp.crustWheatThin}, {hp.crustCheeseBurst}, {hp.crustDoubleCheeseCrunch}</div>
+            <div className="bg-zinc-50 rounded-xl p-3"><strong>{hp.extraToppingsTitle}</strong> {hp.extraCheesePrice} • {hp.extraVegPrice} • {hp.extraChickenPrice}</div>
           </div>
         </div>
-        <img src={content?.philosophy_image_url || '/uploads/6b5cec893827b62c.jpg'} alt="Pizza making" className="w-full h-full object-cover rounded-2xl min-h-[280px]"/>
+        <img src={content?.philosophy_image_url || 'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=600&h=400&fit=crop'} alt="Pizza making" className="w-full h-full object-cover rounded-2xl min-h-[280px]"/>
       </div>
     </div>
   );
