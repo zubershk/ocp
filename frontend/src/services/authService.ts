@@ -5,6 +5,7 @@ const CUSTOMER_KEY = 'ocp_customer';
 
 export interface Customer {
   phone: string;
+  whatsapp_number?: string;
   name: string;
   total_orders: number;
   total_spent: number;
@@ -28,6 +29,11 @@ export function getStoredCustomer(): Customer | null {
 export function setStoredCustomer(c: Customer | null) {
   if (c) localStorage.setItem(CUSTOMER_KEY, JSON.stringify(c));
   else localStorage.removeItem(CUSTOMER_KEY);
+}
+
+function normalizeCustomer(c: Customer): Customer {
+  if (!c.phone && c.whatsapp_number) c.phone = c.whatsapp_number;
+  return c;
 }
 
 function authHeaders(): Record<string, string> {
@@ -60,6 +66,7 @@ export async function register(payload: {
   const result = (await res.json().catch(() => null)) as { token?: string; customer?: Customer; error?: string } | null;
   if (!res.ok) throw new Error(result?.error ?? `HTTP ${res.status}`);
   if (!result?.token || !result?.customer) throw new Error('Invalid response');
+  normalizeCustomer(result.customer);
   setCustomerToken(result.token);
   setStoredCustomer(result.customer);
   return { token: result.token, customer: result.customer };
@@ -74,6 +81,7 @@ export async function login(email: string, password: string): Promise<{ token: s
   const data = (await res.json().catch(() => null)) as { token?: string; customer?: Customer; error?: string } | null;
   if (!res.ok) throw new Error(data?.error ?? `HTTP ${res.status}`);
   if (!data?.token || !data?.customer) throw new Error('Invalid response');
+  normalizeCustomer(data.customer);
   setCustomerToken(data.token);
   setStoredCustomer(data.customer);
   return { token: data.token, customer: data.customer };
@@ -88,6 +96,7 @@ export async function verifyOtp(phone: string, code: string, name?: string): Pro
   const data = (await res.json().catch(() => null)) as { token?: string; customer?: Customer; error?: string } | null;
   if (!res.ok) throw new Error(data?.error ?? `HTTP ${res.status}`);
   if (!data?.token || !data?.customer) throw new Error('Invalid response');
+  normalizeCustomer(data.customer);
   setCustomerToken(data.token);
   setStoredCustomer(data.customer);
   return { token: data.token, customer: data.customer };
@@ -100,6 +109,7 @@ export async function fetchMe(): Promise<Customer> {
   const data = (await res.json().catch(() => null)) as { customer?: Customer; error?: string } | null;
   if (!res.ok) throw new Error(data?.error ?? `HTTP ${res.status}`);
   if (!data?.customer) throw new Error('No customer');
+  normalizeCustomer(data.customer);
   setStoredCustomer(data.customer);
   return data.customer;
 }
@@ -118,7 +128,7 @@ export async function logout(): Promise<void> {
   setStoredCustomer(null);
 }
 
-export async function updateProfile(fields: { name?: string; email?: string; default_address?: string }): Promise<void> {
+export async function updateProfile(fields: { name?: string; email?: string; phone?: string; default_address?: string }): Promise<void> {
   const res = await fetch(`${apiBaseUrl}/api/auth/me`, {
     method: 'PATCH',
     headers: { Accept: 'application/json', 'Content-Type': 'application/json', ...authHeaders() },
