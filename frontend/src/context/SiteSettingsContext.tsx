@@ -104,8 +104,27 @@ interface HomepageSettings {
   extra_cheese_price?: string;
   extra_veg_price?: string;
   extra_chicken_price?: string;
+  // POS printer configuration (configurable from admin)
+  printer_config?: PrinterConfig;
   [key: string]: unknown;
 }
+
+// POS Printer configuration interface
+export interface PrinterConfig {
+  printer_type: 'none' | 'usb' | 'network' | 'virtual' | 'browser';
+  printer_port: string;
+  printer_port_num: number;
+  paper_width: 58 | 80;
+  auto_print: boolean;
+}
+
+export const DEFAULT_PRINTER_CONFIG: PrinterConfig = {
+  printer_type: 'none',
+  printer_port: '',
+  printer_port_num: 9100,
+  paper_width: 58,
+  auto_print: false,
+};
 
 interface ContactSettings {
   title?: string;
@@ -506,6 +525,8 @@ export function useHomepage() {
     extraChickenPrice: h.extra_chicken_price ?? 'Chicken ₹60/95/125',
     // Login page promo cards
     promos: Array.isArray(h.promos) ? h.promos : [],
+    // POS Printer config
+    printerConfig: h.printer_config ?? DEFAULT_PRINTER_CONFIG,
   }), [h]);
 }
 

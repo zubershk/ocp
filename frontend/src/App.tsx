@@ -53,6 +53,7 @@ const AdminReviews = lazy(() => import('./pages/AdminReviews'));
 const AdminBotWorkflows = lazy(() => import('./pages/AdminBotWorkflows'));
 const AdminBusinessConfig = lazy(() => import('./pages/AdminBusinessConfig'));
 const AdminPosConfig = lazy(() => import('./pages/AdminPosConfig'));
+const AdminPrinter = lazy(() => import('./pages/AdminPrinter'));
 const AdminTables = lazy(() => import('./pages/AdminTables'));
 const AdminPaymentMethods = lazy(() => import('./pages/AdminPaymentMethods'));
 const POS = lazy(() => import('./pages/POS'));
@@ -196,6 +197,7 @@ function AppRoutes() {
       <Route path="/admin/bot-workflows" element={<AdminSuspense><AdminPageShell><AdminBotWorkflows /></AdminPageShell></AdminSuspense>} />
       <Route path="/admin/business-config" element={<AdminSuspense><AdminPageShell><AdminBusinessConfig /></AdminPageShell></AdminSuspense>} />
       <Route path="/admin/pos-config" element={<AdminSuspense><AdminPageShell><AdminPosConfig /></AdminPageShell></AdminSuspense>} />
+      <Route path="/admin/printer" element={<AdminSuspense><AdminPageShell><AdminPrinter /></AdminPageShell></AdminSuspense>} />
       <Route path="/admin/tables" element={<AdminSuspense><AdminPageShell><AdminTables /></AdminPageShell></AdminSuspense>} />
       <Route path="/admin/payment-methods" element={<AdminSuspense><AdminPageShell><AdminPaymentMethods /></AdminPageShell></AdminSuspense>} />
       <Route path="/pos" element={<AdminSuspense><RealtimeProvider><POS /></RealtimeProvider></AdminSuspense>} />
