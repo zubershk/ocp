@@ -111,7 +111,7 @@ interface HomepageSettings {
 
 // POS Printer configuration interface
 export interface PrinterConfig {
-  printer_type: 'none' | 'usb' | 'network' | 'virtual' | 'browser';
+  printer_type: 'none' | 'usb' | 'network' | 'web' | 'browser';
   printer_port: string;
   printer_port_num: number;
   paper_width: 58 | 80;
@@ -525,8 +525,6 @@ export function useHomepage() {
     extraChickenPrice: h.extra_chicken_price ?? 'Chicken ₹60/95/125',
     // Login page promo cards
     promos: Array.isArray(h.promos) ? h.promos : [],
-    // POS Printer config
-    printerConfig: h.printer_config ?? DEFAULT_PRINTER_CONFIG,
   }), [h]);
 }
 

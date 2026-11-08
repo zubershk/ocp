@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Printer,
-  Monitor,
   Save,
   ArrowLeft,
   ShieldCheck,
@@ -12,20 +11,20 @@ import {
   Wifi,
   Usb,
   Globe,
-  Monitor as BrowserIcon,
+  Eye,
+  X,
 } from 'lucide-react';
 import { adminFetch, getAdminKey } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import { Card, CardContent } from '@/components/shadcn/card';
 import { Button } from '@/components/shadcn/button';
 import { Input } from '@/components/shadcn/input';
-import { Select } from '@/components/shadcn/select';
 import { Switch } from '@/components/shadcn/switch';
 import { Skeleton } from '@/components/shadcn/skeleton';
 import { PrinterConfig, DEFAULT_PRINTER_CONFIG } from '../context/SiteSettingsContext';
 
 interface PrinterConfigForm {
-  printer_type: 'none' | 'usb' | 'network' | 'virtual' | 'browser';
+  printer_type: 'none' | 'usb' | 'network' | 'web' | 'browser';
   printer_port: string;
   printer_port_num: number;
   paper_width: 58 | 80;
@@ -57,16 +56,16 @@ const PRINTER_TYPES: {
     description: 'Network thermal printer (TCP)',
   },
   {
-    value: 'virtual',
-    label: 'Virtual Thermal Printer',
+    value: 'web',
+    label: 'Web Print (Browser)',
     icon: Globe,
-    description: 'localhost:9100 — for testing',
+    description: 'Print via browser — no hardware needed',
   },
   {
     value: 'browser',
-    label: 'Browser Print',
-    icon: BrowserIcon,
-    description: 'window.print() in browser',
+    label: 'Browser Print Dialog',
+    icon: Printer,
+    description: 'Standard browser print dialog',
   },
 ];
 
@@ -75,6 +74,14 @@ export default function AdminPrinter() {
   const qc = useQueryClient();
   const toast = useToast();
   const [form, setForm] = useState<PrinterConfigForm>(DEFAULT_PRINTER_CONFIG);
+
+  const handleAuthError = (e: unknown) => {
+    if (e instanceof Error && e.message.includes('401')) {
+      localStorage.removeItem('ocp_admin_key');
+      toast.push({ type: 'error', title: 'Admin key invalid. Please sign in again.' });
+      window.location.href = '/admin';
+    }
+  };
 
   const settingsQuery = useQuery({
     queryKey: ['admin-printer'],
@@ -87,22 +94,32 @@ export default function AdminPrinter() {
 
   useEffect(() => {
     if (settingsQuery.data) setForm(settingsQuery.data);
-  }, [settingsQuery.data]);
+    if (settingsQuery.error) {
+      handleAuthError(settingsQuery.error);
+      toast.push({ type: 'error', title: settingsQuery.error.message || 'Failed to load printer config' });
+    }
+  }, [settingsQuery.data, settingsQuery.error]);
 
   const saveMut = useMutation({
     mutationFn: (body: PrinterConfigForm) =>
-      adminFetch('/admin/printer/config', { method: 'PUT', body: JSON.stringify({ value: body }) }),
+      adminFetch('/admin/printer/config', { method: 'PUT', body: JSON.stringify(body) }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-printer'] });
       toast.push({ type: 'success', title: 'Printer config saved' });
     },
-    onError: (e: Error) => toast.push({ type: 'error', title: e.message || 'Failed to save' }),
+    onError: (e: Error) => {
+      handleAuthError(e);
+      toast.push({ type: 'error', title: e.message || 'Failed to save' });
+    },
   });
 
   const testMut = useMutation({
-    mutationFn: () => adminFetch('/admin/printer/test', { method: 'POST' }),
+    mutationFn: () => adminFetch('/admin/printer/test', { method: 'POST', body: JSON.stringify(form) }),
     onSuccess: () => toast.push({ type: 'success', title: 'Test page sent to printer' }),
-    onError: (e: Error) => toast.push({ type: 'error', title: e.message || 'Test print failed' }),
+    onError: (e: Error) => {
+      handleAuthError(e);
+      toast.push({ type: 'error', title: e.message || 'Test print failed' });
+    },
   });
 
   const updateField = <K extends keyof PrinterConfigForm>(key: K, value: PrinterConfigForm[K]) => {
@@ -133,8 +150,8 @@ export default function AdminPrinter() {
     );
   }
 
-  const isNetworkOrVirtual =
-    form.printer_type === 'network' || form.printer_type === 'virtual';
+  const isNetworkOrWeb =
+    form.printer_type === 'network' || form.printer_type === 'web';
   const isUsb = form.printer_type === 'usb';
   const isBrowser = form.printer_type === 'browser';
 
@@ -175,6 +192,7 @@ export default function AdminPrinter() {
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       {PRINTER_TYPES.map((pt) => {
                         const selected = form.printer_type === pt.value;
+                        const Icon = pt.icon;
                         return (
                           <button
                             key={pt.value}
@@ -186,7 +204,7 @@ export default function AdminPrinter() {
                                 : 'border-stone-200 text-zinc-600 hover:border-orange-300 hover:bg-orange-25'
                             }`}
                           >
-                            <pt.icon size={18} />
+                            <Icon size={18} />
                             <span className="text-sm font-medium">{pt.label}</span>
                             <span className="text-xs text-zinc-500">{pt.description}</span>
                           </button>
@@ -196,7 +214,7 @@ export default function AdminPrinter() {
                   </div>
 
                   {/* Printer Port / IP */}
-                  {isNetworkOrVirtual || isUsb ? (
+                  {isNetworkOrWeb || isUsb ? (
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="text-xs font-semibold text-zinc-700 uppercase tracking-wider mb-1.5 block">
@@ -276,15 +294,25 @@ export default function AdminPrinter() {
                       <Save size={16} className="mr-2" />
                       {saveMut.isPending ? 'Saving...' : 'Save Configuration'}
                     </Button>
-                    <Button
-                      onClick={() => testMut.mutate()}
-                      disabled={testMut.isPending || form.printer_type === 'none'}
-                      variant="outline"
-                      className="flex-1"
-                    >
-                      <RefreshCw size={16} className="mr-2" />
-                      {testMut.isPending ? 'Testing...' : 'Send Test Page'}
-                    </Button>
+                    {isBrowser ? (
+                      <Button
+                        onClick={() => window.print()}
+                        className="flex-1"
+                      >
+                        <Printer size={16} className="mr-2" />
+                        Test Print (Browser)
+                      </Button>
+                    ) : (
+                      <Button
+                        onClick={() => testMut.mutate()}
+                        disabled={testMut.isPending || form.printer_type === 'none'}
+                        variant="outline"
+                        className="flex-1"
+                      >
+                        <RefreshCw size={16} className="mr-2" />
+                        {testMut.isPending ? 'Testing...' : 'Send Test Page'}
+                      </Button>
+                    )}
                   </div>
                 </div>
               )}
@@ -382,9 +410,9 @@ export default function AdminPrinter() {
                     <Globe size={12} />
                   </div>
                   <div>
-                    <h4 className="text-sm font-medium">Virtual Printer</h4>
+                    <h4 className="text-sm font-medium">Web Print (Browser)</h4>
                     <p className="text-xs text-zinc-500">
-                      Runs on localhost:9100. Start via Docker: <code className="text-xs font-mono text-orange-600 bg-orange-50/50 px-1 py-0.5 rounded">docker run -p 8000:80 -p 9100:9100 virtual-thermal-printer</code>
+                      Prints directly through the browser — no hardware, VM, or Docker required. Uses the browser's native print dialog with thermal receipt formatting.
                     </p>
                   </div>
                 </div>
