@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Pizza, Clock, Phone, MapPin, RefreshCw, Search, Bell, BellOff, LogOut, MessageCircle,
-  PhoneCall, AlertTriangle, ChefHat, CheckCircle2, XCircle, Timer,
+  PhoneCall, AlertTriangle, ChefHat, CheckCircle2, XCircle, Timer, Printer,
   LayoutGrid, List, TrendingUp, Wallet, Flame, ArrowUpRight, MoreHorizontal, ShieldCheck,
   Activity, IndianRupee,
 } from 'lucide-react';
@@ -137,6 +137,10 @@ export default function Admin() {
         setTimeout(() => setFreshIds((s) => { const n = new Set(s); n.delete(id); return n; }), 15000);
         setLiveMsg(`New order ${d.order_number ?? ''} arrived`);
         if (soundOn) playOrderPing();
+        const pc = printerQuery.data?.printer_config;
+        if (pc && pc.auto_print && (pc.printer_type === 'browser' || pc.printer_type === 'web')) {
+          printOrderReceipt(id);
+        }
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -147,6 +151,60 @@ export default function Admin() {
     queryFn: () => adminFetch<{ phone: string }>('/admin/config'),
     enabled: authed,
   });
+
+  const printerQuery = useQuery({
+    queryKey: ['admin-printer'],
+    queryFn: () => adminFetch<{ printer_config?: { printer_type: string; auto_print: boolean; paper_width: number } }>('/admin/printer/config'),
+    enabled: authed,
+  });
+
+  const printOrderReceipt = async (orderId: number) => {
+    try {
+      const order = await adminFetch<any>(`/admin/orders/${orderId}`);
+      if (!order) return;
+      const w = window.open('', '_blank', 'width=400,height=600');
+      if (!w) return;
+      const items = order.items || [];
+      const itemRows = items.map((it: any) =>
+        `<tr><td>${it.name}</td><td style="text-align:center">${it.quantity}</td><td style="text-align:right">₹${Number(it.line_total || it.subtotal || 0).toFixed(2)}</td></tr>`
+      ).join('');
+      w.document.write(`<!DOCTYPE html><html><head><title>Receipt ${order.order_number}</title>
+<style>
+  body { font-family: monospace; font-size: 12px; width: ${printerQuery.data?.printer_config?.paper_width || 80}mm; margin: 0 auto; padding: 8px; }
+  h1 { text-align: center; font-size: 16px; margin: 4px 0; }
+  .divider { border-top: 1px dashed #000; margin: 4px 0; }
+  table { width: 100%; border-collapse: collapse; }
+  td { padding: 2px 0; }
+  .right { text-align: right; }
+  .center { text-align: center; }
+  .bold { font-weight: bold; }
+  @media print { body { margin: 0; } }
+</style></head><body>
+<h1>${order.restaurant_name || 'Orange Cheese Pizza'}</h1>
+<div class="divider"></div>
+<div>Order #${order.order_number}</div>
+<div>${new Date(order.created_at).toLocaleString()}</div>
+<div class="divider"></div>
+<table>${itemRows}</table>
+<div class="divider"></div>
+<div class="right">Subtotal: ₹${Number(order.subtotal).toFixed(2)}</div>
+${Number(order.delivery_fee) > 0 ? `<div class="right">Delivery: ₹${Number(order.delivery_fee).toFixed(2)}</div>` : ''}
+${Number(order.discount) > 0 ? `<div class="right">Discount: -₹${Number(order.discount).toFixed(2)}</div>` : ''}
+<div class="right bold">Total: ₹${Number(order.total).toFixed(2)}</div>
+<div class="divider"></div>
+<div>Payment: ${order.payment_method?.toUpperCase()}</div>
+<div>Type: ${order.order_type}</div>
+${order.address ? `<div>Address: ${order.address}</div>` : ''}
+<div class="divider"></div>
+<div class="center">Thank you for your order!</div>
+<div class="center">Visit us again!</div>
+<script>window.onload = function() { window.print(); }</script>
+</body></html>`);
+      w.document.close();
+    } catch (e) {
+      console.error('Print failed:', e);
+    }
+  };
 
   // Polling fallback beep (realtime path above handles the live case).
   useEffect(() => {
@@ -582,6 +640,9 @@ export default function Admin() {
                         <a href={`https://wa.me/91${o.customer_phone.replace(/\D/g, '').slice(-10)}?text=Hi%20${encodeURIComponent(o.customer_name.split(' ')[0])},%20about%20your%20order%20${o.order_number}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-emerald-600 text-white hover:bg-emerald-700 font-semibold shadow-sm">
                           <MessageCircle size={12} />WhatsApp
                         </a>
+                        <button type="button" onClick={() => printOrderReceipt(o.id)} className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-orange-600 text-white hover:bg-orange-700 font-semibold shadow-sm" title="Print receipt">
+                          <Printer size={12} />Print
+                        </button>
                       </div>
                       {o.address ? (
                         <div className="mt-2.5 text-xs text-muted-foreground flex gap-1.5 leading-relaxed"><MapPin size={12} className="shrink-0 mt-0.5 text-muted-foreground" /><span className="line-clamp-2">{o.address}{o.landmark ? ` • ${o.landmark}` : ''}</span></div>
