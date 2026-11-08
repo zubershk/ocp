@@ -398,22 +398,13 @@ func (s *WebsiteOrderService) CreateFor(req *WebsiteOrderRequest, idempotencyKey
 
 	// ---- auto-print receipt if printer is configured ----
 	go func() {
-		printed, err := PrintOrderReceipt(&models.Order{
-			ID:            orderID,
-			OrderNumber:   orderNumber,
-			CustomerName:  name,
-			CustomerPhone: phone,
-			OrderType:     req.DeliveryType,
-			PaymentMethod: req.PaymentMethod,
-			Subtotal:      subtotal,
-			DeliveryFee:   deliveryFee,
-			Discount:      discount,
-			Total:         total,
-			Status:        "confirmed",
-			CreatedAt:     createdAt,
-			RestaurantID:  rid,
-			OutletID:      outletID,
-		}, s.cfg.RestaurantName)
+		// Fetch full order with items for the receipt
+		fullOrder, err := defaultOrderService.GetOrderByID(orderID, rid)
+		if err != nil || fullOrder == nil {
+			log.Printf("[printer] failed to fetch order %d for printing: %v", orderID, err)
+			return
+		}
+		printed, err := PrintOrderReceipt(fullOrder, s.cfg.RestaurantName)
 		if err != nil {
 			log.Printf("[printer] auto-print failed for order %s: %v", orderNumber, err)
 		} else if printed {

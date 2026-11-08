@@ -1581,7 +1581,7 @@ func (h *AdminHandler) UpdatePOSConfig(c *gin.Context) {
 
 // ============================================================
 // Printer Configuration — per-restaurant, stored in site_settings
-// key 'printer_config'. Supports none | usb | network | virtual | browser.
+// key 'printer_config'. Supports none | usb | network | web | browser.
 // ============================================================
 
 // GetPrinterConfig returns the current printer config for the restaurant.
@@ -1614,8 +1614,22 @@ func (h *AdminHandler) UpdatePrinterConfig(c *gin.Context) {
 }
 
 // TestPrinterConnection sends a test page to the configured printer.
+// Accepts an optional body with the current config to test without saving first.
 func (h *AdminHandler) TestPrinterConnection(c *gin.Context) {
 	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
+
+	// Try to read config from request body first (allows testing unsaved config)
+	var bodyCfg services.PrinterConfig
+	if err := c.ShouldBindJSON(&bodyCfg); err == nil && bodyCfg.PrinterType != "" {
+		if err := services.TestPrinterConnection(&bodyCfg, h.config.RestaurantName); err != nil {
+			c.JSON(http.StatusBadGateway, gin.H{"error": "printer test failed: " + err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"ok": true, "message": "test page sent to printer"})
+		return
+	}
+
+	// Fall back to reading from DB
 	cfg, err := services.GetPrinterConfig(rid)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
@@ -1630,6 +1644,49 @@ func (h *AdminHandler) TestPrinterConnection(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true, "message": "test page sent to printer"})
+}
+
+// GetPrinterStatus returns the status of the configured printer.
+func (h *AdminHandler) GetPrinterStatus(c *gin.Context) {
+	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
+
+	cfg, err := services.GetPrinterConfig(rid)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
+		return
+	}
+
+	status := map[string]interface{}{
+		"printer_type": cfg.PrinterType,
+		"printer_port": cfg.PrinterPort,
+		"printer_port_num": cfg.PrinterPortNum,
+		"paper_width":    cfg.PaperWidth,
+		"auto_print":     cfg.AutoPrint,
+		"configured":     cfg.PrinterType != services.PrinterTypeNone,
+	}
+
+	// Test connection if not "none" or "browser"
+	if cfg.PrinterType == services.PrinterTypeNone {
+		status["status"] = "not_configured"
+		c.JSON(http.StatusOK, gin.H{"printer_config": status})
+		return
+	}
+
+	if cfg.PrinterType == services.PrinterTypeBrowser {
+		status["status"] = "ready"
+		c.JSON(http.StatusOK, gin.H{"printer_config": status})
+		return
+	}
+
+	if err := services.TestPrinterConnection(cfg, h.config.RestaurantName); err != nil {
+		status["status"] = "error"
+		status["error"] = err.Error()
+		c.JSON(http.StatusOK, gin.H{"printer_config": status})
+		return
+	}
+
+	status["status"] = "online"
+	c.JSON(http.StatusOK, gin.H{"printer_config": status})
 }
 
 // ManualPrintOrder prints a specific order receipt on demand.
@@ -1654,6 +1711,36 @@ func (h *AdminHandler) ManualPrintOrder(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true, "message": "order printed", "order_id": id})
+}
+
+// GetPrinterTemplateConfig returns the printer template config for the restaurant.
+func (h *AdminHandler) GetPrinterTemplateConfig(c *gin.Context) {
+	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
+	cfg, err := services.GetPrinterTemplateConfig(rid)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"printer_template_config": cfg})
+}
+
+// UpdatePrinterTemplateConfig saves the printer template config for the restaurant.
+func (h *AdminHandler) UpdatePrinterTemplateConfig(c *gin.Context) {
+	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
+	var cfg services.PrinterTemplateConfig
+	if err := c.ShouldBindJSON(&cfg); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON: " + err.Error()})
+		return
+	}
+	if err := services.SavePrinterTemplateConfig(&cfg, rid); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	auditLog(c, "update_printer_template_config", "printer_template_config", cfg)
+	services.InvalidatePrinterTemplateConfig(rid)
+	services.BroadcastRealtimeFor(rid, 0, c.GetInt("orgID"), "printer.config_updated", map[string]interface{}{"restaurant_id": rid})
+	saved, _ := services.GetPrinterTemplateConfig(rid)
+	c.JSON(http.StatusOK, gin.H{"ok": true, "printer_template_config": saved})
 }
 
 // Live chat — SaaS bot dashboard
