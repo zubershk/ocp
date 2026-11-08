@@ -54,6 +54,7 @@ const AdminBotWorkflows = lazy(() => import('./pages/AdminBotWorkflows'));
 const AdminBusinessConfig = lazy(() => import('./pages/AdminBusinessConfig'));
 const AdminPosConfig = lazy(() => import('./pages/AdminPosConfig'));
 const AdminPrinter = lazy(() => import('./pages/AdminPrinter'));
+const AdminPrinterTemplate = lazy(() => import('./pages/AdminPrinterTemplate'));
 const AdminTables = lazy(() => import('./pages/AdminTables'));
 const AdminPaymentMethods = lazy(() => import('./pages/AdminPaymentMethods'));
 const POS = lazy(() => import('./pages/POS'));
@@ -162,6 +163,8 @@ function AppRoutes() {
       <Route path="/r/login" element={<PageShell><Layout><Login /></Layout></PageShell>} />
       <Route path="/r/register" element={<PageShell><Layout><Register /></Layout></PageShell>} />
       <Route path="/r/account" element={<PageShell><Layout><Account /></Layout></PageShell>} />
+      {/* Redirect /r/admin to /admin since /r/admin matches slug route */}
+      <Route path="/r/admin" element={<Navigate to="/admin" replace />} />
       {/* Tenant-slug local fallback for open-source multi-tenant: /r/:slug/* */}
       <Route path="/r/:restaurantSlug" element={<PageShell><Layout><Home /></Layout></PageShell>} />
       <Route path="/r/:restaurantSlug/menu" element={<PageShell><Layout><Menu /></Layout></PageShell>} />
@@ -198,6 +201,7 @@ function AppRoutes() {
       <Route path="/admin/business-config" element={<AdminSuspense><AdminPageShell><AdminBusinessConfig /></AdminPageShell></AdminSuspense>} />
       <Route path="/admin/pos-config" element={<AdminSuspense><AdminPageShell><AdminPosConfig /></AdminPageShell></AdminSuspense>} />
       <Route path="/admin/printer" element={<AdminSuspense><AdminPageShell><AdminPrinter /></AdminPageShell></AdminSuspense>} />
+      <Route path="/admin/printer/template" element={<AdminSuspense><AdminPageShell><AdminPrinterTemplate /></AdminPageShell></AdminSuspense>} />
       <Route path="/admin/tables" element={<AdminSuspense><AdminPageShell><AdminTables /></AdminPageShell></AdminSuspense>} />
       <Route path="/admin/payment-methods" element={<AdminSuspense><AdminPageShell><AdminPaymentMethods /></AdminPageShell></AdminSuspense>} />
       <Route path="/pos" element={<AdminSuspense><RealtimeProvider><POS /></RealtimeProvider></AdminSuspense>} />

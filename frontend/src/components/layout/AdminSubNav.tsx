@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Pizza, MessageCircle, Settings, BarChart3, Users, ScrollText, LayoutGrid, Megaphone, Image, Tag, Bot, Store, Package, Star, Check, Menu as MenuIcon, X, ExternalLink, PanelLeftClose, PanelLeftOpen, ChevronDown, History, Monitor, Home, Footprints, Printer } from 'lucide-react';
+import { Pizza, MessageCircle, Settings, BarChart3, Users, ScrollText, LayoutGrid, Layout, Megaphone, Image, Tag, Bot, Store, Package, Star, Check, Menu as MenuIcon, X, ExternalLink, PanelLeftClose, PanelLeftOpen, ChevronDown, History, Monitor, Home, Footprints, Printer } from 'lucide-react';
 import { adminFetch, getAdminKey } from '../../services/api';
 
 const items = [
@@ -24,6 +24,7 @@ const items = [
   { to: '/admin/business-config', label: 'Config', icon: Store, group: 'Setup', roles: ['owner', 'manager'] },
   { to: '/admin/pos-config', label: 'POS Config', icon: Monitor, group: 'Setup', roles: ['owner', 'manager'] },
   { to: '/admin/printer', label: 'Printer', icon: Printer, group: 'Setup', roles: ['owner', 'manager'] },
+  { to: '/admin/printer/template', label: 'Printer Template', icon: Layout, group: 'Setup', roles: ['owner', 'manager'] },
   { to: '/admin/tables', label: 'Tables', icon: LayoutGrid, group: 'Setup', roles: ['owner', 'manager'] },
   { to: '/admin/payment-methods', label: 'Payments', icon: Store, group: 'Setup', roles: ['owner', 'manager'] },
 ];
