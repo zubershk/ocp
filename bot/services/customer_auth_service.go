@@ -450,6 +450,17 @@ func checkPassword(password, hash string) bool {
 }
 
 // sendResendEmail sends an email via Resend API.
+// getRestaurantName fetches the restaurant name from restaurant_config.
+func getRestaurantName(restaurantID int) string {
+	rid := ResolveRestaurant(restaurantID)
+	var name string
+	err := database.DB.QueryRow(`SELECT name FROM restaurant_config WHERE restaurant_id=$1 LIMIT 1`, rid).Scan(&name)
+	if err != nil || name == "" {
+		return "Restaurant"
+	}
+	return name
+}
+
 func sendResendEmail(to, subject, html string) error {
 	apiKey := os.Getenv("RESEND_API_KEY")
 	if apiKey == "" {
@@ -465,8 +476,12 @@ func sendResendEmail(to, subject, html string) error {
 		Html    string `json:"html"`
 	}
 
+	fromName := os.Getenv("RESEND_FROM_NAME")
+	if fromName == "" {
+		fromName = "Restaurant"
+	}
 	reqBody, err := json.Marshal(emailRequest{
-		From:    "Orange Cheese Pizza <onboarding@resend.dev>",
+		From:    fromName + " <onboarding@resend.dev>",
 		To:      []string{to},
 		Subject: subject,
 		Html:    html,
@@ -893,12 +908,12 @@ func RequestPasswordReset(email string, restaurantID int) error {
 	html := fmt.Sprintf(`
 		<h2>Password Reset</h2>
 		<p>Hi %s,</p>
-		<p>You requested a password reset for your Orange Cheese Pizza account.</p>
+		<p>You requested a password reset for your %s account.</p>
 		<p>Click the button below to reset your password:</p>
 		<p><a href="%s?token=%s" style="background:#ea580c;color:white;padding:12px 24px;text-decoration:none;border-radius:6px;">Reset Password</a></p>
 		<p>This link expires in 15 minutes. If you didn't request this, please ignore this email.</p>
-		<p>Thanks,<br>The Orange Cheese Pizza Team</p>
-	`, cust.Name.String, resetURL, token)
+		<p>Thanks,<br>The %s Team</p>
+	`, cust.Name.String, getRestaurantName(rid), resetURL, token, getRestaurantName(rid))
 
 	if err := sendResendEmail(email, "Reset your OCP password", html); err != nil {
 		log.Printf("[auth] failed to send password reset email to %s: %v", email, err)
@@ -1064,13 +1079,13 @@ func RequestEmailVerification(email string, restaurantID int) error {
 	html := fmt.Sprintf(`
 		<h2>Verify Your Email</h2>
 		<p>Hi %s,</p>
-		<p>Welcome to Orange Cheese Pizza! Please verify your email address by clicking the button below:</p>
+		<p>Welcome to %s! Please verify your email address by clicking the button below:</p>
 		<p><a href="%s?token=%s" style="background:#ea580c;color:white;padding:12px 24px;text-decoration:none;border-radius:6px;">Verify Email</a></p>
 		<p>This link expires in 24 hours.</p>
-		<p>Thanks,<br>The Orange Cheese Pizza Team</p>
-	`, cust.Name.String, verifyURL, token)
+		<p>Thanks,<br>The %s Team</p>
+	`, cust.Name.String, getRestaurantName(rid), verifyURL, token, getRestaurantName(rid))
 
-	if err := sendResendEmail(email, "Verify your email - Orange Cheese Pizza", html); err != nil {
+	if err := sendResendEmail(email, "Verify your email - "+getRestaurantName(rid), html); err != nil {
 		log.Printf("[auth] failed to send verification email to %s: %v", email, err)
 		// Don't return error - token is stored, user can retry
 	}

@@ -104,7 +104,7 @@ func defaultMessages() map[string]string {
 		// LOCATION
 		"location_title":     emPin + " {{.RestaurantName}}",
 		"location_body":      "{{.Address}}\n\nTel: {{.Phone}}\nKitchen: {{.KitchenHours}}\nDelivery: {{.DeliveryHours}}",
-		"location_maps_hint": "{{.RestaurantName}} Mira Road",
+		"location_maps_hint": "{{.RestaurantName}}",
 
 		// ERRORS
 		"unknown_input":      "I didn't quite understand that.\n\n{{.Options}}",

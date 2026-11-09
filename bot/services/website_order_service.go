@@ -225,6 +225,9 @@ func (s *WebsiteOrderService) CreateFor(req *WebsiteOrderRequest, idempotencyKey
 		return nil, badRequest("address is required for delivery")
 	}
 	biz := GetBizConfigFor(ridForScope)
+	if biz == nil {
+		return nil, badRequest("restaurant configuration not found")
+	}
 	validPayments := biz.GetValidPaymentMethods()
 	validSizes := biz.GetValidSizes()
 
