@@ -280,7 +280,7 @@ const CONTACT_DEFAULTS: ContactSettings = {
   outlet_title: 'Visit Our {outlet} Outlet',
   delivery_hours_title: 'Delivery Hours',
   delivery_hours_text: '{hours} - all days',
-  delivery_area_text: 'We deliver to Mira Road East, Beverly Park, and surrounding areas',
+  delivery_area_text: '',
   delivery_note: 'Free home delivery within our service area. All prices include tax.',
   form_title: 'Send us a message',
   form_desc: 'Have a question or feedback? Send us a message and we\'ll get back to you on WhatsApp.',
@@ -290,7 +290,7 @@ const CONTACT_DEFAULTS: ContactSettings = {
   submit_button: 'Send on WhatsApp',
   order_cta_text: 'Order Now',
   other_outlets_title: 'Other Outlets',
-  map_address: 'Mira Road East, Mumbai',
+  map_address: '',
   map_embed_url: '',
 };
 
@@ -509,7 +509,7 @@ export function useHomepage() {
     menuSubtitle: h.menu_subtitle ?? '',
     completeMealTitle: h.complete_meal_title ?? 'Complete Your Meal',
     heroImageUrl: h.hero_image_url ?? 'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=1920&h=700&fit=crop',
-    locationsMapAddress: h.locations_map_address ?? 'Mira Road East, Mumbai',
+    locationsMapAddress: h.locations_map_address ?? '',
     locationsMapEmbedUrl: h.locations_map_embed_url ?? '',
     // Crust & toppings info
     crustTitle: h.crust_title ?? '6 Delicious Crusts',
@@ -541,7 +541,7 @@ export function useContact() {
     outletTitle: c.outlet_title ?? 'Visit Our {outlet} Outlet',
     deliveryHoursTitle: c.delivery_hours_title ?? 'Delivery Hours',
     deliveryHoursText: c.delivery_hours_text ?? '{hours} - all days',
-    deliveryAreaText: c.delivery_area_text ?? 'We deliver to Mira Road East, Beverly Park, and surrounding areas',
+    deliveryAreaText: c.delivery_area_text ?? '',
     deliveryNote: c.delivery_note ?? 'Free home delivery within our service area. All prices include tax.',
     formTitle: c.form_title ?? 'Send us a message',
     formDesc: c.form_desc ?? 'Have a question or feedback? Send us a message and we\'ll get back to you on WhatsApp.',
@@ -551,7 +551,7 @@ export function useContact() {
     submitButton: c.submit_button ?? 'Send on WhatsApp',
     orderCtaText: c.order_cta_text ?? 'Order Now',
     otherOutletsTitle: c.other_outlets_title ?? 'Other Outlets',
-    mapAddress: c.map_address ?? 'Mira Road East, Mumbai',
+    mapAddress: c.map_address ?? '',
     mapEmbedUrl: c.map_embed_url ?? '',
   }), [c]);
 }
