@@ -31,7 +31,7 @@ export default function BannerCarousel() {
       <div className={`${b.background} p-6 sm:p-8 lg:p-10 min-h-[160px] sm:min-h-[180px] transition-colors duration-500`}>
         <div className="flex items-center justify-between gap-4">
           <div className="max-w-lg">
-            <p className={`text-xs font-bold tracking-widest uppercase ${b.accent}`}>{restaurantName || 'Orange Cheese Pizza'}</p>
+            <p className={`text-xs font-bold tracking-widest uppercase ${b.accent}`}>{restaurantName || ''}</p>
             <h3 className="text-white text-xl sm:text-2xl lg:text-3xl font-heading font-bold leading-tight mt-2">{b.title}</h3>
             <p className="text-zinc-400 mt-2 text-sm sm:text-base">{b.subtitle}</p>
             {b.buttonText && (

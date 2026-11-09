@@ -25,7 +25,7 @@ export function usePushNotifications(restaurantName?: string) {
     try {
       // In production, you'd register with your push service (e.g., Firebase Cloud Messaging)
       // For now, show a test notification
-      new Notification(restaurantName || 'Orange Cheese Pizza', {
+      new Notification(restaurantName || 'Restaurant', {
         body: 'You\'ll be notified when your order status changes!',
         icon: '/favicon.svg',
         badge: '/favicon.svg',

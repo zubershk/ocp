@@ -3,10 +3,12 @@ import { Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Shield, User, Mail, Lock, Phone, CheckCircle, RefreshCw } from 'lucide-react';
 import { register } from '../services/authService';
 import { useToast } from '../context/ToastContext';
+import { useRestaurantName } from '../context/RestaurantContext';
 
 export default function Register() {
   const nav = useNavigate();
   const { push } = useToast();
+  const restaurantName = useRestaurantName();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -114,7 +116,7 @@ export default function Register() {
               Create Account
             </h1>
             <p className="text-sm text-zinc-500 mt-1.5 leading-relaxed">
-              Join Orange Cheese Pizza. Same number for web & WhatsApp history.
+              Join {restaurantName || 'us'}. Same number for web & WhatsApp history.
             </p>
 
             <form onSubmit={handleSubmit} className="mt-6 space-y-3">

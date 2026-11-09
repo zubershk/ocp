@@ -4,6 +4,7 @@ import { PartyPopper, RefreshCw, Star, Send, CheckCircle, Clock, MapPin, Phone, 
 import { orderService, type OrderView } from '../services/orderService';
 import { apiBaseUrl } from '../services/api';
 import { useCart } from '../context/CartContext';
+import { useRestaurantName } from '../context/RestaurantContext';
 import { menuService } from '../services/menuService';
 import { useRestaurantPhone, useDeliveryHours } from '../context/RestaurantContext';
 import { useGsapFadeIn } from '../hooks/useGsap';
@@ -23,6 +24,7 @@ const legacyStep: Record<string, string> = { preparing: 'confirmed', ready: 'con
 export default function Order() {
   const { id } = useParams();
   const nav = useNavigate();
+  const restaurantName = useRestaurantName();
   const [order, setOrder] = useState<OrderView | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'missing'>('loading');
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
@@ -180,7 +182,7 @@ export default function Order() {
     if (navigator.share) {
       navigator.share({
         title: `Order ${order.orderNumber}`,
-        text: `I just ordered from Orange Cheese Pizza! Order #${order.orderNumber}`,
+        text: `I just ordered from ${restaurantName || 'Restaurant'}! Order #${order.orderNumber}`,
         url: window.location.href,
       }).catch(() => {});
     } else {

@@ -333,7 +333,7 @@ export default function Checkout() {
                     aria-invalid={!!showFieldError('postal')}
                     aria-describedby={showFieldError('postal') ? 'err-postal' : undefined}
                     className={`mt-1.5 w-full px-3.5 py-2.5 rounded-full border focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-400 transition-all text-sm ${showFieldError('postal') ? 'border-red-300 bg-red-50/50' : 'border-stone-200'}`}
-                    placeholder="401107"
+                    placeholder="e.g., 401107"
                   />
                   {showFieldError('postal') && <p id="err-postal" className="text-xs text-red-600 mt-1">{showFieldError('postal')}</p>}
                 </div>

@@ -202,7 +202,7 @@ export default function OnboardingWizard({ phone, onComplete }: Props) {
                       value={form.delivery_area}
                       onChange={(e) => set('delivery_area', e.target.value)}
                       className="w-full px-4 py-2.5 rounded-xl border border-stone-200 bg-white text-sm focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none transition-all"
-                      placeholder="Mira Road, Borivali, Andheri (comma separated)"
+                      placeholder="e.g., Mira Road, Borivali, Andheri (comma separated)"
                     />
                   </div>
                   <div>

@@ -5,6 +5,7 @@ import {
   Smartphone, Bell, Users, Settings, Truck, Clock, Star, ExternalLink,
 } from 'lucide-react';
 import { useSocial, useSEO } from '../context/SiteSettingsContext';
+import { useRestaurantName } from '../context/RestaurantContext';
 
 function GithubIcon({ size = 16, className = '' }: { size?: number; className?: string }) {
   return (
@@ -77,6 +78,7 @@ const techStack = [
 export default function Landing() {
   const social = useSocial();
   const seo = useSEO();
+  const restaurantName = useRestaurantName();
 
   const heroTitle = seo.metaTitle || 'Your pizza shop. Your platform. Zero commission.';
   const heroDescription = seo.metaDescription || 'Full-stack online ordering with WhatsApp integration, real-time management, and a marketing campaign runner — all self-hosted, all yours.';
@@ -90,7 +92,7 @@ export default function Landing() {
             <div className="w-8 h-8 rounded-xl bg-brand-600 flex items-center justify-center">
               <span className="text-white font-bold text-sm">O</span>
             </div>
-            <span className="font-heading font-bold text-lg text-zinc-900">Orange Cheese Pizza</span>
+            <span className="font-heading font-bold text-lg text-zinc-900">{restaurantName || 'Restaurant'}</span>
           </div>
           <div className="hidden sm:flex items-center gap-6 text-sm font-medium text-zinc-600">
             <a href="#features" className="hover:text-zinc-900 transition-colors">Features</a>
@@ -403,7 +405,7 @@ export default function Landing() {
             <div className="w-7 h-7 rounded-lg bg-brand-600 flex items-center justify-center">
               <span className="text-white font-bold text-xs">O</span>
             </div>
-            <span className="font-heading font-semibold text-sm text-white">Orange Cheese Pizza</span>
+            <span className="font-heading font-semibold text-sm text-white">{restaurantName || 'Restaurant'}</span>
           </div>
           <div className="flex items-center gap-6 text-xs text-zinc-500">
             <a href="https://github.com/zubershk/ocp" target="_blank" rel="noopener noreferrer" className="hover:text-zinc-300 transition-colors">GitHub</a>
