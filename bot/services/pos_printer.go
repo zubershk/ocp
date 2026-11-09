@@ -11,6 +11,8 @@ import (
 
 	"orangecheesepizza/bot/database"
 	"orangecheesepizza/bot/models"
+
+	"github.com/skip2/go-qrcode"
 )
 
 // ------------------------------------------------------------------
@@ -101,7 +103,7 @@ func (p *PrinterConfig) Validate() error {
 // PrinterTemplateElement represents a single line/element on a receipt.
 type PrinterTemplateElement struct {
 	ID          string `json:"id"`          // Unique element ID
-	Type        string `json:"type"`        // "text" | "line" | "image" | "qr" | "divider"
+	Type        string `json:"type"`        // "text" | "line" | "image" | "qr" | "divider" | "spacer"
 	Text        string `json:"text"`        // Text content (for text type)
 	Align       string `json:"align"`       // "left" | "center" | "right"
 	Bold        bool   `json:"bold"`        // Bold text
@@ -113,6 +115,14 @@ type PrinterTemplateElement struct {
 	PaddingTop  int    `json:"padding_top"` // Space before element (lines)
 	PaddingBottom int   `json:"padding_bottom"` // Space after element (lines)
 	CharWidth   int    `json:"char_width"`  // Max characters per line (default based on paper width)
+	// QR code specific
+	QRValue string `json:"qr_value"`    // QR code content
+	QRSize  int    `json:"qr_size"`     // QR code size (1-8)
+	// Spacer specific
+	SpacerLines int `json:"spacer_lines"` // Number of blank lines
+	// Conditional display
+	Condition string `json:"condition"`   // e.g., "show_if_customer", "show_if_delivery"
+	Italic    bool   `json:"italic"`      // Italic text
 }
 
 // PrinterTemplateConfig is the template definition for receipt printing.
@@ -229,14 +239,31 @@ func (c *PrinterTemplateConfig) Validate() error {
 		if el.ID == "" {
 			return fmt.Errorf("element %d: id is required", i)
 		}
-		if el.Type != "text" && el.Type != "divider" && el.Type != "image" && el.Type != "qr" {
+		if el.Type != "text" && el.Type != "divider" && el.Type != "image" && el.Type != "qr" && el.Type != "spacer" {
 			return fmt.Errorf("element %d (%s): invalid type %q", i, el.ID, el.Type)
 		}
 		if el.Align != "" && el.Align != "left" && el.Align != "center" && el.Align != "right" {
 			return fmt.Errorf("element %d (%s): invalid align %q", i, el.ID, el.Align)
 		}
+		if el.Type == "qr" && el.QRSize > 0 && (el.QRSize < 1 || el.QRSize > 8) {
+			return fmt.Errorf("element %d (%s): qr_size must be between 1 and 8", i, el.ID)
+		}
+		if el.Type == "spacer" && el.SpacerLines > 0 && el.SpacerLines > 20 {
+			return fmt.Errorf("element %d (%s): spacer_lines must be between 1 and 20", i, el.ID)
+		}
 	}
 	return nil
+}
+
+// getRestaurantAddress fetches the restaurant address from restaurant_config.
+func getRestaurantAddress(restaurantID int) string {
+	rid := ResolveRestaurant(restaurantID)
+	var address string
+	err := database.DB.QueryRow(`SELECT address FROM restaurant_config WHERE restaurant_id=$1 LIMIT 1`, rid).Scan(&address)
+	if err != nil {
+		return ""
+	}
+	return address
 }
 
 // GenerateReceiptFromTemplate generates ESC/POS receipt bytes from template config.
@@ -282,10 +309,17 @@ func GenerateReceiptFromTemplate(order *models.Order, cfg *PrinterTemplateConfig
 	doubleReset := esc + "!" + "\x00"
 
 	// Helper to replace template variables
+	// Fetch restaurant info for placeholders
+	restaurantAddress := getRestaurantAddress(order.RestaurantID)
+
 	replaceVars := func(text string) string {
+		text = strings.ReplaceAll(text, "{{brand_name}}", brandName)
+		text = strings.ReplaceAll(text, "{{restaurant_address}}", restaurantAddress)
 		text = strings.ReplaceAll(text, "{{order_number}}", order.OrderNumber)
 		text = strings.ReplaceAll(text, "{{customer_name}}", order.CustomerName)
 		text = strings.ReplaceAll(text, "{{customer_phone}}", order.CustomerPhone)
+		text = strings.ReplaceAll(text, "{{customer_address}}", order.Address)
+		text = strings.ReplaceAll(text, "{{customer_landmark}}", order.Landmark)
 		text = strings.ReplaceAll(text, "{{order_type}}", order.OrderType)
 		text = strings.ReplaceAll(text, "{{payment_method}}", order.PaymentMethod)
 		text = strings.ReplaceAll(text, "{{status}}", order.Status)
@@ -297,12 +331,16 @@ func GenerateReceiptFromTemplate(order *models.Order, cfg *PrinterTemplateConfig
 		// Items list
 		if text == "{{items_list}}" {
 			var itemsText strings.Builder
+			nameWidth := width - 12
+			if nameWidth < 8 {
+				nameWidth = 8
+			}
 			for _, item := range order.Items {
 				name := item.Name
-				if len(name) > width-12 {
-					name = name[:width-13]
+				if len(name) > nameWidth {
+					name = name[:nameWidth-1]
 				}
-				itemsText.WriteString(fmt.Sprintf("%-12s %3d %6.2f\n", name, item.Quantity, item.Subtotal))
+				itemsText.WriteString(fmt.Sprintf("%-*s %3d %6.2f\n", nameWidth, name, item.Quantity, item.Subtotal))
 			}
 			return itemsText.String()
 		}
@@ -337,20 +375,77 @@ func GenerateReceiptFromTemplate(order *models.Order, cfg *PrinterTemplateConfig
 				b.WriteString(boldOff)
 			}
 		case "spacer":
-			lines := elem.PaddingTop + elem.PaddingBottom + 2
+			lines := elem.SpacerLines
 			if lines < 1 {
-				lines = 1
+				lines = elem.PaddingTop + elem.PaddingBottom + 2
+				if lines < 1 {
+					lines = 1
+				}
 			}
 			for i := 0; i < lines; i++ {
 				b.WriteString(lineFeed)
 			}
 		case "qr":
-			b.WriteString(center("[QR: " + elem.Text + "]") + lineFeed)
-		}
+			qrText := replaceVars(elem.QRValue)
+			if qrText == "" {
+				qrText = replaceVars(elem.Text)
+			}
+			if qrText != "" {
+				qrBytes, err := generateQRCodeESCPOS(qrText, elem.QRSize)
+				if err == nil {
+					b.Write(qrBytes)
+				} else {
+					b.WriteString(center("QR:" + lineFeed))
+					b.WriteString(center("[" + qrText + "]") + lineFeed)
+				}
+			}
+	}
 	}
 
 	b.WriteString(cutPaper)
 	return []byte(b.String())
+}
+
+// generateQRCodeESCPOS generates a QR code as ESC/POS raster bitmap commands.
+func generateQRCodeESCPOS(text string, size int) ([]byte, error) {
+	if size < 1 || size > 8 {
+		size = 4
+	}
+	qrCode, err := qrcode.New(text, qrcode.Medium)
+	if err != nil {
+		return nil, err
+	}
+	qrCode.DisableBorder = true
+
+	img := qrCode.Image(size * 10)
+
+	width := img.Bounds().Dx()
+	height := img.Bounds().Dy()
+
+	var result []byte
+
+	for y := 0; y < height; y += 8 {
+		for x := 0; x < width; x++ {
+			var byteVal byte
+			for bit := 0; bit < 8; bit++ {
+				yPos := y + bit
+				if yPos < height {
+					color := img.At(x, yPos)
+					r, g, b, _ := color.RGBA()
+					if r < 128 && g < 128 && b < 128 {
+						byteVal |= byte(1 << uint(7-bit))
+					}
+				}
+			}
+			result = append(result, byteVal)
+		}
+	}
+
+	nL := byte(width % 256)
+	nH := byte(width / 256)
+	cmd := append([]byte{27, '*', 32, nL, nH}, result...)
+
+	return cmd, nil
 }
 
 const (
