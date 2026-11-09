@@ -1,36 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  Printer,
-  Save,
-  ArrowLeft,
-  AlertTriangle,
-  RefreshCw,
-  Plus,
-  Trash2,
-  ChevronUp,
-  ChevronDown,
-  Layout,
-  Eye,
-  X,
-  GripVertical,
-  Edit3,
-  Type,
-  AlignLeft,
-  AlignCenter,
-  AlignRight,
-  Bold,
-  Maximize2,
-  Copy,
-  Download,
-  QrCode,
-  Minus,
-  Settings2,
-  FileText,
-  ChevronRight,
-  Layers,
-  Palette,
-  Zap,
+  Printer, Save, ArrowLeft, AlertTriangle, RefreshCw, Plus, Trash2,
+  ChevronUp, ChevronDown, Layout, Eye, X, GripVertical, Edit3, Type,
+  AlignLeft, AlignCenter, AlignRight, Bold, Maximize2, Copy, Download,
+  QrCode, Minus, Settings2, FileText, CheckCircle, Layers, Upload, Undo,
 } from 'lucide-react';
 import { adminFetch, getAdminKey } from '../services/api';
 import { useToast } from '../context/ToastContext';
@@ -87,12 +61,16 @@ const DEFAULT_PRINTER_TEMPLATE_CONFIG: PrinterTemplateConfig = {
   paper_width: 58,
   elements: [
     { id: 'header', type: 'text', text: '{{brand_name}}', align: 'center', bold: true, double_height: true, double_width: false, underline: false, size: 4, padding_top: 1, padding_bottom: 0, char_width: 48, italic: false },
+    { id: 'restaurant_address', type: 'text', text: '{{restaurant_address}}', align: 'center', bold: false, double_height: false, double_width: false, underline: false, size: 1, padding_top: 0, padding_bottom: 1, char_width: 48, italic: false },
     { id: 'divider1', type: 'divider', text: '', align: 'center', bold: false, double_height: false, double_width: false, underline: false, size: 1, padding_top: 0, padding_bottom: 0, char_width: 48, italic: false },
     { id: 'order_number', type: 'text', text: 'Order #{{order_number}}', align: 'left', bold: true, double_height: false, double_width: false, underline: false, size: 2, padding_top: 0, padding_bottom: 0, char_width: 48, italic: false },
     { id: 'date_time', type: 'text', text: '{{date_time}}', align: 'left', bold: false, double_height: false, double_width: false, underline: false, size: 1, padding_top: 0, padding_bottom: 1, char_width: 48, italic: false },
     { id: 'divider2', type: 'divider', text: '', align: 'center', bold: false, double_height: false, double_width: false, underline: false, size: 1, padding_top: 0, padding_bottom: 1, char_width: 48, italic: false },
-    { id: 'customer_info', type: 'text', text: 'Customer: {{customer_name}}\nPhone: {{customer_phone}}', align: 'left', bold: false, double_height: false, double_width: false, underline: false, size: 1, padding_top: 0, padding_bottom: 1, char_width: 48, italic: false, condition: 'show_if_customer' },
-    { id: 'items_header', type: 'text', text: 'Item           Qty  Price', align: 'left', bold: true, double_height: false, double_width: false, underline: false, size: 1, padding_top: 0, padding_bottom: 0, char_width: 48, italic: false },
+    { id: 'customer_name', type: 'text', text: 'Customer: {{customer_name}}', align: 'left', bold: false, double_height: false, double_width: false, underline: false, size: 1, padding_top: 0, padding_bottom: 0, char_width: 48, italic: false, condition: 'show_if_customer' },
+    { id: 'customer_phone', type: 'text', text: 'Phone:    {{customer_phone}}', align: 'left', bold: false, double_height: false, double_width: false, underline: false, size: 1, padding_top: 0, padding_bottom: 0, char_width: 48, italic: false, condition: 'show_if_customer' },
+    { id: 'customer_address', type: 'text', text: 'Address:  {{customer_address}}', align: 'left', bold: false, double_height: false, double_width: false, underline: false, size: 1, padding_top: 0, padding_bottom: 0, char_width: 48, italic: false, condition: 'show_if_customer' },
+    { id: 'customer_landmark', type: 'text', text: 'Landmark: {{customer_landmark}}', align: 'left', bold: false, double_height: false, double_width: false, underline: false, size: 1, padding_top: 0, padding_bottom: 1, char_width: 48, italic: false, condition: 'show_if_customer' },
+    { id: 'items_header', type: 'text', text: 'Item              Qty  Price', align: 'left', bold: true, double_height: false, double_width: false, underline: false, size: 1, padding_top: 0, padding_bottom: 0, char_width: 48, italic: false },
     { id: 'items_divider', type: 'divider', text: '', align: 'center', bold: false, double_height: false, double_width: false, underline: false, size: 1, padding_top: 0, padding_bottom: 0, char_width: 48, italic: false },
     { id: 'items_list', type: 'text', text: '{{items_list}}', align: 'left', bold: false, double_height: false, double_width: false, underline: false, size: 1, padding_top: 0, padding_bottom: 1, char_width: 48, italic: false },
     { id: 'totals_divider', type: 'divider', text: '', align: 'center', bold: false, double_height: false, double_width: false, underline: false, size: 1, padding_top: 1, padding_bottom: 0, char_width: 48, italic: false },
@@ -129,6 +107,8 @@ const PREVIEW_ORDER = {
   order_number: 'ORD-2024-001',
   customer_name: 'Test Customer',
   customer_phone: '+91 9876543210',
+  customer_address: '123 Main Street, City, State',
+  customer_landmark: 'Near Landmark',
   order_type: 'delivery',
   payment_method: 'cash',
   status: 'confirmed',
@@ -152,9 +132,12 @@ const ELEMENT_TYPES = [
 
 const PLACEHOLDERS = [
   { key: '{{brand_name}}', desc: 'Restaurant name' },
+  { key: '{{restaurant_address}}', desc: 'Restaurant address' },
   { key: '{{order_number}}', desc: 'Order number' },
   { key: '{{customer_name}}', desc: 'Customer name' },
   { key: '{{customer_phone}}', desc: 'Customer phone' },
+  { key: '{{customer_address}}', desc: 'Delivery address' },
+  { key: '{{customer_landmark}}', desc: 'Delivery landmark' },
   { key: '{{order_type}}', desc: 'Order type' },
   { key: '{{payment_method}}', desc: 'Payment method' },
   { key: '{{date_time}}', desc: 'Date and time' },
@@ -178,11 +161,19 @@ export default function AdminPrinterTemplate() {
   const [authed] = useState(() => getAdminKey().length > 0);
   const qc = useQueryClient();
   const toast = useToast();
+  const [restaurantAddress, setRestaurantAddress] = useState('');
+  const [restaurantName, setRestaurantName] = useState('');
   const [form, setForm] = useState<PrinterTemplateConfig>(DEFAULT_PRINTER_TEMPLATE_CONFIG);
+  const undoStackRef = useRef<PrinterTemplateConfig[]>([]);
+  const MAX_UNDO = 10;
   const [selectedElement, setSelectedElement] = useState<number | null>(null);
   const [showPreview, setShowPreview] = useState(true);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isInitialLoad = useRef(true);
+  const prevFormRef = useRef<string>('');
 
   const handleAuthError = (e: unknown) => {
     if (e instanceof Error && e.message.includes('401')) {
@@ -209,25 +200,116 @@ export default function AdminPrinterTemplate() {
     }
   }, [settingsQuery.data, settingsQuery.error]);
 
+  // Fetch restaurant info from config
+  useEffect(() => {
+    adminFetch<{ address?: string; name?: string }>('/admin/config')
+      .then((data) => {
+        if (data?.address) setRestaurantAddress(data.address);
+        if (data?.name) setRestaurantName(data.name);
+      })
+      .catch((err) => {
+        console.error('Failed to fetch restaurant config:', err);
+      });
+  }, []);
+
   const saveMut = useMutation({
     mutationFn: (body: PrinterTemplateConfig) =>
       adminFetch('/admin/printer/template/config', { method: 'PUT', body: JSON.stringify(body) }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-printer-template'] });
-      toast.push({ type: 'success', title: 'Printer template saved' });
+      setSaveStatus('saved');
+      setTimeout(() => setSaveStatus('idle'), 2000);
     },
     onError: (e: Error) => {
       handleAuthError(e);
+      setSaveStatus('error');
       toast.push({ type: 'error', title: e.message || 'Failed to save' });
     },
   });
 
+  const handleExportTemplate = () => {
+    const blob = new Blob([JSON.stringify(form, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `receipt-template-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.push({ type: 'success', title: 'Template exported' });
+  };
+
+  const handleImportTemplate = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = (e: any) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev: any) => {
+        try {
+          const parsed = JSON.parse(ev.target.result);
+          if (!parsed.elements || !Array.isArray(parsed.elements)) {
+            toast.push({ type: 'error', title: 'Invalid template format' });
+            return;
+          }
+          setFormWithUndo(parsed as PrinterTemplateConfig);
+          setSelectedElement(null);
+          toast.push({ type: 'success', title: 'Template imported' });
+        } catch {
+          toast.push({ type: 'error', title: 'Failed to parse template' });
+        }
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  };
+
+  const handleUndo = () => {
+    if (undoStackRef.current.length === 0) {
+      toast.push({ type: 'error', title: 'Nothing to undo' });
+      return;
+    }
+    const prev = undoStackRef.current.pop();
+    if (prev) {
+      setForm(prev);
+      toast.push({ type: 'success', title: 'Undone' });
+    }
+  };
+
+  const setFormWithUndo = (next: PrinterTemplateConfig | ((prev: PrinterTemplateConfig) => PrinterTemplateConfig)) => {
+    undoStackRef.current.push(form);
+    if (undoStackRef.current.length > MAX_UNDO) undoStackRef.current.shift();
+    setForm(next);
+  };
+
+  // Auto-save: debounced save on any form change (skip initial load)
+  useEffect(() => {
+    if (!authed || !settingsQuery.data) return;
+    const formStr = JSON.stringify(form);
+    if (isInitialLoad.current) {
+      isInitialLoad.current = false;
+      prevFormRef.current = formStr;
+      return;
+    }
+    if (formStr === prevFormRef.current) return;
+    prevFormRef.current = formStr;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    setSaveStatus('saving');
+    saveTimerRef.current = setTimeout(() => {
+      saveMut.mutate(form);
+    }, 1500);
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
+  }, [form]);
+
   const updateField = <K extends keyof PrinterTemplateConfig>(key: K, value: PrinterTemplateConfig[K]) => {
-    setForm((prev) => ({ ...prev, [key]: value }));
+    setFormWithUndo((prev) => ({ ...prev, [key]: value }));
   };
 
   const updateElement = (index: number, field: keyof PrinterTemplateElement, value: any) => {
-    setForm((prev) => {
+    setFormWithUndo((prev) => {
       const elements = [...prev.elements];
       elements[index] = { ...elements[index], [field]: value };
       return { ...prev, elements };
@@ -252,12 +334,12 @@ export default function AdminPrinterTemplate() {
       ...(type === 'qr' ? { qr_value: '{{order_number}}', qr_size: 4 } : {}),
       ...(type === 'spacer' ? { spacer_lines: 2 } : {}),
     };
-    setForm((prev) => ({ ...prev, elements: [...prev.elements, newElement] }));
+    setFormWithUndo((prev) => ({ ...prev, elements: [...prev.elements, newElement] }));
     setSelectedElement(form.elements.length);
   };
 
   const deleteElement = (index: number) => {
-    setForm((prev) => ({
+    setFormWithUndo((prev) => ({
       ...prev,
       elements: prev.elements.filter((_, i) => i !== index),
     }));
@@ -268,7 +350,7 @@ export default function AdminPrinterTemplate() {
   const moveElement = (index: number, direction: 'up' | 'down') => {
     const newIndex = direction === 'up' ? index - 1 : index + 1;
     if (newIndex < 0 || newIndex >= form.elements.length) return;
-    setForm((prev) => {
+    setFormWithUndo((prev) => {
       const elements = [...prev.elements];
       [elements[index], elements[newIndex]] = [elements[newIndex], elements[index]];
       return { ...prev, elements };
@@ -279,7 +361,7 @@ export default function AdminPrinterTemplate() {
 
   const duplicateElement = (index: number) => {
     const el = { ...form.elements[index], id: `el_${Date.now()}` };
-    setForm((prev) => {
+    setFormWithUndo((prev) => {
       const elements = [...prev.elements];
       elements.splice(index + 1, 0, el);
       return { ...prev, elements };
@@ -298,7 +380,7 @@ export default function AdminPrinterTemplate() {
   };
 
   const resetToDefault = () => {
-    setForm(DEFAULT_PRINTER_TEMPLATE_CONFIG);
+    setFormWithUndo(DEFAULT_PRINTER_TEMPLATE_CONFIG);
     setSelectedElement(null);
     toast.push({ type: 'success', title: 'Template reset to default' });
   };
@@ -327,15 +409,9 @@ export default function AdminPrinterTemplate() {
   const sel = selectedElement !== null ? form.elements[selectedElement] : null;
 
   const isElementVisible = (el: PrinterTemplateElement): boolean => {
-    // Check global toggles
-    if (el.id === 'date_time' && !form.show_date_time) return false;
-    if (el.id === 'order_number' && !form.show_order_number) return false;
-    if (el.id.startsWith('items') && !form.show_items) return false;
-    if (['subtotal', 'delivery_fee', 'discount', 'total', 'totals_divider', 'total_divider'].includes(el.id) && !form.show_totals) return false;
-    if (el.id === 'payment_method' && !form.show_payment_method) return false;
-    // Check conditional display
     if (el.condition === 'show_if_delivery' && PREVIEW_ORDER.order_type !== 'delivery') return false;
     if (el.condition === 'show_if_discount' && PREVIEW_ORDER.discount <= 0) return false;
+    if (el.condition === 'show_if_customer' && !PREVIEW_ORDER.customer_name) return false;
     return true;
   };
 
@@ -381,10 +457,13 @@ export default function AdminPrinterTemplate() {
 
     // Text element
     let displayText = el.text;
-    displayText = displayText.replace(/\{\{brand_name\}\}/g, form.header);
+    displayText = displayText.replace(/\{\{brand_name\}\}/g, restaurantName || form.header);
+    displayText = displayText.replace(/\{\{restaurant_address\}\}/g, restaurantAddress || 'Address not configured');
     displayText = displayText.replace(/\{\{order_number\}\}/g, PREVIEW_ORDER.order_number);
     displayText = displayText.replace(/\{\{customer_name\}\}/g, PREVIEW_ORDER.customer_name);
     displayText = displayText.replace(/\{\{customer_phone\}\}/g, PREVIEW_ORDER.customer_phone);
+    displayText = displayText.replace(/\{\{customer_address\}\}/g, '123 Main Street, City, State');
+    displayText = displayText.replace(/\{\{customer_landmark\}\}/g, 'Near Landmark');
     displayText = displayText.replace(/\{\{order_type\}\}/g, PREVIEW_ORDER.order_type);
     displayText = displayText.replace(/\{\{payment_method\}\}/g, PREVIEW_ORDER.payment_method);
     displayText = displayText.replace(/\{\{date_time\}\}/g, new Date(PREVIEW_ORDER.created_at).toLocaleString());
@@ -396,7 +475,7 @@ export default function AdminPrinterTemplate() {
     displayText = displayText.replace(/\{\{status\}\}/g, PREVIEW_ORDER.status);
     if (displayText === '{{items_list}}') {
       displayText = PREVIEW_ORDER.items.map((item: any) =>
-        `${item.name.substring(0, 12).padEnd(12)} ${String(item.quantity).padStart(3)} ${item.subtotal.toFixed(2).padStart(6)}`
+        `${item.name.substring(0, 14).padEnd(14)} ${String(item.quantity).padStart(3)} ${item.subtotal.toFixed(2).padStart(7)}`
       ).join('\n');
     }
 
@@ -423,50 +502,53 @@ export default function AdminPrinterTemplate() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={resetToDefault} className="text-xs h-8">
-            <RefreshCw size={12} className="mr-1" /> Reset
-          </Button>
-          <Button onClick={() => saveMut.mutate(form)} disabled={saveMut.isPending} size="sm" className="text-xs h-8">
-            <Save size={12} className="mr-1" /> {saveMut.isPending ? 'Saving...' : 'Save'}
-          </Button>
+          <div className="text-xs text-zinc-400 flex items-center gap-1.5">
+            {saveStatus === 'saving' && <><RefreshCw size={12} className="animate-spin" /> Saving...</>}
+            {saveStatus === 'saved' && <><CheckCircle size={12} className="text-emerald-500" /> Saved</>}
+            {saveStatus === 'error' && <><AlertTriangle size={12} className="text-red-500" /> Save failed</>}
+            {saveStatus === 'idle' && <><Save size={12} /> Auto-save enabled</>}
+          </div>
+          <div className="flex gap-1">
+            <Button variant="outline" size="sm" onClick={handleUndo} className="text-xs h-8">
+              <Undo size={12} className="mr-1" /> Undo
+            </Button>
+            <Button variant="outline" size="sm" onClick={resetToDefault} className="text-xs h-8">
+              <RefreshCw size={12} className="mr-1" /> Reset
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleImportTemplate} className="text-xs h-8">
+              <Download size={12} className="mr-1" /> Import
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleExportTemplate} className="text-xs h-8">
+              <Upload size={12} className="mr-1" /> Export
+            </Button>
+          </div>
         </div>
       </div>
 
-      {/* ===== MAIN LAYOUT: 3 columns ===== */}
+      {/* ===== MAIN LAYOUT: 2 columns (simplified) ===== */}
       <div className="grid grid-cols-12 gap-4">
-        {/* ===== LEFT: Toolbox + Element List ===== */}
-        <div className="col-span-12 lg:col-span-3 space-y-3">
-          {/* Toolbox */}
-          <div className="bg-white rounded-xl border border-stone-200 p-3">
-            <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-              <Plus size={12} /> Add Element
+        {/* ===== LEFT: Editor Panel ===== */}
+        <div className="col-span-12 lg:col-span-5 space-y-3">
+          {/* Element Toolbox + List combined */}
+          <div className="bg-white rounded-xl border border-stone-200 p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wider flex items-center gap-1.5">
+                <Layers size={12} /> Elements ({form.elements.length})
+              </div>
+              <div className="flex gap-1">
+                {ELEMENT_TYPES.map((et) => {
+                  const Icon = et.icon;
+                  return (
+                    <button key={et.value} type="button" onClick={() => addElement(et.value as PrinterTemplateElement['type'])}
+                      className="p-1.5 rounded-lg border border-stone-200 hover:border-orange-300 hover:bg-orange-50 transition-all"
+                      title={`Add ${et.label}`}>
+                      <Icon size={14} className="text-orange-600" />
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              {ELEMENT_TYPES.map((et) => {
-                const Icon = et.icon;
-                return (
-                  <button key={et.value} type="button" onClick={() => addElement(et.value as PrinterTemplateElement['type'])}
-                    className="flex items-center gap-2 p-2.5 rounded-lg border border-stone-200 hover:border-orange-300 hover:bg-orange-50 transition-all text-left">
-                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${TYPE_COLORS[et.value].split(' ')[0]}`}>
-                      <Icon size={14} className={TYPE_COLORS[et.value].split(' ')[1]} />
-                    </div>
-                    <div>
-                      <div className="text-xs font-medium">{et.label}</div>
-                      <div className="text-[10px] text-zinc-400">{et.description}</div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Element List */}
-          <div className="bg-white rounded-xl border border-stone-200 p-3">
-            <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-              <Layers size={12} /> Elements ({form.elements.length})
-              <span className="text-[9px] text-zinc-400 font-normal normal-case ml-auto">Drag to reorder</span>
-            </div>
-            <div className="space-y-1 max-h-[320px] overflow-y-auto pr-1">
+            <div className="space-y-1 max-h-[280px] overflow-y-auto pr-1">
               {form.elements.map((el, idx) => {
                 const isSelected = selectedElement === idx;
                 const isDragging = dragIndex === idx;
@@ -483,17 +565,13 @@ export default function AdminPrinterTemplate() {
                     onDragOver={(e) => {
                       e.preventDefault();
                       e.dataTransfer.dropEffect = 'move';
-                      if (dragIndex !== null && dragIndex !== idx) {
-                        setDragOverIndex(idx);
-                      }
+                      if (dragIndex !== null && dragIndex !== idx) setDragOverIndex(idx);
                     }}
-                    onDragLeave={() => {
-                      setDragOverIndex(null);
-                    }}
+                    onDragLeave={() => setDragOverIndex(null)}
                     onDrop={(e) => {
                       e.preventDefault();
                       if (dragIndex !== null && dragIndex !== idx) {
-                        setForm((prev) => {
+                        setFormWithUndo((prev) => {
                           const elements = [...prev.elements];
                           const [moved] = elements.splice(dragIndex, 1);
                           elements.splice(idx, 0, moved);
@@ -506,45 +584,28 @@ export default function AdminPrinterTemplate() {
                       setDragIndex(null);
                       setDragOverIndex(null);
                     }}
-                    onDragEnd={() => {
-                      setDragIndex(null);
-                      setDragOverIndex(null);
-                    }}
+                    onDragEnd={() => { setDragIndex(null); setDragOverIndex(null); }}
                     onClick={() => setSelectedElement(idx)}
                     className={`flex items-center gap-2 p-2 rounded-lg cursor-grab active:cursor-grabbing transition-all border ${
                       isDragging ? 'opacity-40 scale-95' : ''
-                    } ${
-                      isDragOver ? 'border-orange-400 bg-orange-50 border-dashed border-2' : ''
-                    } ${
+                    } ${isDragOver ? 'border-orange-400 bg-orange-50 border-dashed border-2' : ''} ${
                       isSelected && !isDragging && !isDragOver ? 'bg-orange-50 border-orange-300 shadow-sm' : ''
-                    } ${
-                      !isSelected && !isDragging && !isDragOver ? 'bg-white border-stone-100 hover:bg-stone-50 hover:border-stone-200' : ''
-                    }`}>
+                    } ${!isSelected && !isDragging && !isDragOver ? 'bg-white border-stone-100 hover:bg-stone-50 hover:border-stone-200' : ''}`}>
                     <GripVertical size={12} className="text-stone-300 shrink-0" />
-                    <div className={`w-6 h-6 rounded flex items-center justify-center text-[9px] font-bold shrink-0 ${typeColor}`}>
+                    <div className={`w-5 h-5 rounded flex items-center justify-center text-[8px] font-bold shrink-0 ${typeColor}`}>
                       {el.type.charAt(0).toUpperCase()}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-xs font-medium truncate">{el.id}</div>
-                      <div className="text-[10px] text-zinc-400 truncate">{el.type} · {el.align}</div>
+                      <div className="text-xs font-medium truncate capitalize">{el.type}</div>
+                      <div className="text-[10px] text-zinc-500 truncate">{el.text || el.qr_value || ''}</div>
                     </div>
                     <div className="flex gap-0.5 shrink-0">
                       <button type="button" onClick={(e) => { e.stopPropagation(); moveElement(idx, 'up'); }} disabled={idx === 0}
-                        className="p-1 rounded hover:bg-stone-200 disabled:opacity-25 transition-colors">
-                        <ChevronUp size={11} />
-                      </button>
+                        className="p-1 rounded hover:bg-stone-200 disabled:opacity-25"><ChevronUp size={10} /></button>
                       <button type="button" onClick={(e) => { e.stopPropagation(); moveElement(idx, 'down'); }} disabled={idx === form.elements.length - 1}
-                        className="p-1 rounded hover:bg-stone-200 disabled:opacity-25 transition-colors">
-                        <ChevronDown size={11} />
-                      </button>
-                      <button type="button" onClick={(e) => { e.stopPropagation(); duplicateElement(idx); }}
-                        className="p-1 rounded hover:bg-blue-50 text-zinc-400 hover:text-blue-500 transition-colors">
-                        <Copy size={11} />
-                      </button>
+                        className="p-1 rounded hover:bg-stone-200 disabled:opacity-25"><ChevronDown size={10} /></button>
                       <button type="button" onClick={(e) => { e.stopPropagation(); deleteElement(idx); }}
-                        className="p-1 rounded hover:bg-red-50 text-zinc-400 hover:text-red-500 transition-colors">
-                        <Trash2 size={11} />
-                      </button>
+                        className="p-1 rounded hover:bg-red-50 text-zinc-400 hover:text-red-500"><Trash2 size={10} /></button>
                     </div>
                   </div>
                 );
@@ -552,48 +613,201 @@ export default function AdminPrinterTemplate() {
             </div>
           </div>
 
-          {/* Global Settings */}
-          <div className="bg-white rounded-xl border border-stone-200 p-3">
-            <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-              <Settings2 size={12} /> Global Settings
+          {/* Element Property Editor (compact) */}
+          {sel && (
+            <div className="bg-white rounded-xl border border-stone-200 p-4">
+              <div className="flex items-center justify-between mb-3 pb-2 border-b border-stone-100">
+                <div className="flex items-center gap-2">
+                  <div className={`w-6 h-6 rounded flex items-center justify-center text-[10px] font-bold ${TYPE_COLORS[sel.type] || TYPE_COLORS.text}`}>
+                    {sel.type.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="text-sm font-semibold">{sel.id}</div>
+                </div>
+                <button type="button" onClick={() => setSelectedElement(null)} className="p-1 rounded hover:bg-stone-100 text-zinc-400">
+                  <X size={12} />
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                {/* Type */}
+                <div className="flex gap-1">
+                  {ELEMENT_TYPES.map((et) => {
+                    const Icon = et.icon;
+                    return (
+                      <button key={et.value} type="button" onClick={() => updateElement(selectedElement!, 'type', et.value)}
+                        className={`flex-1 py-1.5 rounded-lg border text-[10px] font-medium transition-all ${
+                          sel.type === et.value ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-stone-200 text-zinc-500 hover:border-orange-300'
+                        }`}>
+                        <Icon size={10} className="inline mr-0.5" />{et.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Text */}
+                {sel.type === 'text' && (
+                  <textarea value={sel.text} onChange={(e) => updateElement(selectedElement!, 'text', e.target.value)}
+                    rows={2} className="w-full px-2 py-1.5 rounded-lg border border-stone-200 bg-stone-50 text-xs focus:outline-none focus:ring-2 focus:ring-orange-500 resize-none font-mono"
+                    placeholder="Text with {{placeholders}}..." />
+                )}
+
+                {/* QR */}
+                {sel.type === 'qr' && (
+                  <div className="space-y-2">
+                    <Input value={sel.qr_value || ''} onChange={(e) => updateElement(selectedElement!, 'qr_value', e.target.value)}
+                      className="text-xs h-7 font-mono" placeholder="{{order_number}}" />
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-zinc-500">Size:</span>
+                      <input type="range" min={1} max={8} value={sel.qr_size || 4}
+                        onChange={(e) => updateElement(selectedElement!, 'qr_size', parseInt(e.target.value))}
+                        className="flex-1 accent-orange-500" />
+                      <span className="text-[10px] text-zinc-400 w-4">{sel.qr_size || 4}</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Spacer */}
+                {sel.type === 'spacer' && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-zinc-500">Lines:</span>
+                    <input type="range" min={1} max={10} value={sel.spacer_lines || 2}
+                      onChange={(e) => updateElement(selectedElement!, 'spacer_lines', parseInt(e.target.value))}
+                      className="flex-1 accent-orange-500" />
+                    <span className="text-[10px] text-zinc-400 w-4">{sel.spacer_lines || 2}</span>
+                  </div>
+                )}
+
+                {/* Alignment + Bold in one row */}
+                <div className="flex gap-1">
+                  {[
+                    { value: 'left', icon: AlignLeft },
+                    { value: 'center', icon: AlignCenter },
+                    { value: 'right', icon: AlignRight },
+                  ].map((a) => {
+                    const Icon = a.icon;
+                    return (
+                      <button key={a.value} type="button" onClick={() => updateElement(selectedElement!, 'align', a.value)}
+                        className={`flex-1 py-1.5 rounded-lg border text-xs transition-all flex items-center justify-center ${
+                          sel.align === a.value ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-stone-200 text-zinc-500 hover:border-orange-300'
+                        }`}>
+                        <Icon size={12} />
+                      </button>
+                    );
+                  })}
+                  <button type="button" onClick={() => updateElement(selectedElement!, 'bold', !sel.bold)}
+                    className={`px-3 py-1.5 rounded-lg border text-xs transition-all ${sel.bold ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-stone-200 text-zinc-500 hover:border-orange-300'}`}>
+                    <Bold size={12} />
+                  </button>
+                  <button type="button" onClick={() => updateElement(selectedElement!, 'double_height', !sel.double_height)}
+                    className={`px-3 py-1.5 rounded-lg border text-xs transition-all ${sel.double_height ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-stone-200 text-zinc-500 hover:border-orange-300'}`}>
+                    <Maximize2 size={12} />
+                  </button>
+                </div>
+
+                {/* Font Size */}
+                <div className="flex gap-1">
+                  {[
+                    { value: 1, label: 'S' },
+                    { value: 2, label: 'M' },
+                    { value: 3, label: 'L' },
+                    { value: 4, label: 'XL' },
+                  ].map((s) => (
+                    <button key={s.value} type="button" onClick={() => updateElement(selectedElement!, 'size', s.value)}
+                      className={`flex-1 py-1.5 rounded-lg border text-xs font-medium transition-all ${
+                        sel.size === s.value ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-stone-200 text-zinc-500 hover:border-orange-300'
+                      }`}>
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Padding */}
+                <div className="flex gap-3">
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between mb-0.5">
+                      <span className="text-[10px] text-zinc-500">Top</span>
+                      <span className="text-[10px] text-zinc-400">{sel.padding_top}</span>
+                    </div>
+                    <input type="range" min={0} max={5} value={sel.padding_top}
+                      onChange={(e) => updateElement(selectedElement!, 'padding_top', parseInt(e.target.value))}
+                      className="w-full accent-orange-500" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between mb-0.5">
+                      <span className="text-[10px] text-zinc-500">Bottom</span>
+                      <span className="text-[10px] text-zinc-400">{sel.padding_bottom}</span>
+                    </div>
+                    <input type="range" min={0} max={5} value={sel.padding_bottom}
+                      onChange={(e) => updateElement(selectedElement!, 'padding_bottom', parseInt(e.target.value))}
+                      className="w-full accent-orange-500" />
+                  </div>
+                </div>
+
+                {/* Conditional */}
+                <select value={sel.condition || ''} onChange={(e) => updateElement(selectedElement!, 'condition', e.target.value || undefined)}
+                  className="w-full px-2 py-1.5 rounded-lg border border-stone-200 bg-stone-50 text-xs">
+                  <option value="">Always show</option>
+                  <option value="show_if_customer">If customer info</option>
+                  <option value="show_if_delivery">If delivery</option>
+                  <option value="show_if_discount">If discount</option>
+                  <option value="show_if_payment">If payment set</option>
+                </select>
+
+                {/* Placeholders (compact) */}
+                <div className="flex flex-wrap gap-1">
+                  {PLACEHOLDERS.slice(0, 8).map((ph) => (
+                    <button key={ph.key} type="button" onClick={() => insertPlaceholder(ph.key)}
+                      className="px-1.5 py-0.5 rounded bg-stone-100 text-zinc-600 text-[9px] font-mono hover:bg-orange-50 hover:text-orange-600 transition-colors"
+                      title={ph.desc}>{ph.key}</button>
+                  ))}
+                </div>
+
+                {/* Duplicate */}
+                <button type="button" onClick={() => duplicateElement(selectedElement!)}
+                  className="w-full py-1.5 rounded-lg border border-stone-200 text-xs text-zinc-500 hover:bg-stone-50 transition-colors flex items-center justify-center gap-1">
+                  <Copy size={10} /> Duplicate
+                </button>
+              </div>
             </div>
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs font-medium text-zinc-600 mb-1 block">Paper Width</label>
-                <div className="flex gap-2">
+          )}
+
+          {/* Global Settings (compact) */}
+          <div className="bg-white rounded-xl border border-stone-200 p-4">
+            <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+              <Settings2 size={12} /> Settings
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-zinc-600 w-20">Paper</span>
+                <div className="flex gap-1 flex-1">
                   {[58, 80].map((w) => (
                     <button key={w} type="button" onClick={() => updateField('paper_width', w as PrinterTemplateConfig['paper_width'])}
-                      className={`flex-1 py-1.5 rounded-lg border text-xs font-medium transition-all ${
-                        form.paper_width === w ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-stone-200 text-zinc-600 hover:border-orange-300'
+                      className={`flex-1 py-1 rounded-lg border text-xs font-medium transition-all ${
+                        form.paper_width === w ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-stone-200 text-zinc-500 hover:border-orange-300'
                       }`}>
-                      {w} mm
+                      {w}mm
                     </button>
                   ))}
                 </div>
               </div>
               <div>
-                <label className="text-xs font-medium text-zinc-600 mb-1 block">Header Text</label>
-                <Input value={form.header} onChange={(e) => updateField('header', e.target.value)} className="text-xs h-8" />
+                <span className="text-xs text-zinc-600 block mb-1">Header</span>
+                <Input value={form.header} onChange={(e) => updateField('header', e.target.value)} className="text-xs h-7" />
               </div>
               <div>
-                <label className="text-xs font-medium text-zinc-600 mb-1 block">Footer Text</label>
-                <Input value={form.footer} onChange={(e) => updateField('footer', e.target.value)} className="text-xs h-8" />
+                <span className="text-xs text-zinc-600 block mb-1">Footer</span>
+                <Input value={form.footer} onChange={(e) => updateField('footer', e.target.value)} className="text-xs h-7" />
               </div>
-              <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1 pt-1">
                 {[
-                  { key: 'show_date_time', label: 'Show Date & Time', desc: 'Display order timestamp' },
-                  { key: 'show_order_number', label: 'Show Order Number', desc: 'Display order ID' },
-                  { key: 'show_items', label: 'Show Items List', desc: 'Display ordered items' },
-                  { key: 'show_totals', label: 'Show Totals', desc: 'Display price breakdown' },
-                  { key: 'show_payment_method', label: 'Show Payment Method', desc: 'Display payment type' },
-                  { key: 'cut_paper', label: 'Auto Cut Paper', desc: 'Cut after printing' },
-                  { key: 'beep_on_print', label: 'Beep on Print', desc: 'Sound alert' },
+                  { key: 'show_date_time', label: 'Date/Time' },
+                  { key: 'show_order_number', label: 'Order #' },
+                  { key: 'show_items', label: 'Items' },
+                  { key: 'show_totals', label: 'Totals' },
+                  { key: 'show_payment_method', label: 'Payment' },
+                  { key: 'cut_paper', label: 'Auto Cut' },
                 ].map((item) => (
-                  <div key={item.key} className="flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-stone-50 transition-colors">
-                    <div>
-                      <div className="text-xs font-medium text-zinc-700">{item.label}</div>
-                      <div className="text-[10px] text-zinc-400">{item.desc}</div>
-                    </div>
+                  <label key={item.key} className="flex items-center gap-1.5 cursor-pointer py-0.5">
                     <button
                       type="button"
                       role="switch"
@@ -602,251 +816,30 @@ export default function AdminPrinterTemplate() {
                         const current = (form as any)[item.key] === true;
                         updateField(item.key as keyof PrinterTemplateConfig, (!current) as any);
                       }}
-                      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 ${
+                      className={`relative inline-flex h-4 w-7 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
                         (form as any)[item.key] === true ? 'bg-orange-500' : 'bg-stone-300'
                       }`}
                     >
-                      <span
-                        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                          (form as any)[item.key] === true ? 'translate-x-4' : 'translate-x-0'
-                        }`}
-                      />
+                      <span className={`pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                        (form as any)[item.key] === true ? 'translate-x-3' : 'translate-x-0'
+                      }`} />
                     </button>
-                  </div>
+                    <span className="text-[10px] text-zinc-600">{item.label}</span>
+                  </label>
                 ))}
               </div>
             </div>
           </div>
         </div>
 
-        {/* ===== CENTER: Element Property Editor ===== */}
-        <div className="col-span-12 lg:col-span-4 space-y-3">
-          {sel ? (
-            <div className="bg-white rounded-xl border border-stone-200 p-4">
-              <div className="flex items-center justify-between mb-4 pb-3 border-b border-stone-100">
-                <div className="flex items-center gap-2">
-                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold ${TYPE_COLORS[sel.type] || TYPE_COLORS.text}`}>
-                    {sel.type.charAt(0).toUpperCase()}
-                  </div>
-                  <div>
-                    <div className="text-sm font-semibold">{sel.id}</div>
-                    <div className="text-[10px] text-zinc-400 capitalize">{sel.type} element</div>
-                  </div>
-                </div>
-                <button type="button" onClick={() => setSelectedElement(null)}
-                  className="p-1.5 rounded-lg hover:bg-stone-100 text-zinc-400 hover:text-zinc-600 transition-colors">
-                  <X size={14} />
-                </button>
-              </div>
-
-              <div className="space-y-4">
-                {/* Type Selector */}
-                <div>
-                  <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-1.5 block">Type</label>
-                  <div className="flex gap-1.5">
-                    {ELEMENT_TYPES.map((et) => {
-                      const Icon = et.icon;
-                      return (
-                        <button key={et.value} type="button" onClick={() => updateElement(selectedElement!, 'type', et.value)}
-                          className={`flex-1 py-2 rounded-lg border text-xs font-medium transition-all ${
-                            sel.type === et.value ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-stone-200 text-zinc-600 hover:border-orange-300'
-                          }`}>
-                          <Icon size={12} className="inline mr-1" />{et.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Text Content */}
-                {sel.type === 'text' && (
-                  <div>
-                    <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-1.5 block">Text Content</label>
-                    <textarea value={sel.text} onChange={(e) => updateElement(selectedElement!, 'text', e.target.value)}
-                      rows={3} className="w-full px-3 py-2 rounded-lg border border-stone-200 bg-stone-50 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 resize-none font-mono text-xs"
-                      placeholder="Enter text with {{placeholders}}..." />
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {PLACEHOLDERS.slice(0, 6).map((ph) => (
-                        <button key={ph.key} type="button" onClick={() => updateElement(selectedElement!, 'text', sel.text + ph.key)}
-                          className="px-1.5 py-0.5 rounded bg-orange-50 text-orange-700 text-[9px] font-mono hover:bg-orange-100 transition-colors"
-                          title={ph.desc}>{ph.key}</button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* QR Settings */}
-                {sel.type === 'qr' && (
-                  <div className="space-y-3">
-                    <div>
-                      <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-1.5 block">QR Value</label>
-                      <Input value={sel.qr_value || ''} onChange={(e) => updateElement(selectedElement!, 'qr_value', e.target.value)}
-                        className="text-xs h-8 font-mono" placeholder="{{order_number}}" />
-                    </div>
-                    <div>
-                      <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-1.5 block">
-                        QR Size: {sel.qr_size || 4}
-                      </label>
-                      <input type="range" min={1} max={8} value={sel.qr_size || 4}
-                        onChange={(e) => updateElement(selectedElement!, 'qr_size', parseInt(e.target.value))}
-                        className="w-full accent-orange-500" />
-                    </div>
-                  </div>
-                )}
-
-                {/* Spacer Settings */}
-                {sel.type === 'spacer' && (
-                  <div>
-                    <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-1.5 block">
-                      Spacer Lines: {sel.spacer_lines || 2}
-                    </label>
-                    <input type="range" min={1} max={10} value={sel.spacer_lines || 2}
-                      onChange={(e) => updateElement(selectedElement!, 'spacer_lines', parseInt(e.target.value))}
-                      className="w-full accent-orange-500" />
-                  </div>
-                )}
-
-                {/* Alignment */}
-                <div>
-                  <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-1.5 block">Alignment</label>
-                  <div className="flex gap-1.5">
-                    {[
-                      { value: 'left', icon: AlignLeft, label: 'Left' },
-                      { value: 'center', icon: AlignCenter, label: 'Center' },
-                      { value: 'right', icon: AlignRight, label: 'Right' },
-                    ].map((a) => {
-                      const Icon = a.icon;
-                      return (
-                        <button key={a.value} type="button" onClick={() => updateElement(selectedElement!, 'align', a.value)}
-                          className={`flex-1 py-2 rounded-lg border text-xs font-medium transition-all flex items-center justify-center gap-1 ${
-                            sel.align === a.value ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-stone-200 text-zinc-600 hover:border-orange-300'
-                          }`}>
-                          <Icon size={12} /> {a.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Style Toggles */}
-                <div>
-                  <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-1.5 block">Style</label>
-                  <div className="flex gap-1.5">
-                    <button type="button" onClick={() => updateElement(selectedElement!, 'bold', !sel.bold)}
-                      className={`flex-1 py-2 rounded-lg border text-xs font-medium transition-all flex items-center justify-center gap-1 ${
-                        sel.bold ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-stone-200 text-zinc-600 hover:border-orange-300'
-                      }`}>
-                      <Bold size={12} /> Bold
-                    </button>
-                    <button type="button" onClick={() => updateElement(selectedElement!, 'double_height', !sel.double_height)}
-                      className={`flex-1 py-2 rounded-lg border text-xs font-medium transition-all flex items-center justify-center gap-1 ${
-                        sel.double_height ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-stone-200 text-zinc-600 hover:border-orange-300'
-                      }`}>
-                      <Maximize2 size={12} /> 2x
-                    </button>
-                    <button type="button" onClick={() => updateElement(selectedElement!, 'underline', !sel.underline)}
-                      className={`flex-1 py-2 rounded-lg border text-xs font-medium transition-all ${
-                        sel.underline ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-stone-200 text-zinc-600 hover:border-orange-300'
-                      }`}>
-                      <u>U</u>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Font Size */}
-                <div>
-                  <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-1.5 block">Font Size</label>
-                  <div className="flex gap-1.5">
-                    {[
-                      { value: 1, label: 'Small' },
-                      { value: 2, label: 'Normal' },
-                      { value: 3, label: 'Large' },
-                      { value: 4, label: 'XL' },
-                    ].map((s) => (
-                      <button key={s.value} type="button" onClick={() => updateElement(selectedElement!, 'size', s.value)}
-                        className={`flex-1 py-2 rounded-lg border text-xs font-medium transition-all ${
-                          sel.size === s.value ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-stone-200 text-zinc-600 hover:border-orange-300'
-                        }`}>
-                        {s.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Padding */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-1.5 block">
-                      Padding Top: {sel.padding_top}
-                    </label>
-                    <input type="range" min={0} max={5} value={sel.padding_top}
-                      onChange={(e) => updateElement(selectedElement!, 'padding_top', parseInt(e.target.value))}
-                      className="w-full accent-orange-500" />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-1.5 block">
-                      Padding Bottom: {sel.padding_bottom}
-                    </label>
-                    <input type="range" min={0} max={5} value={sel.padding_bottom}
-                      onChange={(e) => updateElement(selectedElement!, 'padding_bottom', parseInt(e.target.value))}
-                      className="w-full accent-orange-500" />
-                  </div>
-                </div>
-
-                {/* Conditional Display */}
-                <div>
-                  <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-1.5 block">Conditional Display</label>
-                  <select value={sel.condition || ''} onChange={(e) => updateElement(selectedElement!, 'condition', e.target.value || undefined)}
-                    className="w-full px-3 py-2 rounded-lg border border-stone-200 bg-stone-50 text-xs focus:outline-none focus:ring-2 focus:ring-orange-500">
-                    <option value="">Always show</option>
-                    <option value="show_if_customer">Show if customer info available</option>
-                    <option value="show_if_delivery">Show if delivery order</option>
-                    <option value="show_if_discount">Show if discount applied</option>
-                    <option value="show_if_payment">Show if payment method set</option>
-                  </select>
-                </div>
-
-                {/* Duplicate */}
-                <button type="button" onClick={() => duplicateElement(selectedElement!)}
-                  className="w-full py-2 rounded-lg border border-stone-200 text-xs font-medium text-zinc-600 hover:bg-stone-50 hover:border-stone-300 transition-all flex items-center justify-center gap-1.5">
-                  <Copy size={12} /> Duplicate Element
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="bg-white rounded-xl border border-stone-200 p-8 text-center">
-              <Edit3 size={36} className="mx-auto text-stone-300 mb-3" />
-              <p className="text-sm text-zinc-500 font-medium">No element selected</p>
-              <p className="text-xs text-zinc-400 mt-1">Click an element in the list or preview to edit its properties</p>
-            </div>
-          )}
-
-          {/* Placeholders */}
-          <div className="bg-white rounded-xl border border-stone-200 p-3">
-            <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-              <FileText size={12} /> Placeholders (click to insert)
-            </div>
-            <div className="grid grid-cols-2 gap-1">
-              {PLACEHOLDERS.map((ph) => (
-                <button key={ph.key} type="button" onClick={() => insertPlaceholder(ph.key)}
-                  disabled={selectedElement === null}
-                  className="text-left px-2 py-1.5 rounded-lg bg-stone-50 hover:bg-orange-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed border border-transparent hover:border-orange-200">
-                  <span className="text-[10px] font-mono text-orange-600 font-medium">{ph.key}</span>
-                  <span className="text-[9px] text-zinc-400 ml-1">{ph.desc}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
         {/* ===== RIGHT: Live Preview ===== */}
-        <div className="col-span-12 lg:col-span-5 space-y-3">
-          <div className="bg-white rounded-xl border border-stone-200 p-4">
+        <div className="col-span-12 lg:col-span-7 space-y-3">
+          <div className="bg-white rounded-xl border border-stone-200 p-4 sticky top-4">
             <div className="flex items-center justify-between mb-3 pb-3 border-b border-stone-100">
               <div className="flex items-center gap-2">
                 <Eye size={14} className="text-orange-600" />
                 <span className="text-sm font-semibold">Live Preview</span>
-                <span className="text-[10px] text-zinc-400 bg-stone-100 px-2 py-0.5 rounded-full">{form.paper_width}mm</span>
+                <span className="text-[10px] text-zinc-400 bg-stone-100 px-2 py-0.5 rounded-full">{form.paper_width}mm paper</span>
               </div>
               <button type="button" onClick={() => setShowPreview(!showPreview)}
                 className="text-xs text-zinc-500 hover:text-zinc-700 font-medium">
@@ -855,9 +848,9 @@ export default function AdminPrinterTemplate() {
             </div>
             {showPreview && (
               <div className="flex justify-center">
-                <div className="border-2 border-stone-200 rounded-lg p-4 bg-white shadow-inner"
-                  style={{ width: `${Math.min(form.paper_width * 3, 320)}px`, minHeight: '300px' }}>
-                  <div className="font-mono text-stone-800" style={{ fontSize: '11px' }}>
+                <div className="border-2 border-stone-200 rounded-lg p-5 bg-white shadow-inner"
+                  style={{ width: `${Math.min(form.paper_width * 4, 420)}px`, minHeight: '400px' }}>
+                  <div className="font-mono text-stone-800" style={{ fontSize: '9px', lineHeight: '1.4' }}>
                     {form.elements.map((el, idx) => renderElementPreview(el, idx)).filter(Boolean)}
                   </div>
                 </div>
@@ -865,66 +858,10 @@ export default function AdminPrinterTemplate() {
             )}
           </div>
 
-          {/* Template Stats */}
-          <div className="bg-white rounded-xl border border-stone-200 p-3">
-            <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-              <Palette size={12} /> Template Summary
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              {[
-                { label: 'Total', value: form.elements.length, color: 'text-zinc-800' },
-                { label: 'Text', value: form.elements.filter((e) => e.type === 'text').length, color: 'text-orange-600' },
-                { label: 'Dividers', value: form.elements.filter((e) => e.type === 'divider').length, color: 'text-zinc-600' },
-                { label: 'QR Codes', value: form.elements.filter((e) => e.type === 'qr').length, color: 'text-emerald-600' },
-                { label: 'Spacers', value: form.elements.filter((e) => e.type === 'spacer').length, color: 'text-blue-600' },
-                { label: 'Width', value: `${form.paper_width}mm`, color: 'text-zinc-800' },
-              ].map((stat) => (
-                <div key={stat.label} className="text-center p-2 rounded-lg bg-stone-50">
-                  <div className={`text-lg font-bold ${stat.color}`}>{stat.value}</div>
-                  <div className="text-[10px] text-zinc-400">{stat.label}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Quick Actions */}
-          <div className="bg-white rounded-xl border border-stone-200 p-3">
-            <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-              <Zap size={12} /> Quick Actions
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <button type="button" onClick={() => {
-                const newEls = [...form.elements];
-                // Move all text elements to top
-                const textEls = newEls.filter(e => e.type === 'text');
-                const others = newEls.filter(e => e.type !== 'text');
-                setForm(prev => ({ ...prev, elements: [...textEls, ...others] }));
-                toast.push({ type: 'success', title: 'Text elements moved to top' });
-              }} className="py-2 px-3 rounded-lg border border-stone-200 text-xs font-medium text-zinc-600 hover:bg-stone-50 transition-colors">
-                Group Text
-              </button>
-              <button type="button" onClick={() => {
-                setForm(prev => ({ ...prev, elements: prev.elements.filter(e => e.type !== 'spacer') }));
-                toast.push({ type: 'success', title: 'Spacers removed' });
-              }} className="py-2 px-3 rounded-lg border border-stone-200 text-xs font-medium text-zinc-600 hover:bg-stone-50 transition-colors">
-                Remove Spacers
-              </button>
-              <button type="button" onClick={() => {
-                const dividers = form.elements.filter(e => e.type === 'divider');
-                if (dividers.length > 0) {
-                  setForm(prev => ({ ...prev, elements: prev.elements.filter(e => e.type !== 'divider') }));
-                  toast.push({ type: 'success', title: 'Dividers removed' });
-                }
-              }} className="py-2 px-3 rounded-lg border border-stone-200 text-xs font-medium text-zinc-600 hover:bg-stone-50 transition-colors">
-                Remove Dividers
-              </button>
-              <button type="button" onClick={() => {
-                // Reverse element order
-                setForm(prev => ({ ...prev, elements: [...prev.elements].reverse() }));
-                toast.push({ type: 'success', title: 'Element order reversed' });
-              }} className="py-2 px-3 rounded-lg border border-stone-200 text-xs font-medium text-zinc-600 hover:bg-stone-50 transition-colors">
-                Reverse Order
-              </button>
+          {/* Info card */}
+          <div className="bg-stone-50 rounded-xl border border-stone-200 p-3">
+            <div className="text-[10px] text-zinc-500 leading-relaxed">
+              <strong className="text-zinc-700">Tip:</strong> Click any element in the list or preview to edit its properties. Drag elements to reorder. Changes are auto-saved after 1.5 seconds.
             </div>
           </div>
         </div>
