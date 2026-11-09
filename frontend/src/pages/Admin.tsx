@@ -10,6 +10,7 @@ import {
 import { adminFetch, getAdminKey, setAdminKey, apiGet } from '../services/api';
 import { useCountUp } from '../hooks/useCountUp';
 import { useRealtime } from '../context/RealtimeContext';
+import { useToast } from '../context/ToastContext';
 import { playOrderPing } from '../utils/adminSound';
 import HoldButton from '../components/ui/HoldButton';
 import { Button } from '@/components/shadcn/button';
@@ -100,6 +101,7 @@ export default function Admin() {
   const [freshIds, setFreshIds] = useState<Set<number>>(new Set());
   const [selId, setSelId] = useState<number | null>(null);
   const [liveMsg, setLiveMsg] = useState('');
+  const toast = useToast();
 
   const [, setTick] = useState(0);
   useEffect(() => { const id = setInterval(() => setTick((n) => n + 1), 30000); return () => clearInterval(id); }, []);
@@ -162,42 +164,153 @@ export default function Admin() {
     try {
       const order = await adminFetch<any>(`/admin/orders/${orderId}`);
       if (!order) return;
+
+      // Fetch printer template config
+      let template: any = null;
+      try {
+        const tmplData = await adminFetch<{ printer_template_config?: any }>('/admin/printer/template/config');
+        template = tmplData.printer_template_config;
+      } catch {
+        // Fall back to default if template fetch fails
+      }
+
+      // Fetch restaurant info from admin config
+      let restaurantName = 'Restaurant';
+      let restaurantAddress = '';
+      try {
+        const cfgData = await adminFetch<{ name?: string; address?: string }>('/admin/config');
+        restaurantName = cfgData?.name || restaurantName;
+        restaurantAddress = cfgData?.address || '';
+      } catch {
+        // Fall back to defaults
+      }
+
+      const paperWidth = printerQuery.data?.printer_config?.paper_width || template?.paper_width || 80;
       const w = window.open('', '_blank', 'width=400,height=600');
-      if (!w) return;
-      const items = order.items || [];
-      const itemRows = items.map((it: any) =>
-        `<tr><td>${it.name}</td><td style="text-align:center">${it.quantity}</td><td style="text-align:right">₹${Number(it.line_total || it.subtotal || 0).toFixed(2)}</td></tr>`
-      ).join('');
+      if (!w) {
+        toast.push({ type: 'error', title: 'Popup blocked', message: 'Please allow popups for this site to print receipts' });
+        return;
+      }
+
+      // Helper to replace template variables
+      const replaceVars = (text: string): string => {
+        const items = order.items || [];
+          const paperChars = paperWidth === 58 ? 20 : 30;
+        const nameWidth = Math.max(paperChars - 12, 8);
+        const itemsList = items.map((it: any) => {
+          const name = (it.name || '').substring(0, nameWidth);
+          return `${name.padEnd(nameWidth)} ${String(it.quantity).padStart(3)} ${Number(it.line_total || it.subtotal || 0).toFixed(2).padStart(7)}`;
+        }).join('\n');
+
+        return text
+          .replace(/\{\{brand_name\}\}/g, restaurantName)
+          .replace(/\{\{restaurant_address\}\}/g, restaurantAddress)
+          .replace(/\{\{order_number\}\}/g, order.order_number || '')
+          .replace(/\{\{customer_name\}\}/g, order.customer_name || '')
+          .replace(/\{\{customer_phone\}\}/g, order.customer_phone || '')
+          .replace(/\{\{customer_address\}\}/g, order.address || '')
+          .replace(/\{\{customer_landmark\}\}/g, order.landmark || '')
+          .replace(/\{\{order_type\}\}/g, order.order_type || '')
+          .replace(/\{\{payment_method\}\}/g, (order.payment_method || '').toUpperCase())
+          .replace(/\{\{status\}\}/g, order.status || '')
+          .replace(/\{\{date_time\}\}/g, new Date(order.created_at).toLocaleString())
+          .replace(/\{\{subtotal\}\}/g, Number(order.subtotal || 0).toFixed(2))
+          .replace(/\{\{delivery_fee\}\}/g, Number(order.delivery_fee || 0).toFixed(2))
+          .replace(/\{\{discount\}\}/g, Number(order.discount || 0).toFixed(2))
+          .replace(/\{\{total\}\}/g, Number(order.total || 0).toFixed(2))
+          .replace(/\{\{items_list\}\}/g, itemsList)
+          .replace(/\{\{footer\}\}/g, template?.footer || 'Thank you for your order!');
+      };
+
+      // Build HTML from template elements (or default layout)
+      const elements = template?.elements || [];
+      let bodyHtml = '';
+
+      if (elements.length > 0) {
+        for (const el of elements) {
+          // Check conditional display
+          if (el.condition === 'show_if_delivery' && order.order_type !== 'delivery') continue;
+          if (el.condition === 'show_if_discount' && Number(order.discount || 0) <= 0) continue;
+          if (el.condition === 'show_if_customer' && !order.customer_name) continue;
+
+          const sizeMap: Record<number, string> = { 1: '9px', 2: '11px', 3: '13px', 4: '16px' };
+          const fontSize = sizeMap[el.size] || '11px';
+          const align = el.align === 'center' ? 'center' : el.align === 'right' ? 'right' : 'left';
+          const fontWeight = el.bold ? 'bold' : 'normal';
+          const textDecoration = el.underline ? 'underline' : 'none';
+          const fontStyle = el.italic ? 'italic' : 'normal';
+          const marginTop = (el.padding_top || 0) * 4;
+          const marginBottom = (el.padding_bottom || 0) * 4;
+
+          if (el.type === 'divider') {
+            bodyHtml += `<div style="border-top:1px dashed #000;margin:${marginTop}px 0 ${marginBottom}px 0;"></div>`;
+          } else if (el.type === 'spacer') {
+            bodyHtml += `<div style="height:${(el.spacer_lines || 2) * 10}px;"></div>`;
+          } else if (el.type === 'qr') {
+            bodyHtml += `<div style="text-align:center;margin:${marginTop}px 0 ${marginBottom}px 0;font-size:9px;">[QR: ${replaceVars(el.qr_value || el.text || '')}]</div>`;
+          } else {
+            // text
+            const rawText = el.text || '';
+            let text = replaceVars(rawText);
+            // Handle multi-line text (like items_list) - use pre to preserve formatting
+            if (text.includes('\n')) {
+              text = text.split('\n').map((line: string) =>
+                `<div class="line">${line}</div>`
+              ).join('');
+            }
+            bodyHtml += `<div style="font-size:${fontSize};text-align:${align};font-weight:${fontWeight};font-style:${fontStyle};text-decoration:${textDecoration};margin:${marginTop}px 0 ${marginBottom}px 0;overflow-wrap:break-word;word-wrap:break-word;">${text}</div>`;
+          }
+        }
+      } else {
+        // Fallback default layout
+        const items = order.items || [];
+        const itemRows = items.map((it: any) =>
+          `<tr><td>${it.name}</td><td style="text-align:center">${it.quantity}</td><td style="text-align:right">₹${Number(it.line_total || it.subtotal || 0).toFixed(2)}</td></tr>`
+        ).join('');
+        bodyHtml = `
+          <div style="text-align:center;font-weight:bold;font-size:16px;margin:4px 0;">${template?.header || restaurantName}</div>
+          <div style="border-top:1px dashed #000;margin:4px 0;"></div>
+          <div>Order #${order.order_number}</div>
+          <div>${new Date(order.created_at).toLocaleString()}</div>
+          <div style="border-top:1px dashed #000;margin:4px 0;"></div>
+          <table style="width:100%;border-collapse:collapse;">${itemRows}</table>
+          <div style="border-top:1px dashed #000;margin:4px 0;"></div>
+          <div style="text-align:right;">Subtotal: ₹${Number(order.subtotal).toFixed(2)}</div>
+          ${Number(order.delivery_fee) > 0 ? `<div style="text-align:right;">Delivery: ₹${Number(order.delivery_fee).toFixed(2)}</div>` : ''}
+          ${Number(order.discount) > 0 ? `<div style="text-align:right;">Discount: -₹${Number(order.discount).toFixed(2)}</div>` : ''}
+          <div style="text-align:right;font-weight:bold;">Total: ₹${Number(order.total).toFixed(2)}</div>
+          <div style="border-top:1px dashed #000;margin:4px 0;"></div>
+          <div>Payment: ${order.payment_method?.toUpperCase()}</div>
+          <div>Type: ${order.order_type}</div>
+          ${order.address ? `<div>Address: ${order.address}</div>` : ''}
+          <div style="border-top:1px dashed #000;margin:4px 0;"></div>
+          <div style="text-align:center;">${template?.footer || 'Thank you for your order!'}</div>
+        `;
+      }
+
       w.document.write(`<!DOCTYPE html><html><head><title>Receipt ${order.order_number}</title>
 <style>
-  body { font-family: monospace; font-size: 12px; width: ${printerQuery.data?.printer_config?.paper_width || 80}mm; margin: 0 auto; padding: 8px; }
-  h1 { text-align: center; font-size: 16px; margin: 4px 0; }
-  .divider { border-top: 1px dashed #000; margin: 4px 0; }
-  table { width: 100%; border-collapse: collapse; }
-  td { padding: 2px 0; }
-  .right { text-align: right; }
-  .center { text-align: center; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Courier New', monospace; font-size: 8px; width: ${paperWidth}mm; max-width: ${paperWidth}mm; margin: 0 auto; padding: 1mm; overflow-wrap: break-word; word-wrap: break-word; }
+  .line { white-space: pre-wrap; word-break: break-word; line-height: 1.3; overflow-wrap: break-word; }
+  table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  td { padding: 1px 0; overflow: hidden; text-overflow: ellipsis; font-size: 8px; }
+  div { max-width: 100%; }
+  .divider { border-top: 1px dashed #000; margin: 3px 0; }
   .bold { font-weight: bold; }
-  @media print { body { margin: 0; } }
+  .center { text-align: center; }
+  .right { text-align: right; }
+  @media print {
+    body { margin: 0; padding: 1mm; overflow: visible; }
+    @page { margin: 0; size: ${paperWidth}mm auto; }
+    html, body { width: ${paperWidth}mm; max-width: ${paperWidth}mm; overflow: visible; }
+    * { overflow: visible !important; }
+  }
+  @media screen {
+    body { background: #f5f5f5; padding: 10px; }
+  }
 </style></head><body>
-<h1>${order.restaurant_name || 'Orange Cheese Pizza'}</h1>
-<div class="divider"></div>
-<div>Order #${order.order_number}</div>
-<div>${new Date(order.created_at).toLocaleString()}</div>
-<div class="divider"></div>
-<table>${itemRows}</table>
-<div class="divider"></div>
-<div class="right">Subtotal: ₹${Number(order.subtotal).toFixed(2)}</div>
-${Number(order.delivery_fee) > 0 ? `<div class="right">Delivery: ₹${Number(order.delivery_fee).toFixed(2)}</div>` : ''}
-${Number(order.discount) > 0 ? `<div class="right">Discount: -₹${Number(order.discount).toFixed(2)}</div>` : ''}
-<div class="right bold">Total: ₹${Number(order.total).toFixed(2)}</div>
-<div class="divider"></div>
-<div>Payment: ${order.payment_method?.toUpperCase()}</div>
-<div>Type: ${order.order_type}</div>
-${order.address ? `<div>Address: ${order.address}</div>` : ''}
-<div class="divider"></div>
-<div class="center">Thank you for your order!</div>
-<div class="center">Visit us again!</div>
+${bodyHtml}
 <script>window.onload = function() { window.print(); }</script>
 </body></html>`);
       w.document.close();
@@ -346,7 +459,7 @@ ${order.address ? `<div>Address: ${order.address}</div>` : ''}
             </CardContent>
             <div className="px-8 py-3 bg-muted border-t flex items-center justify-between text-[11px] text-muted-foreground">
               <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" /> System operational</span>
-              <span className="font-mono">OCP • Mira Road</span>
+              <span className="font-mono">OCP</span>
             </div>
           </Card>
           <p className="text-center text-[11px] text-muted-foreground mt-3">Need a key? Set <code className="font-mono">BOT_ADMIN_KEY</code> and restart the bot.</p>
@@ -369,7 +482,7 @@ ${order.address ? `<div>Address: ${order.address}</div>` : ''}
                 <Badge variant="outline" className="hidden sm:inline-flex gap-1.5 border-border text-zinc-600"><Activity size={12} className="text-zinc-600" />Live</Badge>
                 <span className="hidden md:inline-flex items-center gap-1 text-[11px] text-muted-foreground"><Activity size={12} />{lastUpdated}</span>
               </div>
-              <div className="hidden lg:flex items-center gap-1.5 text-[11px] text-muted-foreground"><span className="w-1 h-1 rounded-full bg-muted-foreground/30" /> Mira Road • Vasai • Bhayandar</div>
+              <div className="hidden lg:flex items-center gap-1.5 text-[11px] text-muted-foreground"><span className="w-1 h-1 rounded-full bg-muted-foreground/30" /> Admin Panel</div>
             </div>
           </div>
 
