@@ -1,0 +1,347 @@
+/* ============================================================
+   Design System Tokens — CSS Custom Properties
+   Edit tokens.ts to update values globally
+   ============================================================ */
+:root {
+  /* Brand Colors */
+  --brand-50: #fef7ee;
+  --brand-100: #fdeedc;
+  --brand-500: #ea580c;
+  --brand-600: #c2410c;
+  --brand-950: #451a03;
+
+  /* Emerald */
+  --emerald-50: #f0fdfa;
+  --emerald-100: #ccfbf1;
+  --emerald-500: #10b981;
+  --emerald-600: #059669;
+  --emerald-950: #022c22;
+
+  /* Zinc */
+  --zinc-50: #fafafa;
+  --zinc-100: #f4f4f5;
+  --zinc-200: #e4e4e7;
+  --zinc-300: #d4d4d8;
+  --zinc-400: #a1a1aa;
+  --zinc-500: #71717a;
+  --zinc-600: #52525b;
+  --zinc-700: #3f3f46;
+  --zinc-800: #27272a;
+  --zinc-900: #18181b;
+  --zinc-950: #09090b;
+
+  /* Stone */
+  --stone-50: #fafaf9;
+  --stone-100: #f5f5f4;
+  --stone-200: #e7e5e4;
+  --stone-300: #d6d3d1;
+  --stone-400: #a8a29e;
+  --stone-500: #78716c;
+  --stone-600: #57534e;
+  --stone-700: #44403c;
+  --stone-800: #292524;
+  --stone-900: #1c1917;
+  --stone-950: #0c0a09;
+
+  /* Red */
+  --red-50: #faf2f2;
+  --red-100: #fee2e2;
+  --red-500: #ef4444;
+  --red-600: #dc2626;
+  --red-950: #450a0a;
+
+  /* Semantic */
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-error: #ef4444;
+  --color-info: #3b82f6;
+
+  /* Backgrounds */
+  --color-bg: #ffffff;
+  --color-bg-alt: #f8fafc;
+  --color-bg-muted: #f1f5f9;
+
+  /* Text */
+  --color-text-primary: #0f172a;
+  --color-text-secondary: #475569;
+  --color-text-muted: #64748b;
+  --color-text-inverse: #ffffff;
+
+  /* Borders */
+  --color-border: #e2e8f0;
+  --color-border-focus: #ea580c;
+
+  /* Border Radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --shadow-inner: inset 0 2px 4px 0 rgb(0 0 0 / 0.05);
+
+  /* Spacing */
+  --spacing-1: 4px;
+  --spacing-2: 8px;
+  --spacing-3: 12px;
+  --spacing-4: 16px;
+  --spacing-5: 20px;
+  --spacing-6: 24px;
+  --spacing-8: 32px;
+  --spacing-10: 40px;
+  --spacing-12: 48px;
+  --spacing-16: 64px;
+  --spacing-20: 80px;
+  --spacing-24: 96px;
+
+  /* Typography */
+  --font-family-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-family-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.875rem;
+  --font-size-base: 1rem;
+  --font-size-lg: 1.125rem;
+  --font-size-xl: 1.25rem;
+  --font-size-2xl: 1.5rem;
+  --font-size-3xl: 1.875rem;
+  --font-size-4xl: 2.25rem;
+
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --font-weight-extrabold: 800;
+
+  --line-height-tight: 1.25;
+  --line-height-normal: 1.5;
+  --line-height-relaxed: 1.75;
+
+  /* Motion */
+  --motion-fast: 150ms;
+  --motion-normal: 250ms;
+  --motion-slow: 350ms;
+  --motion-ease-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --motion-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Z-index */
+  --z-hide: -1;
+  --z-base: 0;
+  --z-docked: 10;
+  --z-dropdown: 100;
+  --z-modal: 200;
+  --z-popover: 300;
+  --z-tooltip: 400;
+  --z-toast: 500;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #0f172a;
+    --color-bg-alt: #020617;
+    --color-bg-muted: #1e293b;
+    --color-text-primary: #f8fafc;
+    --color-text-secondary: #cbd5e1;
+    --color-text-muted: #64748b;
+    --color-text-inverse: #0f172a;
+    --color-border: #334155;
+  }
+}
+
+/* ============================================================
+   Utility Classes for Design Tokens
+   ============================================================ */
+.text-brand-500 { color: var(--brand-500); }
+.text-brand-600 { color: var(--brand-600); }
+.text-emerald-500 { color: var(--emerald-500); }
+.text-emerald-600 { color: var(--emerald-600); }
+.text-zinc-100 { color: var(--zinc-100); }
+.text-zinc-200 { color: var(--zinc-200); }
+.text-zinc-300 { color: var(--zinc-300); }
+.text-zinc-400 { color: var(--zinc-400); }
+.text-zinc-500 { color: var(--zinc-500); }
+.text-zinc-600 { color: var(--zinc-600); }
+.text-zinc-700 { color: var(--zinc-700); }
+.text-zinc-800 { color: var(--zinc-800); }
+.text-stone-100 { color: var(--stone-100); }
+.text-stone-200 { color: var(--stone-200); }
+.text-stone-300 { color: var(--stone-300); }
+.text-stone-400 { color: var(--stone-400); }
+.text-stone-500 { color: var(--stone-500); }
+.text-stone-600 { color: var(--stone-600); }
+.text-stone-700 { color: var(--stone-700); }
+.text-red-500 { color: var(--red-500); }
+.text-red-600 { color: var(--red-600); }
+
+.bg-brand-50 { background-color: var(--brand-50); }
+.bg-brand-100 { background-color: var(--brand-100); }
+.bg-brand-500 { background-color: var(--brand-500); }
+.bg-brand-600 { background-color: var(--brand-600); }
+.bg-emerald-50 { background-color: var(--emerald-50); }
+.bg-emerald-100 { background-color: var(--emerald-100); }
+.bg-emerald-500 { background-color: var(--emerald-500); }
+.bg-emerald-600 { background-color: var(--emerald-600); }
+.bg-zinc-50 { background-color: var(--zinc-50); }
+.bg-zinc-100 { background-color: var(--zinc-100); }
+.bg-zinc-200 { background-color: var(--zinc-200); }
+.bg-zinc-300 { background-color: var(--zinc-300); }
+.bg-zinc-500 { background-color: var(--zinc-500); }
+.bg-zinc-600 { background-color: var(--zinc-600); }
+.bg-stone-50 { background-color: var(--stone-50); }
+.bg-stone-100 { background-color: var(--stone-100); }
+.bg-stone-200 { background-color: var(--stone-200); }
+.bg-stone-300 { background-color: var(--stone-300); }
+.bg-stone-500 { background-color: var(--stone-500); }
+.bg-red-50 { background-color: var(--red-50); }
+.bg-red-100 { background-color: var(--red-100); }
+.bg-red-500 { background-color: var(--red-500); }
+
+.border-brand-500 { border-color: var(--brand-500); }
+.border-brand-600 { border-color: var(--brand-600); }
+.border-zinc-200 { border-color: var(--zinc-200); }
+.border-zinc-300 { border-color: var(--zinc-300); }
+.border-zinc-400 { border-color: var(--zinc-400); }
+.border-zinc-500 { border-color: var(--zinc-500); }
+.border-stone-100 { border-color: var(--stone-100); }
+.border-stone-200 { border-color: var(--stone-200); }
+.border-stone-300 { border-color: var(--stone-300); }
+.border-stone-400 { border-color: var(--stone-400); }
+.border-stone-500 { border-color: var(--stone-500); }
+.border-red-500 { border-color: var(--red-500); }
+.border-red-600 { border-color: var(--red-600); }
+
+/* Component-level design tokens */
+.card {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.card-content {
+  padding: var(--spacing-4);
+}
+
+.input {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-2) var(--spacing-3);
+  color: var(--color-text-primary);
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-base);
+}
+
+.input:focus {
+  outline: none;
+  ring: 2px solid var(--color-border-focus);
+  border-color: var(--color-border-focus);
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-2) var(--spacing-4);
+  border-radius: var(--radius-md);
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: all var(--motion-fast) var(--motion-ease-out);
+  border: none;
+}
+
+.button:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+
+.button-primary {
+  background: var(--brand-500);
+  color: var(--color-text-inverse);
+}
+.button-primary:hover {
+  background: var(--brand-600);
+}
+.button-primary:disabled {
+  background: var(--zinc-400);
+  cursor: not-allowed;
+}
+
+.button-outline {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+}
+.button-outline:hover {
+  background: var(--color-bg-muted);
+  border-color: var(--color-border-focus);
+}
+
+.button-ghost {
+  background: transparent;
+  border: none;
+  color: var(--color-text-primary);
+}
+.button-ghost:hover {
+  background: var(--color-bg-muted);
+}
+
+.button-destructive {
+  background: var(--red-500);
+  color: var(--color-text-inverse);
+}
+.button-destructive:hover {
+  background: var(--red-600);
+}
+
+.switch {
+  position: relative;
+  display: inline-block;
+  width: var(--spacing-5);
+  height: var(--spacing-3);
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.switch-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--zinc-300);
+  border-radius: var(--radius-full);
+  transition: var(--motion-fast);
+}
+
+.switch-slider:before {
+  position: absolute;
+  content: "";
+  height: var(--spacing-3);
+  width: var(--spacing-3);
+  left: var(--spacing-0-5);
+  bottom: var(--spacing-0-5);
+  background-color: white;
+  border-radius: var(--radius-full);
+  transition: var(--motion-fast);
+}
+
+input:checked + .switch-slider {
+  background-color: var(--brand-500);
+}
+
+input:checked + .switch-slider:before {
+  transform: translateX(var(--spacing-2));
+}
