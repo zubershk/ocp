@@ -13,6 +13,7 @@ import (
 	"orangecheesepizza/bot/models"
 
 	"github.com/skip2/go-qrcode"
+	"github.com/tarm/serial"
 )
 
 // ------------------------------------------------------------------
@@ -123,6 +124,8 @@ type PrinterTemplateElement struct {
 	// Conditional display
 	Condition string `json:"condition"`   // e.g., "show_if_customer", "show_if_delivery"
 	Italic    bool   `json:"italic"`      // Italic text
+	FontFamily string `json:"font_family"` // "monospace" | "sans" | "serif"
+	FontWeight string `json:"font_weight"` // "normal" | "bold" | "heavy" | "double_strike"
 }
 
 // PrinterTemplateConfig is the template definition for receipt printing.
@@ -152,21 +155,40 @@ func DefaultPrinterTemplateConfig() *PrinterTemplateConfig {
 		ShowPaymentMethod: true,
 		CutPaper:         true,
 		Elements: []PrinterTemplateElement{
+			// ---- Header ----
 			{ID: "header", Type: "text", Text: "{{brand_name}}", Align: "center", Bold: true, DoubleHeight: true, PaddingTop: 1},
+			{ID: "address_line1", Type: "text", Text: "{{restaurant_address}}", Align: "center", PaddingBottom: 0},
 			{ID: "divider1", Type: "divider", PaddingTop: 0, PaddingBottom: 0},
-			{ID: "order_number", Type: "text", Text: "Order #{{order_number}}", Align: "left", PaddingTop: 0},
-			{ID: "date_time", Type: "text", Text: "{{date_time}}", Align: "left", PaddingBottom: 1},
-			{ID: "divider2", Type: "divider", PaddingBottom: 1},
-			{ID: "items_header", Type: "text", Text: "Item           Qty  Price", Align: "left", Bold: true, PaddingBottom: 0},
+
+			// ---- Order Meta ----
+			{ID: "order_number", Type: "text", Text: "Order #: {{order_number}}", Align: "left", PaddingTop: 0},
+			{ID: "date_time", Type: "text", Text: "Date: {{date_time}}", Align: "left", PaddingBottom: 0},
+			{ID: "order_status", Type: "text", Text: "Status: {{status}}", Align: "left", PaddingBottom: 0},
+			{ID: "divider2", Type: "divider", PaddingBottom: 0},
+
+			// ---- Customer Info (conditional) ----
+			{ID: "customer_name", Type: "text", Text: "Customer: {{customer_name}}", Align: "left", Condition: "show_if_customer", PaddingBottom: 0},
+			{ID: "customer_phone", Type: "text", Text: "Phone: {{customer_phone}}", Align: "left", Condition: "show_if_customer", PaddingBottom: 0},
+			{ID: "customer_address", Type: "text", Text: "Address: {{customer_address}}", Align: "left", Condition: "show_if_customer", PaddingBottom: 0},
+			{ID: "customer_landmark", Type: "text", Text: "Landmark: {{customer_landmark}}", Align: "left", Condition: "show_if_customer", PaddingBottom: 0},
+			{ID: "order_type", Type: "text", Text: "Type: {{order_type}}", Align: "left", PaddingBottom: 0},
+			{ID: "divider3", Type: "divider", PaddingBottom: 0},
+
+			// ---- Items ----
+			{ID: "items_header", Type: "text", Text: "Item            Qty   Price", Align: "left", Bold: true, PaddingBottom: 0},
 			{ID: "items_divider", Type: "divider", PaddingBottom: 0},
 			{ID: "items_list", Type: "text", Text: "{{items_list}}", Align: "left", PaddingBottom: 1},
-			{ID: "totals_divider", Type: "divider", PaddingTop: 1, PaddingBottom: 0},
-			{ID: "subtotal", Type: "text", Text: "Subtotal       {{subtotal}}", Align: "right", PaddingBottom: 0},
-			{ID: "delivery_fee", Type: "text", Text: "Delivery       {{delivery_fee}}", Align: "right", PaddingBottom: 0},
-			{ID: "discount", Type: "text", Text: "Discount       {{discount}}", Align: "right", PaddingBottom: 0},
+			{ID: "totals_divider", Type: "divider", PaddingTop: 0, PaddingBottom: 0},
+
+			// ---- Totals ----
+			{ID: "subtotal", Type: "text", Text: "Subtotal       {{currency_subtotal}}", Align: "right", PaddingBottom: 0},
+			{ID: "delivery_fee", Type: "text", Text: "Delivery       {{currency_delivery_fee}}", Align: "right", PaddingBottom: 0},
+			{ID: "discount", Type: "text", Text: "Discount       {{currency_discount}}", Align: "right", PaddingBottom: 0},
 			{ID: "total_divider", Type: "divider", PaddingBottom: 0},
-			{ID: "total", Type: "text", Text: "Total          {{total}}", Align: "right", Bold: true, PaddingBottom: 1},
+			{ID: "total", Type: "text", Text: "Total          {{currency_total}}", Align: "right", Bold: true, PaddingBottom: 1},
 			{ID: "payment_method", Type: "text", Text: "Payment: {{payment_method}}", Align: "left", PaddingBottom: 1},
+
+			// ---- Footer ----
 			{ID: "footer_divider", Type: "divider", PaddingTop: 1, PaddingBottom: 1},
 			{ID: "footer", Type: "text", Text: "{{footer}}", Align: "center", Bold: false, PaddingBottom: 1},
 			{ID: "thank_you", Type: "text", Text: "Thank you for your order!", Align: "center", Bold: false},
@@ -309,6 +331,11 @@ func GenerateReceiptFromTemplate(order *models.Order, cfg *PrinterTemplateConfig
 	doubleReset := esc + "!" + "\x00"
 	italicOn := esc + "4"
 	italicOff := esc + "5"
+	fontA := esc + "M" + "\x00" // Font A (larger)
+	fontB := esc + "M" + "\x01" // Font B (smaller)
+	fontReset := esc + "M" + "\x00"
+	doubleStrikeOn := esc + "G" + "\x01"  // Double strike (bolder)
+	doubleStrikeOff := esc + "G" + "\x00"
 
 	// Helper to replace template variables
 	// Fetch restaurant info for placeholders
@@ -334,24 +361,66 @@ func GenerateReceiptFromTemplate(order *models.Order, cfg *PrinterTemplateConfig
 		text = strings.ReplaceAll(text, "{{delivery_fee}}", fmt.Sprintf("%.2f", order.DeliveryFee))
 		text = strings.ReplaceAll(text, "{{discount}}", fmt.Sprintf("%.2f", order.Discount))
 		text = strings.ReplaceAll(text, "{{total}}", fmt.Sprintf("%.2f", order.Total))
+		text = strings.ReplaceAll(text, "{{currency_subtotal}}", fmt.Sprintf("₹%.2f", order.Subtotal))
+		text = strings.ReplaceAll(text, "{{currency_delivery_fee}}", fmt.Sprintf("₹%.2f", order.DeliveryFee))
+		text = strings.ReplaceAll(text, "{{currency_discount}}", fmt.Sprintf("₹%.2f", order.Discount))
+		text = strings.ReplaceAll(text, "{{currency_total}}", fmt.Sprintf("₹%.2f", order.Total))
 		text = strings.ReplaceAll(text, "{{footer}}", cfg.Footer)
-		// Items list
+		// Items list with proper column alignment and currency
 		if text == "{{items_list}}" {
 			var itemsText strings.Builder
-			nameWidth := width - 12
-			if nameWidth < 8 {
-				nameWidth = 8
+			nameWidth := 18
+			if width >= 80 {
+				nameWidth = 26
+			} else if width < 40 {
+				nameWidth = width - 14
 			}
+			if nameWidth < 10 {
+				nameWidth = 10
+			}
+			indent := strings.Repeat(" ", 2)
+
 			for _, item := range order.Items {
 				name := item.Name
-				if len(name) > nameWidth {
-					name = name[:nameWidth-1]
-				}
 				price := item.LineTotal
 				if price == 0 {
 					price = item.Subtotal
 				}
-				itemsText.WriteString(fmt.Sprintf("%-*s %3d %6.2f\n", nameWidth, name, item.Quantity, price))
+				if len(name) > nameWidth {
+					breakPoint := nameWidth
+					if breakPoint < len(name) && name[breakPoint] != ' ' && name[breakPoint-1] != ' ' {
+						for i := breakPoint - 1; i >= 0; i-- {
+							if name[i] == ' ' {
+								breakPoint = i
+								break
+							}
+						}
+					}
+					firstPart := strings.TrimRight(name[:breakPoint], " ")
+					remaining := strings.TrimLeft(name[breakPoint:], " ")
+					itemsText.WriteString(fmt.Sprintf("%-*s %3d ₹%7.2f\n", nameWidth, firstPart, item.Quantity, price))
+					for len(remaining) > 0 {
+						chunk := remaining
+						if len(chunk) > nameWidth {
+							cp := nameWidth
+							if cp < len(chunk) && chunk[cp] != ' ' && chunk[cp-1] != ' ' {
+								for i := cp - 1; i >= 0; i-- {
+									if chunk[i] == ' ' {
+										cp = i
+										break
+									}
+								}
+							}
+							itemsText.WriteString(fmt.Sprintf("%s%s\n", indent, strings.TrimRight(chunk[:cp], " ")))
+							remaining = strings.TrimLeft(chunk[cp:], " ")
+						} else {
+							itemsText.WriteString(fmt.Sprintf("%s%s\n", indent, remaining))
+							remaining = ""
+						}
+					}
+				} else {
+					itemsText.WriteString(fmt.Sprintf("%-*s %3d ₹%7.2f\n", nameWidth, name, item.Quantity, price))
+				}
 			}
 			return itemsText.String()
 		}
@@ -410,6 +479,22 @@ func GenerateReceiptFromTemplate(order *models.Order, cfg *PrinterTemplateConfig
 			if elem.DoubleHeight {
 				b.WriteString(doubleH)
 			}
+			// Font family selection
+			switch elem.FontFamily {
+			case "sans":
+				b.WriteString(fontA)
+			case "monospace", "":
+				b.WriteString(fontB)
+			case "serif":
+				b.WriteString(fontA)
+			}
+			// Font weight / double strike
+			switch elem.FontWeight {
+			case "heavy", "double_strike":
+				b.WriteString(doubleStrikeOn)
+			case "bold":
+				b.WriteString(boldOn)
+			}
 			b.WriteString(text + lineFeed)
 			for i := 0; i < elem.PaddingBottom; i++ {
 				b.WriteString(lineFeed)
@@ -423,6 +508,10 @@ func GenerateReceiptFromTemplate(order *models.Order, cfg *PrinterTemplateConfig
 			if elem.Bold {
 				b.WriteString(boldOff)
 			}
+			if elem.FontWeight == "heavy" || elem.FontWeight == "double_strike" {
+				b.WriteString(doubleStrikeOff)
+			}
+			b.WriteString(fontReset)
 		case "spacer":
 			lines := elem.SpacerLines
 			if lines < 1 {
@@ -674,9 +763,17 @@ func sendTCP(data []byte, addr string) error {
 }
 
 func sendSerial(data []byte, port string) error {
-	// USB serial printing requires hardware connection and go-tarm/serial dependency.
-	// For production: go get github.com/tarm/serial
-	return fmt.Errorf("USB printing to %s not available - hardware connection required. Ensure printer is connected to COM port %s.", port, port)
+	c := &serial.Config{Name: port, Baud: 9600}
+	s, err := serial.OpenPort(c)
+	if err != nil {
+		return fmt.Errorf("failed to open serial port %s: %w", port, err)
+	}
+	defer s.Close()
+	_, err = s.Write(data)
+	if err != nil {
+		return fmt.Errorf("failed to write to serial port %s: %w", port, err)
+	}
+	return nil
 }
 
 // ------------------------------------------------------------------
