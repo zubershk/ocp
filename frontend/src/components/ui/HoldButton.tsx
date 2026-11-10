@@ -57,9 +57,22 @@ export default function HoldButton({
         aria-hidden
         style={{
           position: 'absolute', inset: 0, width: `${progress * 100}%`,
-          background: 'rgba(255,255,255,0.25)', pointerEvents: 'none',
+          background: 'rgba(255,255,255,0.35)', pointerEvents: 'none',
+          transition: progress === 0 ? 'width 0.15s ease' : 'none',
         }}
       />
+      {progress > 0 && (
+        <span
+          aria-hidden
+          style={{
+            position: 'absolute', top: 2, right: 6, fontSize: 9,
+            color: 'rgba(255,255,255,0.9)', fontWeight: 600,
+            pointerEvents: 'none',
+          }}
+        >
+          {Math.round(progress * 100)}%
+        </span>
+      )}
       <span style={{ position: 'relative' }}>{children}</span>
     </Button>
   );
