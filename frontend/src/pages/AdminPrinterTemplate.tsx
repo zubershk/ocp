@@ -36,6 +36,8 @@ interface PrinterTemplateElement {
   spacer_lines?: number;
   condition?: string;
   italic?: boolean;
+  font_family?: 'monospace' | 'sans' | 'serif';
+  font_weight?: 'normal' | 'bold' | 'heavy' | 'double_strike';
 }
 
 interface PrinterTemplateConfig {
@@ -60,7 +62,7 @@ interface PrinterTemplateConfig {
 const DEFAULT_PRINTER_TEMPLATE_CONFIG: PrinterTemplateConfig = {
   paper_width: 58,
   elements: [
-    { id: 'header', type: 'text', text: '{{brand_name}}', align: 'center', bold: true, double_height: true, double_width: false, underline: false, size: 4, padding_top: 1, padding_bottom: 0, char_width: 48, italic: false },
+    { id: 'header', type: 'text', text: '{{brand_name}}', align: 'center', bold: true, double_height: true, double_width: false, underline: false, size: 4, padding_top: 1, padding_bottom: 0, char_width: 48, italic: false, font_family: 'sans', font_weight: 'heavy' },
     { id: 'restaurant_address', type: 'text', text: '{{restaurant_address}}', align: 'center', bold: false, double_height: false, double_width: false, underline: false, size: 1, padding_top: 0, padding_bottom: 1, char_width: 48, italic: false },
     { id: 'divider1', type: 'divider', text: '', align: 'center', bold: false, double_height: false, double_width: false, underline: false, size: 1, padding_top: 0, padding_bottom: 0, char_width: 48, italic: false },
     { id: 'order_number', type: 'text', text: 'Order #{{order_number}}', align: 'left', bold: true, double_height: false, double_width: false, underline: false, size: 2, padding_top: 0, padding_bottom: 0, char_width: 48, italic: false },
@@ -70,15 +72,15 @@ const DEFAULT_PRINTER_TEMPLATE_CONFIG: PrinterTemplateConfig = {
     { id: 'customer_phone', type: 'text', text: 'Phone:    {{customer_phone}}', align: 'left', bold: false, double_height: false, double_width: false, underline: false, size: 1, padding_top: 0, padding_bottom: 0, char_width: 48, italic: false, condition: 'show_if_customer' },
     { id: 'customer_address', type: 'text', text: 'Address:  {{customer_address}}', align: 'left', bold: false, double_height: false, double_width: false, underline: false, size: 1, padding_top: 0, padding_bottom: 0, char_width: 48, italic: false, condition: 'show_if_customer' },
     { id: 'customer_landmark', type: 'text', text: 'Landmark: {{customer_landmark}}', align: 'left', bold: false, double_height: false, double_width: false, underline: false, size: 1, padding_top: 0, padding_bottom: 1, char_width: 48, italic: false, condition: 'show_if_customer' },
-    { id: 'items_header', type: 'text', text: 'Item              Qty  Price', align: 'left', bold: true, double_height: false, double_width: false, underline: false, size: 1, padding_top: 0, padding_bottom: 0, char_width: 48, italic: false },
+    { id: 'items_header', type: 'text', text: 'Item            Qty  Price', align: 'left', bold: true, double_height: false, double_width: false, underline: false, size: 1, padding_top: 0, padding_bottom: 0, char_width: 48, italic: false, font_family: 'monospace', font_weight: 'heavy' },
     { id: 'items_divider', type: 'divider', text: '', align: 'center', bold: false, double_height: false, double_width: false, underline: false, size: 1, padding_top: 0, padding_bottom: 0, char_width: 48, italic: false },
-    { id: 'items_list', type: 'text', text: '{{items_list}}', align: 'left', bold: false, double_height: false, double_width: false, underline: false, size: 1, padding_top: 0, padding_bottom: 1, char_width: 48, italic: false },
+    { id: 'items_list', type: 'text', text: '{{items_list}}', align: 'left', bold: false, double_height: false, double_width: false, underline: false, size: 1, padding_top: 0, padding_bottom: 1, char_width: 48, italic: false, font_family: 'monospace' },
     { id: 'totals_divider', type: 'divider', text: '', align: 'center', bold: false, double_height: false, double_width: false, underline: false, size: 1, padding_top: 1, padding_bottom: 0, char_width: 48, italic: false },
     { id: 'subtotal', type: 'text', text: 'Subtotal       {{subtotal}}', align: 'right', bold: false, double_height: false, double_width: false, underline: false, size: 1, padding_top: 0, padding_bottom: 0, char_width: 48, italic: false },
     { id: 'delivery_fee', type: 'text', text: 'Delivery       {{delivery_fee}}', align: 'right', bold: false, double_height: false, double_width: false, underline: false, size: 1, padding_top: 0, padding_bottom: 0, char_width: 48, italic: false, condition: 'show_if_delivery' },
     { id: 'discount', type: 'text', text: 'Discount       {{discount}}', align: 'right', bold: false, double_height: false, double_width: false, underline: false, size: 1, padding_top: 0, padding_bottom: 0, char_width: 48, italic: false, condition: 'show_if_discount' },
     { id: 'total_divider', type: 'divider', text: '', align: 'center', bold: false, double_height: false, double_width: false, underline: false, size: 1, padding_top: 0, padding_bottom: 0, char_width: 48, italic: false },
-    { id: 'total', type: 'text', text: 'Total          {{total}}', align: 'right', bold: true, double_height: false, double_width: false, underline: false, size: 2, padding_top: 0, padding_bottom: 1, char_width: 48, italic: false },
+    { id: 'total', type: 'text', text: 'Total        {{total}}', align: 'right', bold: true, double_height: false, double_width: false, underline: false, size: 2, padding_top: 0, padding_bottom: 1, char_width: 48, italic: false, font_family: 'monospace', font_weight: 'heavy' },
     { id: 'payment_method', type: 'text', text: 'Payment: {{payment_method}}', align: 'left', bold: false, double_height: false, double_width: false, underline: false, size: 1, padding_top: 0, padding_bottom: 1, char_width: 48, italic: false },
     { id: 'order_type', type: 'text', text: 'Type: {{order_type}}', align: 'left', bold: false, double_height: false, double_width: false, underline: false, size: 1, padding_top: 0, padding_bottom: 1, char_width: 48, italic: false },
     { id: 'footer_divider', type: 'divider', text: '', align: 'center', bold: false, double_height: false, double_width: false, underline: false, size: 1, padding_top: 1, padding_bottom: 1, char_width: 48, italic: false },
@@ -130,6 +132,19 @@ const ELEMENT_TYPES = [
   { value: 'qr', label: 'QR Code', icon: QrCode, color: 'emerald', description: 'QR code' },
 ];
 
+const FONT_FAMILIES: { value: string; label: string; css: string; esc: string }[] = [
+  { value: 'monospace', label: 'Courier', css: 'font-mono', esc: '\x1bM' },
+  { value: 'sans', label: 'Sans Serif', css: 'font-sans', esc: '\x1b!' },
+  { value: 'serif', label: 'Serif', css: 'font-serif', esc: '\x1b!' },
+];
+
+const FONT_WEIGHTS: { value: string; label: string; css: string; esc: string }[] = [
+  { value: 'normal', label: 'Normal', css: 'font-normal', esc: '' },
+  { value: 'bold', label: 'Bold', css: 'font-bold', esc: '\x1bE\x01' },
+  { value: 'heavy', label: 'Heavy (900)', css: 'font-black', esc: '\x1bG\x01' },
+  { value: 'double_strike', label: 'Double Strike', css: 'font-black', esc: '\x1bG\x01' },
+];
+
 const PLACEHOLDERS = [
   { key: '{{brand_name}}', desc: 'Restaurant name' },
   { key: '{{restaurant_address}}', desc: 'Restaurant address' },
@@ -142,12 +157,20 @@ const PLACEHOLDERS = [
   { key: '{{payment_method}}', desc: 'Payment method' },
   { key: '{{date_time}}', desc: 'Date and time' },
   { key: '{{subtotal}}', desc: 'Subtotal' },
+  { key: '{{currency_subtotal}}', desc: 'Subtotal (with ₹)' },
   { key: '{{delivery_fee}}', desc: 'Delivery fee' },
+  { key: '{{currency_delivery_fee}}', desc: 'Delivery fee (with ₹)' },
   { key: '{{discount}}', desc: 'Discount' },
+  { key: '{{currency_discount}}', desc: 'Discount (with ₹)' },
   { key: '{{total}}', desc: 'Total' },
+  { key: '{{currency_total}}', desc: 'Total (with ₹)' },
   { key: '{{items_list}}', desc: 'Items list' },
   { key: '{{footer}}', desc: 'Footer text' },
   { key: '{{status}}', desc: 'Order status' },
+  { key: '{{tax_amount}}', desc: 'Tax amount' },
+  { key: '{{container_charge}}', desc: 'Container charge' },
+  { key: '{{tip_amount}}', desc: 'Tip amount' },
+  { key: '{{guest_count}}', desc: 'Guest count' },
 ];
 
 const TYPE_COLORS: Record<string, string> = {
@@ -475,13 +498,13 @@ export default function AdminPrinterTemplate() {
     displayText = displayText.replace(/\{\{status\}\}/g, PREVIEW_ORDER.status);
     if (displayText === '{{items_list}}') {
       displayText = PREVIEW_ORDER.items.map((item: any) =>
-        `${item.name.substring(0, 14).padEnd(14)} ${String(item.quantity).padStart(3)} ${item.subtotal.toFixed(2).padStart(7)}`
+        `${item.name.substring(0, 18).padEnd(18)} ${String(item.quantity).padStart(3)} ₹${item.subtotal.toFixed(2).padStart(7)}`
       ).join('\n');
     }
 
     return (
       <div key={el.id} onClick={() => setSelectedElement(idx)}
-        className={`${sizeClass} ${alignClass} ${weightClass} ${heightClass} ${underlineClass} ${italicClass} whitespace-pre-wrap ${wrapperClass}`}
+        className={`${sizeClass} ${alignClass} ${weightClass} ${heightClass} ${underlineClass} ${italicClass} ${el.font_family === 'sans' ? 'font-sans' : el.font_family === 'serif' ? 'font-serif' : 'font-mono'} ${el.font_weight === 'bold' ? 'font-bold' : el.font_weight === 'heavy' ? 'font-black' : el.font_weight === 'double_strike' ? 'font-black' : 'font-normal'} whitespace-pre-wrap ${wrapperClass}`}
         style={{ marginTop: `${el.padding_top * 3}px`, marginBottom: `${el.padding_bottom * 3}px` }}>
         {displayText || '\u00A0'}
       </div>
@@ -717,6 +740,30 @@ export default function AdminPrinterTemplate() {
                         sel.size === s.value ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-stone-200 text-zinc-500 hover:border-orange-300'
                       }`}>
                       {s.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Font Family */}
+                <div className="flex gap-1">
+                  {FONT_FAMILIES.map((f) => (
+                    <button key={f.value} type="button" onClick={() => updateElement(selectedElement!, 'font_family', f.value)}
+                      className={`flex-1 py-1.5 rounded-lg border text-[10px] font-medium transition-all ${
+                        sel.font_family === f.value ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-stone-200 text-zinc-500 hover:border-orange-300'
+                      }`}>
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Font Weight */}
+                <div className="flex gap-1">
+                  {FONT_WEIGHTS.map((fw) => (
+                    <button key={fw.value} type="button" onClick={() => updateElement(selectedElement!, 'font_weight', fw.value)}
+                      className={`flex-1 py-1.5 rounded-lg border text-[10px] font-medium transition-all ${
+                        sel.font_weight === fw.value ? 'border-red-500 bg-red-50 text-red-700' : 'border-stone-200 text-zinc-500 hover:border-orange-300'
+                      }`}>
+                      {fw.label}
                     </button>
                   ))}
                 </div>
