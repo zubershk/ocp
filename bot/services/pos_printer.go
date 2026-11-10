@@ -307,6 +307,8 @@ func GenerateReceiptFromTemplate(order *models.Order, cfg *PrinterTemplateConfig
 	boldOff := esc + "E" + "\x00"
 	doubleH := esc + "!" + "\x01"
 	doubleReset := esc + "!" + "\x00"
+	italicOn := esc + "4"
+	italicOff := esc + "5"
 
 	// Helper to replace template variables
 	// Fetch restaurant info for placeholders
@@ -321,6 +323,10 @@ func GenerateReceiptFromTemplate(order *models.Order, cfg *PrinterTemplateConfig
 		text = strings.ReplaceAll(text, "{{customer_address}}", order.Address)
 		text = strings.ReplaceAll(text, "{{customer_landmark}}", order.Landmark)
 		text = strings.ReplaceAll(text, "{{order_type}}", order.OrderType)
+		text = strings.ReplaceAll(text, "{{tax_amount}}", fmt.Sprintf("%.2f", order.TaxAmount))
+		text = strings.ReplaceAll(text, "{{container_charge}}", fmt.Sprintf("%.2f", order.ContainerCharge))
+		text = strings.ReplaceAll(text, "{{tip_amount}}", fmt.Sprintf("%.2f", order.TipAmount))
+		text = strings.ReplaceAll(text, "{{guest_count}}", fmt.Sprintf("%d", order.GuestCount))
 		text = strings.ReplaceAll(text, "{{payment_method}}", order.PaymentMethod)
 		text = strings.ReplaceAll(text, "{{status}}", order.Status)
 		text = strings.ReplaceAll(text, "{{date_time}}", order.CreatedAt.Format("2006-01-02 15:04"))
@@ -328,6 +334,7 @@ func GenerateReceiptFromTemplate(order *models.Order, cfg *PrinterTemplateConfig
 		text = strings.ReplaceAll(text, "{{delivery_fee}}", fmt.Sprintf("%.2f", order.DeliveryFee))
 		text = strings.ReplaceAll(text, "{{discount}}", fmt.Sprintf("%.2f", order.Discount))
 		text = strings.ReplaceAll(text, "{{total}}", fmt.Sprintf("%.2f", order.Total))
+		text = strings.ReplaceAll(text, "{{footer}}", cfg.Footer)
 		// Items list
 		if text == "{{items_list}}" {
 			var itemsText strings.Builder
@@ -340,7 +347,11 @@ func GenerateReceiptFromTemplate(order *models.Order, cfg *PrinterTemplateConfig
 				if len(name) > nameWidth {
 					name = name[:nameWidth-1]
 				}
-				itemsText.WriteString(fmt.Sprintf("%-*s %3d %6.2f\n", nameWidth, name, item.Quantity, item.Subtotal))
+				price := item.LineTotal
+				if price == 0 {
+					price = item.Subtotal
+				}
+				itemsText.WriteString(fmt.Sprintf("%-*s %3d %6.2f\n", nameWidth, name, item.Quantity, price))
 			}
 			return itemsText.String()
 		}
@@ -348,10 +359,39 @@ func GenerateReceiptFromTemplate(order *models.Order, cfg *PrinterTemplateConfig
 	}
 
 	for _, elem := range cfg.Elements {
+		// Conditional display
+		if elem.Condition == "show_if_delivery" && order.OrderType != "delivery" {
+			continue
+		}
+		if elem.Condition == "show_if_discount" && order.Discount <= 0 {
+			continue
+		}
+		if elem.Condition == "show_if_customer" && strings.TrimSpace(order.CustomerName) == "" {
+			continue
+		}
+		if elem.Condition == "show_if_tax" && order.TaxAmount <= 0 {
+			continue
+		}
+		if elem.Condition == "show_if_container" && order.ContainerCharge <= 0 {
+			continue
+		}
+		if elem.Condition == "show_if_tip" && order.TipAmount <= 0 {
+			continue
+		}
 		switch elem.Type {
 		case "divider":
+			for i := 0; i < elem.PaddingTop; i++ {
+				b.WriteString(lineFeed)
+			}
 			b.WriteString(divider + lineFeed)
+			for i := 0; i < elem.PaddingBottom; i++ {
+				b.WriteString(lineFeed)
+			}
 		case "text":
+			// Apply padding top
+			for i := 0; i < elem.PaddingTop; i++ {
+				b.WriteString(lineFeed)
+			}
 			text := replaceVars(elem.Text)
 			switch elem.Align {
 			case "center":
@@ -364,12 +404,21 @@ func GenerateReceiptFromTemplate(order *models.Order, cfg *PrinterTemplateConfig
 			if elem.Bold {
 				b.WriteString(boldOn)
 			}
+			if elem.Italic {
+				b.WriteString(italicOn)
+			}
 			if elem.DoubleHeight {
 				b.WriteString(doubleH)
 			}
 			b.WriteString(text + lineFeed)
+			for i := 0; i < elem.PaddingBottom; i++ {
+				b.WriteString(lineFeed)
+			}
 			if elem.DoubleHeight {
 				b.WriteString(doubleReset)
+			}
+			if elem.Italic {
+				b.WriteString(italicOff)
 			}
 			if elem.Bold {
 				b.WriteString(boldOff)
@@ -441,9 +490,12 @@ func generateQRCodeESCPOS(text string, size int) ([]byte, error) {
 		}
 	}
 
-	nL := byte(width % 256)
-	nH := byte(width / 256)
-	cmd := append([]byte{27, '*', 32, nL, nH}, result...)
+	// GS v 0 raster bit image command (ESC/POS standard)
+	xL := byte(width % 256)
+	xH := byte(width / 256)
+	yL := byte(height % 256)
+	yH := byte(height / 256)
+	cmd := append([]byte{0x1D, 0x76, 0x30, 0x00, xL, xH, yL, yH}, result...)
 
 	return cmd, nil
 }
@@ -528,7 +580,11 @@ func GenerateESCPOSReceipt(order *models.Order, cfg *PrinterConfig, brandName st
 		}
 		b.WriteString(padRight(name, 16))
 		b.WriteString(padLeft(fmt.Sprintf("%d", item.Quantity), 5))
-		b.WriteString(padLeft(fmt.Sprintf("%.2f", item.Subtotal), 8))
+		itemPrice := item.LineTotal
+		if itemPrice == 0 {
+			itemPrice = item.Subtotal
+		}
+		b.WriteString(padLeft(fmt.Sprintf("%.2f", itemPrice), 8))
 		b.WriteString(lineFeed)
 		if item.Options != "" {
 			b.WriteString(padRight("  "+item.Options, width) + lineFeed)
@@ -704,7 +760,11 @@ func PrintOrderReceipt(order *models.Order, brandName string) (bool, error) {
 	if !cfg.AutoPrint || cfg.PrinterType == PrinterTypeNone {
 		return false, nil
 	}
-	bytes := GenerateESCPOSReceipt(order, cfg, brandName)
+	tmplCfg, err := GetPrinterTemplateConfig(order.RestaurantID)
+	if err != nil || tmplCfg == nil {
+		tmplCfg = DefaultPrinterTemplateConfig()
+	}
+	bytes := GenerateReceiptFromTemplate(order, tmplCfg, brandName)
 	if err := SendToPrinter(bytes, cfg); err != nil {
 		return true, err
 	}
@@ -720,7 +780,12 @@ func ManualPrintOrderReceipt(order *models.Order, brandName string) error {
 	if cfg.PrinterType == PrinterTypeNone {
 		return fmt.Errorf("printer not configured")
 	}
-	bytes := GenerateESCPOSReceipt(order, cfg, brandName)
+	// Use template config if available, fall back to non-template
+	tmplCfg, err := GetPrinterTemplateConfig(order.RestaurantID)
+	if err != nil || tmplCfg == nil {
+		tmplCfg = DefaultPrinterTemplateConfig()
+	}
+	bytes := GenerateReceiptFromTemplate(order, tmplCfg, brandName)
 	return SendToPrinter(bytes, cfg)
 }
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+﻿import { useState, useEffect, useRef, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -141,7 +141,9 @@ export default function Admin() {
         if (soundOn) playOrderPing();
         const pc = printerQuery.data?.printer_config;
         if (pc && pc.auto_print && (pc.printer_type === 'browser' || pc.printer_type === 'web')) {
-          printOrderReceipt(id);
+          printOrderReceipt(id).catch(() => {
+            toast.push({ type: 'error', title: 'Print failed', message: 'Could not auto-print receipt. Check popup blocker settings.' });
+          });
         }
       }
     }
@@ -195,7 +197,7 @@ export default function Admin() {
       // Helper to replace template variables
       const replaceVars = (text: string): string => {
         const items = order.items || [];
-          const paperChars = paperWidth === 58 ? 20 : 30;
+          const paperChars = paperWidth === 58 ? 32 : 48;
         const nameWidth = Math.max(paperChars - 12, 8);
         const itemsList = items.map((it: any) => {
           const name = (it.name || '').substring(0, nameWidth);
@@ -231,7 +233,10 @@ export default function Admin() {
           // Check conditional display
           if (el.condition === 'show_if_delivery' && order.order_type !== 'delivery') continue;
           if (el.condition === 'show_if_discount' && Number(order.discount || 0) <= 0) continue;
-          if (el.condition === 'show_if_customer' && !order.customer_name) continue;
+          if (el.condition === 'show_if_customer' && !(order.customer_name || '').trim()) continue;
+          if (el.condition === 'show_if_tax' && Number(order.tax_amount || 0) <= 0) continue;
+          if (el.condition === 'show_if_container' && Number(order.container_charge || 0) <= 0) continue;
+          if (el.condition === 'show_if_tip' && Number(order.tip_amount || 0) <= 0) continue;
 
           const sizeMap: Record<number, string> = { 1: '9px', 2: '11px', 3: '13px', 4: '16px' };
           const fontSize = sizeMap[el.size] || '11px';
@@ -247,7 +252,11 @@ export default function Admin() {
           } else if (el.type === 'spacer') {
             bodyHtml += `<div style="height:${(el.spacer_lines || 2) * 10}px;"></div>`;
           } else if (el.type === 'qr') {
-            bodyHtml += `<div style="text-align:center;margin:${marginTop}px 0 ${marginBottom}px 0;font-size:9px;">[QR: ${replaceVars(el.qr_value || el.text || '')}]</div>`;
+            const qrText = replaceVars(el.qr_value || el.text || '');
+            if (qrText) {
+              const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=' + encodeURIComponent(qrText);
+              bodyHtml += `<div style="text-align:center;margin:${marginTop}px 0 ${marginBottom}px 0;"><img src="${qrUrl}" alt="QR Code" style="width:80px;height:80px;" /><div style="font-size:8px;margin-top:2px;">${qrText}</div></div>`;
+            }
           } else {
             // text
             const rawText = el.text || '';
@@ -269,9 +278,15 @@ export default function Admin() {
         ).join('');
         bodyHtml = `
           <div style="text-align:center;font-weight:bold;font-size:16px;margin:4px 0;">${template?.header || restaurantName}</div>
+          ${restaurantAddress ? `<div style="text-align:center;font-size:9px;margin:2px 0;">${restaurantAddress}</div>` : ''}
           <div style="border-top:1px dashed #000;margin:4px 0;"></div>
           <div>Order #${order.order_number}</div>
           <div>${new Date(order.created_at).toLocaleString()}</div>
+          ${order.customer_name ? `<div>Customer: ${order.customer_name}</div>` : ''}
+          ${order.customer_phone ? `<div>Phone: ${order.customer_phone}</div>` : ''}
+          ${order.address ? `<div>Address: ${order.address}</div>` : ''}
+          ${order.landmark ? `<div>Landmark: ${order.landmark}</div>` : ''}
+          <div>Type: ${order.order_type} | Payment: ${(order.payment_method || '').toUpperCase()}</div>
           <div style="border-top:1px dashed #000;margin:4px 0;"></div>
           <table style="width:100%;border-collapse:collapse;">${itemRows}</table>
           <div style="border-top:1px dashed #000;margin:4px 0;"></div>
