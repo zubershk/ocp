@@ -91,7 +91,7 @@ export default function Admin() {
   const [authed, setAuthed] = useState(() => getAdminKey().length > 0);
   const [tab, setTab] = useState('active');
   const [search, setSearch] = useState('');
-  const [view, setView] = useState<'board' | 'list'>(() => (typeof window !== 'undefined' && window.innerWidth < 768 ? 'board' : 'board'));
+  const [view, setView] = useState<'board' | 'list'>('board');
   const [soundOn, setSoundOn] = useState(() => { try { return localStorage.getItem('ocp_admin_sound') !== 'off'; } catch { return true; } });
   const [autoRefresh, setAutoRefresh] = useState(() => { try { return localStorage.getItem('ocp_admin_autorefresh') !== 'off'; } catch { return true; } });
   const queryClient = useQueryClient();
@@ -140,7 +140,7 @@ export default function Admin() {
         setLiveMsg(`New order ${d.order_number ?? ''} arrived`);
         if (soundOn) playOrderPing();
         const pc = printerQuery.data?.printer_config;
-        if (pc && pc.auto_print && (pc.printer_type === 'browser' || pc.printer_type === 'web')) {
+        if (pc && pc.auto_print && pc.printer_type !== 'none') {
           printOrderReceipt(id).catch(() => {
             toast.push({ type: 'error', title: 'Auto-print failed', message: 'Could not send receipt to configured printer' });
           });
@@ -164,17 +164,178 @@ export default function Admin() {
 
   const printOrderReceipt = async (orderId: number) => {
     try {
-      const res = await adminFetch<any>(`/admin/orders/${orderId}/print`, {
-        method: 'POST',
-      });
-      if (res?.ok) {
-        toast.push({ type: 'success', title: 'Receipt sent to printer', message: `Order #${res.order_id ?? orderId} printed` });
-      } else {
-        toast.push({ type: 'error', title: 'Print failed', message: res?.error || 'Unknown error' });
+      const order = await adminFetch<any>(`/admin/orders/${orderId}`);
+      if (!order) return;
+
+      // Fetch printer template config
+      let template: any = null;
+      try {
+        const tmplData = await adminFetch<{ printer_template_config?: any }>('/admin/printer/template/config');
+        template = tmplData.printer_template_config;
+      } catch {
+        // Fall back to default if template fetch fails
       }
+
+      // Fetch restaurant info from admin config
+      let restaurantName = 'Restaurant';
+      let restaurantAddress = '';
+      try {
+        const cfgData = await adminFetch<{ name?: string; address?: string }>('/admin/config');
+        restaurantName = cfgData?.name || restaurantName;
+        restaurantAddress = cfgData?.address || '';
+      } catch {
+        // Fall back to defaults
+      }
+
+      const paperWidth = printerQuery.data?.printer_config?.paper_width || template?.paper_width || 80;
+      const w = window.open('', '_blank', 'width=400,height=600');
+      if (!w) {
+        toast.push({ type: 'error', title: 'Popup blocked', message: 'Please allow popups for this site to print receipts' });
+        return;
+      }
+
+      // Helper to replace template variables
+      const replaceVars = (text: string): string => {
+        const items = order.items || [];
+        const nameWidth = paperWidth === 58 ? 18 : 28;
+        const indent = '  ';
+        const itemsList = items.map((it: any) => {
+          const name = (it.name || '');
+          const price = it.line_total || it.subtotal || 0;
+          const qty = it.quantity || 0;
+          if (name.length > nameWidth) {
+            const lines: string[] = [];
+            lines.push(`${name.slice(0, nameWidth).padEnd(nameWidth)} ${String(qty).padStart(3)} ₹${price.toFixed(2).padStart(7)}`);
+            let remaining = name.slice(nameWidth);
+            while (remaining.length > 0) {
+              const chunk = remaining.slice(0, nameWidth);
+              lines.push(`${indent}${chunk}`);
+              remaining = remaining.slice(chunk.length);
+            }
+            return lines.join('\n');
+          }
+          return `${name.padEnd(nameWidth)} ${String(qty).padStart(3)} ₹${price.toFixed(2).padStart(7)}`;
+        }).join('\n');
+
+        return text
+          .replace(/\{\{brand_name\}\}/g, restaurantName)
+          .replace(/\{\{restaurant_address\}\}/g, restaurantAddress)
+          .replace(/\{\{order_number\}\}/g, order.order_number || '')
+          .replace(/\{\{customer_name\}\}/g, order.customer_name || '')
+          .replace(/\{\{customer_phone\}\}/g, order.customer_phone || '')
+          .replace(/\{\{customer_address\}\}/g, order.address || '')
+          .replace(/\{\{customer_landmark\}\}/g, order.landmark || '')
+          .replace(/\{\{order_type\}\}/g, order.order_type || '')
+          .replace(/\{\{payment_method\}\}/g, (order.payment_method || '').toUpperCase())
+          .replace(/\{\{status\}\}/g, order.status || '')
+          .replace(/\{\{date_time\}\}/g, new Date(order.created_at).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' }))
+          .replace(/\{\{subtotal\}\}/g, Number(order.subtotal || 0).toFixed(2))
+          .replace(/\{\{delivery_fee\}\}/g, Number(order.delivery_fee || 0).toFixed(2))
+          .replace(/\{\{discount\}\}/g, Number(order.discount || 0).toFixed(2))
+          .replace(/\{\{total\}\}/g, Number(order.total || 0).toFixed(2))
+          .replace(/\{\{currency_subtotal\}\}/g, '₹' + Number(order.subtotal || 0).toFixed(2))
+          .replace(/\{\{currency_delivery_fee\}\}/g, '₹' + Number(order.delivery_fee || 0).toFixed(2))
+          .replace(/\{\{currency_discount\}\}/g, '₹' + Number(order.discount || 0).toFixed(2))
+          .replace(/\{\{currency_total\}\}/g, '₹' + Number(order.total || 0).toFixed(2))
+          .replace(/\{\{items_list\}\}/g, itemsList)
+          .replace(/\{\{footer\}\}/g, template?.footer || 'Thank you for your order!');
+      };
+
+      // Build HTML from template elements (or default layout)
+      const elements = template?.elements || [];
+      let bodyHtml = '';
+
+      if (elements.length > 0) {
+        for (const el of elements) {
+          // Check conditional display
+          if (el.condition === 'show_if_delivery' && order.order_type !== 'delivery') continue;
+          if (el.condition === 'show_if_discount' && Number(order.discount || 0) <= 0) continue;
+          if (el.condition === 'show_if_customer' && !(order.customer_name || '').trim()) continue;
+          if (el.condition === 'show_if_tax' && Number(order.tax_amount || 0) <= 0) continue;
+          if (el.condition === 'show_if_container' && Number(order.container_charge || 0) <= 0) continue;
+          if (el.condition === 'show_if_tip' && Number(order.tip_amount || 0) <= 0) continue;
+
+          const sizeMap: Record<number, string> = { 1: '9px', 2: '11px', 3: '13px', 4: '16px' };
+          const fontSize = sizeMap[el.size] || '11px';
+          const align = el.align === 'center' ? 'center' : el.align === 'right' ? 'right' : 'left';
+          const fontWeight = el.bold ? 'bold' : 'normal';
+          const textDecoration = el.underline ? 'underline' : 'none';
+          const fontStyle = el.italic ? 'italic' : 'normal';
+          const marginTop = (el.padding_top || 0) * 4;
+          const marginBottom = (el.padding_bottom || 0) * 4;
+
+          if (el.type === 'divider') {
+            bodyHtml += `<div style="border-top:1px dashed #000;margin:${marginTop}px 0 ${marginBottom}px 0;"></div>`;
+          } else if (el.type === 'spacer') {
+            bodyHtml += `<div style="height:${(el.spacer_lines || 2) * 10}px;"></div>`;
+          } else if (el.type === 'qr') {
+            bodyHtml += `<div style="text-align:center;margin:${marginTop}px 0 ${marginBottom}px 0;font-size:9px;">[QR: ${replaceVars(el.qr_value || el.text || '')}]</div>`;
+          } else {
+            // text
+            const rawText = el.text || '';
+            let text = replaceVars(rawText);
+            // Handle multi-line text (like items_list) - use pre to preserve formatting
+            if (text.includes('\n')) {
+              text = text.split('\n').map((line: string) =>
+                `<div class="line">${line}</div>`
+              ).join('');
+            }
+            bodyHtml += `<div style="font-size:${fontSize};text-align:${align};font-weight:${fontWeight};font-style:${fontStyle};text-decoration:${textDecoration};margin:${marginTop}px 0 ${marginBottom}px 0;overflow-wrap:break-word;word-wrap:break-word;">${text}</div>`;
+          }
+        }
+      } else {
+        // Fallback default layout
+        const items = order.items || [];
+        const itemRows = items.map((it: any) =>
+          `<tr><td>${it.name}</td><td style="text-align:center">${it.quantity}</td><td style="text-align:right">₹${Number(it.line_total || it.subtotal || 0).toFixed(2)}</td></tr>`
+        ).join('');
+        bodyHtml = `
+          <div style="text-align:center;font-weight:bold;font-size:16px;margin:4px 0;">${template?.header || restaurantName}</div>
+          ${restaurantAddress ? `<div style="text-align:center;font-size:9px;margin:2px 0;">${restaurantAddress}</div>` : ''}
+          <div style="border-top:1px dashed #000;margin:4px 0;"></div>
+          <div>Order #${order.order_number}</div>
+          <div>${new Date(order.created_at).toLocaleString()}</div>
+          ${order.customer_name ? `<div>Customer: ${order.customer_name}</div>` : ''}
+          ${order.customer_phone ? `<div>Phone: ${order.customer_phone}</div>` : ''}
+          ${order.address ? `<div>Address: ${order.address}</div>` : ''}
+          ${order.landmark ? `<div>Landmark: ${order.landmark}</div>` : ''}
+          <div>Type: ${order.order_type} | Payment: ${(order.payment_method || '').toUpperCase()}</div>
+          <div style="border-top:1px dashed #000;margin:4px 0;"></div>
+          <table style="width:100%;border-collapse:collapse;">${itemRows}</table>
+          <div style="border-top:1px dashed #000;margin:4px 0;"></div>
+          <div style="text-align:center;">${template?.footer || 'Thank you for your order!'}</div>
+        `;
+      }
+
+      w.document.write(`<!DOCTYPE html><html><head><title>Receipt ${order.order_number}</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Courier New', monospace; font-size: 8px; width: ${paperWidth}mm; max-width: ${paperWidth}mm; margin: 0 auto; padding: 1mm; overflow-wrap: break-word; word-wrap: break-word; }
+  .line { white-space: pre-wrap; word-break: break-word; line-height: 1.3; overflow-wrap: break-word; }
+  table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  td { padding: 1px 0; overflow: hidden; text-overflow: ellipsis; font-size: 8px; }
+  div { max-width: 100%; }
+  .divider { border-top: 1px dashed #000; margin: 3px 0; }
+  .bold { font-weight: bold; }
+  .center { text-align: center; }
+  .right { text-align: right; }
+  @media print {
+    body { margin: 0; padding: 1mm; overflow: visible; }
+    @page { margin: 0; size: ${paperWidth}mm auto; }
+    html, body { width: ${paperWidth}mm; max-width: ${paperWidth}mm; overflow: visible; }
+    * { overflow: visible !important; }
+  }
+  @media screen {
+    body { background: #f5f5f5; padding: 10px; }
+  }
+</style></head><body>
+${bodyHtml}
+<script>window.onload = function() { window.print(); }</script>
+</body></html>`);
+      w.document.close();
     } catch (e) {
       console.error('Print failed:', e);
-      toast.push({ type: 'error', title: 'Print failed', message: 'Could not send receipt to printer' });
+      toast.push({ type: 'error', title: 'Print failed', message: 'Could not print receipt' });
     }
   };
 
