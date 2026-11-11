@@ -70,6 +70,7 @@ function Start-Bot() {
     }
     if (-not $env:BOT_ADMIN_KEY) { $env:BOT_ADMIN_KEY = 'a7b3c9d1e5f7a2b4c6d8e0f1a3b5c7d9' }
     if (-not $env:EVOLUTION_WEBHOOK_SECRET) { $env:EVOLUTION_WEBHOOK_SECRET = 'f4e6d8c0a2b1d3f5a7b9c1d3e5f7a9b1' }
+    if (-not $env:EVOLUTION_API_URL) { $env:EVOLUTION_API_URL = 'http://localhost:8080' }
     if (-not $env:OTP_PEPPER) { $env:OTP_PEPPER = '3c5e7a9b1d3f5a7c9e0b2d4f6a8c1e3f' }
     if (-not $env:BOT_PORT) { $env:BOT_PORT = $script:BotPort }
     if (Test-Path $script:BotLog) { Remove-Item $script:BotLog -Force -ErrorAction SilentlyContinue }

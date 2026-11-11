@@ -46,10 +46,19 @@ func sessionTTL() time.Duration {
 	return defaultSessionExpiry
 }
 
+// hashHex returns the peppered SHA-256 hash of a secret.
+//
+// The pepper is read from the environment on every call rather than in a
+// package init(): Go runs init() before main(), so an init() would read
+// the environment BEFORE main() loads .env via godotenv, making the
+// pepper invisible to .env-based setups.
+//
+// Fail-closed: an empty OTP_PEPPER panics instead of hashing with an
+// empty secret. Startup enforcement lives in config.Validate(), which
+// runs after .env is loaded.
 func hashHex(s string) string {
 	pepper := os.Getenv("OTP_PEPPER")
 	if pepper == "" {
-		// Fail closed: OTP_PEPPER is required. Do not fall back to BOT_ADMIN_KEY.
 		panic("OTP_PEPPER environment variable is required for session hashing")
 	}
 	h := sha256.Sum256([]byte(pepper + s))
@@ -648,7 +657,7 @@ func GetCustomerByEmail(email string, restaurantID int) (*Customer, error) {
 	}
 	row := database.DB.QueryRow(`
 		SELECT id, whatsapp_number, name, email, default_address, landmark,
-		       total_orders, total_spent, password_hash
+		       total_orders, total_spent, password_hash, email_verified
 		FROM customers WHERE email = $1 AND restaurant_id = $2
 	`, strings.TrimSpace(email), rid)
 
@@ -656,7 +665,7 @@ func GetCustomerByEmail(email string, restaurantID int) (*Customer, error) {
 	var wa sql.NullString
 	err := row.Scan(&c.ID, &wa, &c.Name, &c.Email,
 		&c.DefaultAddress, &c.Landmark, &c.TotalOrders, &c.TotalSpent,
-		&c.PasswordHash)
+		&c.PasswordHash, &c.EmailVerified)
 	if err != nil {
 		return nil, err
 	}
@@ -816,6 +825,12 @@ func LoginCustomer(email, password string, restaurantID int) (string, *Customer,
 	if !cust.PasswordHash.Valid || !checkPassword(password, cust.PasswordHash.String) {
 		_ = RecordLoginFailure(email, rid)
 		return "", nil, &ValidationError{Msg: "invalid email or password"}
+	}
+
+	// Enforce email verification before login
+	if !cust.EmailVerified {
+		_ = RecordLoginFailure(email, rid)
+		return "", nil, &ValidationError{Msg: "email not verified — please verify your email before logging in"}
 	}
 
 	// Reset failure counter on successful auth

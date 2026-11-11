@@ -10,6 +10,8 @@ func setRequiredEnv(t *testing.T) {
 	t.Setenv("BOT_DATABASE_URL", "postgresql://ocp:test@localhost:5432/ocp?sslmode=disable")
 	t.Setenv("BOT_ADMIN_KEY", "test-key")
 	t.Setenv("EVOLUTION_WEBHOOK_SECRET", "test-secret")
+	t.Setenv("OTP_PEPPER", "test-pepper")
+	t.Setenv("EVOLUTION_API_URL", "http://localhost:8080")
 	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:5173")
 }
 
@@ -17,6 +19,8 @@ func TestValidateRequiresDeploymentValues(t *testing.T) {
 	os.Unsetenv("BOT_DATABASE_URL")
 	os.Unsetenv("BOT_ADMIN_KEY")
 	os.Unsetenv("EVOLUTION_WEBHOOK_SECRET")
+	os.Unsetenv("OTP_PEPPER")
+	os.Unsetenv("EVOLUTION_API_URL")
 	os.Unsetenv("CORS_ALLOWED_ORIGINS")
 
 	cfg := Load()

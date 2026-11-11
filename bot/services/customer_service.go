@@ -24,6 +24,7 @@ type Customer struct {
 	TotalOrders    int            `json:"total_orders"`
 	TotalSpent     float64        `json:"total_spent"`
 	PasswordHash   sql.NullString `json:"-"`
+	EmailVerified  bool           `json:"email_verified"`
 	FirstName      string         `json:"name,omitempty"`
 }
 

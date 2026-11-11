@@ -128,7 +128,7 @@ func Load() *Config {
 			OTPPepper:     getEnv("OTP_PEPPER", ""),
 		},
 		IntegrationConfig: IntegrationConfig{
-			EvolutionAPIURL:        getEnv("EVOLUTION_API_URL", "http://localhost:8080"),
+			EvolutionAPIURL:        getEnv("EVOLUTION_API_URL", ""),
 			EvolutionAPIKey:        getEnv("EVOLUTION_API_KEY", ""),
 			EvolutionInstance:      getEnv("EVOLUTION_INSTANCE", "restaurant"),
 			EvolutionInstanceToken: getEnv("EVOLUTION_INSTANCE_TOKEN", ""),
@@ -180,6 +180,9 @@ func (c *Config) Validate() error {
 	}
 	if c.OTPPepper == "" {
 		return fmt.Errorf("SECURITY: OTP_PEPPER must be set — refusing to start without a session pepper")
+	}
+	if c.IntegrationConfig.EvolutionAPIURL == "" {
+		return fmt.Errorf("SECURITY: EVOLUTION_API_URL must be set — refusing to start without Evolution API URL")
 	}
 	// Security: CORS origins must be explicit in production. Local dev
 	// falls back to the Vite localhost defaults.
