@@ -163,15 +163,15 @@ export default function AdminSettings() {
           <div className="mt-4 grid sm:grid-cols-2 gap-4">
             <div>
               <label className="text-xs font-semibold">Restaurant name</label>
-              <Input id="cfg-name" defaultValue={config?.name ?? ''} placeholder="Orange Cheese Pizza" className="mt-1" />
+              <Input id="cfg-name" defaultValue={config?.name ?? ''} placeholder="Your Restaurant Name" className="mt-1" />
             </div>
             <div>
               <label className="text-xs font-semibold">Primary phone</label>
-              <Input id="cfg-phone" defaultValue={config?.phone ?? ''} placeholder="8369293998" className="mt-1" />
+              <Input id="cfg-phone" defaultValue={config?.phone ?? ''} placeholder="+91 9876543210" className="mt-1" />
             </div>
             <div className="sm:col-span-2">
               <label className="text-xs font-semibold">Address (full)</label>
-              <textarea id="cfg-address" defaultValue={config?.address ?? ''} rows={2} placeholder="Shop 21, Winstone PNK, Mira Road East" className="mt-1 w-full px-3 py-2.5 rounded-xl border text-sm" />
+              <textarea id="cfg-address" defaultValue={config?.address ?? ''} rows={2} placeholder="Shop 21, Wing Name, Area, City" className="mt-1 w-full px-3 py-2.5 rounded-xl border text-sm" />
             </div>
             <div>
               <label className="text-xs font-semibold">Map URL</label>
@@ -239,9 +239,9 @@ export default function AdminSettings() {
             </DialogHeader>
             <div className="space-y-3 py-4">
               <div><label className="text-xs font-semibold">Slug *</label><Input value={outletForm.slug} onChange={(e) => setOutletForm({ ...outletForm, slug: e.target.value })} placeholder="mira-road" className="mt-1 font-mono text-sm" required /></div>
-              <div><label className="text-xs font-semibold">Name *</label><Input value={outletForm.name} onChange={(e) => setOutletForm({ ...outletForm, name: e.target.value })} placeholder="Mira Road East" className="mt-1" required /></div>
-              <div><label className="text-xs font-semibold">Address (one per line)</label><textarea value={outletForm.address} onChange={(e) => setOutletForm({ ...outletForm, address: e.target.value })} rows={4} placeholder={`Shop 21, Winstone PNK\nBeverly Park, Mira Road East`} className="mt-1 w-full px-3 py-2.5 rounded-xl border text-sm" /></div>
-              <div><label className="text-xs font-semibold">Phones (comma separated)</label><Input value={outletForm.phones} onChange={(e) => setOutletForm({ ...outletForm, phones: e.target.value })} placeholder="8369293998, 8591683998" className="mt-1" /></div>
+              <div><label className="text-xs font-semibold">Name *</label><Input value={outletForm.name} onChange={(e) => setOutletForm({ ...outletForm, name: e.target.value })} placeholder="Outlet Name" className="mt-1" required /></div>
+              <div><label className="text-xs font-semibold">Address (one per line)</label><textarea value={outletForm.address} onChange={(e) => setOutletForm({ ...outletForm, address: e.target.value })} rows={4} placeholder={`Shop 21, Wing Name\nArea, City`} className="mt-1 w-full px-3 py-2.5 rounded-xl border text-sm" /></div>
+              <div><label className="text-xs font-semibold">Phones (comma separated)</label><Input value={outletForm.phones} onChange={(e) => setOutletForm({ ...outletForm, phones: e.target.value })} placeholder="+91 9876543210, +91 8765432109" className="mt-1" /></div>
               <div><label className="text-xs font-semibold">Delivery hours</label><Input value={outletForm.delivery_hours} onChange={(e) => setOutletForm({ ...outletForm, delivery_hours: e.target.value })} className="mt-1" /></div>
               <div className="flex gap-4">
                 <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={outletForm.online_ordering} onChange={(e) => setOutletForm({ ...outletForm, online_ordering: e.target.checked })} /> Online ordering</label>

@@ -18,7 +18,7 @@ export default function Login() {
   const { push } = useToast();
   const outletNames = useOutletNames();
 
-  const outletList = outletNames.length > 0 ? outletNames.join(' · ') : 'Mira Road · Vasai · Bhayandar';
+  const outletList = outletNames.length > 0 ? outletNames.join(' · ') : 'Outlet 1• Outlet 2• Outlet 3';
 
   const ICON_MAP: Record<string, any> = {
     Gift, Truck, Clock3, Award, UtensilsCrossed, MapPin, Star, Flame, Shield, Phone, Mail,

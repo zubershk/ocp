@@ -701,7 +701,7 @@ function MessageCard({
                     <Input
                       value={editImage}
                       onChange={(e) => onEditImageChange(e.target.value)}
-                      placeholder="https://… or /uploads/xxx.jpg"
+                      placeholder="https://example.com/image.jpg or /uploads/xxx.jpg"
                       className="flex-1 text-xs font-mono"
                     />
                     <input type="file" ref={fileRef} accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(f); if (fileRef.current) fileRef.current.value = ''; }} />
@@ -752,3 +752,5 @@ function MessageCard({
     </Card>
   );
 }
+
+

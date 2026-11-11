@@ -77,7 +77,7 @@ export default function Locations() {
       <div className="mt-8 rounded-2xl overflow-hidden border border-stone-200 shadow-sm">
         <iframe
           title="Store location map"
-          src={hp.locationsMapEmbedUrl || `https://www.google.com/maps?q=${encodeURIComponent(hp.locationsMapAddress || (outlets[0]?.address_lines ?? ['Mira Road East, Mumbai']).join(' '))}&output=embed`}
+          src={hp.locationsMapEmbedUrl || `https://www.google.com/maps?q=${encodeURIComponent(hp.locationsMapAddress || (outlets[0]?.address_lines ?? ['Shop 21, Wing Name, Area, City']).join(' '))}&output=embed`}
           width="100%"
           height="320"
           style={{ border: 0 }}

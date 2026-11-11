@@ -94,7 +94,7 @@ export default function AdminFooter() {
     { key: 'tax_note', label: 'Tax Note Text', placeholder: 'All prices include tax' },
     { key: 'other_outlets_title', label: 'Other Outlets Title', placeholder: 'Other Outlets' },
     { key: 'trust_title', label: 'Trust Section Title', placeholder: 'Why Order With Us' },
-    { key: 'copyright_text', label: 'Copyright Text', placeholder: '© 2026 Orange Cheese Pizza. All rights reserved.' },
+    { key: 'copyright_text', label: 'Copyright Text', placeholder: '© 2026 Your Restaurant. All rights reserved.' },
   ];
 
   return (

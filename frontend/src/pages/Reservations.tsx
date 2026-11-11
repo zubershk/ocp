@@ -23,7 +23,7 @@ export default function Reservations(){
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 grid lg:grid-cols-2 gap-8">
       <div>
         <h1 className="text-3xl font-bold">Reserve a Table</h1>
-        <p className="text-zinc-500 mt-2">{outletNames.join(' • ') || 'Vasai West • Mira Road East • Bhayandar West'} • Free home delivery {deliveryHours || '11AM–4AM'}</p>
+        <p className="text-zinc-500 mt-2">{outletNames.join(' • ') || 'Outlet 1 • Outlet 2 • Outlet 3'}, Free home delivery {deliveryHours || '11AM–4AM'}</p>
         <form onSubmit={e=>{e.preventDefault(); if(!form.name || !form.phone || !form.date || !form.time) { push({ type:'error', title:'Please fill required fields'}); return; } setDone(true); push({ type:'success', title:'Reservation confirmed'});}} className="mt-6 bg-white rounded-2xl border p-6 space-y-4">
           <div className="grid sm:grid-cols-2 gap-3">
             <div><label className="text-xs font-medium">Name *</label><input value={form.name} onChange={e=>setForm({...form,name:e.target.value})} className="mt-1 w-full px-3 py-2.5 rounded-xl border" placeholder="Full name" required/></div>
@@ -63,3 +63,6 @@ export default function Reservations(){
     </div>
   )
 }
+
+
+

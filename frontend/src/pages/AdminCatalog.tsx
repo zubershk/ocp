@@ -841,7 +841,7 @@ export default function AdminCatalog() {
                 <div className="sm:col-span-2">
                   <label className="text-xs font-semibold">Image</label>
                   <div className="mt-1 flex gap-2">
-                    <Input value={form.image_url} onChange={(e) => setForm({ ...form, image_url: e.target.value })} placeholder="https://… or /uploads/xxx.jpg" className="flex-1 text-sm" />
+                    <Input value={form.image_url} onChange={(e) => setForm({ ...form, image_url: e.target.value })} placeholder="https://example.com/image.jpg or /uploads/xxx.jpg" className="flex-1 text-sm" />
                     <input type="file" ref={fileRef} accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(f); }} />
                     <Button type="button" disabled={uploading} onClick={() => fileRef.current?.click()} className="inline-flex items-center gap-2"><Upload size={14} />{uploading ? '…' : 'Upload'}</Button>
                   </div>
@@ -894,3 +894,4 @@ export default function AdminCatalog() {
     </div>
   );
 }
+

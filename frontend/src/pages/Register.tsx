@@ -194,7 +194,7 @@ export default function Register() {
 
               <button
                 type="submit"
-                disabled={registering || !email || !password || password.length < 6 || password !== confirmPassword}
+                disabled={registering || !email || !password || password.length < 8 || password !== confirmPassword}
                 className="w-full py-3.5 rounded-2xl bg-brand-600 text-white font-semibold hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2 transition-all duration-200 shadow-sm hover:shadow-md active:scale-[0.98]"
               >
                 {registering ? (
