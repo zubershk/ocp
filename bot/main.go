@@ -230,7 +230,8 @@ func main() {
 
 	// Admin endpoints (protected by admin key)
 	adminGroup := router.Group("/admin")
-	adminGroup.Use(handlers.RateLimit(60, time.Minute))
+	// No global rate limit here: the admin panel opens a long-lived SSE
+	// stream and polls several endpoints, which a 60/min budget throttled.
 	adminGroup.Use(adminHandler.RequireAdminKey())
 	// Tenant context for every admin call. Handlers ignore these keys
 	// until PR 3 scopes them; behavior is unchanged in PR 2.
