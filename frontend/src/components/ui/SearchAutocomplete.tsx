@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 
 interface SearchAutocompleteProps {
   items: { id: string; name: string; category: string; price: number; image: string; isPopular?: boolean }[];
-  onSelect?: (item: any) => void;
+  onSelect?: (item: { id: string; name: string; category: string; price: number; image: string; isPopular?: boolean }) => void;
 }
 
 const RECENT_KEY = 'ocp_recent_searches';
@@ -44,7 +44,7 @@ export default function SearchAutocomplete({ items, onSelect }: SearchAutocomple
     return () => window.removeEventListener('keydown', h);
   }, []);
 
-  const handleSelect = (item: any) => {
+  const handleSelect = (item: { id: string; name: string; category: string; price: number; image: string; isPopular?: boolean }) => {
     saveRecent(item.name);
     setRecentSearches(getRecent());
     setQ('');

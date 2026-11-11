@@ -149,7 +149,7 @@ export default function Footer() {
                     >
                       {p}
                     </a>
-                  )).reduce((acc: any[], curr: any, idx: number) => {
+                  )).reduce((acc: React.ReactNode[], curr: React.ReactNode, idx: number) => {
                     if (idx > 0) acc.push(<span key={`sep-${idx}`} className="text-zinc-700 mx-0.5">·</span>);
                     acc.push(curr);
                     return acc;
@@ -195,7 +195,7 @@ export default function Footer() {
                       >
                         {p}
                       </a>
-                    )).reduce((acc: any[], curr: any, idx: number) => {
+                    )).reduce((acc: React.ReactNode[], curr: React.ReactNode, idx: number) => {
                       if (idx > 0) acc.push(<span key={`sep-${idx}`} className="text-zinc-600 mx-0.5">·</span>);
                       acc.push(curr);
                       return acc;
