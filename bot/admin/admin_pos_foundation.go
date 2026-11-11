@@ -37,7 +37,7 @@ func (h *AdminHandler) CreateAddonGroup(c *gin.Context) {
 	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
 	var req services.AddonGroup
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON: " + safeError(err)})
 		return
 	}
 	// Ensure tenant: ignore client restaurant_id
@@ -53,14 +53,14 @@ func (h *AdminHandler) CreateAddonGroup(c *gin.Context) {
 	created, err := services.CreateAddonGroup(rid, req)
 	if err != nil {
 		if strings.Contains(err.Error(), "duplicate") || strings.Contains(err.Error(), "already exists") {
-			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+			c.JSON(http.StatusConflict, gin.H{"error": safeError(err)})
 			return
 		}
 		if strings.Contains(err.Error(), "menu item") || strings.Contains(err.Error(), "belong") || strings.Contains(err.Error(), "required") {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
 			return
 		}
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
 		return
 	}
 	auditLog(c, "create_addon_group", strconv.Itoa(created.ID), map[string]interface{}{"name": created.Name, "menu_item_id": created.MenuItemID})
@@ -76,7 +76,7 @@ func (h *AdminHandler) UpdateAddonGroup(c *gin.Context) {
 	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
 	var patch map[string]interface{}
 	if err := c.ShouldBindJSON(&patch); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON: " + safeError(err)})
 		return
 	}
 	updated, err := services.UpdateAddonGroup(id, rid, patch)
@@ -86,10 +86,10 @@ func (h *AdminHandler) UpdateAddonGroup(c *gin.Context) {
 			return
 		}
 		if strings.Contains(err.Error(), "duplicate") {
-			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+			c.JSON(http.StatusConflict, gin.H{"error": safeError(err)})
 			return
 		}
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
 		return
 	}
 	auditLog(c, "update_addon_group", strconv.Itoa(id), patch)
@@ -153,7 +153,7 @@ func (h *AdminHandler) CreateAddonItem(c *gin.Context) {
 		Active        *bool    `json:"active"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON: " + safeError(err)})
 		return
 	}
 	active := true
@@ -163,10 +163,10 @@ func (h *AdminHandler) CreateAddonItem(c *gin.Context) {
 	created, err := services.CreateAddonItem(rid, gid, req.MenuItemID, req.PriceOverride, req.SortOrder, active)
 	if err != nil {
 		if strings.Contains(err.Error(), "duplicate") {
-			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+			c.JSON(http.StatusConflict, gin.H{"error": safeError(err)})
 			return
 		}
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
 		return
 	}
 	auditLog(c, "create_addon_item", strconv.Itoa(created.ID), map[string]interface{}{"group_id": gid, "menu_item_id": req.MenuItemID})
@@ -182,7 +182,7 @@ func (h *AdminHandler) UpdateAddonItem(c *gin.Context) {
 	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
 	var patch map[string]interface{}
 	if err := c.ShouldBindJSON(&patch); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON: " + safeError(err)})
 		return
 	}
 	updated, err := services.UpdateAddonItem(id, rid, patch)
@@ -191,7 +191,7 @@ func (h *AdminHandler) UpdateAddonItem(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "addon item not found"})
 			return
 		}
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
 		return
 	}
 	auditLog(c, "update_addon_item", strconv.Itoa(id), patch)
@@ -246,7 +246,7 @@ func (h *AdminHandler) CreateTableAdmin(c *gin.Context) {
 		Description string `json:"description"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON: " + safeError(err)})
 		return
 	}
 	if req.Capacity == 0 {
@@ -259,14 +259,14 @@ func (h *AdminHandler) CreateTableAdmin(c *gin.Context) {
 	created, err := services.CreateTableAdmin(rid, outletID, req.Name, req.Capacity, req.Position, req.Description)
 	if err != nil {
 		if strings.Contains(err.Error(), "duplicate") {
-			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+			c.JSON(http.StatusConflict, gin.H{"error": safeError(err)})
 			return
 		}
 		if strings.Contains(err.Error(), "does not belong") || strings.Contains(err.Error(), "outlet") {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
 			return
 		}
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
 		return
 	}
 	auditLog(c, "create_table", strconv.Itoa(created.ID), map[string]interface{}{"name": created.Name, "outlet_id": outletID})
@@ -282,7 +282,7 @@ func (h *AdminHandler) UpdateTableAdmin(c *gin.Context) {
 	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
 	var patch map[string]interface{}
 	if err := c.ShouldBindJSON(&patch); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON: " + safeError(err)})
 		return
 	}
 	updated, err := services.UpdateTableAdmin(id, rid, patch)
@@ -292,10 +292,10 @@ func (h *AdminHandler) UpdateTableAdmin(c *gin.Context) {
 			return
 		}
 		if strings.Contains(err.Error(), "duplicate") {
-			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+			c.JSON(http.StatusConflict, gin.H{"error": safeError(err)})
 			return
 		}
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
 		return
 	}
 	auditLog(c, "update_table", strconv.Itoa(id), patch)
@@ -328,7 +328,7 @@ func (h *AdminHandler) ReorderTables(c *gin.Context) {
 		OutletID   int   `json:"outlet_id"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON: " + safeError(err)})
 		return
 	}
 	outletID := req.OutletID
@@ -336,7 +336,7 @@ func (h *AdminHandler) ReorderTables(c *gin.Context) {
 		outletID = c.GetInt("outletID")
 	}
 	if err := services.ReorderTables(rid, outletID, req.OrderedIDs); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
 		return
 	}
 	auditLog(c, "reorder_tables", "tables", map[string]interface{}{"ordered_ids": req.OrderedIDs})
@@ -362,16 +362,16 @@ func (h *AdminHandler) CreatePaymentMethod(c *gin.Context) {
 	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
 	var req services.RestaurantPaymentMethod
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON: " + safeError(err)})
 		return
 	}
 	created, err := services.CreatePaymentMethod(rid, req)
 	if err != nil {
 		if strings.Contains(err.Error(), "duplicate") {
-			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+			c.JSON(http.StatusConflict, gin.H{"error": safeError(err)})
 			return
 		}
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
 		return
 	}
 	auditLog(c, "create_payment_method", strconv.Itoa(created.ID), map[string]interface{}{"key": created.Key})
@@ -387,7 +387,7 @@ func (h *AdminHandler) UpdatePaymentMethod(c *gin.Context) {
 	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
 	var patch map[string]interface{}
 	if err := c.ShouldBindJSON(&patch); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON: " + safeError(err)})
 		return
 	}
 	// Prevent key mutation via patch for system rows — service will ignore
@@ -403,7 +403,7 @@ func (h *AdminHandler) UpdatePaymentMethod(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "payment method not found"})
 			return
 		}
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
 		return
 	}
 	auditLog(c, "update_payment_method", strconv.Itoa(id), patch)
@@ -419,7 +419,7 @@ func (h *AdminHandler) DeletePaymentMethod(c *gin.Context) {
 	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
 	if err := services.DeletePaymentMethod(id, rid); err != nil {
 		if strings.Contains(err.Error(), "cannot delete system") {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
 			return
 		}
 		if errors.Is(err, sql.ErrNoRows) {
@@ -439,11 +439,11 @@ func (h *AdminHandler) ReorderPaymentMethods(c *gin.Context) {
 		OrderedIDs []int `json:"ordered_ids" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON: " + safeError(err)})
 		return
 	}
 	if err := services.ReorderPaymentMethods(rid, req.OrderedIDs); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
 		return
 	}
 	auditLog(c, "reorder_payment_methods", "payment_methods", map[string]interface{}{"ordered_ids": req.OrderedIDs})
@@ -469,12 +469,12 @@ func (h *AdminHandler) UpsertCustomerField(c *gin.Context) {
 	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
 	var req services.POSCustomerFieldRow
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON: " + safeError(err)})
 		return
 	}
 	created, err := services.UpsertCustomerField(rid, req)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
 		return
 	}
 	auditLog(c, "upsert_customer_field", created.FieldKey, map[string]interface{}{"label": created.Label, "visible": created.Visible, "required": created.Required})
@@ -490,7 +490,7 @@ func (h *AdminHandler) UpdateCustomerField(c *gin.Context) {
 	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
 	var patch map[string]interface{}
 	if err := c.ShouldBindJSON(&patch); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON: " + safeError(err)})
 		return
 	}
 	// field_key immutable
@@ -503,7 +503,7 @@ func (h *AdminHandler) UpdateCustomerField(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "customer field not found"})
 			return
 		}
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
 		return
 	}
 	auditLog(c, "update_customer_field", strconv.Itoa(id), patch)
@@ -516,11 +516,11 @@ func (h *AdminHandler) ReorderCustomerFields(c *gin.Context) {
 		OrderedIDs []int `json:"ordered_ids" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON: " + safeError(err)})
 		return
 	}
 	if err := services.ReorderCustomerFields(rid, req.OrderedIDs); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
 		return
 	}
 	auditLog(c, "reorder_customer_fields", "customer_fields", map[string]interface{}{"ordered_ids": req.OrderedIDs})
