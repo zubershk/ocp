@@ -35,6 +35,10 @@ export interface CreateOrderItemPayload {
   size?: string;
   crust?: string;
   quantity: number;
+  /** Set when the line is a combo — billed at the combo price. */
+  combo_slug?: string;
+  /** The items the customer picked within the combo. */
+  combo_selection?: { menu_item_id: number; size?: string; quantity: number }[];
 }
 
 export interface CreateOrderPayload {

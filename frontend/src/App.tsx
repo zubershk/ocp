@@ -57,6 +57,8 @@ const AdminPrinter = lazy(() => import('./pages/AdminPrinter'));
 const AdminPrinterTemplate = lazy(() => import('./pages/AdminPrinterTemplate'));
 const AdminTables = lazy(() => import('./pages/AdminTables'));
 const AdminPaymentMethods = lazy(() => import('./pages/AdminPaymentMethods'));
+const AdminCombos = lazy(() => import('./pages/AdminCombos'));
+const AdminCoupons = lazy(() => import('./pages/AdminCoupons'));
 const POS = lazy(() => import('./pages/POS'));
 
 const queryClient = new QueryClient({
@@ -204,6 +206,8 @@ function AppRoutes() {
       <Route path="/admin/printer/template" element={<AdminSuspense><AdminPageShell><AdminPrinterTemplate /></AdminPageShell></AdminSuspense>} />
       <Route path="/admin/tables" element={<AdminSuspense><AdminPageShell><AdminTables /></AdminPageShell></AdminSuspense>} />
       <Route path="/admin/payment-methods" element={<AdminSuspense><AdminPageShell><AdminPaymentMethods /></AdminPageShell></AdminSuspense>} />
+      <Route path="/admin/combos" element={<AdminSuspense><AdminPageShell><AdminCombos /></AdminPageShell></AdminSuspense>} />
+      <Route path="/admin/coupons" element={<AdminSuspense><AdminPageShell><AdminCoupons /></AdminPageShell></AdminSuspense>} />
       <Route path="/pos" element={<AdminSuspense><RealtimeProvider><POS /></RealtimeProvider></AdminSuspense>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

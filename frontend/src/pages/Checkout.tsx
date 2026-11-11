@@ -111,7 +111,24 @@ export default function Checkout() {
         address: isDelivery ? [form.address.trim(), form.city.trim(), form.postal].filter(Boolean).join(', ') : undefined,
         landmark: form.landmark || undefined,
         payment_method: form.payment,
-        items: items.map((i) => ({ id: i.menuItemId, size: i.size, crust: i.crust, quantity: i.quantity })),
+        items: items.map((i) => ({
+          id: i.menuItemId,
+          size: i.size,
+          crust: i.crust,
+          quantity: i.quantity,
+          // Combo lines are billed at the combo price; the selection
+          // tells the kitchen which items to prepare.
+          ...(i.comboSlug
+            ? {
+                combo_slug: i.comboSlug,
+                combo_selection: (i.comboSelection ?? []).map((s) => ({
+                  menu_item_id: s.menuItemId,
+                  size: s.size,
+                  quantity: s.quantity,
+                })),
+              }
+            : {}),
+        })),
       });
       clear();
       push({ type: 'success', title: `Order ${order.orderNumber} placed!` });
@@ -333,7 +350,7 @@ export default function Checkout() {
                     aria-invalid={!!showFieldError('postal')}
                     aria-describedby={showFieldError('postal') ? 'err-postal' : undefined}
                     className={`mt-1.5 w-full px-3.5 py-2.5 rounded-full border focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-400 transition-all text-sm ${showFieldError('postal') ? 'border-red-300 bg-red-50/50' : 'border-stone-200'}`}
-                    placeholder="e.g., 401107"
+                    placeholder="e.g., 123456"
                   />
                   {showFieldError('postal') && <p id="err-postal" className="text-xs text-red-600 mt-1">{showFieldError('postal')}</p>}
                 </div>

@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Pizza, SlidersHorizontal, ChevronDown, ArrowRight } from 'lucide-react';
+import { Pizza, SlidersHorizontal, ChevronDown, ArrowRight, Package } from 'lucide-react';
 import { useMenuItems } from '../hooks/useMenu';
 import { useCart } from '../context/CartContext';
 import { useCrusts } from '../context/CrustContext';
@@ -11,12 +11,35 @@ import { useDeliveryHours } from '../context/RestaurantContext';
 import { useHomepage } from '../context/SiteSettingsContext';
 import { ProductCard } from '@/components/shadcn-space/blocks/product-listing-01/product-card';
 import { Button } from '@/components/shadcn/button';
+import { apiGet } from '../services/api';
+
+interface ComboItem {
+  id: number;
+  menu_item_id: number;
+  name: string;
+  slug: string;
+  size: string;
+  quantity: number;
+  unit_price: number;
+}
+
+interface Combo {
+  id: number;
+  name: string;
+  slug: string;
+  description: string;
+  combo_price: number;
+  mrp_total: number;
+  savings: number;
+  items: ComboItem[];
+}
 
 const categories: { id: string; label: string; filter: (m: any) => boolean }[] = [
   { id: 'all', label: 'All', filter: () => true },
   { id: 'pizza', label: 'Pizza', filter: (m) => m.category === 'pizza' },
   { id: 'value-pizza', label: 'Value Pizza', filter: (m) => m.category === 'value-pizza' },
   { id: 'family-packs', label: 'Family Packs', filter: (m) => m.category === 'family-packs' },
+  { id: 'combos', label: 'Combos', filter: (m) => m.category === 'combos' },
   { id: 'burgers', label: 'Burgers', filter: (m) => m.category === 'burgers' },
   { id: 'momos', label: 'Momos', filter: (m) => m.category === 'momos' },
   { id: 'pasta', label: 'Pasta', filter: (m) => m.category === 'pasta' },
@@ -35,6 +58,7 @@ export default function Menu() {
   const [params] = useSearchParams();
   const initialQ = params.get('q') || '';
   const initialCat = categories.some((c) => c.id === params.get('cat')) ? params.get('cat')! : 'all';
+  const comboSlug = params.get('combo') || '';
   const [q, setQ] = useState(initialQ);
   const [cat, setCat] = useState(initialCat);
   const [dietary, setDietary] = useState<'all' | 'veg' | 'nonveg'>('all');
@@ -88,12 +112,53 @@ export default function Menu() {
     return list;
   }, [menuItems, q, cat, dietary, sort]);
 
+  // When arriving from a combo card (?combo=slug), show exactly the
+  // items that make up that combo so the customer can build it.
+  // The banner only renders when the combo actually loads; if the
+  // request fails the customer simply sees the normal menu, with no
+  // error surfaced.
+  const [combo, setCombo] = useState<Combo | null>(null);
+
+  useEffect(() => {
+    if (!comboSlug) {
+      setCombo(null);
+      return;
+    }
+    let alive = true;
+    setCombo(null);
+    apiGet<{ combo: Combo }>(`/api/combos/${encodeURIComponent(comboSlug)}`)
+      .then((res) => {
+        if (alive) setCombo(res.combo ?? null);
+      })
+      .catch(() => {
+        // Combo missing, deactivated, expired or the server is down.
+        // Fall back to the regular menu without telling the customer.
+        if (alive) setCombo(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [comboSlug]);
+
+  // Items belonging to the selected combo (matched by slug).
+  const comboItemSlugs = useMemo(
+    () => new Set((combo?.items ?? []).map((i) => i.slug)),
+    [combo],
+  );
+
+  const comboFiltered = useMemo(() => {
+    if (!combo || comboItemSlugs.size === 0) return filtered;
+    return filtered.filter((m) => comboItemSlugs.has(m.id));
+  }, [filtered, combo, comboItemSlugs]);
+
+  const displayList = combo ? comboFiltered : filtered;
+
   // Initialize visibleProduct with first product
   useEffect(() => {
-    if (filtered.length > 0 && !visibleProduct) {
-      setVisibleProduct(filtered[0]);
+    if (displayList.length > 0 && !visibleProduct) {
+      setVisibleProduct(displayList[0]);
     }
-  }, [filtered, visibleProduct]);
+  }, [displayList, visibleProduct]);
 
   const quickAdd = (item: (typeof menuItems)[number]) => {
     addItem(item, 'regular', defaultCrust, 1);
@@ -124,6 +189,49 @@ export default function Menu() {
 
   return (
     <div className="container-page py-6 sm:py-8 pb-28 lg:pb-8">
+      {/* Combo banner — shown only when the combo actually loads */}
+      {combo && (
+        <div className="mb-6 rounded-3xl border border-orange-200 bg-orange-50/60 p-5 sm:p-6">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-orange-600 text-white flex items-center justify-center shrink-0">
+              <Package size={18} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h2 className="font-heading font-bold text-lg text-zinc-900">{combo.name}</h2>
+              {combo.description && (
+                <p className="text-sm text-zinc-600 mt-0.5">{combo.description}</p>
+              )}
+              <p className="text-sm text-zinc-600 mt-2">
+                <span className="font-bold text-zinc-900">₹{combo.combo_price.toFixed(2)}</span>
+                {combo.mrp_total > combo.combo_price && (
+                  <>
+                    {' '}
+                    <span className="line-through text-zinc-400">₹{combo.mrp_total.toFixed(2)}</span>
+                    <span className="text-emerald-600 font-semibold ml-1">
+                      Save ₹{combo.savings.toFixed(2)}
+                    </span>
+                  </>
+                )}
+              </p>
+              <ul className="mt-2 space-y-0.5">
+                {combo.items.map((it) => (
+                  <li key={it.id} className="text-xs text-zinc-600">
+                    {it.quantity} × {it.name}
+                    {it.size && it.size !== 'regular' ? ` (${it.size})` : ''}
+                  </li>
+                ))}
+              </ul>
+              <Link
+                to="/r/offers"
+                className="inline-flex items-center gap-1.5 mt-3 text-sm font-semibold text-brand-700 hover:text-brand-800"
+              >
+                <ArrowRight size={14} /> All combo deals
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
         <div>
@@ -227,7 +335,7 @@ export default function Menu() {
           <option value="price-low">Price: Low to High</option>
           <option value="price-high">Price: High to Low</option>
         </select>
-        <span className="text-sm text-zinc-500 ml-auto">{filtered.length} items</span>
+        <span className="text-sm text-zinc-500 ml-auto">{displayList.length} items</span>
       </div>
 
       {/* Loading skeleton */}
@@ -252,18 +360,26 @@ export default function Menu() {
             </div>
           ))}
         </div>
-      ) : filtered.length === 0 ? (
+      ) : displayList.length === 0 ? (
         <div className="mt-8 sm:mt-12 text-center py-6 sm:py-16 bg-white rounded-3xl shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] animate-fade-up">
           <div className="w-20 h-20 mx-auto rounded-3xl bg-stone-100 flex items-center justify-center">
             <Pizza size={32} className="text-stone-300" />
           </div>
           <h3 className="font-heading font-bold text-xl sm:text-2xl mt-4 sm:mt-5">
-            {q ? `No results for "${q}"` : cat !== 'all' ? `No ${categories.find(c => c.id === cat)?.label || ''} items` : 'No items found'}
+            {combo
+              ? 'No items available for this combo'
+              : q
+                ? `No results for "${q}"`
+                : cat !== 'all'
+                  ? `No ${categories.find(c => c.id === cat)?.label || ''} items`
+                  : 'No items found'}
           </h3>
           <p className="text-sm text-zinc-500 mt-2 max-w-sm mx-auto leading-relaxed">
-            {q
-              ? 'Try a different search term or browse our full menu'
-              : cat !== 'all'
+            {combo
+              ? 'The items in this combo are temporarily unavailable'
+              : q
+                ? 'Try a different search term or browse our full menu'
+                : cat !== 'all'
                 ? 'Try a different category or view our full menu'
                 : 'We are updating our menu — check back soon'
             }
@@ -286,7 +402,7 @@ export default function Menu() {
         </div>
       ) : (
         <div ref={menuGridRef} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5 mt-6 justify-items-center">
-          {filtered.map((item) => {
+          {displayList.map((item) => {
             // Sized items need a size choice — send the user to the detail page
             // instead of silently adding a default size.
             const needsSize = !!item.priceBySize;
@@ -339,7 +455,7 @@ export default function Menu() {
       )}
 
       {/* Crust info */}
-      {!loading && filtered.length > 0 && (
+      {!loading && displayList.length > 0 && (
         <details className="mt-8 group">
           <summary className="flex items-center gap-2 px-5 py-3.5 rounded-full bg-amber-50/80 border border-amber-200/60 text-sm text-amber-800 font-medium cursor-pointer hover:bg-amber-50 transition-colors list-none [&::-webkit-details-marker]:hidden">
             <ChevronDown size={16} className="transition-transform group-open:rotate-180" />

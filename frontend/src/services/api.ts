@@ -27,7 +27,10 @@ export async function apiGet<T>(path: string, headers: Record<string, string> = 
     headers: { Accept: 'application/json', ...headers },
   });
   if (!response.ok) {
-    throw new Error(`GET ${path} failed with HTTP ${response.status}`);
+    // ApiError carries the HTTP status so callers can distinguish
+    // "not found" (404) from a server fault or network failure.
+    // The message format is unchanged for existing callers.
+    throw new ApiError(response.status, `GET ${path} failed with HTTP ${response.status}`);
   }
   return response.json() as Promise<T>;
 }

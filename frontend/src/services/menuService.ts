@@ -60,6 +60,7 @@ const CATEGORY_SLUG_MAP: Record<string, MenuCategory> = {
   'nonveg-pizzas': 'pizza',
   'value-pizza': 'value-pizza',
   'family-packs': 'family-packs',
+  'combos': 'combos',
   'pasta': 'pasta',
   'garlic-bread': 'garlic-bread',
   'tacos': 'tacos',

@@ -7,6 +7,7 @@ import { useMenuItems } from '../hooks/useMenu';
 import { useToast } from '../context/ToastContext';
 import { useDeliveryHours } from '../context/RestaurantContext';
 import { useHomepage } from '../context/SiteSettingsContext';
+import { apiPost } from '../services/api';
 
 export default function Cart() {
   const { items, updateQty, removeItem, clear, subtotal, addItem } = useCart();
@@ -18,8 +19,12 @@ export default function Cart() {
   const [removingIds, setRemovingIds] = useState<Set<string>>(new Set());
   const [promoCode, setPromoCode] = useState('');
   const [promoApplied, setPromoApplied] = useState(false);
+  const [appliedCode, setAppliedCode] = useState('');
+  const [discountAmount, setDiscountAmount] = useState(0);
 
   const totalItems = items.reduce((a, b) => a + b.quantity, 0);
+
+  const formatCurrency = (v: number) => '₹' + Number(v || 0).toFixed(2);
 
   const handleRemove = useCallback((id: string) => {
     setRemovingIds((prev) => new Set(prev).add(id));
@@ -32,16 +37,32 @@ export default function Cart() {
     .filter((m) => !items.some((it) => it.menuItemId === m.id))
     .slice(0, 4);
 
-  const applyPromo = () => {
-    if (promoCode.trim().toUpperCase() === 'FIRST20') {
-      setPromoApplied(true);
-      push({ type: 'success', title: 'Promo code applied! 20% off your order' });
-    } else {
-      push({ type: 'error', title: 'Invalid promo code' });
+  const applyPromo = async () => {
+    const code = promoCode.trim();
+    if (!code) return;
+    try {
+      const result = await apiPost<{ ok: boolean; result?: { discount: number; total: number; code: string }; error?: string }>(
+        '/api/coupons/validate',
+        { code, subtotal }
+      );
+      if (result.ok && result.result) {
+        setPromoApplied(true);
+        setAppliedCode(result.result.code || code.toUpperCase());
+        setDiscountAmount(result.result.discount);
+        push({ type: 'success', title: `Promo code applied! ${formatCurrency(result.result.discount)} off` });
+      } else {
+        setPromoApplied(false);
+        setDiscountAmount(0);
+        push({ type: 'error', title: result.error || 'Invalid promo code' });
+      }
+    } catch (e: any) {
+      setPromoApplied(false);
+      setDiscountAmount(0);
+      push({ type: 'error', title: e?.message || 'Invalid promo code' });
     }
   };
 
-  const discount = promoApplied ? Math.round(subtotal * 0.2) : 0;
+  const discount = discountAmount;
   const total = subtotal - discount;
 
   if (items.length === 0) return (
@@ -227,7 +248,7 @@ export default function Cart() {
               </div>
               {promoApplied && (
                 <p className="text-xs text-emerald-600 mt-2">
-                  ✓ FIRST20 applied — 20% discount
+                  ✓ {appliedCode} applied — {formatCurrency(discountAmount)} off
                 </p>
               )}
             </div>

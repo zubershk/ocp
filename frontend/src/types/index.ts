@@ -124,6 +124,21 @@ export interface CartItem {
   /** Order metadata passed through to the backend (not displayed). */
   size?: string;
   crust?: string;
+  /**
+   * Set when this line is a combo. The line is billed at the combo
+   * price (basePrice), and comboSelection records the items the
+   * customer picked within the combo.
+   */
+  comboSlug?: string;
+  comboSelection?: ComboSelectionItem[];
+}
+
+/** One item the customer chose inside a combo. */
+export interface ComboSelectionItem {
+  menuItemId: number;
+  name: string;
+  size: string;
+  quantity: number;
 }
 
 export interface Cart {

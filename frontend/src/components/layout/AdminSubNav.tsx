@@ -10,6 +10,8 @@ const items = [
   { to: '/admin/chats', label: 'Chats', icon: MessageCircle, group: 'Sell', roles: ['owner', 'manager', 'kitchen', 'viewer'] },
   { to: '/admin/catalog', label: 'Menu', icon: LayoutGrid, group: 'Catalog', roles: ['owner', 'manager', 'viewer'] },
   { to: '/admin/offers', label: 'Offers', icon: Tag, group: 'Marketing', roles: ['owner', 'manager', 'viewer'] },
+  { to: '/admin/combos', label: 'Combos', icon: Package, group: 'Marketing', roles: ['owner', 'manager', 'viewer'] },
+  { to: '/admin/coupons', label: 'Coupons', icon: Tag, group: 'Marketing', roles: ['owner', 'manager', 'viewer'] },
   { to: '/admin/family-packs', label: 'Packs', icon: Package, group: 'Marketing', roles: ['owner', 'manager', 'viewer'] },
   { to: '/admin/banners', label: 'Banners', icon: Image, group: 'Marketing', roles: ['owner', 'manager', 'viewer'] },
   { to: '/admin/brand', label: 'Brand', icon: Megaphone, group: 'Marketing', roles: ['owner', 'manager', 'viewer'] },
