@@ -143,7 +143,7 @@ func posStatusError(c *gin.Context, err error) {
 		errors.Is(err, services.ErrOrderOverpaid) ||
 		errors.Is(err, services.ErrOrderHasPayments) ||
 		errors.Is(err, services.ErrPaymentExceedsDue):
-		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		c.JSON(http.StatusConflict, gin.H{"error": safeError(err)})
 	default:
 		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 	}
@@ -204,9 +204,9 @@ func (h *AdminHandler) Health(c *gin.Context) {
 
 // ListCustomers returns all customers from the database for campaign runner integration.
 func (h *AdminHandler) ListCustomers(c *gin.Context) {
-	limit := 500
+	limit := 50
 	if l := c.Query("limit"); l != "" {
-		if v, err := strconv.Atoi(l); err == nil && v > 0 && v <= 2000 {
+		if v, err := strconv.Atoi(l); err == nil && v > 0 && v <= 100 {
 			limit = v
 		}
 	}
@@ -347,7 +347,7 @@ func (h *AdminHandler) BroadcastSend(c *gin.Context) {
 	}
 	if req.ImageURL != "" {
 		if err := services.ValidateExternalImageURL(req.ImageURL); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
 			return
 		}
 	}
@@ -735,7 +735,25 @@ func (h *AdminHandler) DeleteMenuItem(c *gin.Context) {
 		return
 	}
 
-	if err := h.menuService.DeleteItem(id, services.ResolveRestaurant(c.GetInt("restaurantID"))); err != nil {
+	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
+	// A menu item that is part of a combo cannot be deleted — the
+	// combo_items FK is RESTRICT on purpose so bundles are never
+	// silently emptied. Report it clearly instead of surfacing a
+	// raw foreign-key error as "internal error".
+	comboNames, err := services.NewComboService().CountMenuItemCombos(id, rid)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
+		return
+	}
+	if len(comboNames) > 0 {
+		c.JSON(http.StatusConflict, gin.H{
+			"error": fmt.Sprintf("This item is part of %d combo(s). Remove it from the combo first.", len(comboNames)),
+			"combos": comboNames,
+		})
+		return
+	}
+
+	if err := h.menuService.DeleteItem(id, rid); err != nil {
 		if err == sql.ErrNoRows {
 			c.JSON(http.StatusNotFound, gin.H{"error": "item not found"})
 			return
@@ -1270,7 +1288,7 @@ func (h *AdminHandler) ConfirmPOSOrder(c *gin.Context) {
 			return
 		}
 		if errors.Is(err, services.ErrInvalidOrderTransition) {
-			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+			c.JSON(http.StatusConflict, gin.H{"error": safeError(err)})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
@@ -1302,7 +1320,7 @@ func (h *AdminHandler) CompletePOSOrder(c *gin.Context) {
 	}
 	if err := h.posOrderService.CompleteOrder(id, c.GetInt("restaurantID"), c.GetInt("outletID")); err != nil {
 		if errors.Is(err, services.ErrOrderHasDue) || errors.Is(err, services.ErrOrderOverpaid) || errors.Is(err, services.ErrInvalidOrderTransition) || errors.Is(err, services.ErrOrderNotFound) || errors.Is(err, services.ErrOrderTenantMismatch) {
-			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+			c.JSON(http.StatusConflict, gin.H{"error": safeError(err)})
 			return
 		}
 		c.JSON(http.StatusConflict, gin.H{"error": safeError(err)})
@@ -1321,11 +1339,11 @@ func (h *AdminHandler) CancelPOSOrder(c *gin.Context) {
 	}
 	if err := h.posOrderService.CancelOrder(id, c.GetInt("restaurantID"), c.GetInt("outletID")); err != nil {
 		if errors.Is(err, services.ErrOrderHasPayments) {
-			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+			c.JSON(http.StatusConflict, gin.H{"error": safeError(err)})
 			return
 		}
 		if errors.Is(err, services.ErrInvalidOrderTransition) || errors.Is(err, services.ErrOrderNotFound) || errors.Is(err, services.ErrOrderTenantMismatch) {
-			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+			c.JSON(http.StatusConflict, gin.H{"error": safeError(err)})
 			return
 		}
 		c.JSON(http.StatusConflict, gin.H{"error": safeError(err)})
@@ -1372,11 +1390,11 @@ func (h *AdminHandler) TakePaymentPOSOrder(c *gin.Context) {
 			return
 		}
 		if errors.Is(err, services.ErrPaymentExceedsDue) {
-			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+			c.JSON(http.StatusConflict, gin.H{"error": safeError(err)})
 			return
 		}
 		if errors.Is(err, services.ErrInvalidOrderTransition) || errors.Is(err, services.ErrOrderNotFound) || errors.Is(err, services.ErrOrderTenantMismatch) {
-			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+			c.JSON(http.StatusConflict, gin.H{"error": safeError(err)})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
@@ -1565,11 +1583,11 @@ func (h *AdminHandler) UpdatePOSConfig(c *gin.Context) {
 	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
 	var cfg services.POSConfig
 	if err := c.ShouldBindJSON(&cfg); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON: " + safeError(err)})
 		return
 	}
 	if err := services.SavePOSConfig(&cfg, rid); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
 		return
 	}
 	auditLog(c, "update_pos_config", "pos_config", cfg)
@@ -1600,11 +1618,11 @@ func (h *AdminHandler) UpdatePrinterConfig(c *gin.Context) {
 	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
 	var cfg services.PrinterConfig
 	if err := c.ShouldBindJSON(&cfg); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON: " + safeError(err)})
 		return
 	}
 	if err := services.SavePrinterConfig(&cfg, rid); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
 		return
 	}
 	auditLog(c, "update_printer_config", "printer_config", cfg)
@@ -1622,7 +1640,7 @@ func (h *AdminHandler) TestPrinterConnection(c *gin.Context) {
 	var bodyCfg services.PrinterConfig
 	if err := c.ShouldBindJSON(&bodyCfg); err == nil && bodyCfg.PrinterType != "" {
 		if err := services.TestPrinterConnection(&bodyCfg, h.config.RestaurantName); err != nil {
-			c.JSON(http.StatusBadGateway, gin.H{"error": "printer test failed: " + err.Error()})
+			c.JSON(http.StatusBadGateway, gin.H{"error": "printer test failed: " + safeError(err)})
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"ok": true, "message": "test page sent to printer"})
@@ -1640,7 +1658,7 @@ func (h *AdminHandler) TestPrinterConnection(c *gin.Context) {
 		return
 	}
 	if err := services.TestPrinterConnection(cfg, h.config.RestaurantName); err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": "printer test failed: " + err.Error()})
+		c.JSON(http.StatusBadGateway, gin.H{"error": "printer test failed: " + safeError(err)})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true, "message": "test page sent to printer"})
@@ -1707,7 +1725,7 @@ func (h *AdminHandler) ManualPrintOrder(c *gin.Context) {
 		return
 	}
 	if err := services.ManualPrintOrderReceipt(order, h.config.RestaurantName); err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": "print failed: " + err.Error()})
+		c.JSON(http.StatusBadGateway, gin.H{"error": "print failed: " + safeError(err)})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true, "message": "order printed", "order_id": id})
@@ -1729,11 +1747,11 @@ func (h *AdminHandler) UpdatePrinterTemplateConfig(c *gin.Context) {
 	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
 	var cfg services.PrinterTemplateConfig
 	if err := c.ShouldBindJSON(&cfg); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON: " + safeError(err)})
 		return
 	}
 	if err := services.SavePrinterTemplateConfig(&cfg, rid); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": safeError(err)})
 		return
 	}
 	auditLog(c, "update_printer_template_config", "printer_template_config", cfg)
@@ -1741,6 +1759,201 @@ func (h *AdminHandler) UpdatePrinterTemplateConfig(c *gin.Context) {
 	services.BroadcastRealtimeFor(rid, 0, c.GetInt("orgID"), "printer.config_updated", map[string]interface{}{"restaurant_id": rid})
 	saved, _ := services.GetPrinterTemplateConfig(rid)
 	c.JSON(http.StatusOK, gin.H{"ok": true, "printer_template_config": saved})
+}
+
+// GetCoupons returns all coupons for the restaurant.
+func (h *AdminHandler) GetCoupons(c *gin.Context) {
+	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
+	coupons, err := services.NewCouponService().List(rid)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"coupons": coupons})
+}
+
+// CreateCoupon creates a new coupon.
+func (h *AdminHandler) CreateCoupon(c *gin.Context) {
+	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
+	var cfg services.CouponConfig
+	if err := c.ShouldBindJSON(&cfg); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON: " + safeError(err)})
+		return
+	}
+	cfg.RestaurantID = rid
+	coupon, err := services.NewCouponService().Create(&cfg)
+	if err != nil {
+		if ve, ok := err.(*services.CouponValidationError); ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": ve.Message})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true, "coupon": coupon})
+}
+
+// UpdateCoupon updates an existing coupon.
+func (h *AdminHandler) UpdateCoupon(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid ID"})
+		return
+	}
+	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
+	var cfg services.CouponConfig
+	if err := c.ShouldBindJSON(&cfg); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON: " + safeError(err)})
+		return
+	}
+	coupon, err := services.NewCouponService().Update(id, rid, &cfg)
+	if err != nil {
+		if ve, ok := err.(*services.CouponValidationError); ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": ve.Message})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true, "coupon": coupon})
+}
+
+// DeleteCoupon deletes a coupon.
+func (h *AdminHandler) DeleteCoupon(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid ID"})
+		return
+	}
+	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
+	if err := services.NewCouponService().Delete(id, rid); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true, "message": "coupon deleted"})
+}
+
+// ValidateCoupon checks if a coupon can be applied to a subtotal.
+func (h *AdminHandler) ValidateCoupon(c *gin.Context) {
+	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
+	var req struct {
+		Code     string  `json:"code"`
+		Subtotal float64 `json:"subtotal"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON: " + safeError(err)})
+		return
+	}
+	result, err := services.NewCouponService().Validate(req.Code, rid, req.Subtotal)
+	if err != nil {
+		if ve, ok := err.(*services.CouponValidationError); ok {
+			auditLog(c, "validate_coupon", req.Code, map[string]interface{}{"restaurant_id": rid, "subtotal": req.Subtotal, "valid": false, "reason": ve.Message})
+			c.JSON(http.StatusBadRequest, gin.H{"error": ve.Message})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
+		return
+	}
+	auditLog(c, "validate_coupon", req.Code, map[string]interface{}{"restaurant_id": rid, "subtotal": req.Subtotal, "valid": true, "discount": result.Discount})
+	c.JSON(http.StatusOK, gin.H{"ok": true, "result": result})
+}
+
+// GetMenuCatalog returns the flat, tenant-scoped menu catalog
+// (categories + items) for admin pickers. Unlike the public
+// /api/menu it resolves the restaurant from the admin session,
+// so an admin never sees another tenant's menu.
+func (h *AdminHandler) GetMenuCatalog(c *gin.Context) {
+	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
+	categories, err := h.menuService.GetCategories(rid)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
+		return
+	}
+	items, err := services.GetMenuItems(rid)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"categories": categories, "items": items})
+}
+
+// GetCombos returns every combo for the restaurant (including inactive).
+func (h *AdminHandler) GetCombos(c *gin.Context) {
+	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
+	combos, err := services.NewComboService().List(rid)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"combos": combos})
+}
+
+// CreateCombo creates a combo from a list of menu items.
+func (h *AdminHandler) CreateCombo(c *gin.Context) {
+	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
+	var cfg services.ComboConfig
+	if err := c.ShouldBindJSON(&cfg); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON: " + safeError(err)})
+		return
+	}
+	cfg.RestaurantID = rid
+	combo, err := services.NewComboService().Create(&cfg)
+	if err != nil {
+		if ve, ok := err.(*services.ComboValidationError); ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": ve.Msg})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
+		return
+	}
+	auditLog(c, "create_combo", combo.Name, map[string]interface{}{"id": combo.ID, "combo_price": combo.ComboPrice})
+	c.JSON(http.StatusCreated, gin.H{"ok": true, "combo": combo})
+}
+
+// UpdateCombo updates an existing combo and its item list.
+func (h *AdminHandler) UpdateCombo(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid ID"})
+		return
+	}
+	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
+	var cfg services.ComboConfig
+	if err := c.ShouldBindJSON(&cfg); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON: " + safeError(err)})
+		return
+	}
+	combo, err := services.NewComboService().Update(id, rid, &cfg)
+	if err != nil {
+		if ve, ok := err.(*services.ComboValidationError); ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": ve.Msg})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
+		return
+	}
+	auditLog(c, "update_combo", combo.Name, map[string]interface{}{"id": combo.ID, "combo_price": combo.ComboPrice})
+	c.JSON(http.StatusOK, gin.H{"ok": true, "combo": combo})
+}
+
+// DeleteCombo removes a combo and its constituent items.
+func (h *AdminHandler) DeleteCombo(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid ID"})
+		return
+	}
+	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
+	if err := services.NewComboService().Delete(id, rid); err != nil {
+		if ve, ok := err.(*services.ComboValidationError); ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": ve.Msg})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
+		return
+	}
+	auditLog(c, "delete_combo", strconv.Itoa(id), map[string]interface{}{"restaurant_id": rid})
+	c.JSON(http.StatusOK, gin.H{"ok": true, "message": "combo deleted"})
 }
 
 // Live chat — SaaS bot dashboard
@@ -2601,7 +2814,7 @@ func (h *AdminHandler) UpdateBotMessage(c *gin.Context) {
 		return
 	}
 	if err := botMsgSvc.UpdateMessage(key, req.MessageText, req.ImageURL, services.ResolveRestaurant(c.GetInt("restaurantID"))); err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
+		c.JSON(500, gin.H{"error": safeError(err)})
 		return
 	}
 	auditLog(c, "bot_message_updated", key, nil)
@@ -2616,7 +2829,7 @@ func (h *AdminHandler) ResetBotMessage(c *gin.Context) {
 	}
 	key := c.Param("key")
 	if err := botMsgSvc.ResetMessage(key, services.ResolveRestaurant(c.GetInt("restaurantID"))); err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
+		c.JSON(500, gin.H{"error": safeError(err)})
 		return
 	}
 	auditLog(c, "bot_message_reset", key, nil)
@@ -2630,7 +2843,7 @@ func (h *AdminHandler) ResetAllBotMessages(c *gin.Context) {
 		return
 	}
 	if err := botMsgSvc.ResetAllMessages(services.ResolveRestaurant(c.GetInt("restaurantID"))); err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
+		c.JSON(500, gin.H{"error": safeError(err)})
 		return
 	}
 	auditLog(c, "bot_messages_reset_all", "all", nil)
@@ -2710,7 +2923,7 @@ func (h *AdminHandler) UpdateBusinessConfig(c *gin.Context) {
 		return
 	}
 	if err := services.SaveBusinessConfig(&cfg, services.ResolveRestaurant(c.GetInt("restaurantID"))); err != nil {
-		c.JSON(500, gin.H{"error": "failed to save: " + err.Error()})
+		c.JSON(500, gin.H{"error": "failed to save: " + safeError(err)})
 		return
 	}
 	// Reload in all engines
@@ -2808,7 +3021,7 @@ func (h *AdminHandler) CreateCrust(c *gin.Context) {
 	`, req.Slug, req.Name, req.Description, req.PriceRegular, req.PriceMedium, req.PriceLarge, req.SortOrder,
 		services.ResolveRestaurant(c.GetInt("restaurantID"))).Scan(&id)
 	if err != nil {
-		c.JSON(500, gin.H{"error": "failed to create crust: " + err.Error()})
+		c.JSON(500, gin.H{"error": "failed to create crust: " + safeError(err)})
 		return
 	}
 	auditLog(c, "create_crust", "created crust: "+req.Name, req.Name)

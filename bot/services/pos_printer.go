@@ -421,6 +421,18 @@ func GenerateReceiptFromTemplate(order *models.Order, cfg *PrinterTemplateConfig
 				} else {
 					itemsText.WriteString(fmt.Sprintf("%-*s %3d ₹%7.2f\n", nameWidth, name, item.Quantity, price))
 				}
+				// Combo lines are billed at the combo price; print the
+				// items inside so the kitchen knows what to prepare.
+				for _, ci := range item.Combo {
+					label := fmt.Sprintf("%d x %s", ci.Quantity, ci.Name)
+					if ci.Size != "" && ci.Size != "regular" {
+						label += " (" + ci.Size + ")"
+					}
+					if len(label) > nameWidth {
+						label = label[:nameWidth-1] + "…"
+					}
+					itemsText.WriteString(fmt.Sprintf("%s%-*s\n", indent, nameWidth, label))
+				}
 			}
 			return itemsText.String()
 		}
@@ -675,6 +687,17 @@ func GenerateESCPOSReceipt(order *models.Order, cfg *PrinterConfig, brandName st
 		}
 		b.WriteString(padLeft(fmt.Sprintf("%.2f", itemPrice), 8))
 		b.WriteString(lineFeed)
+		// Combo lines: print what was picked so the kitchen can prepare it.
+		for _, ci := range item.Combo {
+			label := fmt.Sprintf("  %d x %s", ci.Quantity, ci.Name)
+			if ci.Size != "" && ci.Size != "regular" {
+				label += " (" + ci.Size + ")"
+			}
+			if len(label) > width {
+				label = label[:width-1] + "…"
+			}
+			b.WriteString(padRight(label, width) + lineFeed)
+		}
 		if item.Options != "" {
 			b.WriteString(padRight("  "+item.Options, width) + lineFeed)
 		}

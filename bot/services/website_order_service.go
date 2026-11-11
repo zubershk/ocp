@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"regexp"
@@ -14,7 +15,14 @@ import (
 	"orangecheesepizza/bot/config"
 	"orangecheesepizza/bot/database"
 	"orangecheesepizza/bot/models"
+	"html"
 )
+
+// stripHTMLTags removes HTML tags from user-provided text to prevent injection
+// in receipts and customer-facing displays.
+func stripHTMLTags(s string) string {
+	return html.UnescapeString(regexp.MustCompile(`<[^>]*>`).ReplaceAllString(s, ""))
+}
 
 // ------------------------------------------------------------------
 // Website order flow (Phase 2.2)
@@ -31,6 +39,18 @@ type WebsiteOrderItemRequest struct {
 	Size     string `json:"size,omitempty"`
 	Crust    string `json:"crust,omitempty"`
 	Quantity int    `json:"quantity"`
+	// ComboSlug marks this line as a combo. ID then points at the
+	// combo's backing menu item, and ComboSelection carries the items
+	// the customer picked (required for pick-N combos).
+	ComboSlug     string                `json:"combo_slug,omitempty"`
+	ComboSelection []ComboSelectionItem `json:"combo_selection,omitempty"`
+}
+
+// ComboSelectionItem is one item the customer chose within a combo.
+type ComboSelectionItem struct {
+	MenuItemID int    `json:"menu_item_id"`
+	Size       string `json:"size,omitempty"`
+	Quantity   int    `json:"quantity"`
 }
 
 type WebsiteCustomerRequest struct {
@@ -56,6 +76,21 @@ type WebsiteOrderLine struct {
 	Size       string  `json:"size,omitempty"`
 	Crust      string  `json:"crust,omitempty"`
 	CrustName  string  `json:"crust_name,omitempty"`
+	Quantity   int     `json:"quantity"`
+	UnitPrice  float64 `json:"unit_price"`
+	LineTotal  float64 `json:"line_total"`
+	// ComboSlug / ComboItems are set when the line is a combo. The line
+	// is billed at the combo price; ComboItems records what was chosen.
+	ComboSlug  string           `json:"combo_slug,omitempty"`
+	ComboID    int              `json:"combo_id,omitempty"`
+	ComboItems []OrderComboItem `json:"combo_items,omitempty"`
+}
+
+// OrderComboItem is one resolved item inside a combo order line.
+type OrderComboItem struct {
+	MenuItemID int     `json:"menu_item_id"`
+	Name       string  `json:"name"`
+	Size       string  `json:"size,omitempty"`
 	Quantity   int     `json:"quantity"`
 	UnitPrice  float64 `json:"unit_price"`
 	LineTotal  float64 `json:"line_total"`
@@ -195,6 +230,55 @@ func (s *WebsiteOrderService) Create(req *WebsiteOrderRequest, idempotencyKey st
 	return s.CreateFor(req, idempotencyKey, 0)
 }
 
+// priceComboLine resolves a combo order line. The line is billed at the
+// combo price; the customer's selection is validated against the combo's
+// pool and recorded so the kitchen knows what to prepare.
+func (s *WebsiteOrderService) priceComboLine(requested WebsiteOrderItemRequest, rid int) (WebsiteOrderLine, error) {
+	comboSvc := NewComboService()
+	combo, err := comboSvc.GetActiveBySlug(requested.ComboSlug, rid)
+	if err != nil {
+		if errors.Is(err, ErrComboNotFound) {
+			return WebsiteOrderLine{}, badRequest("combo is not available: %s", requested.ComboSlug)
+		}
+		return WebsiteOrderLine{}, err
+	}
+	if combo.MenuItemID == 0 {
+		return WebsiteOrderLine{}, badRequest("combo %s is not orderable", combo.Slug)
+	}
+
+	selection, err := comboSvc.ResolveSelection(combo, requested.ComboSelection)
+	if err != nil {
+		if ve, ok := err.(*ComboValidationError); ok {
+			return WebsiteOrderLine{}, badRequest("%s", ve.Msg)
+		}
+		return WebsiteOrderLine{}, err
+	}
+
+	comboItems := make([]OrderComboItem, 0, len(selection))
+	for _, sel := range selection {
+		comboItems = append(comboItems, OrderComboItem{
+			MenuItemID: sel.MenuItemID,
+			Name:       sel.Name,
+			Size:       sel.Size,
+			Quantity:   sel.Quantity,
+			UnitPrice:  sel.UnitPrice,
+			LineTotal:  sel.LineTotal,
+		})
+	}
+
+	return WebsiteOrderLine{
+		MenuItemID: combo.MenuItemID,
+		Slug:       combo.Slug,
+		Name:       combo.Name,
+		Quantity:   requested.Quantity,
+		UnitPrice:  combo.ComboPrice,
+		LineTotal:  round2(combo.ComboPrice * float64(requested.Quantity)),
+		ComboSlug:  combo.Slug,
+		ComboID:    combo.ID,
+		ComboItems: comboItems,
+	}, nil
+}
+
 func (s *WebsiteOrderService) CreateFor(req *WebsiteOrderRequest, idempotencyKey string, restaurantID int) (*WebsiteOrderResult, error) {
 	if restaurantID == 0 && !IsSingleTenantMode() {
 		return nil, ErrTenantRequired
@@ -208,7 +292,7 @@ func (s *WebsiteOrderService) CreateFor(req *WebsiteOrderRequest, idempotencyKey
 	}
 
 	// ---- validation ----
-	name := strings.TrimSpace(req.Customer.Name)
+	name := stripHTMLTags(strings.TrimSpace(req.Customer.Name))
 	if name == "" || len(name) > 200 {
 		return nil, badRequest("customer name is required")
 	}
@@ -220,7 +304,7 @@ func (s *WebsiteOrderService) CreateFor(req *WebsiteOrderRequest, idempotencyKey
 	if req.DeliveryType != OrderTypeDelivery && req.DeliveryType != OrderTypeTakeaway {
 		return nil, badRequest("delivery_type must be delivery or takeaway")
 	}
-	address := strings.TrimSpace(req.Address)
+	address := stripHTMLTags(strings.TrimSpace(req.Address))
 	if req.DeliveryType == OrderTypeDelivery && address == "" {
 		return nil, badRequest("address is required for delivery")
 	}
@@ -248,6 +332,19 @@ func (s *WebsiteOrderService) CreateFor(req *WebsiteOrderRequest, idempotencyKey
 	lines := make([]WebsiteOrderLine, 0, len(req.Items))
 	var subtotal float64
 	for _, requested := range req.Items {
+		// A combo line is billed at the combo price, not the sum of its
+		// parts. The combo is resolved from the DB and the customer's
+		// selection is validated against its pool.
+		if requested.ComboSlug != "" {
+			line, err := s.priceComboLine(requested, ridForScope)
+			if err != nil {
+				return nil, err
+			}
+			subtotal += line.LineTotal
+			lines = append(lines, line)
+			continue
+		}
+
 		item, err := s.menu.GetItemByIdentifierFor(requested.ID, ridForScope)
 		if err != nil || item == nil {
 			return nil, badRequest("unknown or unavailable menu item: %s", requested.ID)
@@ -345,7 +442,7 @@ func (s *WebsiteOrderService) CreateFor(req *WebsiteOrderRequest, idempotencyKey
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'confirmed',$13,$14,$15,$16,$17)
 		RETURNING id, created_at, access_token
 	`, orderNumber, name, phone, strings.TrimSpace(req.Customer.Email), req.DeliveryType,
-		address, strings.TrimSpace(req.Landmark), req.PaymentMethod,
+		address, stripHTMLTags(strings.TrimSpace(req.Landmark)), req.PaymentMethod,
 		subtotal, deliveryFee, discount, total, nullIfEmpty(idempotencyKey), source,
 		orderAccessToken(), rid, outletID,
 	).Scan(&orderID, &createdAt, &accessToken)
@@ -364,11 +461,23 @@ func (s *WebsiteOrderService) CreateFor(req *WebsiteOrderRequest, idempotencyKey
 			"size":  line.Size,
 			"crust": line.Crust,
 		})
+		// Combo lines additionally record WHAT was chosen, so the kitchen
+		// ticket lists the actual items to prepare.
+		comboJSON, _ := json.Marshal(line.ComboItems)
+		if line.ComboItems == nil {
+			comboJSON = []byte("[]")
+		}
+		var comboID interface{}
+		if line.ComboID > 0 {
+			comboID = line.ComboID
+		}
 		if _, err := tx.Exec(`
 			INSERT INTO order_items
-				(order_id, menu_item_id, name, quantity, unit_price, options, subtotal, restaurant_id)
-			VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8)
-		`, orderID, line.MenuItemID, line.Name, line.Quantity, line.UnitPrice, string(optionsJSON), line.LineTotal, rid); err != nil {
+				(order_id, menu_item_id, name, quantity, unit_price, options, subtotal, restaurant_id,
+				 combo_id, combo_snapshot)
+			VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,$10::jsonb)
+		`, orderID, line.MenuItemID, line.Name, line.Quantity, line.UnitPrice,
+			string(optionsJSON), line.LineTotal, rid, comboID, string(comboJSON)); err != nil {
 			return nil, fmt.Errorf("order item insert failed: %w", err)
 		}
 	}
@@ -389,7 +498,7 @@ func (s *WebsiteOrderService) CreateFor(req *WebsiteOrderRequest, idempotencyKey
 		CustomerName: name, CustomerPhone: phone,
 		Email:        strings.TrimSpace(req.Customer.Email),
 		DeliveryType: req.DeliveryType, Address: address,
-		Landmark:      strings.TrimSpace(req.Landmark),
+		Landmark:      stripHTMLTags(strings.TrimSpace(req.Landmark)),
 		PaymentMethod: req.PaymentMethod,
 		Items:         lines, Subtotal: subtotal,
 		DeliveryFee: deliveryFee, Discount: discount, Total: total,
@@ -553,7 +662,8 @@ func (s *WebsiteOrderService) getByID(orderID int) (*WebsiteOrderResult, error) 
 	o.ETAminutes = estimateETA(o.Status, o.CreatedAt)
 
 	itemRows, err := database.DB.Query(`
-		SELECT oi.menu_item_id, oi.name, COALESCE(mi.slug, ''), oi.quantity, oi.unit_price, oi.options, oi.subtotal
+		SELECT oi.menu_item_id, oi.name, COALESCE(mi.slug, ''), oi.quantity, oi.unit_price, oi.options, oi.subtotal,
+		       COALESCE(oi.combo_id, 0), COALESCE(oi.combo_snapshot, '[]'::jsonb)
 		FROM order_items oi
 		LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id
 		WHERE oi.order_id = $1 ORDER BY oi.id
@@ -571,8 +681,10 @@ func (s *WebsiteOrderService) getByID(orderID int) (*WebsiteOrderResult, error) 
 			unitPrice   float64
 			optionsJSON []byte
 			lineTotal   float64
+			comboJSON   []byte
 		)
-		if err := itemRows.Scan(&line.MenuItemID, &line.Name, &line.Slug, &quantity, &unitPrice, &optionsJSON, &lineTotal); err != nil {
+		if err := itemRows.Scan(&line.MenuItemID, &line.Name, &line.Slug, &quantity, &unitPrice, &optionsJSON, &lineTotal,
+			&line.ComboID, &comboJSON); err != nil {
 			return nil, err
 		}
 		var opts map[string]string
@@ -582,6 +694,14 @@ func (s *WebsiteOrderService) getByID(orderID int) (*WebsiteOrderResult, error) 
 		line.Quantity = quantity
 		line.UnitPrice = unitPrice
 		line.LineTotal = lineTotal
+		if line.ComboID > 0 {
+			var comboItems []OrderComboItem
+			if err := json.Unmarshal(comboJSON, &comboItems); err == nil {
+				line.ComboItems = comboItems
+			}
+			// Resolve the combo slug for display.
+			_ = database.DB.QueryRow(`SELECT slug FROM combos WHERE id = $1`, line.ComboID).Scan(&line.ComboSlug)
+		}
 		o.Items = append(o.Items, line)
 	}
 	if err := itemRows.Err(); err != nil {

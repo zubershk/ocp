@@ -387,7 +387,8 @@ func (s *OrderService) GetOrderByID(id, restaurantID int) (*models.Order, error)
 
 	// Load order items
 	rows, err := database.DB.Query(`
-		SELECT id, order_id, menu_item_id, name, quantity, unit_price, options, subtotal, created_at, COALESCE(addons_snapshot, '[]'::jsonb)
+		SELECT id, order_id, menu_item_id, name, quantity, unit_price, options, subtotal, created_at,
+		       COALESCE(addons_snapshot, '[]'::jsonb), COALESCE(combo_snapshot, '[]'::jsonb)
 		FROM order_items WHERE order_id = $1
 	`, order.ID)
 	if err != nil {
@@ -397,12 +398,13 @@ func (s *OrderService) GetOrderByID(id, restaurantID int) (*models.Order, error)
 
 	for rows.Next() {
 		var item models.OrderItem
-		var optionsJSON, addonsJSON []byte
-		if err := rows.Scan(&item.ID, &item.OrderID, &item.MenuItemID, &item.Name, &item.Quantity, &item.UnitPrice, &optionsJSON, &item.Subtotal, &item.CreatedAt, &addonsJSON); err != nil {
+		var optionsJSON, addonsJSON, comboJSON []byte
+		if err := rows.Scan(&item.ID, &item.OrderID, &item.MenuItemID, &item.Name, &item.Quantity, &item.UnitPrice, &optionsJSON, &item.Subtotal, &item.CreatedAt, &addonsJSON, &comboJSON); err != nil {
 			return nil, err
 		}
 		json.Unmarshal(optionsJSON, &item.Options)
 		json.Unmarshal(addonsJSON, &item.Addons)
+		json.Unmarshal(comboJSON, &item.Combo)
 		var opts map[string]string
 		if json.Unmarshal(optionsJSON, &opts) == nil {
 			item.Size = opts["size"]

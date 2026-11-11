@@ -341,6 +341,110 @@ func (h *ApiHandler) GetConfig(c *gin.Context) {
 	}})
 }
 
+// GetCombos handles GET /api/combos — the customer-facing combo list.
+// Only active, in-window combos with at least one item are returned.
+// Tenant-scoped: the restaurant is resolved server-side, never from
+// the request body.
+func (h *ApiHandler) GetCombos(c *gin.Context) {
+	rid, errReq := services.RequireRestaurant(c)
+	if errReq != nil {
+		if database.DB == nil && rid == 0 {
+			rid = 0
+		} else {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "tenant required"})
+			return
+		}
+	}
+	combos, err := services.NewComboService().ListActive(rid)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load combos"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"combos": combos})
+}
+
+// GetComboBySlug handles GET /api/combos/:slug — a single combo for the
+// combo detail view. Returns 404 when the combo does not exist (or is
+// no longer active/expired) and 500 only on a genuine server fault, so
+// the client can tell "gone" apart from "temporarily unavailable".
+func (h *ApiHandler) GetComboBySlug(c *gin.Context) {
+	rid, errReq := services.RequireRestaurant(c)
+	if errReq != nil {
+		if database.DB == nil && rid == 0 {
+			rid = 0
+		} else {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "tenant required"})
+			return
+		}
+	}
+	combo, err := services.NewComboService().GetActiveBySlug(c.Param("slug"), rid)
+	if err != nil {
+		if errors.Is(err, services.ErrComboNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "combo not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load combo"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"combo": combo})
+}
+
+// GetCoupons handles GET /api/coupons — the customer-facing coupon list.
+// Only active, non-expired coupons are returned so the offers page can
+// show codes customers can actually redeem. Usage counters and limits
+// stay server-side.
+func (h *ApiHandler) GetCoupons(c *gin.Context) {
+	rid, errReq := services.RequireRestaurant(c)
+	if errReq != nil {
+		if database.DB == nil && rid == 0 {
+			rid = 0
+		} else {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "tenant required"})
+			return
+		}
+	}
+	coupons, err := services.NewCouponService().ListActive(rid)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load coupons"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"coupons": coupons})
+}
+
+// ValidateCoupon handles POST /api/coupons/validate — customer-facing
+// coupon check against the cart subtotal. Returns the discount that
+// would be applied. No usage counter is incremented here; that happens
+// when the order is placed.
+func (h *ApiHandler) ValidateCoupon(c *gin.Context) {
+	rid, errReq := services.RequireRestaurant(c)
+	if errReq != nil {
+		if database.DB == nil && rid == 0 {
+			rid = 0
+		} else {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "tenant required"})
+			return
+		}
+	}
+	var req struct {
+		Code     string  `json:"code"`
+		Subtotal float64 `json:"subtotal"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON"})
+		return
+	}
+	result, err := services.NewCouponService().Validate(req.Code, rid, req.Subtotal)
+	if err != nil {
+		if ve, ok := err.(*services.CouponValidationError); ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": ve.Message})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to validate coupon"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true, "result": result})
+}
+
 func parsePGArray(s string) []string {
 	if len(s) < 2 {
 		return []string{}

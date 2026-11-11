@@ -150,6 +150,20 @@ type OrderItem struct {
 	LineTotal float64 `json:"line_total"`
 	// Frozen addon snapshot (name/price per addon) for dense bill lines.
 	Addons []OrderAddon `json:"addons,omitempty"`
+	// Frozen combo breakdown (name/size/qty per item) for combo lines.
+	// The line itself is billed at the combo price; this records WHAT
+	// was picked so the kitchen ticket lists the actual items.
+	Combo []OrderComboItem `json:"combo,omitempty"`
+}
+
+// OrderComboItem is one item inside a combo order line.
+type OrderComboItem struct {
+	MenuItemID int     `json:"menu_item_id"`
+	Name       string  `json:"name"`
+	Size       string  `json:"size,omitempty"`
+	Quantity   int     `json:"quantity"`
+	UnitPrice  float64 `json:"unit_price"`
+	LineTotal  float64 `json:"line_total"`
 }
 
 // OrderAddon is one entry of order_items.addons_snapshot.
