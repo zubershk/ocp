@@ -452,7 +452,8 @@ func (s *OrderService) GetOrderItemsByOrderIDs(ids []int) (map[int][]models.Orde
 		args[i] = id
 	}
 	rows, err := database.DB.Query(`
-		SELECT id, order_id, menu_item_id, name, quantity, unit_price, options, subtotal, created_at, COALESCE(addons_snapshot, '[]'::jsonb)
+		SELECT id, order_id, menu_item_id, name, quantity, unit_price, options, subtotal, created_at,
+		       COALESCE(addons_snapshot, '[]'::jsonb), COALESCE(combo_snapshot, '[]'::jsonb)
 		FROM order_items WHERE order_id IN (`+strings.Join(placeholders, ",")+`)
 	`, args...)
 	if err != nil {
@@ -461,12 +462,13 @@ func (s *OrderService) GetOrderItemsByOrderIDs(ids []int) (map[int][]models.Orde
 	defer rows.Close()
 	for rows.Next() {
 		var item models.OrderItem
-		var optionsJSON, addonsJSON []byte
-		if err := rows.Scan(&item.ID, &item.OrderID, &item.MenuItemID, &item.Name, &item.Quantity, &item.UnitPrice, &optionsJSON, &item.Subtotal, &item.CreatedAt, &addonsJSON); err != nil {
+		var optionsJSON, addonsJSON, comboJSON []byte
+		if err := rows.Scan(&item.ID, &item.OrderID, &item.MenuItemID, &item.Name, &item.Quantity, &item.UnitPrice, &optionsJSON, &item.Subtotal, &item.CreatedAt, &addonsJSON, &comboJSON); err != nil {
 			continue
 		}
 		_ = json.Unmarshal(optionsJSON, &item.Options)
 		_ = json.Unmarshal(addonsJSON, &item.Addons)
+		_ = json.Unmarshal(comboJSON, &item.Combo)
 		var opts map[string]string
 		if json.Unmarshal(optionsJSON, &opts) == nil {
 			item.Size = opts["size"]

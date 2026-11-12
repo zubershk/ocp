@@ -786,6 +786,15 @@ func (s *WebsiteOrderService) notifyWhatsApp(order *WebsiteOrderResult) WhatsApp
 			label += " + " + line.CrustName
 		}
 		fmt.Fprintf(&b, "%d × %s\n", line.Quantity, label)
+		// Combo lines are billed at the combo price; list what was picked
+		// inside so the kitchen knows what to prepare.
+		for _, ci := range line.ComboItems {
+			ciLabel := ci.Name
+			if ci.Size != "" && ci.Size != "regular" {
+				ciLabel += " - " + strings.Title(ci.Size)
+			}
+			fmt.Fprintf(&b, "   - %d × %s\n", ci.Quantity, ciLabel)
+		}
 		if i == 14 && len(order.Items) > 15 {
 			fmt.Fprintf(&b, "...and %d more\n", len(order.Items)-15)
 			break
