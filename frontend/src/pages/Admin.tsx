@@ -19,6 +19,7 @@ import { Card, CardContent } from '@/components/shadcn/card';
 import { Input } from '@/components/shadcn/input';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/shadcn/table';
 import { Skeleton } from '@/components/shadcn/skeleton';
+import { wrapLabel } from '@/lib/utils';
 
 const NEXT_STATUSES: Record<string, { to: string; label: string; primary?: boolean }[]> = {
   placed: [{ to: 'confirmed', label: 'Confirm', primary: true }, { to: 'cancelled', label: 'Cancel' }],
@@ -56,6 +57,8 @@ const STATUS_META: Record<string, { cls: string; dot: string }> = {
 
 interface AdminOrderItem {
   name: string; size?: string; crust?: string; quantity: number; unit_price: number; line_total: number;
+  /** Present on combo lines: what was picked inside the combo. */
+  combo?: { name: string; size?: string; quantity: number }[];
 }
 interface AdminOrder {
   id: number; order_number: string; status: string; customer_name: string; customer_phone: string;
@@ -203,18 +206,28 @@ export default function Admin() {
           const name = (it.name || '');
           const price = it.line_total || it.subtotal || 0;
           const qty = it.quantity || 0;
+          const lines: string[] = [];
           if (name.length > nameWidth) {
-            const lines: string[] = [];
-            lines.push(`${name.slice(0, nameWidth).padEnd(nameWidth)} ${String(qty).padStart(3)} ₹${price.toFixed(2).padStart(7)}`);
-            let remaining = name.slice(nameWidth);
-            while (remaining.length > 0) {
-              const chunk = remaining.slice(0, nameWidth);
+            // Wrap on word boundaries so long dish names are never cut
+            // mid-word.
+            const wrapped = wrapLabel(name, nameWidth);
+            lines.push(`${wrapped[0].padEnd(nameWidth)} ${String(qty).padStart(3)} ₹${price.toFixed(2).padStart(7)}`);
+            for (const chunk of wrapped.slice(1)) {
               lines.push(`${indent}${chunk}`);
-              remaining = remaining.slice(chunk.length);
             }
-            return lines.join('\n');
+          } else {
+            lines.push(`${name.padEnd(nameWidth)} ${String(qty).padStart(3)} ₹${price.toFixed(2).padStart(7)}`);
           }
-          return `${name.padEnd(nameWidth)} ${String(qty).padStart(3)} ₹${price.toFixed(2).padStart(7)}`;
+          // Combo lines are billed at the combo price; list what was
+          // picked inside so the kitchen ticket shows the actual items.
+          const combo = Array.isArray(it.combo) ? it.combo : [];
+          for (const ci of combo) {
+            const label = `${ci.quantity} x ${ci.name}${ci.size && ci.size !== 'regular' ? ` (${ci.size})` : ''}`;
+            for (const chunk of wrapLabel(label, Math.max(8, nameWidth - indent.length))) {
+              lines.push(`${indent}${chunk}`);
+            }
+          }
+          return lines.join('\n');
         }).join('\n');
 
         return text
@@ -286,9 +299,19 @@ export default function Admin() {
       } else {
         // Fallback default layout
         const items = order.items || [];
-        const itemRows = items.map((it: any) =>
-          `<tr><td>${it.name}</td><td style="text-align:center">${it.quantity}</td><td style="text-align:right">₹${Number(it.line_total || it.subtotal || 0).toFixed(2)}</td></tr>`
-        ).join('');
+        const itemRows = items.map((it: any) => {
+          const row = `<tr><td>${it.name}</td><td style="text-align:center">${it.quantity}</td><td style="text-align:right">₹${Number(it.line_total || it.subtotal || 0).toFixed(2)}</td></tr>`;
+          // Combo lines: list what was picked inside the combo.
+          const combo = Array.isArray(it.combo) ? it.combo : [];
+          if (combo.length === 0) return row;
+          const detail = combo
+            .map((ci: any) => {
+              const label = `${ci.quantity} x ${ci.name}${ci.size && ci.size !== 'regular' ? ` (${ci.size})` : ''}`;
+              return `<tr><td colspan="3" style="padding-left:8px">${label}</td></tr>`;
+            })
+            .join('');
+          return row + detail;
+        }).join('');
         bodyHtml = `
           <div style="text-align:center;font-weight:bold;font-size:16px;margin:4px 0;">${template?.header || restaurantName}</div>
           ${restaurantAddress ? `<div style="text-align:center;font-size:9px;margin:2px 0;">${restaurantAddress}</div>` : ''}
@@ -786,9 +809,21 @@ ${bodyHtml}
 
                     <div className="mt-4 space-y-1.5">
                       {(o.items ?? []).slice(0, 4).map((it, i) => (
-                        <div key={i} className="flex justify-between gap-3 text-[13px] leading-tight">
-                          <span className="text-foreground truncate"><span className="font-semibold tabular-nums">{it.quantity}×</span> {it.name}{it.size ? ` · ${it.size}` : ''}{it.crust ? ` · ${it.crust}` : ''}</span>
-                          <span className="font-semibold tabular-nums shrink-0">₹{Number(it.line_total).toLocaleString('en-IN')}</span>
+                        <div key={i}>
+                          <div className="flex justify-between gap-3 text-[13px] leading-tight">
+                            <span className="text-foreground truncate"><span className="font-semibold tabular-nums">{it.quantity}×</span> {it.name}{it.size ? ` · ${it.size}` : ''}{it.crust ? ` · ${it.crust}` : ''}</span>
+                            <span className="font-semibold tabular-nums shrink-0">₹{Number(it.line_total).toLocaleString('en-IN')}</span>
+                          </div>
+                          {/* Combo lines: what was picked inside the combo. */}
+                          {it.combo && it.combo.length > 0 && (
+                            <ul className="mt-0.5 pl-3 border-l border-border space-y-0.5">
+                              {it.combo.map((ci, j) => (
+                                <li key={j} className="text-[11px] text-muted-foreground">
+                                  <span className="font-semibold tabular-nums">{ci.quantity}×</span> {ci.name}{ci.size && ci.size !== 'regular' ? ` · ${ci.size}` : ''}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
                         </div>
                       ))}
                       {(o.items?.length ?? 0) > 4 && <div className="text-xs text-muted-foreground">+{o.items!.length - 4} more items</div>}
