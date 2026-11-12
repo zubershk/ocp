@@ -94,12 +94,27 @@ export default function ReceiptModal({
             <hr className="my-2 border-dashed" />
             <ul className="space-y-1">
               {(order.items ?? []).map((it, i) => (
-                <li key={i} className="flex justify-between tabular-nums">
-                  <span>
-                    {it.quantity}× {it.name}
-                    {it.size ? ` (${it.size})` : ''}
-                  </span>
-                  <span>{formatCurrency(it.line_total, currencySymbol)}</span>
+                <li key={i}>
+                  <div className="flex justify-between tabular-nums">
+                    <span>
+                      {it.quantity}× {it.name}
+                      {it.size ? ` (${it.size})` : ''}
+                    </span>
+                    <span>{formatCurrency(it.line_total, currencySymbol)}</span>
+                  </div>
+                  {/* Combo lines: list what was picked inside the combo. */}
+                  {it.combo && it.combo.length > 0 && (
+                    <ul className="mt-0.5 pl-3 border-l border-zinc-200 space-y-0.5">
+                      {it.combo.map((ci, j) => (
+                        <li key={j} className="flex justify-between tabular-nums text-xs text-zinc-500">
+                          <span>
+                            {ci.quantity}× {ci.name}
+                            {ci.size && ci.size !== 'regular' ? ` (${ci.size})` : ''}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </li>
               ))}
             </ul>

@@ -9,6 +9,7 @@ import { menuService } from '../services/menuService';
 import { useRestaurantPhone, useDeliveryHours } from '../context/RestaurantContext';
 import { useGsapFadeIn } from '../hooks/useGsap';
 import { useToast } from '../context/ToastContext';
+import { ComboBreakdown, toComboPicks } from '../components/ComboBreakdown';
 
 const labels: Record<string, string> = { placed: 'Order Placed', confirmed: 'Confirmed', out_for_delivery: 'Out for Delivery', delivered: 'Delivered', completed: 'Completed', cancelled: 'Cancelled' };
 const orderSteps = ['placed', 'confirmed', 'out_for_delivery', 'delivered'];
@@ -304,10 +305,17 @@ export default function Order() {
           <h3 className="font-heading font-semibold text-sm text-zinc-500 uppercase tracking-wide">Items</h3>
           <div className="mt-3 space-y-2.5">
             {order.items.map((it, idx) => (
-              <div key={idx} className="flex items-center gap-3">
+              <div key={idx} className="flex items-start gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-sm truncate">{it.name}{it.size ? ` · ${it.size}` : ''}{it.crust && it.crust !== 'tossed' ? ` + ${it.crust}` : ''}</div>
                   <div className="text-xs text-zinc-500">Qty {it.quantity} × ₹{it.unitPrice}</div>
+                  {/* Combo lines: show WHAT was picked inside the combo. */}
+                  {it.comboItems && it.comboItems.length > 0 && (
+                    <ComboBreakdown
+                      picks={toComboPicks(it.comboItems)}
+                      className="mt-1.5 pl-3 border-l-2 border-orange-200"
+                    />
+                  )}
                 </div>
                 <div className="font-semibold text-sm shrink-0">₹{it.lineTotal}</div>
               </div>

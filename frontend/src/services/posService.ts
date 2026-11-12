@@ -40,6 +40,8 @@ export interface PosOrderItem {
   line_total: number;
   subtotal?: number;
   addons?: { group_id: number; menu_item_id: number; name: string; price: number }[];
+  /** Present on combo lines: what was picked inside the combo. */
+  combo?: { name: string; size?: string; quantity: number }[];
 }
 
 export interface PosOrder {

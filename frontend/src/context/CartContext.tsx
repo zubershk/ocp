@@ -37,7 +37,14 @@ export function CartProvider({ children }: { children: ReactNode }) {
   // recorded so the kitchen knows what to prepare — they are not priced
   // separately, which is what caused the "charging individual price" bug.
   const addCombo = (combo: { slug: string; name: string; image: string; price: number }, selection: ComboSelectionItem[], qty: number) => {
-    const id = `combo-${combo.slug}`;
+    // Two combos with DIFFERENT mixes must stay separate lines: the
+    // kitchen needs to know what each one contains. The same mix
+    // repeated still merges into one line with a higher quantity.
+    const mixKey = [...selection]
+      .sort((a, b) => a.menuItemId - b.menuItemId || a.size.localeCompare(b.size))
+      .map((s) => `${s.menuItemId}:${s.size}x${s.quantity}`)
+      .join('|');
+    const id = `combo-${combo.slug}-${mixKey}`;
     const unit = combo.price;
     setItems(prev => {
       const ex = prev.find(p=>p.id===id);

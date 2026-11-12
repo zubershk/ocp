@@ -70,6 +70,9 @@ interface ApiOrderResponse {
       quantity: number;
       unit_price: number;
       line_total: number;
+      /** Present on combo lines: what was picked inside the combo. */
+      combo_slug?: string;
+      combo_items?: { name: string; size?: string; quantity: number }[];
     }[];
     events?: {
       event_type: string;
@@ -105,6 +108,9 @@ export type OrderView = {
     quantity: number;
     unitPrice: number;
     lineTotal: number;
+    /** Present on combo lines: what was picked inside the combo. */
+    comboSlug?: string;
+    comboItems?: { name: string; size?: string; quantity: number }[];
   }[];
   events?: {
     eventType: string;
@@ -140,6 +146,8 @@ function toView(raw: ApiOrderResponse['order'], notification?: ApiOrderResponse[
       quantity: it.quantity,
       unitPrice: it.unit_price,
       lineTotal: it.line_total,
+      comboSlug: it.combo_slug || undefined,
+      comboItems: it.combo_items ?? undefined,
     })),
     events: raw.events?.map((e) => ({
       eventType: e.event_type,
