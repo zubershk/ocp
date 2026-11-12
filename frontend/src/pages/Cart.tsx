@@ -8,6 +8,8 @@ import { useToast } from '../context/ToastContext';
 import { useDeliveryHours } from '../context/RestaurantContext';
 import { useHomepage } from '../context/SiteSettingsContext';
 import { apiPost } from '../services/api';
+import { ComboBreakdown } from '../components/ComboBreakdown';
+import { ItemThumb } from '../components/ItemThumb';
 
 export default function Cart() {
   const { items, updateQty, removeItem, clear, subtotal, addItem } = useCart();
@@ -109,20 +111,28 @@ export default function Cart() {
                 `}
                 style={{ animationDelay: `${i * 40}ms` }}
               >
-                <img
+                <ItemThumb
                   src={it.image}
                   alt=""
-                  width={80}
-                  height={80}
-                  loading="lazy"
-                  decoding="async"
-                  className="w-20 h-20 rounded-xl object-cover bg-orange-50 shrink-0"
+                  className="w-20 h-20 rounded-xl"
+                  iconSize={26}
                 />
                 <div className="flex-1 min-w-0">
                   <h3 className="text-sm font-semibold text-zinc-900 leading-tight">{it.name}</h3>
                   <div className="text-xs text-zinc-400 mt-1">
                     ₹{it.basePrice} each · All prices include tax
                   </div>
+                  {/* Combo lines: show WHAT was picked inside the combo. */}
+                  {it.comboSelection && it.comboSelection.length > 0 && (
+                    <ComboBreakdown
+                      picks={it.comboSelection.map((s) => ({
+                        name: s.name,
+                        size: s.size,
+                        quantity: s.quantity,
+                      }))}
+                      className="mt-2 pl-3 border-l-2 border-orange-200"
+                    />
+                  )}
                   <div className="flex items-center gap-2 mt-3">
                     <button
                       onClick={() => updateQty(it.id, it.quantity - 1)}
@@ -165,14 +175,11 @@ export default function Cart() {
                   >
                     <Link to={`/r/menu/item/${s.id}`} aria-label={`View ${s.name}`}>
                       <div className="overflow-hidden shrink-0">
-                        <img
+                        <ItemThumb
                           src={s.image}
                           alt=""
-                          width={64}
-                          height={64}
-                          loading="lazy"
-                          decoding="async"
-                          className="w-16 h-16 object-cover bg-orange-50"
+                          className="w-16 h-16"
+                          iconSize={22}
                         />
                       </div>
                     </Link>

@@ -6,6 +6,8 @@ import { useAuth } from '../context/AuthContext';
 import { orderService } from '../services/orderService';
 import { useToast } from '../context/ToastContext';
 import AddressAutocomplete from '../components/ui/AddressAutocomplete';
+import { ComboBreakdown } from '../components/ComboBreakdown';
+import { ItemThumb } from '../components/ItemThumb';
 import { useDeliveryHours, useRestaurantAddress, usePrimaryOutlet } from '../context/RestaurantContext';
 import { useHomepage } from '../context/SiteSettingsContext';
 
@@ -419,18 +421,26 @@ export default function Checkout() {
             <ul className="mt-4 space-y-3">
               {items.map((it) => (
                 <li key={it.id} className="flex gap-3 text-sm">
-                  <img
+                  <ItemThumb
                     src={it.image}
                     alt=""
-                    width={48}
-                    height={48}
-                    loading="lazy"
-                    decoding="async"
-                    className="w-12 h-12 rounded-xl object-cover bg-orange-50 shrink-0"
+                    className="w-12 h-12 rounded-xl"
+                    iconSize={18}
                   />
                   <div className="flex-1 min-w-0">
                     <div className="font-medium text-zinc-900 leading-tight line-clamp-1">{it.name}</div>
                     <div className="text-xs text-zinc-400 mt-0.5">Qty {it.quantity} × ₹{it.basePrice}</div>
+                    {/* Combo lines: show WHAT was picked inside the combo. */}
+                    {it.comboSelection && it.comboSelection.length > 0 && (
+                      <ComboBreakdown
+                        picks={it.comboSelection.map((s) => ({
+                          name: s.name,
+                          size: s.size,
+                          quantity: s.quantity,
+                        }))}
+                        className="mt-1 pl-3 border-l-2 border-orange-200"
+                      />
+                    )}
                   </div>
                   <div className="font-semibold text-zinc-900 shrink-0">₹{it.subtotal}</div>
                 </li>
