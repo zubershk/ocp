@@ -1,5 +1,6 @@
-import { Link, NavLink } from 'react-router-dom';
+import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { ShoppingCart, Menu, X, Pizza, User, ChevronRight, Search } from 'lucide-react';
+import { createPortal } from 'react-dom';
 import { useCart } from '../../context/CartContext';
 import { useAuth } from '../../context/AuthContext';
 import { useRestaurantName } from '../../context/RestaurantContext';
@@ -23,6 +24,20 @@ export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const prevCountRef = useRef(count);
   const [badgePulse, setBadgePulse] = useState(false);
+  const [query, setQuery] = useState('');
+  const navigate = useNavigate();
+
+  // Search hands the query to the menu page, which prefilters and shows
+  // results. Keeping it a real form means it works with Enter on mobile
+  // (where there is no room for a desktop-style dropdown).
+  const submitSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    const q = query.trim();
+    if (!q) return;
+    navigate(`/r/menu?q=${encodeURIComponent(q)}`);
+    setQuery('');
+    setOpen(false);
+  };
 
   useEffect(() => {
     if (count > prevCountRef.current) {
@@ -86,18 +101,29 @@ export default function Navbar() {
             </Link>
 
             {/* Search bar (Zomato style) */}
-            <div className="hidden md:flex flex-1 max-w-md mx-4">
+            <form onSubmit={submitSearch} className="hidden md:flex flex-1 min-w-0 max-w-md mx-4" role="search">
               <div className="relative flex items-center w-full bg-stone-100 rounded-full overflow-hidden">
                 <div className="pl-4">
                   <Search size={16} className="text-zinc-400" />
                 </div>
                 <input
-                  type="text"
+                  type="search"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
                   placeholder="Search for a dish..."
-                  className="flex-1 py-2.5 px-3 text-sm text-zinc-900 placeholder:text-zinc-400 bg-transparent outline-none"
+                  aria-label="Search the menu"
+                  className="flex-1 min-w-0 py-2.5 px-3 text-sm text-zinc-900 placeholder:text-zinc-400 bg-transparent outline-none"
                 />
+                {query.trim() && (
+                  <button
+                    type="submit"
+                    className="mr-1.5 px-3 py-1.5 rounded-full bg-brand-600 text-white text-xs font-semibold shrink-0"
+                  >
+                    Search
+                  </button>
+                )}
               </div>
-            </div>
+            </form>
 
             {/* Desktop nav */}
             <nav className="hidden lg:flex items-center gap-1">
@@ -175,14 +201,16 @@ export default function Navbar() {
         </div>
       </header>
 
-      {/* Mobile slide-in overlay */}
-      {open && (
-        <div className="fixed inset-0 z-50 lg:hidden">
-          {/* Backdrop */}
-          <div
-            className="absolute inset-0 bg-black/20 backdrop-blur-sm animate-fade-in"
-            onClick={() => setOpen(false)}
-          />
+      {/* Mobile slide-in overlay. Rendered into <body> so the panel is
+          always sized to the viewport, never to a transformed ancestor. */}
+      {open &&
+        createPortal(
+          <div className="fixed inset-0 z-50 lg:hidden">
+            {/* Backdrop */}
+            <div
+              className="absolute inset-0 bg-black/20 backdrop-blur-sm animate-fade-in"
+              onClick={() => setOpen(false)}
+            />
 
           {/* Panel */}
           <div className="absolute right-0 top-0 h-full w-80 max-w-[85vw] bg-white shadow-2xl animate-slide-in-right">
@@ -199,8 +227,33 @@ export default function Navbar() {
                 </button>
               </div>
 
+              {/* Search — the desktop bar is hidden on mobile */}
+              <form onSubmit={submitSearch} className="px-4 pt-4" role="search">
+                <div className="relative flex items-center bg-stone-100 rounded-full overflow-hidden">
+                  <div className="pl-3.5">
+                    <Search size={16} className="text-zinc-400" />
+                  </div>
+                  <input
+                    type="search"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="Search for a dish..."
+                    aria-label="Search the menu"
+                    className="flex-1 min-w-0 py-3 px-3 text-sm text-zinc-900 placeholder:text-zinc-400 bg-transparent outline-none"
+                  />
+                  {query.trim() && (
+                    <button
+                      type="submit"
+                      className="mr-1.5 px-3 py-2 rounded-full bg-brand-600 text-white text-xs font-semibold shrink-0"
+                    >
+                      Go
+                    </button>
+                  )}
+                </div>
+              </form>
+
               {/* Nav links */}
-              <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
+              <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto overscroll-contain">
                 {navItems.map((n) => (
                   <NavLink
                     key={n.to}
@@ -261,8 +314,9 @@ export default function Navbar() {
               </div>
             </div>
           </div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
     </>
   );
 }

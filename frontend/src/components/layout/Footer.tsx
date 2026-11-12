@@ -35,7 +35,7 @@ export default function Footer() {
           </div>
           <Link
             to="/r/menu"
-            className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-white text-brand-600 font-bold text-sm hover:bg-stone-50 transition-all shadow-[0_4px_6px_-1px_rgba(0,0,0,0.2)] shrink-0"
+            className="inline-flex items-center justify-center gap-2 w-full sm:w-auto px-6 py-3 sm:py-2.5 rounded-full bg-white text-brand-600 font-bold text-sm hover:bg-stone-50 transition-all shadow-[0_4px_6px_-1px_rgba(0,0,0,0.2)] shrink-0 touch-target"
           >
             Order Now <ArrowRight size={14} />
           </Link>
@@ -64,29 +64,29 @@ export default function Footer() {
               </p>
             )}
             {/* Social links */}
-            <div className="flex items-center gap-3 mt-5">
+            <div className="flex items-center gap-2.5 mt-5">
               {social.instagram && (
-                <a href={social.instagram?.startsWith('https://') ? social.instagram : '#'} target="_blank" rel="noopener noreferrer" className="w-9 h-9 rounded-full bg-zinc-800 flex items-center justify-center hover:bg-brand-600 transition-colors" aria-label="Instagram">
+                <a href={social.instagram?.startsWith('https://') ? social.instagram : '#'} target="_blank" rel="noopener noreferrer" className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center hover:bg-brand-600 transition-colors" aria-label="Instagram">
                   <Globe size={16} className="text-zinc-400 hover:text-white" />
                 </a>
               )}
               {social.facebook && (
-                <a href={social.facebook?.startsWith('https://') ? social.facebook : '#'} target="_blank" rel="noopener noreferrer" className="w-9 h-9 rounded-full bg-zinc-800 flex items-center justify-center hover:bg-brand-600 transition-colors" aria-label="Facebook">
+                <a href={social.facebook?.startsWith('https://') ? social.facebook : '#'} target="_blank" rel="noopener noreferrer" className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center hover:bg-brand-600 transition-colors" aria-label="Facebook">
                   <Globe size={16} className="text-zinc-400 hover:text-white" />
                 </a>
               )}
               {social.twitter && (
-                <a href={social.twitter?.startsWith('https://') ? social.twitter : '#'} target="_blank" rel="noopener noreferrer" className="w-9 h-9 rounded-full bg-zinc-800 flex items-center justify-center hover:bg-brand-600 transition-colors" aria-label="Twitter">
+                <a href={social.twitter?.startsWith('https://') ? social.twitter : '#'} target="_blank" rel="noopener noreferrer" className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center hover:bg-brand-600 transition-colors" aria-label="Twitter">
                   <Globe size={16} className="text-zinc-400 hover:text-white" />
                 </a>
               )}
               {social.youtube && (
-                <a href={social.youtube?.startsWith('https://') ? social.youtube : '#'} target="_blank" rel="noopener noreferrer" className="w-9 h-9 rounded-full bg-zinc-800 flex items-center justify-center hover:bg-brand-600 transition-colors" aria-label="YouTube">
+                <a href={social.youtube?.startsWith('https://') ? social.youtube : '#'} target="_blank" rel="noopener noreferrer" className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center hover:bg-brand-600 transition-colors" aria-label="YouTube">
                   <Globe size={16} className="text-zinc-400 hover:text-white" />
                 </a>
               )}
               {social.whatsapp && (
-                <a href={social.whatsapp?.startsWith('https://') ? social.whatsapp : '#'} target="_blank" rel="noopener noreferrer" className="w-9 h-9 rounded-full bg-zinc-800 flex items-center justify-center hover:bg-green-600 transition-colors" aria-label="WhatsApp">
+                <a href={social.whatsapp?.startsWith('https://') ? social.whatsapp : '#'} target="_blank" rel="noopener noreferrer" className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center hover:bg-green-600 transition-colors" aria-label="WhatsApp">
                   <MessageCircle size={16} className="text-zinc-400 hover:text-white" />
                 </a>
               )}
@@ -127,12 +127,16 @@ export default function Footer() {
             <ul className="space-y-3 text-sm">
               {outlets[0]?.address_lines?.map((line: string, i: number) => (
                 <li key={i} className="flex gap-2">
-                  {i === 0 && <MapPin size={14} className="mt-0.5 shrink-0" style={{ color: brand.primaryColor }} />}
+                  {i === 0 ? (
+                    <MapPin size={14} className="mt-0.5 shrink-0" style={{ color: brand.primaryColor }} />
+                  ) : (
+                    <span className="w-[14px] shrink-0" aria-hidden="true" />
+                  )}
                   <a
                     href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((outlets[0]?.address_lines ?? []).join(' '))}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-zinc-500 leading-relaxed hover:text-white transition-colors"
+                    className="text-zinc-500 leading-relaxed hover:text-white transition-colors break-words"
                   >
                     {line}
                   </a>
@@ -185,7 +189,7 @@ export default function Footer() {
               <h4 className="text-white font-heading font-semibold mb-4 text-sm">{footer.otherOutletsTitle}</h4>
               <div className="text-sm space-y-2 text-zinc-500">
                 {outlets.slice(1).map((o) => (
-                  <div key={o.id}>
+                  <div key={o.id} className="break-words">
                     <span className="font-medium text-zinc-300">{o.name}:</span>{' '}
                     {o.phones?.map((p: string) => (
                       <a
@@ -220,18 +224,18 @@ export default function Footer() {
           <div className="grid md:grid-cols-2 gap-8">
             <div>
               <h4 className="text-white font-heading font-semibold mb-4 text-sm">{footer.trustTitle}</h4>
-              <div className="flex flex-wrap gap-3">
+              <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2.5 sm:gap-3">
                 <span className="inline-flex items-center gap-2 bg-zinc-800/60 text-zinc-300 px-4 py-2.5 rounded-xl text-xs font-medium">
-                  <ShieldCheck size={14} className="text-emerald-400" /> Secure Checkout
+                  <ShieldCheck size={14} className="text-emerald-400 shrink-0" /> Secure Checkout
                 </span>
                 <span className="inline-flex items-center gap-2 bg-zinc-800/60 text-zinc-300 px-4 py-2.5 rounded-xl text-xs font-medium">
-                  <Truck size={14} className="text-brand-400" /> Free Delivery
+                  <Truck size={14} className="text-brand-400 shrink-0" /> Free Delivery
                 </span>
                 <span className="inline-flex items-center gap-2 bg-zinc-800/60 text-zinc-300 px-4 py-2.5 rounded-xl text-xs font-medium">
-                  <Star size={14} className="text-amber-400" /> 4.7 Rated
+                  <Star size={14} className="text-amber-400 shrink-0" /> 4.7 Rated
                 </span>
                 <span className="inline-flex items-center gap-2 bg-zinc-800/60 text-zinc-300 px-4 py-2.5 rounded-xl text-xs font-medium">
-                  <CreditCard size={14} className="text-blue-400" /> Cash & UPI
+                  <CreditCard size={14} className="text-blue-400 shrink-0" /> Cash &amp; UPI
                 </span>
               </div>
             </div>
@@ -263,10 +267,11 @@ export default function Footer() {
           </div>
         </div>
 
-        {/* Back to top */}
+        {/* Back to top — hidden on phones, where it would sit on top of
+            the content and collide with the sticky mobile action bars. */}
         <button
           onClick={scrollToTop}
-          className="fixed bottom-6 right-6 z-40 w-11 h-11 rounded-full bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700 flex items-center justify-center transition-all shadow-lg group"
+          className="hidden sm:flex fixed bottom-6 right-6 z-40 w-11 h-11 rounded-full bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700 items-center justify-center transition-all shadow-lg group"
           aria-label="Back to top"
         >
           <Pizza size={18} className="transition-transform duration-500 group-hover:rotate-[360deg] group-hover:scale-110" />
