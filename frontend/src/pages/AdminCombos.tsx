@@ -64,7 +64,6 @@ type DraftItem = {
   image_url: string;
   size: string;
   quantity: number;
-  max_qty: number;
   unit_price: number;
 };
 
@@ -178,37 +177,47 @@ export default function AdminCombos() {
 
   // Live MRP of the bundle, from the same size pricing the storefront uses.
   // For a pick-N combo the customer chooses N items, so the MRP shown is
-  // the cheapest valid selection — matching what the backend computes.
+  // the value of the starting mix — mirroring what the backend computes
+  // (pool quantities, clamped to the limit, topped up from the cheapest).
   const draftLimit = Math.max(0, parseInt(form.selection_limit, 10) || 0);
   const draftMrp = useMemo(() => {
     if (draftLimit === 0) {
       return form.items.reduce((sum, it) => sum + it.unit_price * it.quantity, 0);
     }
-    const units: number[] = [];
+    const mix = new Map<string, { qty: number; price: number }>();
+    let remaining = draftLimit;
     for (const it of form.items) {
-      const max = it.max_qty > 0 ? it.max_qty : it.quantity;
-      for (let i = 0; i < (max > 0 ? max : 1); i++) units.push(it.unit_price);
+      if (remaining <= 0) break;
+      const qty = Math.min(it.quantity, remaining);
+      if (qty <= 0) continue;
+      remaining -= qty;
+      mix.set(`${it.menu_item_id}:${it.size}`, { qty, price: it.unit_price });
     }
-    if (units.length < draftLimit) {
-      return form.items.reduce((sum, it) => sum + it.unit_price * it.quantity, 0);
+    if (remaining > 0) {
+      // Top up from the cheapest pool items so the mix is complete.
+      const cheapest = [...form.items].sort((a, b) => a.unit_price - b.unit_price);
+      for (const it of cheapest) {
+        const key = `${it.menu_item_id}:${it.size}`;
+        while (remaining > 0) {
+          const cur = mix.get(key);
+          if (cur) cur.qty += 1;
+          else mix.set(key, { qty: 1, price: it.unit_price });
+          remaining -= 1;
+        }
+      }
     }
-    units.sort((a, b) => a - b);
-    return units.slice(0, draftLimit).reduce((a, b) => a + b, 0);
+    let total = 0;
+    for (const v of mix.values()) total += v.qty * v.price;
+    return total;
   }, [form.items, draftLimit]);
 
   const draftPrice = parseFloat(form.combo_price);
   const validDraftPrice = Number.isFinite(draftPrice) && draftPrice > 0;
   const draftSavings = validDraftPrice ? Math.max(0, draftMrp - draftPrice) : 0;
 
-  // The pool must be able to satisfy the selection limit.
-  const poolCapacity = form.items.reduce(
-    (sum, it) => sum + (it.max_qty > 0 ? it.max_qty : it.quantity),
-    0,
-  );
-  const limitSatisfied = draftLimit === 0 || poolCapacity >= draftLimit;
-
-  const canSave =
-    form.name.trim().length > 0 && form.items.length > 0 && validDraftPrice && limitSatisfied;
+  // There is no per-item cap, so any pool can satisfy any limit — the
+  // customer may take every unit from a single item.
+  const canSave = form.name.trim().length > 0 && form.items.length > 0 && validDraftPrice;
 
   const filteredMenu = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -245,7 +254,6 @@ export default function AdminCombos() {
             image_url: item.image_url,
             size,
             quantity: 1,
-            max_qty: 1,
             unit_price: priceFor(item, size),
           },
         ],
@@ -257,16 +265,7 @@ export default function AdminCombos() {
     setForm((f) => ({
       ...f,
       items: f.items.map((it, i) =>
-        i === index ? { ...it, quantity: Math.max(1, Math.min(20, quantity)) } : it,
-      ),
-    }));
-  };
-
-  const setMaxQty = (index: number, maxQty: number) => {
-    setForm((f) => ({
-      ...f,
-      items: f.items.map((it, i) =>
-        i === index ? { ...it, max_qty: Math.max(1, Math.min(20, maxQty)) } : it,
+        i === index ? { ...it, quantity: Math.max(0, Math.min(20, quantity)) } : it,
       ),
     }));
   };
@@ -291,7 +290,6 @@ export default function AdminCombos() {
         menu_item_id: it.menu_item_id,
         size: it.size,
         quantity: it.quantity,
-        max_qty: it.max_qty,
       })),
     };
     if (editingId) {
@@ -318,7 +316,6 @@ export default function AdminCombos() {
         image_url: it.image_url,
         size: it.size,
         quantity: it.quantity,
-        max_qty: it.max_qty > 0 ? it.max_qty : it.quantity,
         unit_price: it.unit_price,
       })),
     });
@@ -464,48 +461,28 @@ export default function AdminCombos() {
                             <div className="text-sm font-medium text-zinc-900 truncate">{it.name}</div>
                             <div className="text-xs text-zinc-400">
                               {it.size} · {money(it.unit_price)} each
-                              {draftLimit > 0 ? ` · max ${it.max_qty}` : ''}
+                              {draftLimit > 0 ? ` · up to ${draftLimit}` : ''}
                             </div>
                           </div>
-                          {draftLimit > 0 ? (
-                            <div className="flex items-center gap-1 shrink-0">
+                          <div className="flex items-center gap-2 shrink-0">
+                            <div className="flex items-center gap-1">
                               <label
-                                htmlFor={`maxqty-${index}`}
+                                htmlFor={`qty-${index}`}
                                 className="text-[10px] text-zinc-400 uppercase tracking-wide"
                               >
-                                Max
+                                Qty
                               </label>
                               <input
-                                id={`maxqty-${index}`}
+                                id={`qty-${index}`}
                                 type="number"
-                                min="1"
+                                min="0"
                                 max="20"
-                                value={it.max_qty}
-                                onChange={(e) => setMaxQty(index, parseInt(e.target.value, 10) || 1)}
+                                value={it.quantity}
+                                onChange={(e) => setQty(index, parseInt(e.target.value, 10) || 0)}
                                 className="w-14 px-2 py-1 rounded-md border border-stone-200 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500/30"
                               />
                             </div>
-                          ) : (
-                            <div className="flex items-center gap-1 shrink-0">
-                              <button
-                                type="button"
-                                onClick={() => setQty(index, it.quantity - 1)}
-                                className="w-7 h-7 rounded-full border border-stone-200 text-sm font-bold text-zinc-600 hover:bg-stone-50"
-                                aria-label={`Decrease ${it.name} quantity`}
-                              >
-                                &minus;
-                              </button>
-                              <span className="w-6 text-center text-sm font-semibold">{it.quantity}</span>
-                              <button
-                                type="button"
-                                onClick={() => setQty(index, it.quantity + 1)}
-                                className="w-7 h-7 rounded-full border border-stone-200 text-sm font-bold text-zinc-600 hover:bg-stone-50"
-                                aria-label={`Increase ${it.name} quantity`}
-                              >
-                                +
-                              </button>
-                            </div>
-                          )}
+                          </div>
                           <button
                             type="button"
                             onClick={() => removeItem(index)}
@@ -566,20 +543,18 @@ export default function AdminCombos() {
                   </div>
                 </div>
                 <p className="text-[11px] text-zinc-400 -mt-2">
-                  Pick Limit <span className="font-semibold">0</span> = fixed bundle (all items
-                  included). Set <span className="font-semibold">4</span> and the customer chooses
-                  any 4 from the pool below. Max per item is set on each row.
+                  Pick Limit <span className="font-semibold">0</span> = fixed bundle (the customer
+                  gets the exact mix below). Set <span className="font-semibold">4</span> and the
+                  customer picks any 4 from the pool — they can take 2 onion + 1 tomato + 1 corn and
+                  still pay the combo price. There is no per-item limit: any item can be taken up to
+                  the full pick limit.{' '}
+                  <span className="font-semibold">Qty</span> is the combo&apos;s standard mix — the
+                  customer starts from a blank slate and can apply this mix in one tap.
                 </p>
-                {!limitSatisfied && (
-                  <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-                    The pool only allows {poolCapacity} item(s) but the limit is {draftLimit}. Raise
-                    a Max value or lower the limit.
-                  </p>
-                )}
 
                 <div className="rounded-xl bg-stone-50 border border-stone-100 p-3 text-sm">
                   <div className="flex justify-between text-zinc-600">
-                    <span>{draftLimit > 0 ? 'Cheapest valid pick (MRP)' : 'Items total (MRP)'}</span>
+                    <span>{draftLimit > 0 ? 'Standard mix value (MRP)' : 'Items total (MRP)'}</span>
                     <span className="font-semibold text-zinc-900">{money(draftMrp)}</span>
                   </div>
                   <div className="flex justify-between text-zinc-600 mt-1">
@@ -797,10 +772,7 @@ export default function AdminCombos() {
                     <ul className="mt-2 pl-15 space-y-0.5">
                       {combo.items.map((it) => (
                         <li key={it.id} className="text-xs text-zinc-500 truncate">
-                          {(combo.selection_limit ?? 0) > 0
-                            ? `max ${it.max_qty > 0 ? it.max_qty : it.quantity} × `
-                            : `${it.quantity} × `}
-                          {it.name}
+                          {it.quantity} × {it.name}
                           {it.size !== 'regular' ? ` (${it.size})` : ''}
                         </li>
                       ))}

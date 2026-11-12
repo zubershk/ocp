@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS combo_items (
     combo_id    INT NOT NULL REFERENCES combos(id) ON DELETE CASCADE,
     menu_item_id INT NOT NULL REFERENCES menu_items(id) ON DELETE RESTRICT,
     size        VARCHAR(10) NOT NULL DEFAULT 'regular',
-    quantity    INT NOT NULL DEFAULT 1 CHECK (quantity > 0),
+    quantity    INT NOT NULL DEFAULT 1 CHECK (quantity >= 0),
     created_at  TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 

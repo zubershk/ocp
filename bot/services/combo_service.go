@@ -49,6 +49,12 @@ type Combo struct {
 	// RequiresSelection is true when the customer must choose from the
 	// pool before the combo can be added to the cart.
 	RequiresSelection bool `json:"requires_selection"`
+	// DefaultSelection is the starting mix for a pick-N combo: the
+	// pool's configured quantities, clamped to the selection limit.
+	// The storefront opens the picker on this mix so the customer can
+	// redistribute it (e.g. 2 onion + 1 tomato + 1 corn) instead of
+	// starting from an empty picker.
+	DefaultSelection []ComboSelection `json:"default_selection,omitempty"`
 }
 
 // ComboItem is one constituent of a combo.
@@ -63,8 +69,10 @@ type ComboItem struct {
 	ImageURL string  `json:"image_url"`
 	Size     string  `json:"size"`
 	Quantity int     `json:"quantity"`
-	// MaxQty caps how many units of this pool item may be selected
-	// in pick-N mode. 0 means "use Quantity".
+	// MaxQty is the EFFECTIVE cap on how many units of this pool item
+	// may be selected. It is derived, never admin-set: in pick-N mode
+	// it equals the combo's selection limit (there is no per-item cap),
+	// and in a fixed bundle it equals the configured quantity.
 	MaxQty    int     `json:"max_qty"`
 	UnitPrice float64 `json:"unit_price"`
 	LineTotal float64 `json:"line_total"`
@@ -92,8 +100,11 @@ type ComboConfig struct {
 type ComboItemIn struct {
 	MenuItemID int    `json:"menu_item_id"`
 	Size       string `json:"size"`
-	Quantity   int    `json:"quantity"`
-	// MaxQty caps selectable units of this pool item in pick-N mode.
+	// Quantity is the item's share of the combo's starting mix.
+	Quantity int `json:"quantity"`
+	// MaxQty is accepted for backwards compatibility but IGNORED.
+	// There is no per-item cap: the customer may take any number of
+	// any pool item, bounded only by the combo's selection limit.
 	MaxQty int `json:"max_qty"`
 }
 
@@ -340,14 +351,39 @@ func comboUnitPrice(size string, pRegular, pMedium, pLarge float64) float64 {
 //
 // For a fixed bundle the MRP is the sum of the pool at the configured
 // quantities. For a pick-N combo the customer chooses N units, so the
-// MRP shown is the cheapest valid selection — that is the true "value
-// of the bundle" floor the combo price is compared against.
+// MRP shown is the value of the starting mix — that is the true "value
+// of the bundle" the combo price is compared against.
+//
+// It also normalises each pool item's effective cap, which is derived
+// from the selection limit rather than set per item.
 func (c *Combo) applyTotals() {
 	c.RequiresSelection = c.SelectionLimit > 0
 
+	// There is no per-item cap: the effective cap on any single pool
+	// item is the combo's total selection limit.
+	for i := range c.Items {
+		if c.SelectionLimit > 0 {
+			c.Items[i].MaxQty = c.SelectionLimit
+		} else {
+			c.Items[i].MaxQty = c.Items[i].Quantity
+			if c.Items[i].MaxQty <= 0 {
+				c.Items[i].MaxQty = 1
+			}
+		}
+	}
+
 	var mrp float64
 	if c.RequiresSelection {
-		mrp = c.cheapestSelectionTotal()
+		// MRP is the value of the mix the customer starts from. Using
+		// the default selection (rather than the theoretical cheapest
+		// pick) keeps the advertised saving tied to what the customer
+		// actually sees in the picker.
+		for _, sel := range c.buildDefaultSelection() {
+			mrp += sel.LineTotal
+		}
+		if mrp == 0 {
+			mrp = c.cheapestSelectionTotal()
+		}
 	} else {
 		for _, it := range c.Items {
 			mrp += it.LineTotal
@@ -358,17 +394,19 @@ func (c *Combo) applyTotals() {
 	if c.Savings < 0 {
 		c.Savings = 0
 	}
+	c.DefaultSelection = c.buildDefaultSelection()
 }
 
 // cheapestSelectionTotal returns the lowest-price valid selection of
-// SelectionLimit units from the pool, honouring each item's MaxQty cap.
+// SelectionLimit units from the pool. There is no per-item cap, so any
+// single pool item can fill the whole selection.
 func (c *Combo) cheapestSelectionTotal() float64 {
 	type unit struct {
 		price float64
 	}
 	var units []unit
 	for _, it := range c.Items {
-		max := it.MaxQty
+		max := c.SelectionLimit
 		if max <= 0 {
 			max = it.Quantity
 		}
@@ -444,6 +482,9 @@ func (s *ComboService) validate(cfg *ComboConfig, rid int) error {
 	if cfg.SelectionLimit < 0 {
 		return comboBadRequest("selection limit cannot be negative")
 	}
+	if cfg.SelectionLimit > 50 {
+		return comboBadRequest("selection limit cannot be greater than 50")
+	}
 
 	seen := map[string]bool{}
 	for i := range cfg.Items {
@@ -451,17 +492,34 @@ func (s *ComboService) validate(cfg *ComboConfig, rid int) error {
 		if it.MenuItemID <= 0 {
 			return comboBadRequest("menu_item_id is required for every combo item")
 		}
-		if it.Quantity <= 0 {
+		// In a pick-N combo the default quantity may be 0: the item is
+		// offered in the pool but is not part of the starting mix.
+		// In a fixed bundle every pool item is included, so the quantity
+		// is at least 1.
+		if it.Quantity < 0 {
+			return comboBadRequest("quantity for a combo item cannot be negative")
+		}
+		if it.Quantity == 0 && cfg.SelectionLimit == 0 {
 			it.Quantity = 1
 		}
 		if it.Quantity > 20 {
 			return comboBadRequest("quantity for a combo item must be between 1 and 20")
 		}
-		if it.MaxQty <= 0 {
+		// There is NO per-item cap: the customer may take any number of
+		// any pool item, bounded only by the combo's selection limit.
+		// MaxQty is derived here so the client knows the effective cap.
+		if cfg.SelectionLimit > 0 {
+			it.MaxQty = cfg.SelectionLimit
+		} else {
 			it.MaxQty = it.Quantity
+			if it.MaxQty <= 0 {
+				it.MaxQty = 1
+			}
 		}
-		if it.MaxQty > 20 {
-			return comboBadRequest("max quantity for a combo item must be between 1 and 20")
+		// The starting mix can never exceed the effective cap, or the
+		// picker would open on an invalid state.
+		if it.Quantity > it.MaxQty {
+			it.Quantity = it.MaxQty
 		}
 		it.Size = strings.ToLower(strings.TrimSpace(it.Size))
 		if it.Size == "" {
@@ -488,18 +546,10 @@ func (s *ComboService) validate(cfg *ComboConfig, rid int) error {
 		}
 	}
 
-	// A pick-N combo needs the pool to be able to satisfy the limit.
-	if cfg.SelectionLimit > 0 {
-		available := 0
-		for _, it := range cfg.Items {
-			available += it.MaxQty
-		}
-		if available < cfg.SelectionLimit {
-			return comboBadRequest(
-				"selection limit of %d cannot be met — the pool only allows %d item(s)",
-				cfg.SelectionLimit, available)
-		}
-	}
+	// A pick-N combo can always satisfy its limit: there is no per-item
+	// cap, so the customer may take every unit from a single pool item.
+	// The pool only needs to contain at least one item, which is
+	// enforced above.
 	return nil
 }
 
@@ -770,8 +820,10 @@ type ComboSelection struct {
 //
 // For a fixed bundle (SelectionLimit == 0) the pool is taken as defined
 // and any customer selection is ignored. For a pick-N combo the customer
-// must select exactly SelectionLimit units, every selected item must be
-// in the pool, and no item may exceed its MaxQty.
+// must select exactly SelectionLimit units and every selected item must
+// be in the pool. There is NO per-item cap: the customer may take any
+// number of any pool item (e.g. all 4 units as onion), bounded only by
+// the total selection limit.
 //
 // The returned prices are the LIVE menu prices, so the receipt shows what
 // the items were worth; the customer is still billed the combo price.
@@ -832,14 +884,6 @@ func (s *ComboService) ResolveSelection(combo *Combo, selection []ComboSelection
 	out := make([]ComboSelection, 0, len(picked))
 	for key, qty := range picked {
 		it := pool[key]
-		maxQty := it.MaxQty
-		if maxQty <= 0 {
-			maxQty = it.Quantity
-		}
-		if maxQty > 0 && qty > maxQty {
-			return nil, comboBadRequest(
-				"cannot select %d × %s (maximum %d)", qty, it.Name, maxQty)
-		}
 		out = append(out, ComboSelection{
 			MenuItemID: it.MenuItemID,
 			Name:       it.Name,
@@ -850,6 +894,102 @@ func (s *ComboService) ResolveSelection(combo *Combo, selection []ComboSelection
 		})
 	}
 	return out, nil
+}
+
+// buildDefaultSelection returns the mix the customer starts from in a
+// pick-N combo: the pool's configured quantities, clamped so the
+// total never exceeds the selection limit.
+//
+// This lets the storefront open the picker on a sensible, valid
+// starting point (the "1 of each" bundle) that the customer can then
+// redistribute — e.g. swap a capsicum for a second onion — without
+// the picker starting empty or in an invalid state.
+//
+// If the configured quantities add up to less than the limit the mix is
+// topped up from the pool (cheapest first) so the picker always opens
+// on a COMPLETE selection the customer can accept as-is.
+//
+// For a fixed bundle it returns the pool exactly as configured.
+func (c *Combo) buildDefaultSelection() []ComboSelection {
+	out := make([]ComboSelection, 0, len(c.Items))
+	if c.SelectionLimit == 0 {
+		for _, it := range c.Items {
+			out = append(out, ComboSelection{
+				MenuItemID: it.MenuItemID,
+				Name:       it.Name,
+				Size:       it.Size,
+				Quantity:   it.Quantity,
+				UnitPrice:  it.UnitPrice,
+				LineTotal:  it.LineTotal,
+			})
+		}
+		return out
+	}
+
+	remaining := c.SelectionLimit
+	for _, it := range c.Items {
+		if remaining <= 0 {
+			break
+		}
+		qty := it.Quantity
+		if qty > remaining {
+			qty = remaining
+		}
+		if qty <= 0 {
+			continue
+		}
+		remaining -= qty
+		out = append(out, ComboSelection{
+			MenuItemID: it.MenuItemID,
+			Name:       it.Name,
+			Size:       it.Size,
+			Quantity:   qty,
+			UnitPrice:  it.UnitPrice,
+			LineTotal:  round2(it.UnitPrice * float64(qty)),
+		})
+	}
+
+	// Top up to the limit so the picker opens on a complete selection.
+	// There is no per-item cap, so the cheapest pool items fill the gap
+	// first — which also keeps the advertised MRP a conservative floor.
+	if remaining > 0 {
+		type poolKey struct {
+			id   int
+			size string
+		}
+		// Index the mix by pool key so the top-up extends an existing
+		// entry instead of duplicating it.
+		idx := make(map[poolKey]int, len(out))
+		for i, sel := range out {
+			idx[poolKey{sel.MenuItemID, sel.Size}] = i
+		}
+
+		pool := make([]ComboItem, len(c.Items))
+		copy(pool, c.Items)
+		sort.Slice(pool, func(i, j int) bool { return pool[i].UnitPrice < pool[j].UnitPrice })
+
+		for _, it := range pool {
+			key := poolKey{it.MenuItemID, it.Size}
+			for remaining > 0 {
+				if i, ok := idx[key]; ok {
+					out[i].Quantity++
+					out[i].LineTotal = round2(out[i].UnitPrice * float64(out[i].Quantity))
+				} else {
+					idx[key] = len(out)
+					out = append(out, ComboSelection{
+						MenuItemID: it.MenuItemID,
+						Name:       it.Name,
+						Size:       it.Size,
+						Quantity:   1,
+						UnitPrice:  it.UnitPrice,
+						LineTotal:  round2(it.UnitPrice),
+					})
+				}
+				remaining--
+			}
+		}
+	}
+	return out
 }
 
 // MenuItemInUseError reports that a menu item still belongs to one or
