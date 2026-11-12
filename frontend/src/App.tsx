@@ -70,11 +70,14 @@ function PageShell({ children, className = '' }: { children: React.ReactNode; cl
     <AnimatePresence mode="popLayout">
       <motion.div
         key={className || 'default'}
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -10 }}
+        // Opacity only: a `transform` here (even translateY(0)) would make
+        // this element the containing block for `position: fixed`
+        // descendants, sending modals and mobile menus off-screen.
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
         transition={{ duration: 0.25, ease: 'easeOut' }}
-        className={`page-enter ${className}`}
+        className={className}
       >
         {children}
       </motion.div>

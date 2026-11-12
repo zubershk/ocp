@@ -415,6 +415,10 @@
 
   .container-page { @apply mx-auto max-w-7xl px-4 sm:px-6 lg:px-8; }
 
+  /* Alias kept for pages that reference `page-container`. Without this
+     the class resolves to nothing and the content runs edge-to-edge. */
+  .page-container { @apply mx-auto max-w-7xl px-4 sm:px-6 lg:px-8; }
+
   .section { @apply py-12 sm:py-16 lg:py-20; }
   .section-sm { @apply py-8 sm:py-10 lg:py-12; }
 
@@ -485,13 +489,18 @@
   100% { background-position: -200% 0; }
 }
 
+/* The resting state MUST end on `transform: none`. Any other transform
+   (even translateY(0)) makes this element the containing block for
+   `position: fixed` descendants, which sends modals and mobile menus
+   off-screen because they resolve against the page shell instead of
+   the viewport. */
 @keyframes page-fade-in {
   from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  to { opacity: 1; transform: none; }
 }
 
 @keyframes page-fade-out {
-  from { opacity: 1; transform: translateY(0); }
+  from { opacity: 1; transform: none; }
   to { opacity: 0; transform: translateY(-4px); }
 }
 
