@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { Search, X, TrendingUp, Clock, ArrowRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { ItemThumb } from '../ItemThumb';
 
 interface SearchAutocompleteProps {
   items: { id: string; name: string; category: string; price: number; image: string; isPopular?: boolean }[];
@@ -109,7 +110,7 @@ export default function SearchAutocomplete({ items, onSelect }: SearchAutocomple
                   onMouseDown={() => handleSelect(item)}
                   className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-stone-50 transition-colors text-left"
                 >
-                  <img src={item.image} alt="" className="w-10 h-10 rounded-xl object-cover bg-orange-50" />
+                  <ItemThumb src={item.image} alt="" className="w-10 h-10 rounded-xl" iconSize={16} />
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium text-zinc-900 truncate">{item.name}</div>
                     <div className="text-xs text-zinc-500 capitalize">{item.category.replace('-', ' ')}</div>
@@ -155,7 +156,7 @@ export default function SearchAutocomplete({ items, onSelect }: SearchAutocomple
                       onMouseDown={() => handleSelect(item)}
                       className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-stone-50 transition-colors text-left"
                     >
-                      <img src={item.image} alt="" className="w-10 h-10 rounded-xl object-cover bg-orange-50" />
+                      <ItemThumb src={item.image} alt="" className="w-10 h-10 rounded-xl" iconSize={16} />
                       <div className="flex-1 min-w-0">
                         <div className="text-sm font-medium text-zinc-900 truncate">{item.name}</div>
                         <div className="text-xs text-zinc-500">₹{item.price}</div>

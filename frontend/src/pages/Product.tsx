@@ -1,11 +1,12 @@
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useState, useRef } from 'react';
-import { Minus, Plus, ArrowLeft, Flame, Clock, BadgeCheck, ChevronRight, ShoppingCart, Zap, Check } from 'lucide-react';
+import { Minus, Plus, ArrowLeft, Flame, Clock, BadgeCheck, ChevronRight, ShoppingCart, Zap, Check, Package } from 'lucide-react';
 import { useCrusts } from '../context/CrustContext';
 import { useMenuItems } from '../hooks/useMenu';
 import { useCart } from '../context/CartContext';
 import { useToast } from '../context/ToastContext';
 import ImageZoom from '../components/ui/ImageZoom';
+import { ItemThumb } from '../components/ItemThumb';
 import StarRating from '../components/ui/StarRating';
 import { useDeliveryHours } from '../context/RestaurantContext';
 import { useHomepage } from '../context/SiteSettingsContext';
@@ -89,18 +90,26 @@ export default function Product() {
         {/* Image */}
         <div className="animate-fade-in">
           <div className="relative overflow-hidden rounded-3xl bg-orange-50 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)]">
-            <img
-              src={item.image}
-              alt=""
-              className="absolute inset-0 w-full h-full object-cover"
-              onLoad={() => setImgLoaded(true)}
-            />
-            {!imgLoaded && <div className="absolute inset-0 skeleton rounded-none" />}
-            <ImageZoom
-              src={item.image}
-              alt={item.name}
-              className={`w-full h-[280px] lg:h-[420px] transition-opacity duration-300 ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
-            />
+            {item.image ? (
+              <>
+                <img
+                  src={item.image}
+                  alt=""
+                  className="absolute inset-0 w-full h-full object-cover"
+                  onLoad={() => setImgLoaded(true)}
+                />
+                {!imgLoaded && <div className="absolute inset-0 skeleton rounded-none" />}
+                <ImageZoom
+                  src={item.image}
+                  alt={item.name}
+                  className={`w-full h-[280px] lg:h-[420px] transition-opacity duration-300 ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
+                />
+              </>
+            ) : (
+              <div className="w-full h-[280px] lg:h-[420px] flex items-center justify-center bg-orange-50 text-orange-300">
+                <Package size={44} />
+              </div>
+            )}
             {/* Badges */}
             <div className="absolute top-4 left-4 flex flex-wrap gap-2">
               <span className={`text-[11px] font-bold px-3 py-1.5 rounded-full backdrop-blur-sm ${item.dietary === 'veg' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'}`}>
@@ -289,14 +298,11 @@ export default function Product() {
               <div key={s.id} className="bg-white rounded-3xl shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] overflow-hidden group flex flex-col card-lift stagger-child">
                 <Link to={`/r/menu/item/${s.id}`} aria-label={`View ${s.name}`} className="block">
                   <div className="overflow-hidden">
-                    <img
+                    <ItemThumb
                       src={s.image}
                       alt={s.name}
-                      width={400}
-                      height={300}
-                      loading="lazy"
-                      decoding="async"
-                      className="w-full h-28 object-cover group-hover:scale-105 transition-transform duration-500 ease-out bg-orange-50"
+                      className="w-full h-28 group-hover:scale-105 transition-transform duration-500 ease-out"
+                      iconSize={26}
                     />
                   </div>
                 </Link>
