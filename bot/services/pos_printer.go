@@ -387,36 +387,12 @@ func GenerateReceiptFromTemplate(order *models.Order, cfg *PrinterTemplateConfig
 					price = item.Subtotal
 				}
 				if len(name) > nameWidth {
-					breakPoint := nameWidth
-					if breakPoint < len(name) && name[breakPoint] != ' ' && name[breakPoint-1] != ' ' {
-						for i := breakPoint - 1; i >= 0; i-- {
-							if name[i] == ' ' {
-								breakPoint = i
-								break
-							}
-						}
-					}
-					firstPart := strings.TrimRight(name[:breakPoint], " ")
-					remaining := strings.TrimLeft(name[breakPoint:], " ")
-					itemsText.WriteString(fmt.Sprintf("%-*s %3d ₹%7.2f\n", nameWidth, firstPart, item.Quantity, price))
-					for len(remaining) > 0 {
-						chunk := remaining
-						if len(chunk) > nameWidth {
-							cp := nameWidth
-							if cp < len(chunk) && chunk[cp] != ' ' && chunk[cp-1] != ' ' {
-								for i := cp - 1; i >= 0; i-- {
-									if chunk[i] == ' ' {
-										cp = i
-										break
-									}
-								}
-							}
-							itemsText.WriteString(fmt.Sprintf("%s%s\n", indent, strings.TrimRight(chunk[:cp], " ")))
-							remaining = strings.TrimLeft(chunk[cp:], " ")
-						} else {
-							itemsText.WriteString(fmt.Sprintf("%s%s\n", indent, remaining))
-							remaining = ""
-						}
+					// Wrap on word boundaries so long dish names are
+					// never cut mid-word.
+					wrapped := wrapLabel(name, nameWidth)
+					itemsText.WriteString(fmt.Sprintf("%-*s %3d ₹%7.2f\n", nameWidth, wrapped[0], item.Quantity, price))
+					for _, chunk := range wrapped[1:] {
+						itemsText.WriteString(fmt.Sprintf("%s%s\n", indent, chunk))
 					}
 				} else {
 					itemsText.WriteString(fmt.Sprintf("%-*s %3d ₹%7.2f\n", nameWidth, name, item.Quantity, price))
@@ -428,10 +404,11 @@ func GenerateReceiptFromTemplate(order *models.Order, cfg *PrinterTemplateConfig
 					if ci.Size != "" && ci.Size != "regular" {
 						label += " (" + ci.Size + ")"
 					}
-					if len(label) > nameWidth {
-						label = label[:nameWidth-1] + "…"
+					// Wrap on word boundaries so the item name stays
+					// readable instead of being cut mid-word.
+					for _, chunk := range wrapLabel(label, nameWidth-len(indent)) {
+						itemsText.WriteString(indent + chunk + "\n")
 					}
-					itemsText.WriteString(fmt.Sprintf("%s%-*s\n", indent, nameWidth, label))
 				}
 			}
 			return itemsText.String()
@@ -617,8 +594,55 @@ const (
 	cutPaper    = esc + "i" + "\x01" // partial cut
 )
 
-func padRight(s string, width int) string {
-	if len(s) >= width {
+// wrapLabel breaks a label into lines of at most `width` characters,
+// always breaking on a word boundary.
+//
+// A lone trailing word is never left on its own line when the previous
+// line can spare a word: "2 x Golden Corn - Value" / "Pizza" becomes
+// "2 x Golden Corn -" / "Value Pizza", which keeps the item name
+// readable on the kitchen ticket instead of stranding a fragment.
+func wrapLabel(label string, width int) []string {
+	if width < 1 {
+		width = 1
+	}
+	words := strings.Fields(label)
+	if len(words) == 0 {
+		return nil
+	}
+
+	var lines []string
+	cur := ""
+	for _, w := range words {
+		candidate := w
+		if cur != "" {
+			candidate = cur + " " + w
+		}
+		if cur != "" && len(candidate) > width {
+			lines = append(lines, cur)
+			cur = w
+			continue
+		}
+		cur = candidate
+	}
+	lines = append(lines, cur)
+
+	// Balance the last line so it is not a single orphaned word.
+	if len(lines) >= 2 {
+		last := lines[len(lines)-1]
+		prev := lines[len(lines)-2]
+		if !strings.Contains(last, " ") {
+			prevWords := strings.Fields(prev)
+			if len(prevWords) >= 2 {
+				moved := prevWords[len(prevWords)-1]
+				lines[len(lines)-2] = strings.Join(prevWords[:len(prevWords)-1], " ")
+				lines[len(lines)-1] = moved + " " + last
+			}
+		}
+	}
+	return lines
+}
+
+func padRight(s string, width int) string {	if len(s) >= width {
 		return s
 	}
 	return s + strings.Repeat(" ", width-len(s))
@@ -693,10 +717,11 @@ func GenerateESCPOSReceipt(order *models.Order, cfg *PrinterConfig, brandName st
 			if ci.Size != "" && ci.Size != "regular" {
 				label += " (" + ci.Size + ")"
 			}
-			if len(label) > width {
-				label = label[:width-1] + "…"
+			// Wrap on word boundaries so the items stay
+			// distinguishable on the ticket.
+			for _, chunk := range wrapLabel(strings.TrimSpace(label), width) {
+				b.WriteString(padRight(chunk, width) + lineFeed)
 			}
-			b.WriteString(padRight(label, width) + lineFeed)
 		}
 		if item.Options != "" {
 			b.WriteString(padRight("  "+item.Options, width) + lineFeed)
