@@ -92,6 +92,12 @@ interface HomepageSettings {
   menu_title?: string;
   menu_subtitle?: string;
   complete_meal_title?: string;
+  // Complete-meal upsell configuration (admin configurable)
+  complete_meal_categories?: string;
+  complete_meal_limit?: number;
+  complete_meal_show_on_product?: boolean;
+  complete_meal_show_on_cart?: boolean;
+  complete_meal_show_on_checkout?: boolean;
   // Crust & toppings info (configurable from admin)
   crust_title?: string;
   crust_subtitle?: string;
@@ -247,7 +253,44 @@ const BRAND_DEFAULTS: BrandSettings = {
 const SEO_DEFAULTS: SEOSettings = {};
 const SOCIAL_DEFAULTS: SocialSettings = {};
 const FOOTER_DEFAULTS: FooterSettings = {};
+
+/**
+ * Menu categories offered by the "complete your meal" upsell. Admin
+ * configurable via the homepage settings (`complete_meal_categories`).
+ */
+export const DEFAULT_COMPLETE_MEAL_CATEGORIES = [
+  'garlic-bread',
+  'desserts',
+  'french-fries',
+  'drinks',
+  'beverages',
+];
+
+/** Parses the admin's comma separated category list. */
+const parseCategoryList = (value: unknown): string[] => {
+  if (Array.isArray(value)) {
+    return value.map((v) => String(v).trim().toLowerCase()).filter(Boolean);
+  }
+  const list = String(value ?? '')
+    .split(',')
+    .map((v) => v.trim().toLowerCase())
+    .filter(Boolean);
+  return list.length ? list : DEFAULT_COMPLETE_MEAL_CATEGORIES;
+};
+
+/** Clamps the admin's item count to a sane range. */
+const parseUpsellLimit = (value: unknown): number => {
+  const n = Number.parseInt(String(value ?? ''), 10);
+  if (!Number.isFinite(n) || n <= 0) return 4;
+  return Math.min(n, 12);
+};
+
 const HOMEPAGE_DEFAULTS: HomepageSettings = {
+  complete_meal_categories: DEFAULT_COMPLETE_MEAL_CATEGORIES.join(','),
+  complete_meal_limit: 4,
+  complete_meal_show_on_product: true,
+  complete_meal_show_on_cart: true,
+  complete_meal_show_on_checkout: true,
   crust_title: '6 Delicious Crusts',
   crust_subtitle: 'Choose your base',
   crust_tossed: 'Tossed (base)',
@@ -508,6 +551,11 @@ export function useHomepage() {
     menuTitle: h.menu_title ?? 'Our Menu',
     menuSubtitle: h.menu_subtitle ?? '',
     completeMealTitle: h.complete_meal_title ?? 'Complete Your Meal',
+    completeMealCategories: parseCategoryList(h.complete_meal_categories),
+    completeMealLimit: parseUpsellLimit(h.complete_meal_limit),
+    completeMealShowOnProduct: h.complete_meal_show_on_product !== false,
+    completeMealShowOnCart: h.complete_meal_show_on_cart !== false,
+    completeMealShowOnCheckout: h.complete_meal_show_on_checkout !== false,
     heroImageUrl: h.hero_image_url ?? 'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=1920&h=700&fit=crop',
     locationsMapAddress: h.locations_map_address ?? '',
     locationsMapEmbedUrl: h.locations_map_embed_url ?? '',
