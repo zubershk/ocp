@@ -25,6 +25,13 @@ export interface ProductCardProps {
   actionLabel?: string;
   onAddToCart?: () => void;
   onWishlist?: (wishlisted: boolean) => void;
+  /**
+   * Extra data-* attributes are forwarded to the root element. Without
+   * this, a caller passing e.g. `data-product-id` would be silently
+   * dropped and anything that queries the DOM for it would find
+   * nothing.
+   */
+  [dataAttribute: `data-${string}`]: string | number | undefined;
 }
 
 export function ProductCard({
@@ -44,6 +51,7 @@ export function ProductCard({
   actionLabel = "Add to Cart",
   onAddToCart,
   onWishlist,
+  ...dataAttributes
 }: ProductCardProps) {
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
@@ -86,6 +94,7 @@ export function ProductCard({
         className,
       )}
       data-testid="product-card"
+      {...dataAttributes}
     >
       {/* Image area - premium product photography */}
       <div className="relative overflow-hidden bg-stone-50 h-[260px] shrink-0">
