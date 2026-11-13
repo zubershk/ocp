@@ -144,6 +144,36 @@ All visual values are defined in `src/design-tokens.ts` and exported as CSS cust
 | States | checked, unchecked, disabled |
 | Accessibility | ARIA checked state, keyboard accessible |
 
+### CompleteMealSection
+
+**File:** `src/components/CompleteMealSection.tsx`
+
+The storefront's "Complete Your Meal" upsell region. One owner, used on the
+product page (`/r/menu/item/:id`), the cart (`/r/cart`) and the checkout
+(`/r/checkout`).
+
+| Property | Value |
+|----------|-------|
+| Title source | `useHomepage().completeMealTitle` (admin editable) |
+| Item source | Menu items in the configured categories, excluding what is already in the cart |
+| Grid | `grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4` — one column on phones so the name is never truncated |
+| Card | White, `rounded-3xl`, `h-28` image, one-line name (`line-clamp-1`), price |
+| Add control | shadcn `Button`, `type="button"`, `w-full h-11 touch-target`, label `Add` with `Adding…` / `Added!` states |
+
+**Admin configuration** (homepage settings, `/admin/homepage`):
+
+| Setting | Default |
+|---------|---------|
+| `complete_meal_title` | `Complete Your Meal` |
+| `complete_meal_categories` | `garlic-bread,desserts,french-fries,drinks,beverages` |
+| `complete_meal_limit` | `4` |
+| `complete_meal_show_on_product` | `true` |
+| `complete_meal_show_on_cart` | `true` |
+| `complete_meal_show_on_checkout` | `true` |
+
+**Note:** the add control must stay `type="button"` — the region renders
+inside the checkout form, where a submit button would place the order.
+
 ### AdminPrinterTemplate
 
 **File:** `src/pages/AdminPrinterTemplate.tsx`

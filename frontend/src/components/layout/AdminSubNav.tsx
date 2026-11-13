@@ -15,7 +15,7 @@ const items = [
   { to: '/admin/family-packs', label: 'Packs', icon: Package, group: 'Marketing', roles: ['owner', 'manager', 'viewer'] },
   { to: '/admin/banners', label: 'Banners', icon: Image, group: 'Marketing', roles: ['owner', 'manager', 'viewer'] },
   { to: '/admin/brand', label: 'Brand', icon: Megaphone, group: 'Marketing', roles: ['owner', 'manager', 'viewer'] },
-  { to: '/admin/homepage', label: 'Homepage', icon: Home, group: 'Marketing', roles: ['owner', 'manager', 'viewer'] },
+  { to: '/admin/homepage', label: 'Site Content', icon: Home, group: 'Marketing', roles: ['owner', 'manager', 'viewer'] },
   { to: '/admin/footer', label: 'Footer', icon: Footprints, group: 'Marketing', roles: ['owner', 'manager', 'viewer'] },
   { to: '/admin/analytics', label: 'Analytics', icon: BarChart3, group: 'Insights', roles: ['owner', 'manager', 'viewer'] },
   { to: '/admin/reviews', label: 'Reviews', icon: Star, group: 'Insights', badge: 'reviews', roles: ['owner', 'manager', 'viewer'] },
