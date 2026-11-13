@@ -8,6 +8,7 @@ import { useToast } from '../context/ToastContext';
 import AddressAutocomplete from '../components/ui/AddressAutocomplete';
 import { ComboBreakdown } from '../components/ComboBreakdown';
 import { ItemThumb } from '../components/ItemThumb';
+import { CompleteMealSection } from '../components/CompleteMealSection';
 import { useDeliveryHours, useRestaurantAddress, usePrimaryOutlet } from '../context/RestaurantContext';
 import { useHomepage } from '../context/SiteSettingsContext';
 
@@ -412,6 +413,13 @@ export default function Checkout() {
             </button>
             <p className="text-xs text-zinc-500 mt-2 text-center">You can review everything on the next screen.</p>
           </fieldset>
+
+          {/* Complete your meal — inside the form column so the two column
+              layout is preserved. The add control is type="button" so it
+              can never submit the order. */}
+          {hp.completeMealShowOnCheckout && (
+            <CompleteMealSection className="mt-8" />
+          )}
         </form>
 
         {/* Order summary sidebar */}

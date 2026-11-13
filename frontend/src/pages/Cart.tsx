@@ -2,19 +2,16 @@ import { useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { Minus, Plus, Trash2, ShoppingBag, Plus as PlusIcon, ArrowRight, ShieldCheck, Clock, Tag, PlusCircle, X } from 'lucide-react';
 import { useCart } from '../context/CartContext';
-import { useCrusts } from '../context/CrustContext';
-import { useMenuItems } from '../hooks/useMenu';
 import { useToast } from '../context/ToastContext';
 import { useDeliveryHours } from '../context/RestaurantContext';
 import { useHomepage } from '../context/SiteSettingsContext';
 import { apiPost } from '../services/api';
 import { ComboBreakdown } from '../components/ComboBreakdown';
 import { ItemThumb } from '../components/ItemThumb';
+import { CompleteMealSection } from '../components/CompleteMealSection';
 
 export default function Cart() {
-  const { items, updateQty, removeItem, clear, subtotal, addItem } = useCart();
-  const { defaultCrust } = useCrusts();
-  const { items: menuItems } = useMenuItems();
+  const { items, updateQty, removeItem, clear, subtotal } = useCart();
   const { push } = useToast();
   const deliveryHours = useDeliveryHours();
   const hp = useHomepage();
@@ -28,16 +25,9 @@ export default function Cart() {
 
   const formatCurrency = (v: number) => '₹' + Number(v || 0).toFixed(2);
 
-  const handleRemove = useCallback((id: string) => {
-    setRemovingIds((prev) => new Set(prev).add(id));
+  const handleRemove = useCallback((id: string) => {    setRemovingIds((prev) => new Set(prev).add(id));
     setTimeout(() => { removeItem(id); setRemovingIds((prev) => { const next = new Set(prev); next.delete(id); return next; }); }, 250);
   }, [removeItem]);
-
-  // More suggestions (4 instead of 3) for better upsell
-  const suggestions = menuItems
-    .filter((m) => ['garlic-bread', 'desserts', 'french-fries', 'drinks', 'beverages'].includes(m.category))
-    .filter((m) => !items.some((it) => it.menuItemId === m.id))
-    .slice(0, 4);
 
   const applyPromo = async () => {
     const code = promoCode.trim();
@@ -163,40 +153,9 @@ export default function Cart() {
             ))}
           </ul>
 
-          {/* Suggestions */ }
-          {suggestions.length > 0 && (
-            <section className="mt-10">
-              <h2 className="font-heading font-bold text-lg">Goes great with your order</h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-4">
-                {suggestions.map((s) => (
-                  <div
-                    key={s.id}
-                    className="bg-white rounded-3xl shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] overflow-hidden flex items-center gap-3 pr-3 card-lift"
-                  >
-                    <Link to={`/r/menu/item/${s.id}`} aria-label={`View ${s.name}`}>
-                      <div className="overflow-hidden shrink-0">
-                        <ItemThumb
-                          src={s.image}
-                          alt=""
-                          className="w-16 h-16"
-                          iconSize={22}
-                        />
-                      </div>
-                    </Link>
-                    <div className="min-w-0 flex-1 py-2">
-                      <div className="text-sm font-semibold text-zinc-900 leading-tight line-clamp-1">{s.name}</div>
-                      <div className="text-xs text-zinc-400 mt-0.5">₹{s.price}</div>
-                    </div>
-                    <button
-                      onClick={() => { addItem(s, 'regular', defaultCrust, 1); push({ type: 'success', title: `Added ${s.name} to cart` }); }}
-                      aria-label={`Add ${s.name} to cart`}
-                      className="shrink-0 w-10 h-10 rounded-full bg-brand-600 text-white flex items-center justify-center hover:bg-brand-700 active:scale-95 transition-all duration-150 cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
-                      <PlusIcon size={15} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </section>
+          {/* Suggestions */}
+          {hp.completeMealShowOnCart && (
+            <CompleteMealSection className="mt-10" />
           )}
 
           {/* Add more items CTA */}

@@ -161,13 +161,6 @@ export default function Menu() {
 
   const displayList = combo ? comboFiltered : filtered;
 
-  // Initialize visibleProduct with first product
-  useEffect(() => {
-    if (displayList.length > 0 && !visibleProduct) {
-      setVisibleProduct(displayList[0]);
-    }
-  }, [displayList, visibleProduct]);
-
   const quickAdd = (item: (typeof menuItems)[number]) => {
     addItem(item, 'regular', defaultCrust, 1);
     push({ type: 'success', title: `Added ${item.name} to cart` });
@@ -175,25 +168,55 @@ export default function Menu() {
 
   const menuGridRef = useGsapReveal('.menu-card', { stagger: 0.04, y: 20 });
 
+  // Scroll-spy: the quick-add bar follows the dish that is on screen.
+  //
+  // The observer is re-attached whenever the rendered list changes
+  // (search, category, sort), otherwise it would keep watching cards
+  // that have been removed from the DOM and the bar would go stale.
   useEffect(() => {
-    const visibleProductObserver = new IntersectionObserver(
+    const cards = document.querySelectorAll('[data-product-id]');
+    if (cards.length === 0) {
+      setVisibleProduct(null);
+      return;
+    }
+
+    // Track every card currently on screen so the topmost one wins.
+    const onScreen = new Set<Element>();
+    const observer = new IntersectionObserver(
       (entries) => {
-        const visibleEntry = entries.find((entry) => entry.isIntersecting);
-        if (visibleEntry) {
-          const productId = visibleEntry.target.getAttribute('data-product-id');
-          const product = menuItems.find((item) => item.id === productId);
-          if (product) {
-            setVisibleProduct(product);
+        for (const entry of entries) {
+          if (entry.isIntersecting) onScreen.add(entry.target);
+          else onScreen.delete(entry.target);
+        }
+
+        let best: Element | null = null;
+        let bestTop = Number.POSITIVE_INFINITY;
+        for (const el of onScreen) {
+          const rect = el.getBoundingClientRect();
+          if (rect.bottom > 0 && rect.top < bestTop) {
+            best = el;
+            bestTop = rect.top;
           }
         }
+
+        // Nothing on screen (scrolled past the grid) — hide the bar
+        // rather than leaving a stale dish pinned to the bottom.
+        if (!best) {
+          setVisibleProduct(null);
+          return;
+        }
+        const productId = best.getAttribute('data-product-id');
+        const product = displayList.find((item) => String(item.id) === productId);
+        if (product) setVisibleProduct(product);
       },
-      { threshold: 0.1, rootMargin: '0px 0px 80px 0px' }
+      // The bottom is inset by the height of the bar so a dish hidden
+      // behind it does not count as visible.
+      { threshold: 0, rootMargin: '0px 0px -90px 0px' },
     );
 
-    const cards = document.querySelectorAll('[data-product-id]');
-    cards.forEach((card) => visibleProductObserver.observe(card));
-    return () => visibleProductObserver.disconnect();
-  }, [menuItems]);
+    cards.forEach((card) => observer.observe(card));
+    return () => observer.disconnect();
+  }, [displayList]);
 
   return (
     <div className="container-page py-6 sm:py-8 pb-28 lg:pb-8">
@@ -439,16 +462,22 @@ export default function Menu() {
         </div>
       )}
 
-      {/* Sticky Add to Cart bar for mobile */}
+      {/* Quick-add bar for the dish currently on screen. Mobile only:
+          on desktop every card already carries its own Add to Cart
+          button, and a pinned bar there reads like a cart line. */}
       {visibleProduct && (
-        <div className="fixed bottom-0 inset-x-0 z-50 bg-white border-t border-stone-200 p-3 shadow-[0_-4px_20px_rgba(0,0,0,0.15)]">
+        <div className="lg:hidden fixed bottom-0 inset-x-0 z-50 bg-white border-t border-stone-200 p-3 shadow-[0_-4px_20px_rgba(0,0,0,0.15)]">
           <div className="flex items-center gap-3 max-w-3xl mx-auto">
             <ItemThumb
               src={visibleProduct.image}
               alt={visibleProduct.name}
               className="w-12 h-12 rounded-xl"
               iconSize={18}
-            />            <div className="flex-1 min-w-0">
+            />
+            <div className="flex-1 min-w-0">
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
+                Quick add
+              </div>
               <div className="font-semibold text-sm truncate">{visibleProduct.name}</div>
               <div className="text-xs text-amber-600 font-bold">₹{visibleProduct.price}</div>
             </div>

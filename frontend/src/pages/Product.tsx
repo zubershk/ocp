@@ -6,11 +6,10 @@ import { useMenuItems } from '../hooks/useMenu';
 import { useCart } from '../context/CartContext';
 import { useToast } from '../context/ToastContext';
 import ImageZoom from '../components/ui/ImageZoom';
-import { ItemThumb } from '../components/ItemThumb';
+import { CompleteMealSection } from '../components/CompleteMealSection';
 import StarRating from '../components/ui/StarRating';
 import { useDeliveryHours } from '../context/RestaurantContext';
 import { useHomepage } from '../context/SiteSettingsContext';
-import type { MenuItem } from '../types';
 
 export default function Product() {
   const { id } = useParams();
@@ -67,10 +66,6 @@ export default function Product() {
   const crustExtra = getCrustExtra(activeCrust, size);
   const unit = base + crustExtra;
   const total = unit * qty;
-
-  const sides = items.filter((i) =>
-    ['garlic-bread', 'desserts', 'french-fries', 'drinks', 'beverages'].includes(i.category)
-  ).slice(0, 4);
 
   const addNow = () => {
     addItem(item, size, activeCrust, qty);
@@ -290,38 +285,8 @@ export default function Product() {
       </div>
 
       {/* Complete your meal */}
-      {sides.length > 0 && (
-        <section className="mt-12 pb-8">
-          <h2 className="text-xl sm:text-2xl font-heading font-bold">{hp.completeMealTitle}</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-5">
-            {sides.map((s: MenuItem) => (
-              <div key={s.id} className="bg-white rounded-3xl shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] overflow-hidden group flex flex-col card-lift stagger-child">
-                <Link to={`/r/menu/item/${s.id}`} aria-label={`View ${s.name}`} className="block">
-                  <div className="overflow-hidden">
-                    <ItemThumb
-                      src={s.image}
-                      alt={s.name}
-                      className="w-full h-28 group-hover:scale-105 transition-transform duration-500 ease-out"
-                      iconSize={26}
-                    />
-                  </div>
-                </Link>
-                <div className="p-3 flex flex-col flex-1">
-                  <h3 className="font-semibold text-sm leading-tight line-clamp-1 text-zinc-900">{s.name}</h3>
-                  <div className="flex items-center justify-between mt-2">
-                    <span className="font-bold text-sm text-zinc-900">₹{s.price}</span>
-                    <button
-                      onClick={() => { addItem(s, 'regular', defaultCrust, 1); push({ type: 'success', title: `Added ${s.name} to cart` }); }}
-                      aria-label={`Add ${s.name} to cart`}
-                      className="inline-flex items-center gap-1 text-xs bg-brand-600 text-white px-4 py-2 rounded-full font-semibold hover:bg-brand-700 active:scale-95 transition-all duration-150 cursor-pointer touch-target shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
-                      <Plus size={12} /> Add
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
+      {hp.completeMealShowOnProduct && (
+        <CompleteMealSection className="mt-12 pb-8" />
       )}
 
       {/* Sticky mobile action bar */}
