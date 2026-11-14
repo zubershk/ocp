@@ -199,7 +199,7 @@ export default function AdminBanners() {
                     className="mt-1"
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="text-xs font-semibold">Background</label>
                     <select
@@ -221,7 +221,7 @@ export default function AdminBanners() {
                     </select>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="text-xs font-semibold">Button Text</label>
                     <Input

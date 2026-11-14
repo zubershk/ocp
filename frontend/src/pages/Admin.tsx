@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -560,7 +560,7 @@ ${bodyHtml}
       <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
 
         {/* KPI Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <Card className="stagger-child" style={{ animationDelay: '0ms' }}>
             <CardContent className="p-4">
               <div className="flex items-start justify-between">

@@ -183,7 +183,7 @@ export default function AdminFamilyPacks() {
                     <label className="text-xs font-semibold">Subtitle</label>
                     <Input value={form.subtitle} onChange={(e) => setForm((f) => ({ ...f, subtitle: e.target.value }))} placeholder="e.g. Classic & Favourite" className="mt-1" />
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="text-xs font-semibold">Veg item slug</label>
                       <Input value={form.vegSlug} onChange={(e) => setForm((f) => ({ ...f, vegSlug: e.target.value }))} placeholder="e.g. fp-5-veg" className="mt-1 font-mono" />
