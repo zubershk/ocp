@@ -210,7 +210,7 @@ export default function AdminBusinessConfig() {
   return (
     <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Business Configuration</h1>
           {configSource !== 'db' && (
@@ -321,12 +321,12 @@ export default function AdminBusinessConfig() {
         <p className="text-xs text-muted-foreground mb-3">Configure the size options customers see when ordering. Each size can have different prices per menu item.</p>
         <div className="space-y-2">
           {cfg.sizes.map((size, i) => (
-            <div key={i} className="flex items-center gap-3 p-3 bg-card border border-border rounded-lg">
+            <div key={i} className="flex flex-wrap items-center gap-3 p-3 bg-card border border-border rounded-lg">
               <Input value={size.key} onChange={e => updateSize(i, { key: e.target.value.toLowerCase().replace(/[^a-z0-9]/g, '') })}
-                className="w-28 font-mono"
+                className="w-full sm:w-28 font-mono"
                 placeholder="key (e.g. small)" />
               <Input value={size.label} onChange={e => updateSize(i, { label: e.target.value })}
-                className="flex-1"
+                className="flex-1 min-w-0"
                 placeholder="Display label (e.g. Small)" />
               <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <input type="checkbox" checked={size.active} onChange={e => updateSize(i, { active: e.target.checked })}
@@ -349,15 +349,15 @@ export default function AdminBusinessConfig() {
         <p className="text-xs text-muted-foreground mb-3">Configure payment options shown to customers during checkout.</p>
         <div className="space-y-2">
           {cfg.payment_methods.map((pm, i) => (
-            <div key={i} className="flex items-center gap-3 p-3 bg-card border border-border rounded-lg">
+            <div key={i} className="flex flex-wrap items-center gap-3 p-3 bg-card border border-border rounded-lg">
               <Input value={pm.key} onChange={e => updatePayment(i, { key: e.target.value.toLowerCase().replace(/[^a-z0-9]/g, '') })}
-                className="w-28 font-mono"
+                className="w-full sm:w-28 font-mono"
                 placeholder="key (e.g. cod)" />
               <Input value={pm.label} onChange={e => updatePayment(i, { label: e.target.value })}
-                className="flex-1"
+                className="flex-1 min-w-0"
                 placeholder="Display label (e.g. Cash on Delivery)" />
               <select value={pm.icon} onChange={e => updatePayment(i, { icon: e.target.value })}
-                className="w-32 border border-input bg-transparent rounded-md px-2 py-1.5 text-sm focus:ring-1 focus:ring-ring focus:outline-none">
+                className="w-full sm:w-32 border border-input bg-transparent rounded-md px-2 py-1.5 text-sm focus:ring-1 focus:ring-ring focus:outline-none">
                 <option value="cash">💵 Cash</option>
                 <option value="phone">📱 UPI</option>
                 <option value="card">💳 Card</option>
@@ -385,10 +385,10 @@ export default function AdminBusinessConfig() {
         <p className="text-xs text-muted-foreground mb-3">Assign emoji icons to your menu categories. These appear in the WhatsApp bot menu.</p>
         <div className="space-y-2">
           {Object.entries(cfg.category_icons).map(([slug, icon]) => (
-            <div key={slug} className="flex items-center gap-3 p-3 bg-card border border-border rounded-lg">
-              <span className="w-32 text-sm font-mono text-muted-foreground truncate">{slug}</span>
+            <div key={slug} className="flex flex-wrap items-center gap-3 p-3 bg-card border border-border rounded-lg">
+              <span className="w-full sm:w-32 text-sm font-mono text-muted-foreground truncate">{slug}</span>
               <select value={icon} onChange={e => updateIcon(slug, e.target.value)}
-                className="w-48 border border-input bg-transparent rounded-md px-2 py-1.5 text-sm focus:ring-1 focus:ring-ring focus:outline-none">
+                className="w-full sm:w-48 border border-input bg-transparent rounded-md px-2 py-1.5 text-sm focus:ring-1 focus:ring-ring focus:outline-none">
                 {ICON_OPTIONS.map(opt => <option key={opt.key} value={opt.key}>{opt.label}</option>)}
               </select>
               <span className="text-2xl">{icon}</span>

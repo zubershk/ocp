@@ -82,7 +82,7 @@ export default function AdminTeam() {
           <div className="mt-3 flex flex-col sm:flex-row gap-2">
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name (e.g. Rahul — Kitchen)" className="flex-1" />
             <Select value={role} onValueChange={setRole}>
-              <SelectTrigger className="min-w-[140px]">
+              <SelectTrigger className="min-w-0 sm:min-w-[140px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

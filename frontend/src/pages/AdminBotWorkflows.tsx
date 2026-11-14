@@ -331,7 +331,7 @@ export default function AdminBotWorkflows() {
   return (
     <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
             <MessageSquare size={20} /> Bot Messages
@@ -340,7 +340,7 @@ export default function AdminBotWorkflows() {
             Customize every WhatsApp bot response — no coding needed.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button
             variant={showHelp ? 'default' : 'outline'}
             size="sm"
@@ -442,12 +442,12 @@ export default function AdminBotWorkflows() {
               <div key={cat} className="mb-3">
                 <Button
                   variant="outline"
-                  className="w-full justify-start gap-3 h-auto py-3"
+                  className="w-full justify-start gap-3 h-auto py-3 whitespace-normal"
                   onClick={() => setExpandedCat(isExpanded ? null : cat)}
                 >
-                  {isExpanded ? <ChevronDown size={16} className="text-muted-foreground" /> : <ChevronRight size={16} className="text-muted-foreground" />}
-                  <span className="text-lg">{meta.icon}</span>
-                  <div className="flex-1 text-left">
+                  {isExpanded ? <ChevronDown size={16} className="shrink-0 text-muted-foreground" /> : <ChevronRight size={16} className="shrink-0 text-muted-foreground" />}
+                  <span className="text-lg shrink-0">{meta.icon}</span>
+                  <div className="flex-1 min-w-0 text-left">
                     <div className="font-semibold text-sm">{meta.label}</div>
                     <div className="text-xs text-muted-foreground">{meta.description}</div>
                   </div>

@@ -158,7 +158,7 @@ export default function AdminPrinter() {
   return (
     <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
       {/* Header */}
-      <div className="flex items-center gap-3 mt-4">
+      <div className="flex flex-wrap items-center gap-3 mt-4">
         <Button variant="outline" size="icon" aria-label="Go back" onClick={() => window.history.back()} className="w-9 h-9">
           <ArrowLeft size={16} />
         </Button>
@@ -170,9 +170,9 @@ export default function AdminPrinter() {
         </div>
       </div>
 
-      <div className="mt-6 grid lg:grid-cols-3 gap-6">
+      <div className="mt-6 grid min-w-0 lg:grid-cols-3 gap-6">
         {/* Left: Configuration Form */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="min-w-0 lg:col-span-2 space-y-6">
           <Card className="p-6">
             <CardContent>
               <div className="flex items-center gap-2 mb-6">
@@ -215,7 +215,7 @@ export default function AdminPrinter() {
 
                   {/* Printer Port / IP */}
                   {isNetworkOrWeb || isUsb ? (
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <label className="text-xs font-semibold text-zinc-700 uppercase tracking-wider mb-1.5 block">
                           {isUsb ? 'COM Port' : 'Printer IP / Host'}
@@ -285,7 +285,7 @@ export default function AdminPrinter() {
                   </div>
 
                   {/* Save & Test */}
-                  <div className="flex gap-3 pt-4 border-t border-stone-100 pt-6">
+                  <div className="flex flex-wrap gap-3 pt-4 border-t border-stone-100 pt-6">
                     <Button
                       onClick={() => saveMut.mutate(form)}
                       disabled={saveMut.isPending}
