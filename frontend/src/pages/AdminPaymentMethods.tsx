@@ -43,7 +43,7 @@ export default function AdminPaymentMethods() {
   const methods: PM[] = (data ?? []).sort((a, b) => a.sort_order - b.sort_order || a.label.localeCompare(b.label));
 
   return (
-    <div className="space-y-6">
+    <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Payment Methods — Foundation</h1>
         <p className="text-sm text-muted-foreground">Canonical for new admin/POS APIs. Legacy <code className="px-1 bg-zinc-100 rounded">business_config.payment_methods</code> stays for compat; this table becomes canonical in PR #3.</p>

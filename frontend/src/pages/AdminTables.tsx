@@ -55,7 +55,7 @@ export default function AdminTables() {
   const tables: TableInfo[] = data ?? [];
 
   return (
-    <div className="space-y-6">
+    <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Tables — Foundation</h1>
         <p className="text-sm text-muted-foreground">Operational data (restaurant → outlet). Drag-reorder via Position, soft-delete if open order exists.</p>

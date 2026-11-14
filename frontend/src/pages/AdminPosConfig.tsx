@@ -54,7 +54,7 @@ export default function AdminPosConfig() {
   if (isError || !local) return <div className="p-8 text-sm text-destructive">Failed to load POS config.</div>;
 
   return (
-    <div className="space-y-6">
+    <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
       <div>
         <h1 className="text-2xl font-bold">POS Configuration — Foundation</h1>
         <p className="text-sm text-muted-foreground">Admin-configurable foundation (restaurant-level, outlet override ready via ResolvePOSConfig). No POS behavior changes yet — PR 3 will wire.</p>
@@ -154,7 +154,7 @@ export default function AdminPosConfig() {
       <Card>
         <CardContent className="p-6 space-y-4">
           <h2 className="font-semibold">UI</h2>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div><label className="text-xs">Header Title</label><Input value={local.ui.header_title} onChange={e => setLocal({ ...local, ui: { ...local.ui, header_title: e.target.value } })} maxLength={40} /></div>
             <div><label className="text-xs">Currency (from restaurant)</label><Input value={currencyCode ? `${currencyCode} (${currencySymbol})` : currencySymbol} readOnly title="Derived from the restaurant's authoritative currency. Change it on the restaurant record, not here." /></div>
             <div><label className="text-xs">Accent</label><Input value={local.ui.pos_accent} onChange={e => setLocal({ ...local, ui: { ...local.ui, pos_accent: e.target.value } })} placeholder="#b91c1c" /></div>

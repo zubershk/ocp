@@ -105,13 +105,13 @@ export default function AdminAnalytics() {
 
   if (!data || !data.by_day.length) {
     return (
-      <main id="admin-main" aria-label="Analytics dashboard" className="space-y-6">
+      <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         <div className="flex items-center gap-3">
           <BarChart3 aria-hidden="true" className="w-6 h-6" />
           <h1 className="text-2xl font-bold">Analytics</h1>
         </div>
         <Card><CardContent className="p-12 text-center text-sm text-muted-foreground">No orders yet — adjust range/outlet or check back after first sale.</CardContent></Card>
-      </main>
+      </div>
     );
   }
 
@@ -144,7 +144,7 @@ export default function AdminAnalytics() {
   const maxHourOrders = Math.max(1, ...data.by_hour.map(h => h.orders));
 
   return (
-    <main id="admin-main" aria-label="Analytics dashboard" className="space-y-6">
+    <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
       {/* Header + Controls */}
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <div className="flex items-center gap-3 min-w-0">
@@ -417,6 +417,6 @@ export default function AdminAnalytics() {
       </div>
 
       <footer className="text-xs text-muted-foreground">Live from PostgreSQL • orders + order_items • {live ? 'real-time via SSE' : 'auto-refresh 30s'} {isFetching ? '• updating…' : ''}</footer>
-    </main>
+    </div>
   );
 }
