@@ -512,9 +512,9 @@ export default function AdminPrinterTemplate() {
   };
 
   return (
-    <div className="max-w-[1500px] mx-auto px-4 sm:px-6 py-4">
+    <div className="max-w-[1500px] mx-auto px-4 sm:px-6 lg:px-8 py-4">
       {/* ===== TOP BAR ===== */}
-      <div className="flex items-center justify-between mb-4 pb-4 border-b border-stone-200">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4 pb-4 border-b border-stone-200">
         <div className="flex items-center gap-3">
           <Button variant="outline" size="icon" onClick={() => window.history.back()} className="w-8 h-8">
             <ArrowLeft size={14} />
@@ -524,7 +524,7 @@ export default function AdminPrinterTemplate() {
             <p className="text-xs text-muted-foreground">Drag, drop, and style your receipt layout</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <div className="text-xs text-zinc-400 flex items-center gap-1.5">
             {saveStatus === 'saving' && <><RefreshCw size={12} className="animate-spin" /> Saving...</>}
             {saveStatus === 'saved' && <><CheckCircle size={12} className="text-emerald-500" /> Saved</>}
@@ -549,7 +549,7 @@ export default function AdminPrinterTemplate() {
       </div>
 
       {/* ===== MAIN LAYOUT: 2 columns (simplified) ===== */}
-      <div className="grid grid-cols-12 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         {/* ===== LEFT: Editor Panel ===== */}
         <div className="col-span-12 lg:col-span-5 space-y-3">
           {/* Element Toolbox + List combined */}
@@ -845,7 +845,7 @@ export default function AdminPrinterTemplate() {
                 <span className="text-xs text-zinc-600 block mb-1">Footer</span>
                 <Input value={form.footer} onChange={(e) => updateField('footer', e.target.value)} className="text-xs h-7" />
               </div>
-              <div className="grid grid-cols-2 gap-x-3 gap-y-1 pt-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1 pt-1">
                 {[
                   { key: 'show_date_time', label: 'Date/Time' },
                   { key: 'show_order_number', label: 'Order #' },
@@ -896,7 +896,7 @@ export default function AdminPrinterTemplate() {
             {showPreview && (
               <div className="flex justify-center">
                 <div className="border-2 border-stone-200 rounded-lg p-5 bg-white shadow-inner"
-                  style={{ width: `${Math.min(form.paper_width * 4, 420)}px`, minHeight: '400px' }}>
+                  style={{ width: `${Math.min(form.paper_width * 4, 420)}px`, maxWidth: '100%', minHeight: '400px' }}>
                   <div className="font-mono text-stone-800" style={{ fontSize: '9px', lineHeight: '1.4' }}>
                     {form.elements.map((el, idx) => renderElementPreview(el, idx)).filter(Boolean)}
                   </div>

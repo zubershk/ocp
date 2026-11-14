@@ -454,7 +454,7 @@ export default function AdminCatalog() {
       {/* Sub-nav */}
 
       {/* Items / Crusts / Media / Addons tabs */}
-      <div className="mt-4 flex gap-1 p-1 bg-stone-100 rounded-2xl w-fit text-sm">
+      <div className="mt-4 flex max-w-full gap-1 overflow-x-auto p-1 bg-stone-100 rounded-2xl text-sm">
         {(['items', 'crusts', 'media', 'addons'] as const).map((t) => (
           <button
             key={t}
@@ -469,7 +469,7 @@ export default function AdminCatalog() {
       {tab === 'items' && (
       <>
       {/* Stats */}
-      <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <Card className="p-4"><div className="text-[11px] tracking-normal font-semibold text-zinc-500">Items</div><div className="text-2xl font-bold">{items.length}</div></Card>
         <Card className="p-4"><div className="text-[11px] tracking-normal font-semibold text-zinc-500">Categories</div><div className="text-2xl font-bold">{categories.length}</div></Card>
         <Card className="p-4"><div className="text-[11px] tracking-normal font-semibold text-zinc-500">Available</div><div className="text-2xl font-bold">{items.filter((i) => i.available).length}</div></Card>
@@ -484,10 +484,10 @@ export default function AdminCatalog() {
             <button key={c.id} onClick={() => setCatFilter(c.id)} className={`px-3 py-1.5 rounded-full text-xs font-semibold border ${catFilter === c.id ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white hover:bg-zinc-50'}`}>{c.name}</button>
           ))}
         </div>
-        <div className="flex items-center gap-2">
-          <div className="relative">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative flex-1 min-w-0">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
-            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name or slug…" className="pl-9 pr-3 py-2.5 bg-zinc-50 focus:bg-white text-sm w-56" />
+            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name or slug…" className="pl-9 pr-3 py-2.5 bg-zinc-50 focus:bg-white text-sm w-full sm:w-56" />
           </div>
           <select value={dietFilter} onChange={(e) => setDietFilter(e.target.value)} className="px-3 py-2.5 rounded-xl border bg-white text-sm">
             <option value="all">All diets</option>
@@ -706,7 +706,7 @@ export default function AdminCatalog() {
 
       {tab === 'media' && (
       <div className="mt-4">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <p className="text-sm text-zinc-500">Shared image library. Copy a URL into any image field. Unreferenced files are safe to delete.</p>
           <div className="flex gap-2 shrink-0">
             <input type="file" ref={mediaFileRef} accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadToLibrary(f); if (mediaFileRef.current) mediaFileRef.current.value = ''; }} />
@@ -716,14 +716,14 @@ export default function AdminCatalog() {
           </div>
         </div>
         {filesQuery.isLoading ? (
-          <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-36 rounded-2xl" />)}</div>
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-36 rounded-2xl" />)}</div>
         ) : (filesQuery.data ?? []).length === 0 ? (
           <Card className="mt-4 py-12 text-center px-4">
             <ImageIcon size={24} className="mx-auto text-zinc-300" />
             <p className="font-semibold mt-2">No uploads yet</p>
           </Card>
         ) : (
-          <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3">
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-3">
             {(filesQuery.data ?? []).map((f) => (
               <Card key={f.name} className="overflow-hidden flex flex-col">
                 <div className="aspect-square bg-zinc-50 relative group">
@@ -753,7 +753,7 @@ export default function AdminCatalog() {
           <Card className="p-4">
             <div className="flex flex-wrap items-center gap-3">
               <label className="text-xs font-semibold">Menu Item</label>
-              <select value={addonMenuItemId} onChange={e => setAddonMenuItemId(e.target.value ? Number(e.target.value) : '')} className="px-3 py-2.5 rounded-xl border bg-white text-sm min-w-[220px]">
+              <select value={addonMenuItemId} onChange={e => setAddonMenuItemId(e.target.value ? Number(e.target.value) : '')} className="px-3 py-2.5 rounded-xl border bg-white text-sm min-w-0 sm:min-w-[220px]">
                 <option value="">All items ({items.length}) — pick one to add group</option>
                 {items.map(it => <option key={it.id} value={it.id}>{it.name} #{it.id}</option>)}
               </select>
