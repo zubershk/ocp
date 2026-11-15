@@ -141,20 +141,20 @@ export default function AdminFamilyPacks() {
               </div>
               <div className="space-y-4 max-w-2xl">
                 <div>
-                  <label className="text-xs font-semibold">Title *</label>
-                  <Input value={bogo.title} onChange={(e) => { setBogo((b) => ({ ...b, title: e.target.value })); setBogoTouched(true); }} className="mt-1" />
+                  <label htmlFor="f-AdminFamilyPacks-1" className="text-xs font-semibold">Title *</label>
+                  <Input id="f-AdminFamilyPacks-1" value={bogo.title} onChange={(e) => { setBogo((b) => ({ ...b, title: e.target.value })); setBogoTouched(true); }} className="mt-1" />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold">Subtitle badge</label>
-                  <Input value={bogo.subtitle} onChange={(e) => { setBogo((b) => ({ ...b, subtitle: e.target.value })); setBogoTouched(true); }} className="mt-1" />
+                  <label htmlFor="f-AdminFamilyPacks-2" className="text-xs font-semibold">Subtitle badge</label>
+                  <Input id="f-AdminFamilyPacks-2" value={bogo.subtitle} onChange={(e) => { setBogo((b) => ({ ...b, subtitle: e.target.value })); setBogoTouched(true); }} className="mt-1" />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold">Description</label>
-                  <Input value={bogo.description} onChange={(e) => { setBogo((b) => ({ ...b, description: e.target.value })); setBogoTouched(true); }} className="mt-1" />
+                  <label htmlFor="f-AdminFamilyPacks-3" className="text-xs font-semibold">Description</label>
+                  <Input id="f-AdminFamilyPacks-3" value={bogo.description} onChange={(e) => { setBogo((b) => ({ ...b, description: e.target.value })); setBogoTouched(true); }} className="mt-1" />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold">Pricing line</label>
-                  <Input value={bogo.pricing} onChange={(e) => { setBogo((b) => ({ ...b, pricing: e.target.value })); setBogoTouched(true); }} className="mt-1" />
+                  <label htmlFor="f-AdminFamilyPacks-4" className="text-xs font-semibold">Pricing line</label>
+                  <Input id="f-AdminFamilyPacks-4" value={bogo.pricing} onChange={(e) => { setBogo((b) => ({ ...b, pricing: e.target.value })); setBogoTouched(true); }} className="mt-1" />
                 </div>
                 <div className="flex items-center gap-3">
                   <Button onClick={saveBogo} disabled={saveMut.isPending}>
@@ -176,21 +176,21 @@ export default function AdminFamilyPacks() {
                 </div>
                 <div className="space-y-4 max-w-2xl">
                   <div>
-                    <label className="text-xs font-semibold">Title *</label>
-                    <Input value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder="e.g. Family Pack 5" className="mt-1" required />
+                    <label htmlFor="f-AdminFamilyPacks-5" className="text-xs font-semibold">Title *</label>
+                    <Input id="f-AdminFamilyPacks-5" value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder="e.g. Family Pack 5" className="mt-1" required />
                   </div>
                   <div>
-                    <label className="text-xs font-semibold">Subtitle</label>
-                    <Input value={form.subtitle} onChange={(e) => setForm((f) => ({ ...f, subtitle: e.target.value }))} placeholder="e.g. Classic & Favourite" className="mt-1" />
+                    <label htmlFor="f-AdminFamilyPacks-6" className="text-xs font-semibold">Subtitle</label>
+                    <Input id="f-AdminFamilyPacks-6" value={form.subtitle} onChange={(e) => setForm((f) => ({ ...f, subtitle: e.target.value }))} placeholder="e.g. Classic & Favourite" className="mt-1" />
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="text-xs font-semibold">Veg item slug</label>
-                      <Input value={form.vegSlug} onChange={(e) => setForm((f) => ({ ...f, vegSlug: e.target.value }))} placeholder="e.g. fp-5-veg" className="mt-1 font-mono" />
+                      <label htmlFor="f-AdminFamilyPacks-7" className="text-xs font-semibold">Veg item slug</label>
+                      <Input id="f-AdminFamilyPacks-7" value={form.vegSlug} onChange={(e) => setForm((f) => ({ ...f, vegSlug: e.target.value }))} placeholder="e.g. fp-5-veg" className="mt-1 font-mono" />
                     </div>
                     <div>
-                      <label className="text-xs font-semibold">Non-veg item slug</label>
-                      <Input value={form.nonvegSlug} onChange={(e) => setForm((f) => ({ ...f, nonvegSlug: e.target.value }))} placeholder="e.g. fp-5-nonveg" className="mt-1 font-mono" />
+                      <label htmlFor="f-AdminFamilyPacks-8" className="text-xs font-semibold">Non-veg item slug</label>
+                      <Input id="f-AdminFamilyPacks-8" value={form.nonvegSlug} onChange={(e) => setForm((f) => ({ ...f, nonvegSlug: e.target.value }))} placeholder="e.g. fp-5-nonveg" className="mt-1 font-mono" />
                     </div>
                   </div>
                   <p className="text-xs text-muted-foreground">Slugs must match real menu items — prices and order buttons come from them.</p>

@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Trash2, Pencil, Package, Search, X, Loader2 } from 'lucide-react';
-import { adminFetch, apiGet, getAdminKey } from '../services/api';
+import { adminFetch, getAdminKey } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import { Card, CardContent } from '@/components/shadcn/card';
 import { Button } from '@/components/shadcn/button';

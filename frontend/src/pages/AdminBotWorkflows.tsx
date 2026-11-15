@@ -2,7 +2,7 @@ import { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Save, RotateCcw, MessageSquare, ChevronDown, ChevronRight,
-  Eye, HelpCircle, Smartphone, Search, Info, X, CheckCircle, AlertTriangle, ImagePlus, Loader2,
+  HelpCircle, Smartphone, Search, Info, X, CheckCircle, AlertTriangle, ImagePlus, Loader2,
 } from 'lucide-react';
 import { adminFetch, getAdminKey } from '../services/api';
 import { useToast } from '../context/ToastContext';
@@ -612,7 +612,7 @@ export default function AdminBotWorkflows() {
 // ------------------------------------------------------------------
 
 function MessageCard({
-  msg, cat, isEditing, editText, editImage, onEdit, onEditTextChange, onEditImageChange, onSave, onCancel, onPreview, onReset, isPending,
+  msg, _cat, isEditing, editText, editImage, onEdit, onEditTextChange, onEditImageChange, onSave, onCancel, onPreview, onReset, isPending,
 }: {
   msg: BotMessage;
   cat: string;
@@ -696,9 +696,9 @@ function MessageCard({
                   ) : null;
                 })()}
                 <div>
-                  <label className="text-xs font-semibold">Photo (optional) — sent as image header on WhatsApp</label>
+                  <label htmlFor="f-AdminBotWorkflows-1" className="text-xs font-semibold">Photo (optional) — sent as image header on WhatsApp</label>
                   <div className="mt-1 flex gap-2">
-                    <Input
+                    <Input id="f-AdminBotWorkflows-1"
                       value={editImage}
                       onChange={(e) => onEditImageChange(e.target.value)}
                       placeholder="https://example.com/image.jpg or /uploads/xxx.jpg"

@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import Navbar from './components/layout/Navbar';
 import Footer from './components/layout/Footer';
 import AdminSubNav from './components/layout/AdminSubNav';
-import { NotificationCenter } from './components/ui/NotificationCenter';
+
 import { RealtimeProvider, useRealtime } from './context/RealtimeContext';
 import AdminPalette from './components/admin/AdminPalette';
 import { useState, useEffect } from 'react';

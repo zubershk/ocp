@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect, useCallback } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { MapPin, ChevronRight, ShoppingCart, Star, Phone, ArrowRight } from 'lucide-react';
+import { MapPin, ChevronRight, ShoppingCart, Phone, ArrowRight } from 'lucide-react';
 import { useMenuItems } from '../hooks/useMenu';
 import { pickPopular } from '../services/menuService';
 import { useRestaurantName, useDeliveryHours, useOutletsList, useRestaurantPhone } from '../context/RestaurantContext';

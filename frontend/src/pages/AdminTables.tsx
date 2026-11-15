@@ -12,7 +12,7 @@ interface TableInfo {
 
 export default function AdminTables() {
   const qc = useQueryClient();
-  const [outletFilter, setOutletFilter] = useState<string>('');
+  const [outletFilter, _setOutletFilter] = useState<string>('');
   const [name, setName] = useState('');
   const [capacity, setCapacity] = useState('4');
   const [position, setPosition] = useState('0');

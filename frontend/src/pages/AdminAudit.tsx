@@ -1,11 +1,10 @@
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { ScrollText, Search, Pencil, Trash2, Plus, ShoppingBag, ImagePlus, MessageSquare, Users, Settings, ShieldCheck, Activity } from 'lucide-react';
+import { ScrollText, Search, Pencil, Trash2, Plus, ShoppingBag, ImagePlus, MessageSquare, Users, Settings } from 'lucide-react';
 import { adminFetch, getAdminKey } from '../services/api';
 import { Card, CardContent } from '@/components/shadcn/card';
 import { Input } from '@/components/shadcn/input';
-import { Badge } from '@/components/shadcn/badge';
 import { Skeleton } from '@/components/shadcn/skeleton';
 
 interface Log {

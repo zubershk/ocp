@@ -1,7 +1,6 @@
-import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { MapPin, Phone, Clock, Pizza, ArrowUpRight, ArrowUp, ShieldCheck, Truck, Star, CreditCard, ChevronRight, Zap, MessageCircle, Globe, ArrowRight } from 'lucide-react';
-import { useRestaurant, useRestaurantName, useDeliveryHours, useOutletsList, usePaymentInfo } from '../../context/RestaurantContext';
+import { MapPin, Phone, Clock, Pizza, ArrowUpRight, ShieldCheck, Truck, Star, CreditCard, Zap, MessageCircle, Globe, ArrowRight } from 'lucide-react';
+import { useRestaurantName, useDeliveryHours, useOutletsList, usePaymentInfo } from '../../context/RestaurantContext';
 import { useSocial, useFooter, useBrand } from '../../context/SiteSettingsContext';
 
 export default function Footer() {

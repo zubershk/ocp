@@ -5,9 +5,8 @@ import { Link as RouterLink } from 'react-router-dom';
 import { adminFetch } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import { Button } from '@/components/shadcn/button';
-import { Card, CardContent } from '@/components/shadcn/card';
+import { Card } from '@/components/shadcn/card';
 import { Input } from '@/components/shadcn/input';
-import { Badge } from '@/components/shadcn/badge';
 import { Skeleton } from '@/components/shadcn/skeleton';
 
 interface SizeOption {

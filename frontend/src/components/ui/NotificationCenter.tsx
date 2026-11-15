@@ -2,7 +2,6 @@ import {
   Bell,
   BellMinus,
   X,
-  Clock,
   CheckCircle,
 } from 'lucide-react';
 import { useState, useCallback, useRef } from 'react';

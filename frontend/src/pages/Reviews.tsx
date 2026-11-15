@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { Star, Filter, ChevronDown, MessageSquare, ThumbsUp, ArrowRight, Clock } from 'lucide-react';
+import { Star, Filter, MessageSquare, ThumbsUp } from 'lucide-react';
 import { apiGet } from '../services/api';
 import StarRating from '../components/ui/StarRating';
 

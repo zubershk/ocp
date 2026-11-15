@@ -62,8 +62,8 @@ export default function POS() {
   const [overpaidPaise, setOverpaidPaise] = useState(0);
   const [ledgerReady, setLedgerReady] = useState(true);
   const [creating, setCreating] = useState(false);
-  const [holding, setHolding] = useState(false);
-  const [cancelling, setCancelling] = useState(false);
+  const [_holding, setHolding] = useState(false);
+  const [_cancelling, setCancelling] = useState(false);
   const [resumingId, setResumingId] = useState<number | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [fatal, setFatal] = useState<string | null>(null);
@@ -108,7 +108,7 @@ export default function POS() {
   });
   const role = roleQuery.data ?? 'owner';
   const operatorName = ((roleQuery.data as { user?: { name?: string } })?.user?.name) ?? '';
-  const canRefund = ['owner', 'manager'].includes(role);
+  const _canRefund = ['owner', 'manager'].includes(role);
 const canPay = ['owner', 'manager', 'cashier'].includes(role);
 const canDiscount = ['owner', 'manager'].includes(role);
 const canCancel = ['owner', 'manager'].includes(role);

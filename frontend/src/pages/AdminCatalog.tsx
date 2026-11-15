@@ -323,7 +323,7 @@ export default function AdminCatalog() {
           label: 'Undo',
           onClick: async () => {
             for (const s of snapshot) {
-              const { id, ...body } = s as Record<string, unknown>;
+              const { id: _id, ...body } = s as Record<string, unknown>;
               await adminFetch('/admin/menu', { method: 'POST', body: JSON.stringify(body) });
             }
             qc.invalidateQueries({ queryKey: ['catalog-menu'] });
@@ -662,20 +662,20 @@ export default function AdminCatalog() {
             <div className="py-4 space-y-4">
               <div className="grid sm:grid-cols-2 gap-4">
                 <div className="sm:col-span-2">
-                  <label className="text-xs font-semibold">Name *</label>
-                  <Input value={crustForm.name} onChange={(e) => setCrustForm({ ...crustForm, name: e.target.value, slug: crustForm.slug || slugify(e.target.value) })} placeholder="Cheese Burst" className="mt-1" required />
+                  <label htmlFor="f-AdminCatalog-1" className="text-xs font-semibold">Name *</label>
+                  <Input id="f-AdminCatalog-1" value={crustForm.name} onChange={(e) => setCrustForm({ ...crustForm, name: e.target.value, slug: crustForm.slug || slugify(e.target.value) })} placeholder="Cheese Burst" className="mt-1" required />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold">Slug</label>
-                  <Input value={crustForm.slug} onChange={(e) => setCrustForm({ ...crustForm, slug: e.target.value })} className="mt-1 font-mono text-sm" placeholder="cheese-burst" />
+                  <label htmlFor="f-AdminCatalog-2" className="text-xs font-semibold">Slug</label>
+                  <Input id="f-AdminCatalog-2" value={crustForm.slug} onChange={(e) => setCrustForm({ ...crustForm, slug: e.target.value })} className="mt-1 font-mono text-sm" placeholder="cheese-burst" />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold">Sort order</label>
-                  <Input type="number" value={crustForm.sort_order} onChange={(e) => setCrustForm({ ...crustForm, sort_order: e.target.value })} className="mt-1" />
+                  <label htmlFor="f-AdminCatalog-3" className="text-xs font-semibold">Sort order</label>
+                  <Input id="f-AdminCatalog-3" type="number" value={crustForm.sort_order} onChange={(e) => setCrustForm({ ...crustForm, sort_order: e.target.value })} className="mt-1" />
                 </div>
                 <div className="sm:col-span-2">
-                  <label className="text-xs font-semibold">Description</label>
-                  <Input value={crustForm.description} onChange={(e) => setCrustForm({ ...crustForm, description: e.target.value })} className="mt-1" placeholder="Loaded with extra cheese" />
+                  <label htmlFor="f-AdminCatalog-4" className="text-xs font-semibold">Description</label>
+                  <Input id="f-AdminCatalog-4" value={crustForm.description} onChange={(e) => setCrustForm({ ...crustForm, description: e.target.value })} className="mt-1" placeholder="Loaded with extra cheese" />
                 </div>
                 <div><label className="text-xs font-semibold">Extra ₹ (Regular)</label><Input type="number" step="0.01" value={crustForm.price_regular} onChange={(e) => setCrustForm({ ...crustForm, price_regular: e.target.value })} className="mt-1" placeholder="0" /></div>
                 <div><label className="text-xs font-semibold">Extra ₹ (Medium)</label><Input type="number" step="0.01" value={crustForm.price_medium} onChange={(e) => setCrustForm({ ...crustForm, price_medium: e.target.value })} className="mt-1" placeholder="0" /></div>
@@ -752,8 +752,8 @@ export default function AdminCatalog() {
         <div className="mt-4 space-y-4">
           <Card className="p-4">
             <div className="flex flex-wrap items-center gap-3">
-              <label className="text-xs font-semibold">Menu Item</label>
-              <select value={addonMenuItemId} onChange={e => setAddonMenuItemId(e.target.value ? Number(e.target.value) : '')} className="px-3 py-2.5 rounded-xl border bg-white text-sm min-w-0 sm:min-w-[220px]">
+              <label htmlFor="f-AdminCatalog-5" className="text-xs font-semibold">Menu Item</label>
+              <select id="f-AdminCatalog-5" value={addonMenuItemId} onChange={e => setAddonMenuItemId(e.target.value ? Number(e.target.value) : '')} className="px-3 py-2.5 rounded-xl border bg-white text-sm min-w-0 sm:min-w-[220px]">
                 <option value="">All items ({items.length}) — pick one to add group</option>
                 {items.map(it => <option key={it.id} value={it.id}>{it.name} #{it.id}</option>)}
               </select>
@@ -805,43 +805,43 @@ export default function AdminCatalog() {
             <div className="py-4 space-y-4">
               <div className="grid sm:grid-cols-2 gap-4">
                 <div className="sm:col-span-2">
-                  <label className="text-xs font-semibold">Name *</label>
-                  <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value, slug: form.slug || slugify(e.target.value) })} placeholder="Cheese & Tomato" className="mt-1" required />
+                  <label htmlFor="f-AdminCatalog-6" className="text-xs font-semibold">Name *</label>
+                  <Input id="f-AdminCatalog-6" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value, slug: form.slug || slugify(e.target.value) })} placeholder="Cheese & Tomato" className="mt-1" required />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold">Slug</label>
-                  <Input value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value })} className="mt-1 font-mono text-sm" placeholder="cheese-tomato" />
+                  <label htmlFor="f-AdminCatalog-7" className="text-xs font-semibold">Slug</label>
+                  <Input id="f-AdminCatalog-7" value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value })} className="mt-1 font-mono text-sm" placeholder="cheese-tomato" />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold">Category *</label>
-                  <select value={form.category_id} onChange={(e) => setForm({ ...form, category_id: Number(e.target.value) })} className="mt-1 w-full px-3 py-2.5 rounded-xl border bg-white">
+                  <label htmlFor="f-AdminCatalog-8" className="text-xs font-semibold">Category *</label>
+                  <select id="f-AdminCatalog-8" value={form.category_id} onChange={(e) => setForm({ ...form, category_id: Number(e.target.value) })} className="mt-1 w-full px-3 py-2.5 rounded-xl border bg-white">
                     <option value={0}>Select</option>
                     {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
                 </div>
                 <div className="sm:col-span-2">
-                  <label className="text-xs font-semibold">Description</label>
-                  <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} className="mt-1 w-full px-3 py-2.5 rounded-xl border text-sm" placeholder="Juicy tomato, mozzarella…" />
+                  <label htmlFor="f-AdminCatalog-9" className="text-xs font-semibold">Description</label>
+                  <textarea id="f-AdminCatalog-9" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} className="mt-1 w-full px-3 py-2.5 rounded-xl border text-sm" placeholder="Juicy tomato, mozzarella…" />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold">Price (base) *</label>
-                  <Input type="number" step="0.01" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} className="mt-1" placeholder="205" required />
+                  <label htmlFor="f-AdminCatalog-10" className="text-xs font-semibold">Price (base) *</label>
+                  <Input id="f-AdminCatalog-10" type="number" step="0.01" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} className="mt-1" placeholder="205" required />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold">Sort order</label>
-                  <Input type="number" value={form.sort_order} onChange={(e) => setForm({ ...form, sort_order: e.target.value })} className="mt-1" />
+                  <label htmlFor="f-AdminCatalog-11" className="text-xs font-semibold">Sort order</label>
+                  <Input id="f-AdminCatalog-11" type="number" value={form.sort_order} onChange={(e) => setForm({ ...form, sort_order: e.target.value })} className="mt-1" />
                 </div>
                 <div><label className="text-xs font-semibold">Regular price</label><Input type="number" step="0.01" value={form.price_regular} onChange={(e) => setForm({ ...form, price_regular: e.target.value })} className="mt-1" placeholder="205" /></div>
                 <div><label className="text-xs font-semibold">Medium price</label><Input type="number" step="0.01" value={form.price_medium} onChange={(e) => setForm({ ...form, price_medium: e.target.value })} className="mt-1" placeholder="385" /></div>
                 <div><label className="text-xs font-semibold">Large price</label><Input type="number" step="0.01" value={form.price_large} onChange={(e) => setForm({ ...form, price_large: e.target.value })} className="mt-1" placeholder="615" /></div>
                 <div>
-                  <label className="text-xs font-semibold">Dietary</label>
-                  <select value={form.dietary} onChange={(e) => setForm({ ...form, dietary: e.target.value })} className="mt-1 w-full px-3 py-2.5 rounded-xl border bg-white"><option value="veg">veg</option><option value="nonveg">nonveg</option><option value="egg">egg</option></select>
+                  <label htmlFor="f-AdminCatalog-12" className="text-xs font-semibold">Dietary</label>
+                  <select id="f-AdminCatalog-12" value={form.dietary} onChange={(e) => setForm({ ...form, dietary: e.target.value })} className="mt-1 w-full px-3 py-2.5 rounded-xl border bg-white"><option value="veg">veg</option><option value="nonveg">nonveg</option><option value="egg">egg</option></select>
                 </div>
                 <div className="sm:col-span-2">
-                  <label className="text-xs font-semibold">Image</label>
+                  <label htmlFor="f-AdminCatalog-13" className="text-xs font-semibold">Image</label>
                   <div className="mt-1 flex gap-2">
-                    <Input value={form.image_url} onChange={(e) => setForm({ ...form, image_url: e.target.value })} placeholder="https://example.com/image.jpg or /uploads/xxx.jpg" className="flex-1 text-sm" />
+                    <Input id="f-AdminCatalog-13" value={form.image_url} onChange={(e) => setForm({ ...form, image_url: e.target.value })} placeholder="https://example.com/image.jpg or /uploads/xxx.jpg" className="flex-1 text-sm" />
                     <input type="file" ref={fileRef} accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(f); }} />
                     <Button type="button" disabled={uploading} onClick={() => fileRef.current?.click()} className="inline-flex items-center gap-2"><Upload size={14} />{uploading ? '…' : 'Upload'}</Button>
                   </div>
@@ -849,8 +849,8 @@ export default function AdminCatalog() {
                   <p className="text-[11px] text-zinc-400 mt-1">Any image ≤5MB. Uploaded to <code className="px-1 bg-zinc-100 rounded">/uploads</code> — served to site + bot.</p>
                 </div>
                 <div>
-                  <label className="text-xs font-semibold">Subcategory</label>
-                  <Input value={form.pizza_subcategory} onChange={(e) => setForm({ ...form, pizza_subcategory: e.target.value })} className="mt-1" placeholder="classic / premium" />
+                  <label htmlFor="f-AdminCatalog-14" className="text-xs font-semibold">Subcategory</label>
+                  <Input id="f-AdminCatalog-14" value={form.pizza_subcategory} onChange={(e) => setForm({ ...form, pizza_subcategory: e.target.value })} className="mt-1" placeholder="classic / premium" />
                 </div>
                 <div className="flex flex-col gap-2 pt-6">
                   <label className="inline-flex items-center gap-2 text-sm"><input type="checkbox" checked={form.is_spicy} onChange={(e) => setForm({ ...form, is_spicy: e.target.checked })} /> Spicy</label>

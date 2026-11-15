@@ -153,7 +153,7 @@ export default function Admin() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastSeq]);
 
-  const configQuery = useQuery({
+  const _configQuery = useQuery({
     queryKey: ['admin-config'],
     queryFn: () => adminFetch<{ phone: string }>('/admin/config'),
     enabled: authed,
@@ -491,9 +491,9 @@ ${bodyHtml}
               <h1 className="text-xl font-heading font-bold mt-4 tracking-tight">Operations</h1>
               <p className="text-[13px] text-muted-foreground mt-1">Sign in to manage live orders, kitchen queue and payouts.</p>
               <form onSubmit={(e) => { e.preventDefault(); if (keyInput.trim()) { setAdminKey(keyInput.trim()); setAuthed(true); } }} className="mt-6 text-left space-y-3">
-                <label className="text-[11px] font-semibold tracking-normal text-muted-foreground">Admin key</label>
+                <label htmlFor="f-Admin-1" className="text-[11px] font-semibold tracking-normal text-muted-foreground">Admin key</label>
                 <div className="relative">
-                  <Input type="password" value={keyInput} onChange={(e) => setKeyInput(e.target.value)} placeholder="BOT_ADMIN_KEY" className="font-mono pr-10" autoFocus />
+                  <Input id="f-Admin-1" type="password" value={keyInput} onChange={(e) => setKeyInput(e.target.value)} placeholder="BOT_ADMIN_KEY" className="font-mono pr-10" autoFocus />
                   <ShieldCheck size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 </div>
                 <p className="text-[11px] leading-relaxed text-muted-foreground">Stored only in this browser (<code className="px-1 py-0.5 bg-muted rounded text-foreground font-mono text-[10px]">localStorage</code>). Find it in <code className="px-1 py-0.5 bg-muted rounded text-foreground font-mono text-[10px]">bot/.env</code>.</p>

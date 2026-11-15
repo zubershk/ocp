@@ -143,7 +143,7 @@ export function useOutletsList() {
 }
 
 export function usePrimaryOutlet() {
-  const { outlets, config } = useRestaurant();
+  const { outlets, config: _config } = useRestaurant();
   if (outlets.length > 0) return outlets[0];
   return null;
 }

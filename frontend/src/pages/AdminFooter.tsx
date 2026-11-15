@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
-import { Save, ArrowLeft, Footprints, Type, Link as LinkIcon } from 'lucide-react';
+import { Save, ArrowLeft, Footprints, Type } from 'lucide-react';
 import { adminFetch, getAdminKey } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import { Card, CardContent } from '@/components/shadcn/card';

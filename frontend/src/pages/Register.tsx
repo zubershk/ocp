@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Shield, User, Mail, Lock, Phone, CheckCircle, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Shield, User, RefreshCw } from 'lucide-react';
 import { register } from '../services/authService';
 import { useToast } from '../context/ToastContext';
 import { useRestaurantName } from '../context/RestaurantContext';

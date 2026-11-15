@@ -1,12 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Save, ArrowLeft, Trash2, Plus, Edit3, Delete, Tag } from 'lucide-react';
+import { Plus, Edit3, Delete, Tag } from 'lucide-react';
 import { adminFetch, getAdminKey } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import { Card, CardContent } from '@/components/shadcn/card';
-import { Button } from '@/components/shadcn/button';
 import { Input } from '@/components/shadcn/input';
-import { Skeleton } from '@/components/shadcn/skeleton';
 
 interface Coupon {
   id: number;
@@ -268,8 +266,8 @@ export default function AdminCoupons() {
               </h3>
               <form onSubmit={handleSubmit} className="space-y-3">
                 <div className="space-y-2">
-                  <label className="text-xs font-semibold text-zinc-600">Coupon Code</label>
-                  <Input
+                  <label htmlFor="f-AdminCoupons-1" className="text-xs font-semibold text-zinc-600">Coupon Code</label>
+                  <Input id="f-AdminCoupons-1"
                     value={form.code}
                     onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })}
                     placeholder="e.g. WELCOME20"
@@ -277,8 +275,8 @@ export default function AdminCoupons() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-semibold text-zinc-600">Type</label>
-                  <select
+                  <label htmlFor="f-AdminCoupons-2" className="text-xs font-semibold text-zinc-600">Type</label>
+                  <select id="f-AdminCoupons-2"
                     value={form.type}
                     onChange={(e) => setForm({ ...form, type: e.target.value })}
                     className="w-full px-3 py-2 rounded-lg border border-stone-200 bg-stone-50 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500"
@@ -288,8 +286,8 @@ export default function AdminCoupons() {
                   </select>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-semibold text-zinc-600">Value</label>
-                  <Input
+                  <label htmlFor="f-AdminCoupons-3" className="text-xs font-semibold text-zinc-600">Value</label>
+                  <Input id="f-AdminCoupons-3"
                     type="number"
                     value={form.value}
                     onChange={(e) => setForm({ ...form, value: parseFloat(e.target.value) || 0 })}
@@ -301,8 +299,8 @@ export default function AdminCoupons() {
                   )}
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-semibold text-zinc-600">Min Subtotal</label>
-                  <Input
+                  <label htmlFor="f-AdminCoupons-4" className="text-xs font-semibold text-zinc-600">Min Subtotal</label>
+                  <Input id="f-AdminCoupons-4"
                     type="number"
                     value={form.min_subtotal}
                     onChange={(e) => setForm({ ...form, min_subtotal: parseFloat(e.target.value) || 0 })}
@@ -311,8 +309,8 @@ export default function AdminCoupons() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-semibold text-zinc-600">Max Discount (optional)</label>
-                  <Input
+                  <label htmlFor="f-AdminCoupons-5" className="text-xs font-semibold text-zinc-600">Max Discount (optional)</label>
+                  <Input id="f-AdminCoupons-5"
                     type="number"
                     value={form.max_discount ?? ''}
                     onChange={(e) =>
@@ -323,8 +321,8 @@ export default function AdminCoupons() {
                   <p className="text-xs text-zinc-500 mt-1">Maximum discount amount (percentage only)</p>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-semibold text-zinc-600">Usage Limit (optional)</label>
-                  <Input
+                  <label htmlFor="f-AdminCoupons-6" className="text-xs font-semibold text-zinc-600">Usage Limit (optional)</label>
+                  <Input id="f-AdminCoupons-6"
                     type="number"
                     value={form.usage_limit ?? ''}
                     onChange={(e) =>
@@ -334,8 +332,8 @@ export default function AdminCoupons() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-semibold text-zinc-600">Starts At</label>
-                  <Input
+                  <label htmlFor="f-AdminCoupons-7" className="text-xs font-semibold text-zinc-600">Starts At</label>
+                  <Input id="f-AdminCoupons-7"
                     type="datetime-local"
                     value={form.starts_at || ''}
                     onChange={(e) => setForm({ ...form, starts_at: e.target.value || null })}
@@ -343,8 +341,8 @@ export default function AdminCoupons() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-semibold text-zinc-600">Expires At</label>
-                  <Input
+                  <label htmlFor="f-AdminCoupons-8" className="text-xs font-semibold text-zinc-600">Expires At</label>
+                  <Input id="f-AdminCoupons-8"
                     type="datetime-local"
                     value={form.expires_at || ''}
                     onChange={(e) => setForm({ ...form, expires_at: e.target.value || null })}

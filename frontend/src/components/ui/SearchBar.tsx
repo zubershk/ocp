@@ -1,5 +1,5 @@
 import { Search, X, ArrowRight, Clock, ChevronDown } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../../context/CartContext';
 import { useToast } from '../../context/ToastContext';
@@ -36,7 +36,7 @@ export function SearchBar({ items, placeholder = 'Search for a dish or cuisine..
     setOpenDropdown,
     dietaryFilter,
     setDietaryFilter,
-    categoryFilter,
+    _categoryFilter: categoryFilter,
     setCategoryFilter,
   } = useSearch(items, initialQuery);
 

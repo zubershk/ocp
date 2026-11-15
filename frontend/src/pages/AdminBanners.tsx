@@ -181,8 +181,8 @@ export default function AdminBanners() {
 
               <div className="space-y-4">
                 <div>
-                  <label className="text-xs font-semibold">Title *</label>
-                  <Input
+                  <label htmlFor="f-AdminBanners-1" className="text-xs font-semibold">Title *</label>
+                  <Input id="f-AdminBanners-1"
                     value={form.title}
                     onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
                     placeholder="e.g. Fresh Baked Pizzas"
@@ -191,8 +191,8 @@ export default function AdminBanners() {
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold">Subtitle</label>
-                  <Input
+                  <label htmlFor="f-AdminBanners-2" className="text-xs font-semibold">Subtitle</label>
+                  <Input id="f-AdminBanners-2"
                     value={form.subtitle}
                     onChange={(e) => setForm((f) => ({ ...f, subtitle: e.target.value }))}
                     placeholder="e.g. Hot & cheesy, delivered to your door"
@@ -201,8 +201,8 @@ export default function AdminBanners() {
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="text-xs font-semibold">Background</label>
-                    <select
+                    <label htmlFor="f-AdminBanners-3" className="text-xs font-semibold">Background</label>
+                    <select id="f-AdminBanners-3"
                       value={form.background}
                       onChange={(e) => setForm((f) => ({ ...f, background: e.target.value }))}
                       className="mt-1 w-full px-3 py-2.5 rounded-lg border border-input bg-transparent text-sm"
@@ -211,8 +211,8 @@ export default function AdminBanners() {
                     </select>
                   </div>
                   <div>
-                    <label className="text-xs font-semibold">Accent Text Color</label>
-                    <select
+                    <label htmlFor="f-AdminBanners-4" className="text-xs font-semibold">Accent Text Color</label>
+                    <select id="f-AdminBanners-4"
                       value={form.accent}
                       onChange={(e) => setForm((f) => ({ ...f, accent: e.target.value }))}
                       className="mt-1 w-full px-3 py-2.5 rounded-lg border border-input bg-transparent text-sm"
@@ -223,8 +223,8 @@ export default function AdminBanners() {
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="text-xs font-semibold">Button Text</label>
-                    <Input
+                    <label htmlFor="f-AdminBanners-5" className="text-xs font-semibold">Button Text</label>
+                    <Input id="f-AdminBanners-5"
                       value={form.buttonText}
                       onChange={(e) => setForm((f) => ({ ...f, buttonText: e.target.value }))}
                       placeholder="e.g. Order Now"
@@ -232,8 +232,8 @@ export default function AdminBanners() {
                     />
                   </div>
                   <div>
-                    <label className="text-xs font-semibold">Button Link</label>
-                    <Input
+                    <label htmlFor="f-AdminBanners-6" className="text-xs font-semibold">Button Link</label>
+                    <Input id="f-AdminBanners-6"
                       value={form.buttonLink}
                       onChange={(e) => setForm((f) => ({ ...f, buttonLink: e.target.value }))}
                       placeholder="e.g. /r/menu"
@@ -242,10 +242,10 @@ export default function AdminBanners() {
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs font-semibold">Image URL</label>
+                  <label htmlFor="f-AdminBanners-7" className="text-xs font-semibold">Image URL</label>
                   <div className="flex gap-2 items-end">
                     <div className="flex-1">
-                      <Input
+                      <Input id="f-AdminBanners-7"
                         value={form.image_url}
                         onChange={(e) => setForm((f) => ({ ...f, image_url: e.target.value }))}
                         placeholder="/uploads/..."

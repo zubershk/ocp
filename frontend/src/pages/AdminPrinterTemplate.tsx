@@ -1,18 +1,16 @@
 import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  Printer, Save, ArrowLeft, AlertTriangle, RefreshCw, Plus, Trash2,
-  ChevronUp, ChevronDown, Layout, Eye, X, GripVertical, Edit3, Type,
+  Save, ArrowLeft, AlertTriangle, RefreshCw, Trash2,
+  ChevronUp, ChevronDown, Eye, X, GripVertical, Type,
   AlignLeft, AlignCenter, AlignRight, Bold, Maximize2, Copy, Download,
-  QrCode, Minus, Settings2, FileText, CheckCircle, Layers, Upload, Undo,
+  QrCode, Minus, Settings2, CheckCircle, Layers, Upload, Undo,
 } from 'lucide-react';
 import { adminFetch, getAdminKey } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import { Card, CardContent } from '@/components/shadcn/card';
 import { Button } from '@/components/shadcn/button';
 import { Input } from '@/components/shadcn/input';
-import { Switch } from '@/components/shadcn/switch';
-import { Skeleton } from '@/components/shadcn/skeleton';
 
 // ------------------------------------------------------------------
 // Types

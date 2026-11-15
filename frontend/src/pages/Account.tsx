@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { User, LogOut, Package, Phone, Mail, MapPin, Clock, ArrowRight, ShoppingBag, MessageCircle, Award, TrendingUp, Heart, Settings } from 'lucide-react';
+import { LogOut, Package, Phone, MapPin, Clock, ArrowRight, ShoppingBag, MessageCircle, Settings } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { fetchMyOrders, updateProfile, fetchMe, getCustomerToken } from '../services/authService';
 import { useRestaurantPhone } from '../context/RestaurantContext';

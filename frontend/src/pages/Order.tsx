@@ -1,6 +1,6 @@
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { useEffect, useState, useRef } from 'react';
-import { PartyPopper, RefreshCw, Star, Send, CheckCircle, Clock, MapPin, Phone, Share2, Repeat, ShoppingBag, ChevronRight, AlertCircle } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { PartyPopper, RefreshCw, Star, Send, CheckCircle, Clock } from 'lucide-react';
 import { orderService, type OrderView } from '../services/orderService';
 import { apiBaseUrl } from '../services/api';
 import { useCart } from '../context/CartContext';

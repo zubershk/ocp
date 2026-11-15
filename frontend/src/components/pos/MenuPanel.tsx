@@ -68,7 +68,7 @@ export default function MenuPanel({
   };
   const [customize, setCustomize] = useState<PosMenuItem | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
-  const { crusts } = useCrusts();
+  const { crusts: _crusts } = useCrusts();
   const { currencySymbol } = usePosConfig();
 
   // Ctrl/Cmd + K focuses search from anywhere on the POS.

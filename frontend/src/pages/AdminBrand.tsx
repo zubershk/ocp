@@ -117,10 +117,10 @@ export default function AdminBrand() {
             ) : (
               <div className="mt-4 grid sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="text-xs font-semibold">Logo URL</label>
+                  <label htmlFor="f-AdminBrand-1" className="text-xs font-semibold">Logo URL</label>
                   <div className="flex gap-2 items-end">
                     <div className="flex-1">
-                      <Input
+                      <Input id="f-AdminBrand-1"
                         value={form.logo_url}
                         onChange={(e) => update('logo_url', e.target.value)}
                         placeholder="/uploads/..."
@@ -132,10 +132,10 @@ export default function AdminBrand() {
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs font-semibold">Favicon URL</label>
+                  <label htmlFor="f-AdminBrand-2" className="text-xs font-semibold">Favicon URL</label>
                   <div className="flex gap-2 items-end">
                     <div className="flex-1">
-                      <Input
+                      <Input id="f-AdminBrand-2"
                         value={form.favicon_url}
                         onChange={(e) => update('favicon_url', e.target.value)}
                         placeholder="/uploads/..."
@@ -187,8 +187,8 @@ export default function AdminBrand() {
             ) : (
               <div className="mt-4 grid sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="text-xs font-semibold">Heading font</label>
-                  <select
+                  <label htmlFor="f-AdminBrand-3" className="text-xs font-semibold">Heading font</label>
+                  <select id="f-AdminBrand-3"
                     value={form.font_heading}
                     onChange={(e) => update('font_heading', e.target.value)}
                     className="mt-1 w-full px-3 py-2 rounded-lg border border-border bg-card text-sm"
@@ -197,8 +197,8 @@ export default function AdminBrand() {
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs font-semibold">Body font</label>
-                  <select
+                  <label htmlFor="f-AdminBrand-4" className="text-xs font-semibold">Body font</label>
+                  <select id="f-AdminBrand-4"
                     value={form.font_body}
                     onChange={(e) => update('font_body', e.target.value)}
                     className="mt-1 w-full px-3 py-2 rounded-lg border border-border bg-card text-sm"

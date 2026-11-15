@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Phone, MapPin, Clock, MessageCircle, ArrowRight, Star, Send, Navigation, Globe, ExternalLink } from 'lucide-react';
+import { Phone, MapPin, Clock, MessageCircle, ArrowRight, Send, Navigation, Globe } from 'lucide-react';
 import { useAllPhones, useRestaurantAddress, useDeliveryHours, useOutletsList, useRestaurantPhone, useRestaurantName } from '../context/RestaurantContext';
 import { useSocial, useBrand, useContact } from '../context/SiteSettingsContext';
 import { useToast } from '../context/ToastContext';
@@ -14,7 +14,7 @@ export default function Contact() {
   const restaurantPhone = useRestaurantPhone();
   const restaurantName = useRestaurantName();
   const social = useSocial();
-  const brand = useBrand();
+  const _brand = useBrand();
   const contact = useContact();
   const toast = useToast();
 

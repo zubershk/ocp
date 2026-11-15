@@ -10,7 +10,7 @@ import { DEFAULT_POS_CONFIG, type POSConfig } from '../config/posDefaults';
 import { isFallbackSource, type ConfigSource } from '../config/tenant';
 export default function AdminPosConfig() {
   const qc = useQueryClient();
-  const { data, isLoading, isError, error } = useQuery({
+  const { data, isLoading, isError, error: _error } = useQuery({
     queryKey: ['pos-config'],
     queryFn: async () => {
       try {
@@ -116,8 +116,8 @@ export default function AdminPosConfig() {
               <label className="inline-flex items-center gap-2 text-sm"><input type="checkbox" checked={local.charges.tip_enabled} onChange={e => setLocal({ ...local, charges: { ...local.charges, tip_enabled: e.target.checked } })} /> Tip enabled</label>
             </div>
             <div>
-              <label className="text-xs font-semibold">Round Mode</label>
-              <select value={local.charges.round_mode} onChange={e => setLocal({ ...local, charges: { ...local.charges, round_mode: e.target.value } })} className="mt-1 w-full px-3 py-2.5 rounded-xl border bg-white text-sm">
+              <label htmlFor="f-AdminPosConfig-1" className="text-xs font-semibold">Round Mode</label>
+              <select id="f-AdminPosConfig-1" value={local.charges.round_mode} onChange={e => setLocal({ ...local, charges: { ...local.charges, round_mode: e.target.value } })} className="mt-1 w-full px-3 py-2.5 rounded-xl border bg-white text-sm">
                 <option value="none">none</option><option value="nearest">nearest</option><option value="up">up</option><option value="down">down</option>
               </select>
             </div>

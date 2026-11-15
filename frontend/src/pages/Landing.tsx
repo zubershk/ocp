@@ -1,8 +1,8 @@
 import { Link } from 'react-router-dom';
 import {
-  ArrowRight, MessageSquare, BarChart3, Shield, Zap, Globe, Code,
+  ArrowRight, MessageSquare, BarChart3,
   CheckCircle2, XCircle, ChevronRight, Terminal, Layout,
-  Smartphone, Bell, Users, Settings, Truck, Clock, Star, ExternalLink,
+  Smartphone, Bell, Users,
 } from 'lucide-react';
 import { useSocial, useSEO } from '../context/SiteSettingsContext';
 import { useRestaurantName } from '../context/RestaurantContext';

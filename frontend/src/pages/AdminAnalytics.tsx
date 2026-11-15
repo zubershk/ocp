@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { TrendingUp, IndianRupee, ShoppingBag, Flame, BarChart3, Trophy, Clock, Activity, Download, RefreshCw, Wifi, WifiOff, Search, ArrowUpRight, ArrowDownRight, Users, Filter, Layers } from 'lucide-react';
+import { TrendingUp, IndianRupee, Flame, BarChart3, Trophy, Clock, Activity, Download, RefreshCw, Wifi, WifiOff, Search, ArrowUpRight, ArrowDownRight, Filter, Layers } from 'lucide-react';
 import { ComposedChart, Area, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { format } from 'date-fns';
 import { adminFetch, getAdminKey } from '../services/api';

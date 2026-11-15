@@ -62,7 +62,7 @@ export default function Product() {
   );
 
   const base = item.priceBySize ? (item.priceBySize[size] ?? item.price) : item.price;
-  const crustObj = crusts.find((c) => c.slug === activeCrust);
+  const _crustObj = crusts.find((c) => c.slug === activeCrust);
   const crustExtra = getCrustExtra(activeCrust, size);
   const unit = base + crustExtra;
   const total = unit * qty;

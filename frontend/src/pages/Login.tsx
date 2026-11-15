@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { MessageCircle, ArrowLeft, RefreshCw, Gift, Truck, Clock3, Award, UtensilsCrossed, MapPin, Shield, ChevronRight, Mail, Lock, User, Phone, ArrowRight, ArrowLeft as ArrowLeftIcon, Star, Flame } from 'lucide-react';
-import { sendOtp, verifyOtp, register, login } from '../services/authService';
+import { MessageCircle, RefreshCw, Gift, Truck, Clock3, Award, UtensilsCrossed, MapPin, Shield, ChevronRight, Mail, User, Phone, Star, Flame } from 'lucide-react';
+import { sendOtp, verifyOtp, login } from '../services/authService';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useOutletNames } from '../context/RestaurantContext';
@@ -18,7 +18,7 @@ export default function Login() {
   const { push } = useToast();
   const outletNames = useOutletNames();
 
-  const outletList = outletNames.length > 0 ? outletNames.join(' · ') : 'Outlet 1• Outlet 2• Outlet 3';
+  const _outletList = outletNames.length > 0 ? outletNames.join(' · ') : 'Outlet 1• Outlet 2• Outlet 3';
 
   const ICON_MAP: Record<string, any> = {
     Gift, Truck, Clock3, Award, UtensilsCrossed, MapPin, Star, Flame, Shield, Phone, Mail,
@@ -48,8 +48,8 @@ export default function Login() {
   const [otpVerifying, setOtpVerifying] = useState(false);
   const [otpError, setOtpError] = useState('');
   const [otpCooldown, setOtpCooldown] = useState(0);
-  const [otpDelivered, setOtpDelivered] = useState(true);
-  const [otpSuccess, setOtpSuccess] = useState(false);
+  const [_otpDelivered, setOtpDelivered] = useState(true);
+  const [_otpSuccess, setOtpSuccess] = useState(false);
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   useEffect(() => { if (customer) nav(redirect, { replace: true }); }, [customer, nav, redirect]);
