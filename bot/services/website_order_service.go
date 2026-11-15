@@ -24,6 +24,13 @@ func stripHTMLTags(s string) string {
 	return html.UnescapeString(regexp.MustCompile(`<[^>]*>`).ReplaceAllString(s, ""))
 }
 
+// maxAddressLen caps the address length — it is interpolated into WhatsApp
+// notifications (~1 MB message budget), so an unbounded value breaks the send.
+const maxAddressLen = 2000
+
+// maxLandmarkLen caps the landmark length for the same reason.
+const maxLandmarkLen = 500
+
 // ------------------------------------------------------------------
 // Website order flow (Phase 2.2)
 //
@@ -67,6 +74,10 @@ type WebsiteOrderRequest struct {
 	PaymentMethod string                    `json:"payment_method"`
 	Items         []WebsiteOrderItemRequest `json:"items"`
 	Source        string                    `json:"source,omitempty"` // website | whatsapp
+	// CouponCode is the customer's promo code. It is validated and priced
+	// SERVER-side against the tenant's coupon table and the authoritative
+	// subtotal; the client never supplies a discount amount.
+	CouponCode string `json:"coupon_code,omitempty"`
 }
 
 type WebsiteOrderLine struct {
@@ -233,25 +244,26 @@ func (s *WebsiteOrderService) Create(req *WebsiteOrderRequest, idempotencyKey st
 // priceComboLine resolves a combo order line. The line is billed at the
 // combo price; the customer's selection is validated against the combo's
 // pool and recorded so the kitchen knows what to prepare.
-func (s *WebsiteOrderService) priceComboLine(requested WebsiteOrderItemRequest, rid int) (WebsiteOrderLine, error) {
+// Returns the priced line plus its exact total in paise.
+func (s *WebsiteOrderService) priceComboLine(requested WebsiteOrderItemRequest, rid int) (WebsiteOrderLine, int64, error) {
 	comboSvc := NewComboService()
 	combo, err := comboSvc.GetActiveBySlug(requested.ComboSlug, rid)
 	if err != nil {
 		if errors.Is(err, ErrComboNotFound) {
-			return WebsiteOrderLine{}, badRequest("combo is not available: %s", requested.ComboSlug)
+			return WebsiteOrderLine{}, 0, badRequest("combo is not available: %s", requested.ComboSlug)
 		}
-		return WebsiteOrderLine{}, err
+		return WebsiteOrderLine{}, 0, err
 	}
 	if combo.MenuItemID == 0 {
-		return WebsiteOrderLine{}, badRequest("combo %s is not orderable", combo.Slug)
+		return WebsiteOrderLine{}, 0, badRequest("combo %s is not orderable", combo.Slug)
 	}
 
 	selection, err := comboSvc.ResolveSelection(combo, requested.ComboSelection)
 	if err != nil {
 		if ve, ok := err.(*ComboValidationError); ok {
-			return WebsiteOrderLine{}, badRequest("%s", ve.Msg)
+			return WebsiteOrderLine{}, 0, badRequest("%s", ve.Msg)
 		}
-		return WebsiteOrderLine{}, err
+		return WebsiteOrderLine{}, 0, err
 	}
 
 	comboItems := make([]OrderComboItem, 0, len(selection))
@@ -261,22 +273,26 @@ func (s *WebsiteOrderService) priceComboLine(requested WebsiteOrderItemRequest, 
 			Name:       sel.Name,
 			Size:       sel.Size,
 			Quantity:   sel.Quantity,
-			UnitPrice:  sel.UnitPrice,
-			LineTotal:  sel.LineTotal,
+			UnitPrice:  paiseToRupees(rounding(sel.UnitPrice)),
+			LineTotal:  paiseToRupees(rounding(sel.LineTotal)),
 		})
 	}
+
+	// Money is computed in integer paise and rounded exactly once.
+	comboPricePaise := rounding(combo.ComboPrice)
+	lineTotalPaise := comboPricePaise * int64(requested.Quantity)
 
 	return WebsiteOrderLine{
 		MenuItemID: combo.MenuItemID,
 		Slug:       combo.Slug,
 		Name:       combo.Name,
 		Quantity:   requested.Quantity,
-		UnitPrice:  combo.ComboPrice,
-		LineTotal:  round2(combo.ComboPrice * float64(requested.Quantity)),
+		UnitPrice:  paiseToRupees(comboPricePaise),
+		LineTotal:  paiseToRupees(lineTotalPaise),
 		ComboSlug:  combo.Slug,
 		ComboID:    combo.ID,
 		ComboItems: comboItems,
-	}, nil
+	}, lineTotalPaise, nil
 }
 
 func (s *WebsiteOrderService) CreateFor(req *WebsiteOrderRequest, idempotencyKey string, restaurantID int) (*WebsiteOrderResult, error) {
@@ -308,6 +324,16 @@ func (s *WebsiteOrderService) CreateFor(req *WebsiteOrderRequest, idempotencyKey
 	if req.DeliveryType == OrderTypeDelivery && address == "" {
 		return nil, badRequest("address is required for delivery")
 	}
+	// Same caps the POS path applies (services/pos_service.go): the address
+	// and landmark are interpolated into the WhatsApp notification (~1 MB
+	// message budget), so an unbounded value would break the message send.
+	if len(address) > maxAddressLen {
+		return nil, badRequest("address too long (max %d characters)", maxAddressLen)
+	}
+	landmark := stripHTMLTags(strings.TrimSpace(req.Landmark))
+	if len(landmark) > maxLandmarkLen {
+		return nil, badRequest("landmark too long (max %d characters)", maxLandmarkLen)
+	}
 	biz := GetBizConfigFor(ridForScope)
 	if biz == nil {
 		return nil, badRequest("restaurant configuration not found")
@@ -329,18 +355,21 @@ func (s *WebsiteOrderService) CreateFor(req *WebsiteOrderRequest, idempotencyKey
 	}
 
 	// ---- price calculation from PostgreSQL ----
+	// All money is computed in integer paise (int64) and converted to the
+	// DECIMAL(10,2) columns exactly once, at the end — the same integer
+	// discipline the POS path uses (services/pos_totals.go).
 	lines := make([]WebsiteOrderLine, 0, len(req.Items))
-	var subtotal float64
+	var subtotalPaise int64
 	for _, requested := range req.Items {
 		// A combo line is billed at the combo price, not the sum of its
 		// parts. The combo is resolved from the DB and the customer's
 		// selection is validated against its pool.
 		if requested.ComboSlug != "" {
-			line, err := s.priceComboLine(requested, ridForScope)
+			line, linePaise, err := s.priceComboLine(requested, ridForScope)
 			if err != nil {
 				return nil, err
 			}
-			subtotal += line.LineTotal
+			subtotalPaise += linePaise
 			lines = append(lines, line)
 			continue
 		}
@@ -386,7 +415,8 @@ func (s *WebsiteOrderService) CreateFor(req *WebsiteOrderRequest, idempotencyKey
 			crustExtra = CrustCharge(pr, pm, pl, size)
 		}
 
-		unit := base + crustExtra
+		unitPaise := rounding(base) + rounding(crustExtra)
+		lineTotalPaise := unitPaise * int64(requested.Quantity)
 		line := WebsiteOrderLine{
 			MenuItemID: item.ID,
 			Slug:       item.Slug,
@@ -395,19 +425,55 @@ func (s *WebsiteOrderService) CreateFor(req *WebsiteOrderRequest, idempotencyKey
 			Crust:      crustSlug,
 			CrustName:  crustName,
 			Quantity:   requested.Quantity,
-			UnitPrice:  unit,
-			LineTotal:  unit * float64(requested.Quantity),
+			UnitPrice:  paiseToRupees(unitPaise),
+			LineTotal:  paiseToRupees(lineTotalPaise),
 		}
-		subtotal += line.LineTotal
+		subtotalPaise += lineTotalPaise
 		lines = append(lines, line)
 	}
 
-	deliveryFee := 0.0
-	if req.DeliveryType == "delivery" {
-		deliveryFee = biz.DeliveryFee
+	// ---- coupon: validated and priced server-side ----
+	// The client sends only the CODE. The discount is computed here from the
+	// authoritative subtotal and the tenant's coupon row; an invalid,
+	// expired, not-yet-active or exhausted coupon is a client error (400),
+	// never a silently ignored field.
+	couponCode := strings.ToUpper(strings.TrimSpace(req.CouponCode))
+	discountPaise := int64(0)
+	if couponCode != "" {
+		couponResult, err := NewCouponService().Validate(couponCode, ridForScope, paiseToRupees(subtotalPaise))
+		if err != nil {
+			var cve *CouponValidationError
+			if errors.As(err, &cve) {
+				return nil, badRequest("coupon %s: %s", couponCode, cve.Message)
+			}
+			return nil, err
+		}
+		discountPaise = rounding(couponResult.Discount)
+		if discountPaise < 0 {
+			discountPaise = 0
+		}
+		if discountPaise > subtotalPaise {
+			discountPaise = subtotalPaise
+		}
 	}
-	discount := 0.0
-	total := subtotal + deliveryFee - discount
+
+	deliveryFeePaise := int64(0)
+	if req.DeliveryType == OrderTypeDelivery {
+		deliveryFeePaise = rounding(biz.DeliveryFee)
+	}
+
+	// Tax: website menu prices are tax-INCLUSIVE (the storefront states
+	// "taxes included"), so no tax is added here and orders.tax_amount
+	// stays 0 — the quoted total equals the stored total.
+	totalPaise := subtotalPaise + deliveryFeePaise - discountPaise
+	if totalPaise < 0 {
+		totalPaise = 0
+	}
+
+	subtotal := paiseToRupees(subtotalPaise)
+	deliveryFee := paiseToRupees(deliveryFeePaise)
+	discount := paiseToRupees(discountPaise)
+	total := paiseToRupees(totalPaise)
 
 	// ---- transactional persist ----
 	tx, err := database.DB.Begin()
@@ -415,6 +481,19 @@ func (s *WebsiteOrderService) CreateFor(req *WebsiteOrderRequest, idempotencyKey
 		return nil, fmt.Errorf("tx begin failed: %w", err)
 	}
 	defer tx.Rollback()
+
+	// Coupon redemption is consumed INSIDE the order transaction and with an
+	// atomic guarded UPDATE: two concurrent redemptions of the last use
+	// cannot both win, and a failed order rolls the redemption back.
+	if couponCode != "" {
+		redeemed, err := incrementCouponUse(tx, couponCode, ridForScope)
+		if err != nil {
+			return nil, fmt.Errorf("coupon redemption failed: %w", err)
+		}
+		if !redeemed {
+			return nil, badRequest("coupon %s is no longer available — please remove it and try again", couponCode)
+		}
+	}
 
 	var seq int64
 	if err := tx.QueryRow(`SELECT nextval('ocp_order_number_seq')`).Scan(&seq); err != nil {
@@ -442,7 +521,7 @@ func (s *WebsiteOrderService) CreateFor(req *WebsiteOrderRequest, idempotencyKey
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'confirmed',$13,$14,$15,$16,$17)
 		RETURNING id, created_at, access_token
 	`, orderNumber, name, phone, strings.TrimSpace(req.Customer.Email), req.DeliveryType,
-		address, stripHTMLTags(strings.TrimSpace(req.Landmark)), req.PaymentMethod,
+		address, landmark, req.PaymentMethod,
 		subtotal, deliveryFee, discount, total, nullIfEmpty(idempotencyKey), source,
 		orderAccessToken(), rid, outletID,
 	).Scan(&orderID, &createdAt, &accessToken)
@@ -498,7 +577,7 @@ func (s *WebsiteOrderService) CreateFor(req *WebsiteOrderRequest, idempotencyKey
 		CustomerName: name, CustomerPhone: phone,
 		Email:        strings.TrimSpace(req.Customer.Email),
 		DeliveryType: req.DeliveryType, Address: address,
-		Landmark:      stripHTMLTags(strings.TrimSpace(req.Landmark)),
+		Landmark:      landmark,
 		PaymentMethod: req.PaymentMethod,
 		Items:         lines, Subtotal: subtotal,
 		DeliveryFee: deliveryFee, Discount: discount, Total: total,
@@ -538,7 +617,13 @@ func (s *WebsiteOrderService) CreateFor(req *WebsiteOrderRequest, idempotencyKey
 // Fails closed — panics if crypto/rand is unavailable rather than emitting
 // predictable time-based tokens (which would expose order PII).
 // estimateETA returns remaining minutes until delivery based on status and kitchen load.
+// estimateETAFor scopes the kitchen-load count to one tenant so a busy
+// restaurant never inflates another restaurant's ETA.
 func estimateETA(status string, createdAt time.Time) int {
+	return estimateETAFor(status, createdAt, ResolveRestaurant(0))
+}
+
+func estimateETAFor(status string, createdAt time.Time, restaurantID int) int {
 	base := map[string]int{
 		"placed":           35,
 		"confirmed":        28,
@@ -554,7 +639,7 @@ func estimateETA(status string, createdAt time.Time) int {
 	}
 	// kitchen load adjustment
 	var active int
-	if err := database.DB.QueryRow(`SELECT COUNT(*) FROM orders WHERE status IN ('placed','confirmed','preparing','ready','out_for_delivery') AND created_at > NOW() - INTERVAL '2 hours'`).Scan(&active); err == nil {
+	if err := database.DB.QueryRow(`SELECT COUNT(*) FROM orders WHERE status IN ('placed','confirmed','preparing','ready','out_for_delivery') AND created_at > NOW() - INTERVAL '2 hours' AND restaurant_id = $1`, ResolveRestaurant(restaurantID)).Scan(&active); err == nil {
 		if active > 15 {
 			base += 10
 		} else if active > 8 {
@@ -580,25 +665,44 @@ func orderAccessToken() string {
 	return hex.EncodeToString(b)
 }
 
+// ErrOrderNotCancellable is returned when an order is past the state in
+// which the customer may still cancel it.
+var ErrOrderNotCancellable = errors.New("order can no longer be cancelled")
+
+// ErrCancellationWindowExpired is returned when the 5-minute cancellation
+// window has closed.
+var ErrCancellationWindowExpired = errors.New("cancellation window (5 min) has expired")
+
 // Get resolves an order by numeric ID or order number, with items.
 // When the order has an access token, token must match (404 otherwise).
 // Cancel allows the ordering customer to cancel within 5 minutes of placing,
 // only while the order is still in 'placed' or 'confirmed' state.
-func (s *WebsiteOrderService) Cancel(identifier, token string) error {
-	order, err := s.Get(identifier, token)
+//
+// Cancel/ Get are the single-tenant wrappers; tenant-scoped callers use
+// CancelFor / GetFor so an order can never be read across tenants.
+func (s *WebsiteOrderService) Cancel(identifier, token string, restaurantID int) error {
+	return s.CancelFor(identifier, token, restaurantID)
+}
+
+// CancelFor is Cancel scoped to one tenant: the order must belong to the
+// tenant that owns the request context, and the cancellation UPDATE carries
+// the same tenant predicate.
+func (s *WebsiteOrderService) CancelFor(identifier, token string, restaurantID int) error {
+	rid := ResolveRestaurant(restaurantID)
+	order, err := s.GetFor(identifier, token, rid)
 	if err != nil {
 		return err
 	}
 	if order == nil {
-		return fmt.Errorf("order not found")
+		return ErrOrderNotFound
 	}
 	if order.Status != "placed" && order.Status != "confirmed" {
-		return fmt.Errorf("order can no longer be cancelled")
+		return ErrOrderNotCancellable
 	}
 	if time.Since(order.CreatedAt) > 5*time.Minute {
-		return fmt.Errorf("cancellation window (5 min) has expired")
+		return ErrCancellationWindowExpired
 	}
-	_, err = database.DB.Exec(`UPDATE orders SET status='cancelled', updated_at=NOW() WHERE id=$1`, order.ID)
+	_, err = database.DB.Exec(`UPDATE orders SET status='cancelled', updated_at=NOW() WHERE id=$1 AND restaurant_id=$2`, order.ID, rid)
 	if err != nil {
 		return err
 	}
@@ -607,27 +711,37 @@ func (s *WebsiteOrderService) Cancel(identifier, token string) error {
 	return err
 }
 
+// Get resolves an order by numeric ID or order number, with items.
+// When the order has an access token, token must match (404 otherwise).
 func (s *WebsiteOrderService) Get(identifier string, token string) (*WebsiteOrderResult, error) {
+	return s.GetFor(identifier, token, 0)
+}
+
+// GetFor resolves an order by numeric ID or order number WITHIN one tenant.
+// The tenant predicate is part of the lookup itself, so an order of another
+// tenant is indistinguishable from a missing order.
+func (s *WebsiteOrderService) GetFor(identifier string, token string, restaurantID int) (*WebsiteOrderResult, error) {
+	rid := ResolveRestaurant(restaurantID)
 	var (
 		query string
 		arg   interface{}
 	)
 	if isNumericID(identifier) {
-		query = `SELECT id FROM orders WHERE id = $1`
+		query = `SELECT id FROM orders WHERE id = $1 AND restaurant_id = $2`
 		arg = identifier
 	} else {
-		query = `SELECT id FROM orders WHERE order_number = $1`
+		query = `SELECT id FROM orders WHERE order_number = $1 AND restaurant_id = $2`
 		arg = identifier
 	}
 
 	var orderID int
-	if err := database.DB.QueryRow(query, arg).Scan(&orderID); err != nil {
+	if err := database.DB.QueryRow(query, arg, rid).Scan(&orderID); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
 		return nil, err
 	}
-	order, err := s.getByID(orderID)
+	order, err := s.getByIDFor(orderID, rid)
 	if err != nil || order == nil {
 		return order, err
 	}
@@ -644,13 +758,19 @@ func (s *WebsiteOrderService) Get(identifier string, token string) (*WebsiteOrde
 }
 
 func (s *WebsiteOrderService) getByID(orderID int) (*WebsiteOrderResult, error) {
+	return s.getByIDFor(orderID, ResolveRestaurant(0))
+}
+
+// getByIDFor loads one order with its items, scoped to a tenant.
+func (s *WebsiteOrderService) getByIDFor(orderID, restaurantID int) (*WebsiteOrderResult, error) {
+	rid := ResolveRestaurant(restaurantID)
 	const cols = `
 		id, order_number, status, customer_name, customer_phone,
 		COALESCE(email,''), order_type, COALESCE(address,''), COALESCE(landmark,''),
 		payment_method, subtotal, delivery_fee, discount, total, created_at,
 		COALESCE(access_token,'')
 	`
-	row := database.DB.QueryRow(`SELECT `+cols+` FROM orders WHERE id = $1`, orderID)
+	row := database.DB.QueryRow(`SELECT `+cols+` FROM orders WHERE id = $1 AND restaurant_id = $2`, orderID, rid)
 	var o WebsiteOrderResult
 	if err := row.Scan(&o.ID, &o.OrderNumber, &o.Status, &o.CustomerName, &o.CustomerPhone,
 		&o.Email, &o.DeliveryType, &o.Address, &o.Landmark,
@@ -659,7 +779,7 @@ func (s *WebsiteOrderService) getByID(orderID int) (*WebsiteOrderResult, error) 
 		return nil, err
 	}
 
-	o.ETAminutes = estimateETA(o.Status, o.CreatedAt)
+	o.ETAminutes = estimateETAFor(o.Status, o.CreatedAt, rid)
 
 	itemRows, err := database.DB.Query(`
 		SELECT oi.menu_item_id, oi.name, COALESCE(mi.slug, ''), oi.quantity, oi.unit_price, oi.options, oi.subtotal,
@@ -700,7 +820,7 @@ func (s *WebsiteOrderService) getByID(orderID int) (*WebsiteOrderResult, error) 
 				line.ComboItems = comboItems
 			}
 			// Resolve the combo slug for display.
-			_ = database.DB.QueryRow(`SELECT slug FROM combos WHERE id = $1`, line.ComboID).Scan(&line.ComboSlug)
+			_ = database.DB.QueryRow(`SELECT slug FROM combos WHERE id = $1 AND restaurant_id = $2`, line.ComboID, rid).Scan(&line.ComboSlug)
 		}
 		o.Items = append(o.Items, line)
 	}
@@ -737,22 +857,25 @@ func (s *WebsiteOrderService) getByIdepotencyKeyFor(key string, restaurantID int
 		var orderID int
 		err := database.DB.QueryRow(`SELECT id FROM orders WHERE idempotency_key = $1 AND restaurant_id = $2`, key, ResolveRestaurant(restaurantID)).Scan(&orderID)
 		if err == nil {
-			return s.getByID(orderID)
+			return s.getByIDFor(orderID, restaurantID)
 		}
 		if err != sql.ErrNoRows {
 			return nil, err
 		}
 		return nil, nil
 	}
+	// Single-tenant path: still scoped to the default restaurant so a
+	// replay can never surface another tenant's order.
+	rid := ResolveRestaurant(0)
 	var orderID int
-	err := database.DB.QueryRow(`SELECT id FROM orders WHERE idempotency_key = $1`, key).Scan(&orderID)
+	err := database.DB.QueryRow(`SELECT id FROM orders WHERE idempotency_key = $1 AND restaurant_id = $2`, key, rid).Scan(&orderID)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	return s.getByID(orderID)
+	return s.getByIDFor(orderID, rid)
 }
 
 // notifyWhatsApp sends the restaurant alert AFTER commit. It never
