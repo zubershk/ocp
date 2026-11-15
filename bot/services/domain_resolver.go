@@ -136,7 +136,7 @@ func TenantResolverMiddleware(baseDomain string, trustedProxiesCSV string) gin.H
 				slug := strings.TrimSuffix(host, "."+baseDomain)
 				slug = strings.TrimSuffix(slug, ".")
 				if slug != "" && slug != "www" {
-					_ = database.DB.QueryRow(`SELECT id FROM restaurants WHERE lower(slug)=lower($1) LIMIT 1`, slug).Scan(&found)
+					_ = database.DB.QueryRow(`SELECT id FROM restaurants WHERE lower(slug)=lower($1) ORDER BY id LIMIT 1`, slug).Scan(&found)
 					if found != 0 {
 						rid = found
 					}
@@ -153,15 +153,10 @@ func TenantResolverMiddleware(baseDomain string, trustedProxiesCSV string) gin.H
 				}
 			}
 		}
-		if rid == 0 {
-			if slug := c.Query("restaurant"); slug != "" {
-				var found int
-				_ = database.DB.QueryRow(`SELECT id FROM restaurants WHERE lower(slug)=lower($1) LIMIT 1`, strings.ToLower(slug)).Scan(&found)
-				if found != 0 {
-					rid = found
-				}
-			}
-		}
+		// NOTE: ?restaurant= query param intentionally NOT honored here.
+		// It allowed unauthenticated tenant selection on read and write routes,
+		// which is an IDOR/brute-force vector. Tenant is resolved only from
+		// host/domain or /r/:slug path.
 		if rid != 0 {
 			c.Set("restaurantID", rid)
 			// default outlet for public (delivery)
@@ -183,7 +178,7 @@ func TenantResolverMiddleware(baseDomain string, trustedProxiesCSV string) gin.H
 			if len(parts) > 0 && parts[0] != "" {
 				slug := strings.ToLower(parts[0])
 				var found int
-				if err := database.DB.QueryRow(`SELECT id FROM restaurants WHERE lower(slug)=lower($1) LIMIT 1`, slug).Scan(&found); err == nil && found != 0 {
+				if err := database.DB.QueryRow(`SELECT id FROM restaurants WHERE lower(slug)=lower($1) ORDER BY id LIMIT 1`, slug).Scan(&found); err == nil && found != 0 {
 					c.Set("restaurantID", found)
 					if oid2 := DefaultOutletID(found); oid2 != 0 {
 						c.Set("outletID", oid2)

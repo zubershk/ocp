@@ -209,11 +209,23 @@ func (h *ApiHandler) CreateOrder(c *gin.Context) {
 func (h *ApiHandler) CancelOrder(c *gin.Context) {
 	id := c.Param("id")
 	token := c.GetHeader("X-Order-Token")
+	rid, _ := services.RequireRestaurant(c)
 	if bearerPhone := customerPhoneFromBearer(c); bearerPhone != "" {
 		// allow bearer-owned orders too
 	}
-	if err := h.orders.Cancel(id, token); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	if err := h.orders.Cancel(id, token, rid); err != nil {
+		// Never expose raw DB error text to an anonymous caller.
+		msg := "failed to cancel order"
+		if errors.Is(err, services.ErrOrderNotFound) {
+			msg = "order not found"
+			c.JSON(http.StatusNotFound, gin.H{"error": msg})
+			return
+		}
+		if errors.Is(err, services.ErrOrderNotCancellable) || errors.Is(err, services.ErrCancellationWindowExpired) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusBadRequest, gin.H{"error": msg})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"cancelled": true})
@@ -223,7 +235,8 @@ func (h *ApiHandler) CancelOrder(c *gin.Context) {
 func (h *ApiHandler) StreamOrder(c *gin.Context) {
 	id := c.Param("id")
 	token := c.GetHeader("X-Order-Token")
-	order, err := h.orders.Get(id, token)
+	rid, _ := services.RequireRestaurant(c)
+	order, err := h.orders.GetFor(id, token, rid)
 	if err != nil || order == nil {
 		if bearerPhone := customerPhoneFromBearer(c); bearerPhone != "" {
 			if owned, e := services.CustomerOrderByIdentifier(bearerPhone, id); e == nil && owned != nil {
@@ -243,7 +256,8 @@ func (h *ApiHandler) StreamOrder(c *gin.Context) {
 // token whose phone matches the order's customer_phone (syncs web+WhatsApp).
 func (h *ApiHandler) GetOrder(c *gin.Context) {
 	token := c.GetHeader("X-Order-Token")
-	order, err := h.orders.Get(c.Param("id"), token)
+	rid, _ := services.RequireRestaurant(c)
+	order, err := h.orders.GetFor(c.Param("id"), token, rid)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load order"})
 		return

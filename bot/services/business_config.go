@@ -228,7 +228,9 @@ func GetBizConfig() *BusinessConfig {
 	if globalBizCfg == nil {
 		return defaultBusinessConfig()
 	}
-	return globalBizCfg
+	// Return a copy so callers cannot mutate the cached global config.
+	out := *globalBizCfg
+	return &out
 }
 
 func GetBizConfigFor(restaurantID int) *BusinessConfig {
@@ -299,12 +301,16 @@ func SaveBusinessConfig(cfg *BusinessConfig, restaurantID int) error {
 	if err != nil {
 		return err
 	}
+	// Store copies so callers cannot mutate the cached config through
+	// the pointer they passed in (cross-request corruption).
+	cfgCopy := *cfg
 	bizCacheMu.Lock()
-	bizCfgCache[rid] = cfg
+	bizCfgCache[rid] = &cfgCopy
 	bizCacheMu.Unlock()
 	if rid == ResolveRestaurant(0) {
+		globalCopy := *cfg
 		bizCfgMu.Lock()
-		globalBizCfg = cfg
+		globalBizCfg = &globalCopy
 		bizCfgMu.Unlock()
 	}
 	return nil

@@ -89,7 +89,7 @@ func (h *SiteSettingsHandler) GetPage(c *gin.Context) {
 		return
 	}
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"page": nil})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load page"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"page": gin.H{
@@ -187,6 +187,11 @@ func (h *SiteSettingsHandler) UpdateSiteSetting(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update setting"})
 		return
 	}
+	// Invalidate the in-memory business config cache so the next read
+	// picks up the new prices, payment methods, and order prefix.
+	if key == "bot_config" {
+		services.InvalidateBizCache(rid)
+	}
 	c.JSON(http.StatusOK, gin.H{"updated": true})
 }
 
@@ -235,7 +240,7 @@ func (h *SiteSettingsHandler) GetPageAdmin(c *gin.Context) {
 		return
 	}
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"page": nil})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load page"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"page": gin.H{

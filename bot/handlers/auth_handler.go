@@ -391,17 +391,14 @@ func customerFromHeader(c *gin.Context) (string, *services.Customer, bool) {
 	rid, _ := services.RequireRestaurant(c)
 	phone, cust, err := services.ValidateSessionFor(token, rid)
 	if err != nil {
-		// fallback to global for open-source single-tenant transition
+		// Fallback to tenant-agnostic lookup only in single-tenant mode.
+		// In multi-tenant mode a session must belong to the request tenant.
+		if !services.IsSingleTenantMode() {
+			return "", nil, false
+		}
 		phone, cust, err = services.ValidateSession(token)
 		if err != nil {
 			return "", nil, false
-		}
-		// in strict mode, if session has tenant but request is missing, still allow when single-tenant
-		if rid != 0 {
-			// verify tenant matches if session has it (already checked in For); if fallback got here, treat as invalid
-			if !services.IsSingleTenantMode() {
-				return "", nil, false
-			}
 		}
 	}
 	return phone, cust, true
