@@ -193,9 +193,12 @@ func SendOTPFor(phone string, restaurantID int, evolution *EvolutionClient) (str
 	msg := Msg("notification_otp", map[string]interface{}{"Code": code})
 	if err := evolution.SendText(dest, msg); err != nil {
 		// Evolution GO may not be running (e.g., native Windows without Docker).
-		// Log the OTP so it can be used for testing/development.
+		// Never log the OTP itself: the log file is not a secret store and a
+		// leaked code is a full account takeover for the 5-minute window.
+		// The failure is logged without the code; the code is returned to the
+		// caller (which never echoes it to the client) so the flow can be
+		// diagnosed with the WhatsApp gateway logs.
 		log.Printf("[auth] WhatsApp send failed for %s: %v", normalized, err)
-		log.Printf("[auth] OTP for %s: %s (expires in 5 min)", normalized, code)
 		return code, fmt.Errorf("whatsapp send failed: %w", err)
 	}
 	return code, nil
@@ -255,11 +258,7 @@ func VerifyOTPFor(phone, code, name string, restaurantID int) (string, *Customer
 	var expiresAt time.Time
 	err = tx.QueryRow(`SELECT id, code, attempts, expires_at FROM customer_otps WHERE phone=$1 AND restaurant_id=$2 ORDER BY id DESC LIMIT 1 FOR UPDATE`, normalized, rid).Scan(&rowID, &stored, &attempts, &expiresAt)
 	if err == sql.ErrNoRows {
-		// fallback to global during transition
-		err = tx.QueryRow(`SELECT id, code, attempts, expires_at FROM customer_otps WHERE phone=$1 ORDER BY id DESC LIMIT 1 FOR UPDATE`, normalized).Scan(&rowID, &stored, &attempts, &expiresAt)
-		if err == sql.ErrNoRows {
-			return "", nil, &ValidationError{Msg: "no code found — request a new one"}
-		}
+		return "", nil, &ValidationError{Msg: "no code found — request a new one"}
 	}
 	if err != nil {
 		return "", nil, err
