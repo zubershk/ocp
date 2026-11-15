@@ -172,7 +172,7 @@ func rowsToPager(rows []Row) []pagerItem {
 const waPagerSize = 3
 
 func (e *ConversationEngine) sendListPage(conv *conversation, phone, pageKey, title string, rows []Row) {
-	if e.biz.UseWhatsAppLists() {
+	if e.bizFor(conv).UseWhatsAppLists() {
 		e.evolutionSendList(conv, phone, title, rows)
 		return
 	}
@@ -315,20 +315,21 @@ func (e *ConversationEngine) handleMainAction(cust *Customer, conv *conversation
 // ---------- CATEGORIES ----------
 
 func (e *ConversationEngine) showCategories(conv *conversation, phone string) {
-	cats, err := e.menu.GetCategoriesWithSlug(0)
+	rid := e.tenantID(conv)
+	cats, err := e.menu.GetCategoriesWithSlug(rid)
 	if err != nil || len(cats) == 0 {
 		e.evolution.SendText(phone, e.msgBrand("category_empty"))
 		return
 	}
 	counts := map[int]int{}
-	if allItems, err := e.menu.GetAllActiveItems(); err == nil {
+	if allItems, err := e.menu.GetAllActiveItemsFor(rid); err == nil {
 		for i := range allItems {
 			counts[allItems[i].CategoryID]++
 		}
 	}
 	rows := make([]Row, 0, len(cats))
 	for _, c := range cats {
-		icon := e.biz.GetCategoryIcon(c.Slug)
+		icon := e.bizFor(conv).GetCategoryIcon(c.Slug)
 		title := icon + " " + c.Name
 		if n := counts[c.ID]; n > 0 {
 			title += fmt.Sprintf(" (%d)", n)
@@ -354,7 +355,8 @@ func categorySlugOf(m *models.MenuItem) string {
 // ---------- ITEMS ----------
 
 func (e *ConversationEngine) showItems(conv *conversation, phone, catSlug string) {
-	cats, err := e.menu.GetCategoriesWithSlug(0)
+	rid := e.tenantID(conv)
+	cats, err := e.menu.GetCategoriesWithSlug(rid)
 	if err != nil {
 		e.evolution.SendText(phone, e.msgBrand("menu_unavailable"))
 		return
@@ -368,7 +370,7 @@ func (e *ConversationEngine) showItems(conv *conversation, phone, catSlug string
 			break
 		}
 	}
-	items, err := e.menu.GetAllActiveItems()
+	items, err := e.menu.GetAllActiveItemsFor(rid)
 	if err != nil || catID == -1 {
 		e.evolution.SendText(phone, e.msgBrand("menu_unavailable"))
 		return
@@ -415,7 +417,8 @@ func itemRef(m *models.MenuItem) string {
 // ---------- ITEM DETAIL -> SIZE -> CRUST -> SUMMARY -> QTY ----------
 
 func (e *ConversationEngine) startItemFlow(conv *conversation, phone, ref string) {
-	item, err := e.menu.GetItemByIdentifier(ref)
+	rid := e.tenantID(conv)
+	item, err := e.menu.GetItemByIdentifierFor(ref, rid)
 	if err != nil || item == nil {
 		e.evolution.SendText(phone, e.msgBrand("item_unavailable"))
 		return
@@ -439,7 +442,8 @@ func (e *ConversationEngine) startItemFlow(conv *conversation, phone, ref string
 
 	var sizes strings.Builder
 	sizes.WriteString("Available sizes:\n")
-	for _, s := range e.biz.Sizes {
+	biz := e.bizFor(conv)
+	for _, s := range biz.Sizes {
 		if !s.Active {
 			continue
 		}
@@ -449,7 +453,7 @@ func (e *ConversationEngine) startItemFlow(conv *conversation, phone, ref string
 	}
 
 	buttons := []Button{}
-	for _, s := range e.biz.Sizes {
+	for _, s := range biz.Sizes {
 		if !s.Active {
 			continue
 		}
@@ -467,15 +471,16 @@ func (e *ConversationEngine) startItemFlow(conv *conversation, phone, ref string
 }
 
 func (e *ConversationEngine) sendCrustList(conv *conversation, phone, size string) {
+	rid := e.tenantID(conv)
 	// Fixed bundles skip crust selection entirely (admin no_crust flag).
 	if slug := conv.Context["item_slug"]; slug != "" {
-		if item, _ := e.menu.GetItemByIdentifier(slug); item != nil && item.NoCrust {
+		if item, _ := e.menu.GetItemByIdentifierFor(slug, rid); item != nil && item.NoCrust {
 			conv.Context["crust"] = ""
 			e.confirmSelection(conv, phone)
 			return
 		}
 	}
-	cr, err := e.menu.GetActiveCrusts()
+	cr, err := e.menu.GetActiveCrustsFor(rid)
 	sz := sizeOrRegular(size)
 	if err != nil || len(cr) == 0 {
 		conv.Context["crust"] = ""
@@ -498,7 +503,8 @@ func (e *ConversationEngine) sendCrustList(conv *conversation, phone, size strin
 
 // confirmSelection echoes the built selection, then asks quantity.
 func (e *ConversationEngine) confirmSelection(conv *conversation, phone string) {
-	item, err := e.menu.GetItemByIdentifier(conv.Context["item_slug"])
+	rid := e.tenantID(conv)
+	item, err := e.menu.GetItemByIdentifierFor(conv.Context["item_slug"], rid)
 	if err != nil || item == nil {
 		conv.reset("IDLE")
 		e.evolution.SendText(phone, e.msgBrand("item_became_unavailable"))
@@ -510,7 +516,7 @@ func (e *ConversationEngine) confirmSelection(conv *conversation, phone string) 
 
 	unit := item.PriceBySizeFor(size)
 	if crustSlug != "" {
-		if cr, _ := e.menu.GetActiveCrusts(); cr != nil {
+		if cr, _ := e.menu.GetActiveCrustsFor(rid); cr != nil {
 			for _, c := range cr {
 				if c.Slug == crustSlug {
 					crustName = c.Name
@@ -547,7 +553,8 @@ func (e *ConversationEngine) addToCart(conv *conversation, phone string, qty int
 	if qty < 1 || qty > 20 {
 		qty = 1
 	}
-	item, err := e.menu.GetItemByIdentifier(conv.Context["item_slug"])
+	rid := e.tenantID(conv)
+	item, err := e.menu.GetItemByIdentifierFor(conv.Context["item_slug"], rid)
 	if err != nil || item == nil {
 		conv.reset("IDLE")
 		e.evolution.SendText(phone, e.msgBrand("item_became_unavailable"))
@@ -560,7 +567,7 @@ func (e *ConversationEngine) addToCart(conv *conversation, phone string, qty int
 	unit := item.PriceBySizeFor(size)
 	crustName := ""
 	if crustSlug != "" {
-		if cr, _ := e.menu.GetActiveCrusts(); cr != nil {
+		if cr, _ := e.menu.GetActiveCrustsFor(rid); cr != nil {
 			for _, c := range cr {
 				if c.Slug == crustSlug {
 					crustName = c.Name
@@ -811,9 +818,10 @@ func (e *ConversationEngine) askPayment(conv *conversation, phone string) {
 	conv.State = "PAYMENT"
 	_ = conv.save()
 
+	biz := e.bizFor(conv)
 	icons := map[string]string{"cod": emCash, "upi": emPhone, "online": emCard}
-	buttons := make([]Button, 0, len(e.biz.PaymentMethods))
-	for _, pm := range e.biz.PaymentMethods {
+	buttons := make([]Button, 0, len(biz.PaymentMethods))
+	for _, pm := range biz.PaymentMethods {
 		if !pm.Active {
 			continue
 		}
@@ -835,9 +843,10 @@ func (e *ConversationEngine) askPaymentAfter(conv *conversation, phone, intro st
 	_ = conv.save()
 	e.evolution.SendText(phone, intro)
 
+	biz := e.bizFor(conv)
 	icons := map[string]string{"cod": emCash, "upi": emPhone, "online": emBank}
-	buttons := make([]Button, 0, len(e.biz.PaymentMethods))
-	for _, pm := range e.biz.PaymentMethods {
+	buttons := make([]Button, 0, len(biz.PaymentMethods))
+	for _, pm := range biz.PaymentMethods {
 		if !pm.Active {
 			continue
 		}
@@ -864,7 +873,8 @@ func (e *ConversationEngine) paymentChosen(conv *conversation, phone, method str
 		e.evolution.SendText(phone, e.msgBrand("cart_empty_checkout"))
 		return
 	}
-	payLabel := e.biz.GetPaymentLabel(method)
+	biz := e.bizFor(conv)
+	payLabel := biz.GetPaymentLabel(method)
 
 	name := orDash(conv.Context["name"])
 	dt := strings.Title(conv.Context["delivery_type"])
@@ -890,7 +900,7 @@ func (e *ConversationEngine) paymentChosen(conv *conversation, phone, method str
 	sub := subtotalOf(lines)
 	fee := 0.0
 	if conv.Context["delivery_type"] == "delivery" {
-		fee = e.biz.DeliveryFee
+		fee = biz.DeliveryFee
 	}
 	addressBlock := ""
 	if dt == "Delivery" {
@@ -939,7 +949,7 @@ func (e *ConversationEngine) placeOrder(conv *conversation, phone string) {
 		Items:         items,
 		Source:        SourceWhatsApp,
 	}
-	result, err := e.orders.Create(req, "")
+	result, err := e.orders.CreateFor(req, "", e.tenantID(conv))
 	if err != nil {
 		log.Printf("WA order create failed for %s: %v", phone, err)
 		e.evolution.SendText(phone, e.msg("order_failed", map[string]interface{}{"Error": "please try again in a moment"}))
@@ -1068,6 +1078,7 @@ func (e *ConversationEngine) orderDetailByName(conv *conversation, phone, number
 
 // reorder adds every still-available item from a past order.
 func (e *ConversationEngine) reorderAll(conv *conversation, phone, number string) {
+	rid := e.tenantID(conv)
 	orders, _ := CustomerOrders(phone, 20)
 	var target *models.Order
 	for i := range orders {
@@ -1082,7 +1093,7 @@ func (e *ConversationEngine) reorderAll(conv *conversation, phone, number string
 	}
 	added, skipped := 0, []string{}
 	for _, it := range target.Items {
-		item, err := e.menu.GetItemByIdentifier(fmt.Sprintf("%d", it.MenuItemID))
+		item, err := e.menu.GetItemByIdentifierFor(fmt.Sprintf("%d", it.MenuItemID), rid)
 		if err != nil || item == nil {
 			skipped = append(skipped, it.Name)
 			continue
@@ -1132,11 +1143,12 @@ func (e *ConversationEngine) profileText(cust *Customer, conv *conversation, pho
 func (e *ConversationEngine) locationView(cust *Customer, conv *conversation, phone string) {
 	addr := orDefault(e.cfg.RestaurantAddress, "")
 	phoneOut := orDefault(e.cfg.RestaurantPhone, "")
+	biz := e.bizFor(conv)
 	body := e.msg("location_body", map[string]interface{}{
 		"Address":       addr,
 		"Phone":         phoneOut,
-		"KitchenHours":  e.biz.KitchenHours,
-		"DeliveryHours": e.biz.DeliveryHours,
+		"KitchenHours":  biz.KitchenHours,
+		"DeliveryHours": biz.DeliveryHours,
 	})
 	e.sendButtons(phone,
 		e.msgBrand("location_title"),

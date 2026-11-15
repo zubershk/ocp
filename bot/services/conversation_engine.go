@@ -142,6 +142,8 @@ func shortID(id string) string {
 // HandleInbound processes one inbound message (text or normalized
 // button/list action id). Duplicate deliveries are ignored via message id.
 // Same customer's messages are serialized; customers are independent.
+// The tenant is resolved from the customer's phone so every tenant's
+// WhatsApp customers see their own menu and pricing.
 func (e *ConversationEngine) HandleInbound(phone, input, messageID string) error {
 	input = strings.TrimSpace(input)
 	if input == "" || phone == "" {
@@ -162,7 +164,14 @@ func (e *ConversationEngine) HandleInbound(phone, input, messageID string) error
 		database.DB.Exec(`INSERT INTO processed_messages (message_id) VALUES ($1) ON CONFLICT DO NOTHING`, messageID)
 	}
 
-	cust, err := GetOrCreateCustomer(phone)
+	// Resolve the tenant from the customer's phone. Unknown phones fall
+	// back to the default restaurant in single-tenant mode.
+	rid := RestaurantForPhoneStrict(phone)
+	if rid == 0 {
+		rid = ResolveRestaurant(0)
+	}
+
+	cust, err := GetOrCreateCustomerFor(phone, rid)
 	if err != nil {
 		return fmt.Errorf("customer upsert failed: %w", err)
 	}
@@ -170,12 +179,18 @@ func (e *ConversationEngine) HandleInbound(phone, input, messageID string) error
 	if err != nil {
 		return fmt.Errorf("conversation load failed: %w", err)
 	}
+	// Remember the resolved tenant on the conversation so every menu
+	// lookup below scopes to the right restaurant.
+	if conv.Context == nil {
+		conv.Context = map[string]string{}
+	}
+	conv.Context["restaurant_id"] = itoa(rid)
 
 	stateBefore := conv.State
 	reply := e.route(cust, conv, phone, input)
 
-	log.Printf("[WA] customer=*%s action=%q state %s -> %s",
-		shortPhone(phone), input, stateBefore, conv.State)
+	log.Printf("[WA] customer=*%s action=%q state %s -> %s rid=%d",
+		shortPhone(phone), input, stateBefore, conv.State, e.tenantID(conv))
 
 	if reply != "" {
 		if err := e.evolution.SendText(phone, reply); err != nil {
@@ -183,6 +198,26 @@ func (e *ConversationEngine) HandleInbound(phone, input, messageID string) error
 		}
 	}
 	return nil
+}
+
+// tenantID returns the restaurant ID scoped to this conversation.
+// Falls back to the default restaurant (0 -> resolved default) when
+// not set, preserving single-tenant behavior.
+func (e *ConversationEngine) tenantID(conv *conversation) int {
+	if conv == nil || conv.Context == nil {
+		return ResolveRestaurant(0)
+	}
+	if v, ok := conv.Context["restaurant_id"]; ok {
+		if n := atoiSafe(v); n > 0 {
+			return n
+		}
+	}
+	return ResolveRestaurant(0)
+}
+
+// bizFor returns the per-tenant business config for this conversation.
+func (e *ConversationEngine) bizFor(conv *conversation) *BusinessConfig {
+	return GetBizConfigFor(e.tenantID(conv))
 }
 
 // route applies global commands, self-describing selections, then
