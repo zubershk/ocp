@@ -69,13 +69,17 @@ func ListConversations(limit, offset, restaurantID int) ([]ConversationSummary, 
 			COALESCE((SELECT direction FROM whatsapp_messages m2 WHERE m2.customer_phone = COALESCE(c.whatsapp_number, m.customer_phone) ORDER BY m2.created_at DESC LIMIT 1), '') AS last_dir,
 			COALESCE((SELECT COUNT(*) FROM whatsapp_messages m2 WHERE m2.customer_phone = COALESCE(c.whatsapp_number, m.customer_phone)), 0) AS total
 		FROM (
-			SELECT DISTINCT customer_phone FROM whatsapp_messages
+			-- NULL phones are filtered out in BOTH branches: since migrations
+			-- 042/043 dropped NOT NULL on customers.whatsapp_number, email-auth
+			-- customers carry NULL there and the UNION would otherwise emit a
+			-- NULL row that makes COALESCE(...) NULL and breaks rows.Scan.
+			SELECT DISTINCT customer_phone FROM whatsapp_messages WHERE customer_phone IS NOT NULL
 			UNION
-			SELECT whatsapp_number FROM customers WHERE restaurant_id = $3
+			SELECT whatsapp_number FROM customers WHERE restaurant_id = $3 AND whatsapp_number IS NOT NULL
 		) m
 		LEFT JOIN customers c ON c.whatsapp_number = m.customer_phone
 		LEFT JOIN whatsapp_conversations wc ON wc.customer_id = c.id
-		WHERE COALESCE(c.restaurant_id, $4) = $3
+		WHERE m.customer_phone IS NOT NULL AND COALESCE(c.restaurant_id, $4) = $3
 		ORDER BY last_at DESC NULLS LAST, phone DESC
 		LIMIT $1 OFFSET $2
 	`, limit, offset, rid, def)
