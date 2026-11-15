@@ -67,6 +67,12 @@ func (e *CouponValidationError) Error() string {
 
 type CouponService struct{}
 
+// maxPreviewSubtotal caps the client-supplied subtotal accepted by the
+// coupon preview endpoint (Validate). It is a sanity ceiling only — the
+// authoritative discount is always computed at order time from menu prices
+// read out of PostgreSQL, never from the client.
+const maxPreviewSubtotal = 1000000 // rupees (₹10,00,000)
+
 func NewCouponService() *CouponService {
 	return &CouponService{}
 }
@@ -340,6 +346,13 @@ func (s *CouponService) Validate(code string, restaurantID int, subtotal float64
 	if subtotal < 0 {
 		return nil, &CouponValidationError{Code: cfg.Code, Message: "subtotal must be >= 0"}
 	}
+	// The subtotal in this call is client-supplied (storefront preview only).
+	// Clamp it to a sane non-negative maximum so a hostile client cannot
+	// inflate the previewed discount; the authoritative amount is always
+	// recomputed server-side from menu prices at order time.
+	if subtotal > maxPreviewSubtotal {
+		subtotal = maxPreviewSubtotal
+	}
 	if subtotal < cfg.MinSubtotal {
 		return nil, &CouponValidationError{Code: cfg.Code, Message: fmt.Sprintf("minimum subtotal of %s required", formatCurrency(cfg.MinSubtotal))}
 	}
@@ -381,6 +394,47 @@ func (s *CouponService) IncrementUse(code string, restaurantID int) error {
 		return fmt.Errorf("failed to increment coupon usage: %w", err)
 	}
 	return nil
+}
+
+// IncrementUseIfAvailable atomically consumes one redemption of a coupon.
+//
+// The usage-limit check and the increment are ONE statement: the UPDATE is
+// guarded by `used_count < usage_limit`, so two concurrent redemptions of
+// the last remaining use can never both succeed — the loser's UPDATE
+// matches zero rows and the function returns false.
+//
+// The same guard also re-checks the window and the active flag, so a coupon
+// that expired or was deactivated between validation and redemption is
+// rejected instead of silently consumed.
+//
+// Returns (false, nil) when the coupon is exhausted, inactive, outside its
+// window, or unknown; (false, err) on a database failure.
+func (s *CouponService) IncrementUseIfAvailable(code string, restaurantID int) (bool, error) {
+	return incrementCouponUse(database.DB, code, restaurantID)
+}
+
+// incrementCouponUse is IncrementUseIfAvailable against any querier so the
+// redemption can be consumed inside the caller's transaction (the increment
+// is rolled back with the order when the order itself fails).
+func incrementCouponUse(q dbQuerier, code string, restaurantID int) (bool, error) {
+	rid := ResolveRestaurant(restaurantID)
+	res, err := q.Exec(`
+		UPDATE coupons
+		SET used_count = used_count + 1, updated_at = NOW()
+		WHERE code = $1 AND restaurant_id = $2
+		  AND is_active = true
+		  AND (starts_at IS NULL OR starts_at <= NOW())
+		  AND (expires_at IS NULL OR expires_at > NOW())
+		  AND (usage_limit IS NULL OR used_count < usage_limit)
+	`, strings.ToUpper(code), rid)
+	if err != nil {
+		return false, fmt.Errorf("failed to increment coupon usage: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("failed to read coupon usage result: %w", err)
+	}
+	return n > 0, nil
 }
 
 func formatCurrency(v float64) string {
