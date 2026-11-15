@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { MessageCircle, RefreshCw, Gift, Truck, Clock3, Award, UtensilsCrossed, MapPin, Shield, ChevronRight, Mail, User, Phone, Star, Flame } from 'lucide-react';
+import { MessageCircle, RefreshCw, Gift, Truck, Clock3, Award, UtensilsCrossed, MapPin, Shield, ChevronRight, Mail, User, Phone, Star, Flame, ArrowLeft as ArrowLeftIcon } from 'lucide-react';
 import { sendOtp, verifyOtp, login } from '../services/authService';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';

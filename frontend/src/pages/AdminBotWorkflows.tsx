@@ -470,7 +470,7 @@ export default function AdminBotWorkflows() {
                       <MessageCard
                         key={msg.message_key}
                         msg={msg}
-                        cat={cat}
+                        _cat={cat}
                         isEditing={editingKey === msg.message_key}
                         editText={editText}
                         editImage={editImage}
@@ -615,7 +615,7 @@ function MessageCard({
   msg, _cat, isEditing, editText, editImage, onEdit, onEditTextChange, onEditImageChange, onSave, onCancel, onPreview, onReset, isPending,
 }: {
   msg: BotMessage;
-  cat: string;
+  _cat: string;
   isEditing: boolean;
   editText: string;
   editImage: string;

@@ -36,7 +36,6 @@ export function SearchBar({ items, placeholder = 'Search for a dish or cuisine..
     setOpenDropdown,
     dietaryFilter,
     setDietaryFilter,
-    _categoryFilter: categoryFilter,
     setCategoryFilter,
   } = useSearch(items, initialQuery);
 
