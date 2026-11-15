@@ -120,9 +120,14 @@ func main() {
 	// Setup Gin router
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.Default()
-	// Trusted proxies from env (comma-separated CIDRs/hosts)
+	// Trusted proxies from env (comma-separated CIDRs/hosts).
+	// Always set explicitly: when TRUSTED_PROXIES is unset, SetTrustedProxies(nil)
+	// tells Gin NOT to trust any proxy, so c.ClientIP() returns the immediate
+	// REMOTE_ADDR and a spoofed X-Forwarded-For cannot bypass rate limits.
 	if cfg.TrustedProxies != "" {
 		_ = router.SetTrustedProxies(strings.Split(cfg.TrustedProxies, ","))
+	} else {
+		_ = router.SetTrustedProxies(nil)
 	}
 	// X-Request-ID for observability
 	router.Use(func(c *gin.Context) {
@@ -178,9 +183,14 @@ func main() {
 	apiHandler := handlers.NewApiHandler(menuService, websiteOrderService)
 	authHandler := handlers.NewAuthHandler(evolutionClient)
 	router.Use(handlers.CORSMiddleware(cfg.CORSAllowedOrigins))
-	// Provisioning (open-source, no auth): create tenant
-	router.POST("/api/signup", provisionHandler.Signup)
-	router.POST("/api/orgs", provisionHandler.Signup)
+	// Provisioning (open-source, no auth): create tenant — rate limited
+	// to prevent enumeration and tenant-spam before the global API limiter.
+	signupGroup := router.Group("/api")
+	signupGroup.Use(handlers.RateLimit(3, time.Minute))
+	{
+		signupGroup.POST("/signup", provisionHandler.Signup)
+		signupGroup.POST("/orgs", provisionHandler.Signup)
+	}
 	// Domain-aware public routes need tenant resolver; already global above
 	apiGroup := router.Group("/api")
 	apiGroup.Use(handlers.RateLimit(120, time.Minute))
@@ -234,8 +244,11 @@ func main() {
 
 	// Admin endpoints (protected by admin key)
 	adminGroup := router.Group("/admin")
-	// No global rate limit here: the admin panel opens a long-lived SSE
-	// stream and polls several endpoints, which a 60/min budget throttled.
+	// Failed-auth rate limit: every rejected admin request still costs
+	// DB lookups before rejection, so cap attempts to prevent brute-force
+	// of BOT_ADMIN_KEY and DB pool exhaustion. SSE/polling endpoints that
+	// pass admin key are unaffected (they succeed, not count against limit).
+	adminGroup.Use(handlers.RateLimit(30, time.Minute))
 	adminGroup.Use(adminHandler.RequireAdminKey())
 	// Tenant context for every admin call. Handlers ignore these keys
 	// until PR 3 scopes them; behavior is unchanged in PR 2.
