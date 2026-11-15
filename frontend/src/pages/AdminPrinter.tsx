@@ -11,8 +11,6 @@ import {
   Wifi,
   Usb,
   Globe,
-  Eye,
-  X,
 } from 'lucide-react';
 import { adminFetch, getAdminKey } from '../services/api';
 import { useToast } from '../context/ToastContext';
@@ -21,7 +19,7 @@ import { Button } from '@/components/shadcn/button';
 import { Input } from '@/components/shadcn/input';
 import { Switch } from '@/components/shadcn/switch';
 import { Skeleton } from '@/components/shadcn/skeleton';
-import { PrinterConfig, DEFAULT_PRINTER_CONFIG } from '../context/SiteSettingsContext';
+import { DEFAULT_PRINTER_CONFIG } from '../context/SiteSettingsContext';
 
 interface PrinterConfigForm {
   printer_type: 'none' | 'usb' | 'network' | 'web' | 'browser';
@@ -280,6 +278,7 @@ export default function AdminPrinter() {
                         checked={form.auto_print === true}
                         onCheckedChange={(checked) => updateField('auto_print', checked)}
                         className="ml-2"
+                        aria-label="Auto-print online orders"
                       />
                     </div>
                   </div>

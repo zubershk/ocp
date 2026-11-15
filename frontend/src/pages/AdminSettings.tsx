@@ -5,7 +5,7 @@ import { Save, Plus, Pencil, Trash2, MapPin, Phone, Clock, Store, AlertTriangle,
 import { adminFetch, getAdminKey } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
-import { Card, CardContent } from '@/components/shadcn/card';
+import { Card } from '@/components/shadcn/card';
 import { Button } from '@/components/shadcn/button';
 import { Input } from '@/components/shadcn/input';
 import { Badge } from '@/components/shadcn/badge';
@@ -55,7 +55,7 @@ export default function AdminSettings() {
     enabled: authed,
   });
 
-  const [cfgForm, setCfgForm] = useState<Partial<Config>>({});
+  const [_cfgForm, setCfgForm] = useState<Partial<Config>>({});
 
   const updateConfigMut = useMutation({
     mutationFn: (body: Record<string, unknown>) => adminFetch('/admin/config', { method: 'PUT', body: JSON.stringify(body) }),
@@ -162,27 +162,27 @@ export default function AdminSettings() {
         ) : (
           <div className="mt-4 grid sm:grid-cols-2 gap-4">
             <div>
-              <label className="text-xs font-semibold">Restaurant name</label>
+              <label htmlFor="cfg-name" className="text-xs font-semibold">Restaurant name</label>
               <Input id="cfg-name" defaultValue={config?.name ?? ''} placeholder="Your Restaurant Name" className="mt-1" />
             </div>
             <div>
-              <label className="text-xs font-semibold">Primary phone</label>
+              <label htmlFor="cfg-phone" className="text-xs font-semibold">Primary phone</label>
               <Input id="cfg-phone" defaultValue={config?.phone ?? ''} placeholder="+91 9876543210" className="mt-1" />
             </div>
             <div className="sm:col-span-2">
-              <label className="text-xs font-semibold">Address (full)</label>
+              <label htmlFor="cfg-address" className="text-xs font-semibold">Address (full)</label>
               <textarea id="cfg-address" defaultValue={config?.address ?? ''} rows={2} placeholder="Shop 21, Wing Name, Area, City" className="mt-1 w-full px-3 py-2.5 rounded-xl border text-sm" />
             </div>
             <div>
-              <label className="text-xs font-semibold">Map URL</label>
+              <label htmlFor="cfg-map" className="text-xs font-semibold">Map URL</label>
               <Input id="cfg-map" defaultValue={config?.map_url ?? ''} placeholder="https://maps.google.com/..." className="mt-1 text-sm" />
             </div>
             <div>
-              <label className="text-xs font-semibold">Support phone (WA help)</label>
+              <label htmlFor="cfg-support" className="text-xs font-semibold">Support phone (WA help)</label>
               <Input id="cfg-support" defaultValue={config?.support_phone ?? ''} placeholder="8369293998" className="mt-1" />
             </div>
             <div className="sm:col-span-2">
-              <label className="text-xs font-semibold">Opening hours (e.g. 11:00 AM to 04:00 AM)</label>
+              <label htmlFor="cfg-hours" className="text-xs font-semibold">Opening hours (e.g. 11:00 AM to 04:00 AM)</label>
               <Input id="cfg-hours" defaultValue={(() => { try { const j = JSON.parse(config?.opening_hours ?? '{}'); return j.hours ?? '11:00 AM to 04:00 AM'; } catch { return '11:00 AM to 04:00 AM'; } })()} placeholder="11:00 AM to 04:00 AM" className="mt-1" />
             </div>
           </div>
@@ -238,14 +238,14 @@ export default function AdminSettings() {
               <DialogTitle>{editingOutlet ? `Edit ${editingOutlet.name}` : 'New outlet'}</DialogTitle>
             </DialogHeader>
             <div className="space-y-3 py-4">
-              <div><label className="text-xs font-semibold">Slug *</label><Input value={outletForm.slug} onChange={(e) => setOutletForm({ ...outletForm, slug: e.target.value })} placeholder="mira-road" className="mt-1 font-mono text-sm" required /></div>
-              <div><label className="text-xs font-semibold">Name *</label><Input value={outletForm.name} onChange={(e) => setOutletForm({ ...outletForm, name: e.target.value })} placeholder="Outlet Name" className="mt-1" required /></div>
-              <div><label className="text-xs font-semibold">Address (one per line)</label><textarea value={outletForm.address} onChange={(e) => setOutletForm({ ...outletForm, address: e.target.value })} rows={4} placeholder={`Shop 21, Wing Name\nArea, City`} className="mt-1 w-full px-3 py-2.5 rounded-xl border text-sm" /></div>
-              <div><label className="text-xs font-semibold">Phones (comma separated)</label><Input value={outletForm.phones} onChange={(e) => setOutletForm({ ...outletForm, phones: e.target.value })} placeholder="+91 9876543210, +91 8765432109" className="mt-1" /></div>
-              <div><label className="text-xs font-semibold">Delivery hours</label><Input value={outletForm.delivery_hours} onChange={(e) => setOutletForm({ ...outletForm, delivery_hours: e.target.value })} className="mt-1" /></div>
+              <div><label htmlFor="of-slug" className="text-xs font-semibold">Slug *</label><Input id="of-slug" value={outletForm.slug} onChange={(e) => setOutletForm({ ...outletForm, slug: e.target.value })} placeholder="mira-road" className="mt-1 font-mono text-sm" required /></div>
+              <div><label htmlFor="of-name" className="text-xs font-semibold">Name *</label><Input id="of-name" value={outletForm.name} onChange={(e) => setOutletForm({ ...outletForm, name: e.target.value })} placeholder="Outlet Name" className="mt-1" required /></div>
+              <div><label htmlFor="of-address" className="text-xs font-semibold">Address (one per line)</label><textarea id="of-address" value={outletForm.address} onChange={(e) => setOutletForm({ ...outletForm, address: e.target.value })} rows={4} placeholder={`Shop 21, Wing Name\nArea, City`} className="mt-1 w-full px-3 py-2.5 rounded-xl border text-sm" /></div>
+              <div><label htmlFor="of-phones" className="text-xs font-semibold">Phones (comma separated)</label><Input id="of-phones" value={outletForm.phones} onChange={(e) => setOutletForm({ ...outletForm, phones: e.target.value })} placeholder="+91 9876543210, +91 8765432109" className="mt-1" /></div>
+              <div><label htmlFor="of-delivery-hours" className="text-xs font-semibold">Delivery hours</label><Input id="of-delivery-hours" value={outletForm.delivery_hours} onChange={(e) => setOutletForm({ ...outletForm, delivery_hours: e.target.value })} className="mt-1" /></div>
               <div className="flex gap-4">
                 <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={outletForm.online_ordering} onChange={(e) => setOutletForm({ ...outletForm, online_ordering: e.target.checked })} /> Online ordering</label>
-                <div className="flex items-center gap-2"><label className="text-xs font-semibold">Sort</label><Input type="number" value={outletForm.sort_order} onChange={(e) => setOutletForm({ ...outletForm, sort_order: e.target.value })} className="w-20 px-2 py-1.5" /></div>
+                <div className="flex items-center gap-2"><label htmlFor="of-sort" className="text-xs font-semibold">Sort</label><Input type="number" id="of-sort" value={outletForm.sort_order} onChange={(e) => setOutletForm({ ...outletForm, sort_order: e.target.value })} className="w-20 px-2 py-1.5" /></div>
               </div>
             </div>
             <DialogFooter>

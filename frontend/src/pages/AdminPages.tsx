@@ -17,12 +17,6 @@ interface SitePage {
   updated_at: string;
 }
 
-const DEFAULT_PAGES: { slug: string; title: string; content: string }[] = [
-  { slug: 'about', title: 'About Us', content: 'Update this page content in the admin dashboard.' },
-  { slug: 'terms', title: 'Terms & Conditions', content: 'Update this page content in the admin dashboard.' },
-  { slug: 'privacy', title: 'Privacy Policy', content: 'Update this page content in the admin dashboard.' },
-];
-
 function slugify(title: string): string {
   return title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 }
@@ -156,8 +150,9 @@ export default function AdminPages() {
 
           <div className="space-y-4 max-w-2xl">
             <div>
-              <label className="text-xs font-semibold">Title *</label>
+              <label htmlFor="ap-page-title" className="text-xs font-semibold">Title *</label>
               <input
+                id="ap-page-title"
                 value={form.title}
                 onChange={(e) => handleTitleChange(e.target.value)}
                 placeholder="About Us"
@@ -166,8 +161,9 @@ export default function AdminPages() {
               />
             </div>
             <div>
-              <label className="text-xs font-semibold">Slug</label>
+              <label htmlFor="ap-page-slug" className="text-xs font-semibold">Slug</label>
               <input
+                id="ap-page-slug"
                 value={form.slug}
                 onChange={(e) => handleSlugChange(e.target.value)}
                 placeholder="about-us"
@@ -176,8 +172,9 @@ export default function AdminPages() {
               <p className="text-[11px] text-zinc-400 mt-1">Auto-generated from title. Page will be accessible at /page/{form.slug || '...'}</p>
             </div>
             <div>
-              <label className="text-xs font-semibold">Content</label>
+              <label htmlFor="ap-page-content" className="text-xs font-semibold">Content</label>
               <textarea
+                id="ap-page-content"
                 value={form.content}
                 onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))}
                 rows={10}
@@ -186,8 +183,9 @@ export default function AdminPages() {
               />
             </div>
             <div>
-              <label className="text-xs font-semibold">Meta Title</label>
+              <label htmlFor="ap-page-meta-title" className="text-xs font-semibold">Meta Title</label>
               <input
+                id="ap-page-meta-title"
                 value={form.meta_title}
                 onChange={(e) => setForm((f) => ({ ...f, meta_title: e.target.value }))}
                 placeholder="SEO title (defaults to page title)"
@@ -195,8 +193,9 @@ export default function AdminPages() {
               />
             </div>
             <div>
-              <label className="text-xs font-semibold">Meta Description</label>
+              <label htmlFor="ap-page-meta-desc" className="text-xs font-semibold">Meta Description</label>
               <textarea
+                id="ap-page-meta-desc"
                 value={form.meta_desc}
                 onChange={(e) => setForm((f) => ({ ...f, meta_desc: e.target.value }))}
                 rows={3}

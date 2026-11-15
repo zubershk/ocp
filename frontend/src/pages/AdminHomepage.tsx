@@ -9,6 +9,7 @@ import { Button } from '@/components/shadcn/button';
 import { Input } from '@/components/shadcn/input';
 import { Skeleton } from '@/components/shadcn/skeleton';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/shadcn/tabs';
+import { PromoCardsEditor } from '@/components/admin/PromoCardsEditor';
 
 interface HomepageSettings {
   hero_title: string;
@@ -93,7 +94,28 @@ const SECTIONS: SettingSection[] = [
   { id: 'cta', title: 'Call To Action Banner', hint: 'The closing banner on the home page.', icon: 'Megaphone', fields: [ { key: 'cta_title', label: 'CTA Title', placeholder: 'Ready to order?', help: 'Main title for the bottom CTA banner' }, { key: 'cta_subtitle', label: 'CTA Subtitle', placeholder: 'Pay by cash or UPI...', help: 'Subtitle under the CTA title' }, { key: 'cta_button_text', label: 'CTA Button Text', placeholder: 'Start Your Order', help: 'Button text for the CTA banner' } ] },
   { id: 'cart', title: 'Cart & Checkout', hint: 'The empty cart message and its buttons.', icon: 'ShoppingCart', fields: [ { key: 'empty_cart_title', label: 'Empty Cart Title', placeholder: 'Your cart is empty', help: 'Title shown when cart is empty' }, { key: 'empty_cart_subtitle', label: 'Empty Cart Subtitle', placeholder: 'Add some cheesy pizzas...', help: 'Subtitle when cart is empty' }, { key: 'browse_menu_text', label: 'Browse Menu Button Text', placeholder: 'Browse Menu', help: 'Button text from empty cart state' } ] },
   { id: 'crust', title: 'Crust & Toppings', hint: 'Shown on the product page when a customer configures a pizza.', icon: 'Pizza', fields: [ { key: 'crust_title', label: 'Crust Section Title', placeholder: '6 Delicious Crusts', help: 'Heading for crust selection section' }, { key: 'crust_subtitle', label: 'Crust Section Subtitle', placeholder: 'Choose your base', help: 'Subtext for crust selection' }, { key: 'crust_tossed', label: 'Tossed Crust Text', placeholder: 'Tossed (base)', help: 'Label for tossed crust option' }, { key: 'crust_italian_thin', label: 'Italian Thin Crust Text', placeholder: 'Italian Thin', help: 'Label for Italian thin crust' }, { key: 'crust_wheat_thin', label: 'Wheat Thin Crust Text', placeholder: 'Wheat Thin', help: 'Label for wheat thin crust' }, { key: 'crust_cheese_burst', label: 'Cheese Burst Crust Text', placeholder: 'Cheese Burst', help: 'Label for cheese burst crust' }, { key: 'crust_double_cheese_crunch', label: 'Double Cheese Crunch Text', placeholder: 'Double Cheese Crunch', help: 'Label for double cheese crunch crust' }, { key: 'extra_toppings_title', label: 'Extra Toppings Section Title', placeholder: 'Extra toppings:', help: 'Heading for extra toppings section' }, { key: 'extra_cheese_price', label: 'Extra Cheese Price Line', placeholder: 'Extra Cheese ₹60/95/125', help: 'Price line for extra cheese (small/medium/large)' }, { key: 'extra_veg_price', label: 'Extra Veg Price Line', placeholder: 'Veg ₹45/80/110', help: 'Price line for extra veg toppings' }, { key: 'extra_chicken_price', label: 'Extra Chicken Price Line', placeholder: 'Chicken ₹60/95/125', help: 'Price line for extra chicken toppings' } ] },
-  { id: 'contact', title: 'Contact Page', hint: 'The /r/contact page — call, WhatsApp, the form and delivery notes.', icon: 'Mail', fields: [ { key: 'contact_title', label: 'Contact Page Title', placeholder: 'Contact Us', help: 'Page title for contact page' }, { key: 'contact_subtitle', label: 'Contact Page Subtitle', placeholder: "We'd love to hear from you...", help: 'Subtitle for contact page' }, { key: 'contact_call_title', label: 'Call Section Title', placeholder: 'Call Us', help: 'Heading for phone section' }, { key: 'contact_whatsapp_title', label: 'WhatsApp Section Title', placeholder: 'WhatsApp', help: 'Heading for WhatsApp section' }, { key: 'contact_whatsapp_desc', label: 'WhatsApp Description', placeholder: 'Order directly or ask us anything on WhatsApp.', help: 'Description text for WhatsApp' }, { key: 'contact_whatsapp_button', label: 'WhatsApp Button Text', placeholder: 'Chat on WhatsApp', help: 'Button text for WhatsApp chat' }, { key: 'contact_outlet_title', label: 'Outlet Section Title', placeholder: 'Visit Our {outlet} Outlet', help: 'Heading for outlet location section' }, { key: 'contact_delivery_hours_title', label: 'Delivery Hours Title', placeholder: 'Delivery Hours', help: 'Heading for delivery hours' }, { key: 'contact_delivery_hours_text', label: 'Delivery Hours Text', placeholder: '{hours} - all days', help: 'Text showing delivery hours' }, { key: 'contact_delivery_area_text', label: 'Delivery Area Text', placeholder: 'We deliver to...', help: 'Text describing delivery area' }, { key: 'contact_delivery_note', label: 'Delivery Note', placeholder: 'Free home delivery...', help: 'Note about delivery fees' }, { key: 'contact_form_title', label: 'Contact Form Title', placeholder: 'Send us a message', help: 'Title for the contact form' }, { key: 'contact_form_desc', label: 'Contact Form Description', placeholder: 'Have a question or feedback?', help: 'Description for contact form' }, { key: 'contact_name_label', label: 'Name Field Label', placeholder: 'Your Name *', help: 'Label for name input field' }, { key: 'contact_phone_label', label: 'Phone Field Label', placeholder: 'Phone Number *', help: 'Label for phone input field' }, { key: 'contact_message_label', label: 'Message Field Label', placeholder: 'Your Message *', help: 'Label for message textarea' }, { key: 'contact_submit_button', label: 'Submit Button Text', placeholder: 'Send on WhatsApp', help: 'Text for the form submit button' }, { key: 'contact_order_cta_text', label: 'Order CTA Button Text', placeholder: 'Order Now', help: 'Button text for order CTA' }, { key: 'contact_other_outlets_title', label: 'Other Outlets Title', placeholder: 'Other Outlets', help: 'Heading for other locations section' }, { key: 'contact_map_address', label: 'Map Search Address', placeholder: 'e.g., 123 Main Street, City', help: 'Address shown in contact map' }, { key: 'contact_map_embed_url', label: 'Map Embed URL', placeholder: 'https://www.google.com/maps/embed/v1/...', help: 'Google Maps embed URL for contact page' }, { key: 'locations_map_address', label: 'Locations Map Search Address', placeholder: 'e.g., 123 Main Street, City', help: 'Address shown in locations map' }, { key: 'locations_map_embed_url', label: 'Locations Map Embed URL', placeholder: 'https://www.google.com/maps/embed/v1/...', help: 'Google Maps embed URL for locations page' }, { key: 'promos', label: 'Login Page Promo Cards (JSON)', placeholder: 'JSON array of promo cards...', help: 'JSON array of promo cards shown on login/registration pages' } ] },
+  { id: 'contact', title: 'Contact Page', hint: 'The /r/contact page — call, WhatsApp, the form and delivery notes.', icon: 'Mail', fields: [ { key: 'contact_title', label: 'Contact Page Title', placeholder: 'Contact Us', help: 'Page title for contact page' }, { key: 'contact_subtitle', label: 'Contact Page Subtitle', placeholder: "We'd love to hear from you...", help: 'Subtitle for contact page' }, { key: 'contact_call_title', label: 'Call Section Title', placeholder: 'Call Us', help: 'Heading for phone section' }, { key: 'contact_whatsapp_title', label: 'WhatsApp Section Title', placeholder: 'WhatsApp', help: 'Heading for WhatsApp section' }, { key: 'contact_whatsapp_desc', label: 'WhatsApp Description', placeholder: 'Order directly or ask us anything on WhatsApp.', help: 'Description text for WhatsApp' }, { key: 'contact_whatsapp_button', label: 'WhatsApp Button Text', placeholder: 'Chat on WhatsApp', help: 'Button text for WhatsApp chat' }, { key: 'contact_outlet_title', label: 'Outlet Section Title', placeholder: 'Visit Our {outlet} Outlet', help: 'Heading for outlet location section' }, { key: 'contact_delivery_hours_title', label: 'Delivery Hours Title', placeholder: 'Delivery Hours', help: 'Heading for delivery hours' }, { key: 'contact_delivery_hours_text', label: 'Delivery Hours Text', placeholder: '{hours} - all days', help: 'Text showing delivery hours' }, { key: 'contact_delivery_area_text', label: 'Delivery Area Text', placeholder: 'We deliver to...', help: 'Text describing delivery area' }, { key: 'contact_delivery_note', label: 'Delivery Note', placeholder: 'Free home delivery...', help: 'Note about delivery fees' }, { key: 'contact_form_title', label: 'Contact Form Title', placeholder: 'Send us a message', help: 'Title for the contact form' }, { key: 'contact_form_desc', label: 'Contact Form Description', placeholder: 'Have a question or feedback?', help: 'Description for contact form' }, { key: 'contact_name_label', label: 'Name Field Label', placeholder: 'Your Name *', help: 'Label for name input field' }, { key: 'contact_phone_label', label: 'Phone Field Label', placeholder: 'Phone Number *', help: 'Label for phone input field' }, { key: 'contact_message_label', label: 'Message Field Label', placeholder: 'Your Message *', help: 'Label for message textarea' }, { key: 'contact_submit_button', label: 'Submit Button Text', placeholder: 'Send on WhatsApp', help: 'Text for the form submit button' }, { key: 'contact_order_cta_text', label: 'Order CTA Button Text', placeholder: 'Order Now', help: 'Button text for order CTA' }, { key: 'contact_other_outlets_title', label: 'Other Outlets Title', placeholder: 'Other Outlets', help: 'Heading for other locations section' },  ] },
+  {
+    id: 'maps',
+    title: 'Maps & Addresses',
+    hint: 'The embedded maps on the contact and locations pages.',
+    icon: 'MapPin',
+    fields: [
+      { key: 'contact_map_address', label: 'Contact Map Search Address', placeholder: 'e.g., 123 Main Street, City', help: 'Address shown in the contact page map' },
+      { key: 'contact_map_embed_url', label: 'Contact Map Embed URL', placeholder: 'https://www.google.com/maps/embed/v1/...', help: 'Google Maps embed URL for the contact page' },
+      { key: 'locations_map_address', label: 'Locations Map Search Address', placeholder: 'e.g., 123 Main Street, City', help: 'Address shown in the locations page map' },
+      { key: 'locations_map_embed_url', label: 'Locations Map Embed URL', placeholder: 'https://www.google.com/maps/embed/v1/...', help: 'Google Maps embed URL for the locations page' },
+    ],
+  },
+  {
+    id: 'promos',
+    title: 'Login Page Promo Cards',
+    hint: 'The rotating offer cards shown on the login and registration pages.',
+    icon: 'Gift',
+    fields: [
+      { key: 'promos', label: 'Promo Cards', placeholder: '', help: 'One card is picked at random each time a customer opens the login page.' },
+    ],
+  },
 ];
 
 const UPSELL_SECTION: SettingSection = {
@@ -128,8 +150,6 @@ export default function AdminHomepage() {
   const [form, setForm] = useState<HomepageSettings>(DEFAULTS);
   const [savedForm, setSavedForm] = useState<HomepageSettings>(DEFAULTS);
   const [query, setQuery] = useState('');
-  const [promosText, setPromosText] = useState('');
-  const [promosError, setPromosError] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [justSaved, setJustSaved] = useState(false);
   const [activeTab, setActiveTab] = useState(TAB_GROUPS[0].id);
@@ -149,8 +169,6 @@ export default function AdminHomepage() {
     if (settingsQuery.data) {
       setForm(settingsQuery.data);
       setSavedForm(settingsQuery.data);
-      setPromosText(JSON.stringify(settingsQuery.data.promos ?? [], null, 2));
-      setPromosError(null);
     }
   }, [settingsQuery.data]);
 
@@ -160,19 +178,10 @@ export default function AdminHomepage() {
 
   const revert = (key: keyof HomepageSettings) => {
     setForm((prev) => ({ ...prev, [key]: savedForm[key] }));
-    if (key === 'promos') setPromosText(JSON.stringify(savedForm.promos ?? [], null, 2));
   };
 
   const revertAll = () => {
     setForm(savedForm);
-    setPromosText(JSON.stringify(savedForm.promos ?? [], null, 2));
-    setPromosError(null);
-  };
-
-  const handlePromosChange = (value: string) => {
-    setPromosText(value);
-    try { setForm((prev) => ({ ...prev, promos: JSON.parse(value) })); setPromosError(null); }
-    catch { setPromosError('Invalid JSON — fix the syntax before saving.'); }
   };
 
   const update = (key: keyof HomepageSettings, value: string | boolean | number) => {
@@ -199,12 +208,12 @@ export default function AdminHomepage() {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement | null;
       const typing = !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); if (dirty && !promosError) saveMut.mutate(form); return; }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); if (dirty) saveMut.mutate(form); return; }
       if (e.key === '/' && !typing) { e.preventDefault(); searchRef.current?.focus(); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [dirty, promosError, form, saveMut]);
+  }, [dirty, form, saveMut]);
 
   const matchesQuery = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -228,10 +237,11 @@ export default function AdminHomepage() {
   const renderField = ({ key, label, placeholder, help }: SettingField) => {
     const isPromos = key === 'promos';
     const changed = isChanged(key);
+    const inputId = `setting-${key}`;
     return (
       <div key={key} className="group/field">
         <div className="flex items-center gap-2">
-          <label className="text-[13px] font-medium text-zinc-700">{label}</label>
+          <label htmlFor={inputId} className="text-[13px] font-medium text-zinc-700">{label}</label>
           {changed && <span className="size-1.5 shrink-0 rounded-full bg-amber-500" title="Unsaved change" aria-label="Unsaved change" />}
           {changed && (
             <button type="button" onClick={() => revert(key)} aria-label={`Revert ${label}`} className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-zinc-400 opacity-0 transition-all hover:bg-amber-50 hover:text-amber-700 focus-visible:opacity-100 group-hover/field:opacity-100">
@@ -240,14 +250,16 @@ export default function AdminHomepage() {
           )}
         </div>
         {isPromos ? (
-          <>
-            <textarea value={promosText} onChange={(e) => handlePromosChange(e.target.value)} placeholder={placeholder} rows={10} aria-invalid={!!promosError} className="mt-1.5 w-full rounded-xl border border-stone-200 bg-white px-3.5 py-2.5 font-mono text-[13px] leading-relaxed transition-colors focus:border-brand-400 focus:ring-2 focus:ring-brand-500/20 focus:outline-none aria-invalid:border-red-400 aria-invalid:ring-red-500/20" />
-            {promosError && <p className="mt-1.5 flex items-center gap-1 text-[11px] font-medium text-red-600"><AlertCircle size={11} /> {promosError}</p>}
-          </>
+          <div className="mt-2">
+            <PromoCardsEditor
+              cards={form.promos ?? []}
+              onChange={(next) => setForm((prev) => ({ ...prev, promos: next }))}
+            />
+          </div>
         ) : (
-          <Input value={String(form[key] ?? '')} onChange={(e) => update(key, e.target.value)} placeholder={placeholder} className={`mt-1.5 h-9 w-full text-[13px] transition-colors ${changed ? 'border-amber-300 bg-amber-50/50 focus:border-amber-400 focus:ring-amber-500/20' : ''}`} />
+          <Input id={inputId} value={String(form[key] ?? '')} onChange={(e) => update(key, e.target.value)} placeholder={placeholder} aria-describedby={help ? `${inputId}-help` : undefined} className={`mt-1.5 h-9 w-full text-[13px] transition-colors ${changed ? 'border-amber-300 bg-amber-50/50 focus:border-amber-400 focus:ring-amber-500/20' : ''}`} />
         )}
-        {help && <p className="mt-1.5 text-[11px] leading-relaxed text-zinc-400">{help}</p>}
+        {help && <p id={`${inputId}-help`} className="mt-1.5 text-[11px] leading-relaxed text-zinc-400">{help}</p>}
       </div>
     );
   };
@@ -255,19 +267,19 @@ export default function AdminHomepage() {
   const renderUpsell = (f: HomepageSettings) => (
     <div className="space-y-5">
       <div>
-        <label className="text-[13px] font-medium text-zinc-700">Section Title</label>
-        <Input value={f.complete_meal_title} onChange={(e) => update('complete_meal_title', e.target.value)} placeholder="Complete Your Meal" className="mt-1.5 h-9 text-[13px]" />
-        <p className="mt-1.5 text-[11px] text-zinc-400">Heading shown above the upsell items.</p>
+        <label htmlFor="upsell-title" className="text-[13px] font-medium text-zinc-700">Section Title</label>
+        <Input id="upsell-title" value={f.complete_meal_title} onChange={(e) => update('complete_meal_title', e.target.value)} placeholder="Complete Your Meal" aria-describedby="upsell-title-help" className="mt-1.5 h-9 text-[13px]" />
+        <p id="upsell-title-help" className="mt-1.5 text-[11px] text-zinc-400">Heading shown above the upsell items.</p>
       </div>
       <div>
-        <label className="text-[13px] font-medium text-zinc-700">Menu Categories Offered</label>
-        <Input value={f.complete_meal_categories} onChange={(e) => update('complete_meal_categories', e.target.value)} placeholder="garlic-bread,desserts,french-fries,drinks,beverages" className="mt-1.5 h-9 font-mono text-[12px]" />
-        <p className="mt-1.5 text-[11px] text-zinc-400">Comma separated category ids. Items already in the customer&apos;s cart are never offered.</p>
+        <label htmlFor="upsell-categories" className="text-[13px] font-medium text-zinc-700">Menu Categories Offered</label>
+        <Input id="upsell-categories" value={f.complete_meal_categories} onChange={(e) => update('complete_meal_categories', e.target.value)} placeholder="garlic-bread,desserts,french-fries,drinks,beverages" aria-describedby="upsell-categories-help" className="mt-1.5 h-9 font-mono text-[12px]" />
+        <p id="upsell-categories-help" className="mt-1.5 text-[11px] text-zinc-400">Comma separated category ids. Items already in the customer&apos;s cart are never offered.</p>
       </div>
       <div>
-        <label className="text-[13px] font-medium text-zinc-700">How Many Items to Show</label>
-        <Input type="number" min={1} max={12} value={String(f.complete_meal_limit ?? 4)} onChange={(e) => update('complete_meal_limit', Math.max(1, Math.min(12, parseInt(e.target.value, 10) || 1)))} className="mt-1.5 h-9 w-28 text-[13px]" />
-        <p className="mt-1.5 text-[11px] text-zinc-400">Maximum number of upsell items to display (1-12).</p>
+        <label htmlFor="upsell-limit" className="text-[13px] font-medium text-zinc-700">How Many Items to Show</label>
+        <Input id="upsell-limit" type="number" min={1} max={12} value={String(f.complete_meal_limit ?? 4)} onChange={(e) => update('complete_meal_limit', Math.max(1, Math.min(12, parseInt(e.target.value, 10) || 1)))} aria-describedby="upsell-limit-help" className="mt-1.5 h-9 w-28 text-[13px]" />
+        <p id="upsell-limit-help" className="mt-1.5 text-[11px] text-zinc-400">Maximum number of upsell items to display (1-12).</p>
       </div>
       <fieldset>
         <legend className="text-[13px] font-medium text-zinc-700">Show On</legend>
@@ -321,7 +333,7 @@ export default function AdminHomepage() {
                     <span className="hidden sm:inline">unsaved</span>
                   </span>
                 )}
-                <Button size="sm" variant={dirty ? 'default' : 'outline'} onClick={() => saveMut.mutate(form)} disabled={saveMut.isPending || !dirty || !!promosError} className="h-9 gap-1.5 px-2.5 text-[13px] shadow-sm sm:px-3.5" aria-label={dirty ? 'Save changes' : 'No changes to save'}>
+                <Button size="sm" variant={dirty ? 'default' : 'outline'} onClick={() => saveMut.mutate(form)} disabled={saveMut.isPending || !dirty} className="h-9 gap-1.5 px-2.5 text-[13px] shadow-sm sm:px-3.5" aria-label={dirty ? 'Save changes' : 'No changes to save'}>
                   {saveMut.isPending ? <><svg className="size-3.5 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.55 0 0 5.55 0 12h4z" /></svg><span className="hidden sm:inline">Saving</span></> : dirty ? <><Save size={14} /><span className="hidden sm:inline">Save changes</span></> : <><Check size={14} /><span className="hidden sm:inline">Saved</span></>}
                 </Button>
               </div>
@@ -342,7 +354,7 @@ export default function AdminHomepage() {
                 {searching ? (
                   <span className="text-[11px] font-medium text-zinc-500">{visibleFieldCount} {visibleFieldCount === 1 ? 'match' : 'matches'}</span>
                 ) : visibleSections.length > 0 ? (
-                  <button type="button" onClick={() => setCollapsed((prev) => (allCollapsed ? new Set() : new Set(visibleSections.map((s) => s.id))))} className="whitespace-nowrap rounded-lg px-2 py-1 text-[11px] font-medium text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900">
+                  <button type="button" onClick={() => setCollapsed((_prev) => (allCollapsed ? new Set() : new Set(visibleSections.map((s) => s.id))))} className="whitespace-nowrap rounded-lg px-2 py-1 text-[11px] font-medium text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900">
                     {allCollapsed ? 'Expand all' : 'Collapse all'}
                   </button>
                 ) : null}
@@ -392,10 +404,10 @@ export default function AdminHomepage() {
                           <SectionIcon size={16} strokeWidth={1.75} />
                         </span>
                         <span className="min-w-0 flex-1">
-                          <span className="flex flex-wrap items-center gap-2">
-                            <span className="text-[15px] font-semibold leading-tight tracking-tight text-zinc-900">{section.title}</span>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h2 className="text-[15px] font-semibold leading-tight tracking-tight text-zinc-900">{section.title}</h2>
                             {changed > 0 && <span className="rounded-md bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold text-amber-700 ring-1 ring-inset ring-amber-200">{changed} changed</span>}
-                          </span>
+                          </div>
                           <span className="mt-0.5 block text-xs leading-snug text-muted-foreground">{section.hint}</span>
                         </span>
                         <span className="hidden shrink-0 items-center gap-2 sm:flex">
@@ -422,7 +434,7 @@ export default function AdminHomepage() {
           <aside className="space-y-3 lg:sticky lg:top-28 lg:self-start">
             <Card className="gap-3 rounded-2xl border border-border bg-card p-4 shadow-xs">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">Save status</span>
+                <h2 className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">Save status</h2>
                 {dirty && (
                   <button type="button" onClick={revertAll} className="text-[11px] font-medium text-zinc-400 transition-colors hover:text-amber-700">Revert all</button>
                 )}
@@ -436,12 +448,6 @@ export default function AdminHomepage() {
                   <><CheckCircle size={15} className="shrink-0 text-emerald-600" /><span className="text-[13px] font-medium text-emerald-700">All changes saved</span></>
                 )}
               </div>
-              {promosError && (
-                <div className="mt-2.5 flex items-start gap-2 rounded-xl bg-red-50 px-3 py-2.5 ring-1 ring-inset ring-red-200">
-                  <AlertCircle size={14} className="mt-px shrink-0 text-red-600" />
-                  <p className="text-[11px] leading-relaxed text-red-700">Fix the promo cards JSON before saving.</p>
-                </div>
-              )}
               <div className="flex flex-wrap items-center gap-1.5 border-t border-border pt-2.5 text-[11px] text-zinc-400">
                 <kbd className="rounded border border-stone-200 bg-stone-50 px-1.5 py-0.5 font-mono text-[10px]">⌘S</kbd> save
                 <kbd className="ml-1 rounded border border-stone-200 bg-stone-50 px-1.5 py-0.5 font-mono text-[10px]">/</kbd> search
@@ -450,14 +456,14 @@ export default function AdminHomepage() {
             </Card>
 
             <Card className="gap-3 rounded-2xl border border-border bg-card p-4 shadow-xs">
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">On this page</span>
+              <h2 className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">On this page</h2>
               <div className="mt-3 max-h-[50vh] space-y-4 overflow-y-auto pr-1">
                 {TAB_GROUPS.map((tab) => {
                   const sections = ALL_SECTIONS.filter((s) => tab.sections.includes(s.id));
                   if (!sections.length) return null;
                   return (
                     <div key={tab.id}>
-                      <div className="mb-1.5 px-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">{tab.label}</div>
+                      <h3 className="mb-1.5 px-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">{tab.label}</h3>
                       <ul className="space-y-0.5">
                         {sections.map((section) => {
                           const changed = changedCount(section.fields);

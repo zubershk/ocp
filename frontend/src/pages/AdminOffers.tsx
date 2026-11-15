@@ -150,7 +150,7 @@ export default function AdminOffers() {
     <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
 
       <div className="flex items-center gap-3">
-        <Link to="/admin/settings" className="p-2 rounded-xl hover:bg-muted"><ArrowLeft size={18} /></Link>
+        <Link to="/admin/settings" className="p-2 rounded-xl hover:bg-muted" aria-label="Back to settings"><ArrowLeft size={18} /></Link>
         <h1 className="text-2xl font-bold tracking-tight">Offers &amp; Promotions</h1>
       </div>
       <p className="text-sm text-muted-foreground mt-1 ml-11">Manage offers shown on the Offers page and banners.</p>
@@ -165,8 +165,8 @@ export default function AdminOffers() {
 
             <div className="space-y-4 max-w-2xl">
               <div>
-                <label className="text-xs font-semibold">Title *</label>
-                <Input
+                <label htmlFor="f-AdminOffers-1" className="text-xs font-semibold">Title *</label>
+                <Input id="f-AdminOffers-1"
                   value={form.title}
                   onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
                   placeholder="e.g. Family Pack from ₹515"
@@ -175,8 +175,8 @@ export default function AdminOffers() {
                 />
               </div>
               <div>
-                <label className="text-xs font-semibold">Subtitle</label>
-                <Input
+                <label htmlFor="f-AdminOffers-2" className="text-xs font-semibold">Subtitle</label>
+                <Input id="f-AdminOffers-2"
                   value={form.subtitle}
                   onChange={(e) => setForm((f) => ({ ...f, subtitle: e.target.value }))}
                   placeholder="e.g. 2 pizzas + garlic bread + choco lava"
@@ -185,8 +185,8 @@ export default function AdminOffers() {
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="text-xs font-semibold">Badge</label>
-                  <Input
+                  <label htmlFor="f-AdminOffers-3" className="text-xs font-semibold">Badge</label>
+                  <Input id="f-AdminOffers-3"
                     value={form.badge}
                     onChange={(e) => setForm((f) => ({ ...f, badge: e.target.value }))}
                     placeholder="e.g. NEW, HOT, LIMITED"
@@ -194,8 +194,8 @@ export default function AdminOffers() {
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold">Code</label>
-                  <Input
+                  <label htmlFor="f-AdminOffers-4" className="text-xs font-semibold">Code</label>
+                  <Input id="f-AdminOffers-4"
                     value={form.code}
                     onChange={(e) => setForm((f) => ({ ...f, code: e.target.value }))}
                     placeholder="e.g. WELCOME50"
@@ -205,8 +205,8 @@ export default function AdminOffers() {
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
-                  <label className="text-xs font-semibold">Discount</label>
-                  <Input
+                  <label htmlFor="f-AdminOffers-5" className="text-xs font-semibold">Discount</label>
+                  <Input id="f-AdminOffers-5"
                     value={form.discount}
                     onChange={(e) => setForm((f) => ({ ...f, discount: e.target.value }))}
                     placeholder="e.g. 50% OFF"
@@ -214,8 +214,8 @@ export default function AdminOffers() {
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold">Min Order (₹)</label>
-                  <Input
+                  <label htmlFor="f-AdminOffers-6" className="text-xs font-semibold">Min Order (₹)</label>
+                  <Input id="f-AdminOffers-6"
                     type="number"
                     value={form.minOrder || ''}
                     onChange={(e) => setForm((f) => ({ ...f, minOrder: Number(e.target.value) }))}
@@ -224,8 +224,8 @@ export default function AdminOffers() {
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold">Max Discount (₹)</label>
-                  <Input
+                  <label htmlFor="f-AdminOffers-7" className="text-xs font-semibold">Max Discount (₹)</label>
+                  <Input id="f-AdminOffers-7"
                     type="number"
                     value={form.maxDiscount || ''}
                     onChange={(e) => setForm((f) => ({ ...f, maxDiscount: Number(e.target.value) }))}
@@ -235,10 +235,10 @@ export default function AdminOffers() {
                 </div>
               </div>
               <div>
-                <label className="text-xs font-semibold">Image URL</label>
+                <label htmlFor="f-AdminOffers-8" className="text-xs font-semibold">Image URL</label>
                 <div className="flex gap-2 items-end">
                   <div className="flex-1">
-                    <Input
+                    <Input id="f-AdminOffers-8"
                       value={form.image_url}
                       onChange={(e) => setForm((f) => ({ ...f, image_url: e.target.value }))}
                       placeholder="/uploads/..."
