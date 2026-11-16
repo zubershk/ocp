@@ -3,6 +3,7 @@ package services
 import (
 	"database/sql"
 	"net"
+	"os"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -127,36 +128,36 @@ func TenantResolverMiddleware(baseDomain string, trustedProxiesCSV string) gin.H
 
 		var rid, oid int
 		if host != "" && host != "localhost" && !strings.HasPrefix(host, "127.0.0.1") {
-			// try domains table first (verified wins)
-			var found int
-			err := database.DB.QueryRow(`SELECT restaurant_id FROM domains WHERE lower(domain)=lower($1) AND verified_at IS NOT NULL LIMIT 1`, host).Scan(&found)
-			if err == nil && found != 0 {
+			// Cached lookup (TENANT_CACHE_TTL_SECS). Verified domain wins.
+			if found := RestaurantByDomain(host); found != 0 {
 				rid = found
 			} else if strings.HasSuffix(host, "."+baseDomain) {
 				slug := strings.TrimSuffix(host, "."+baseDomain)
 				slug = strings.TrimSuffix(slug, ".")
 				if slug != "" && slug != "www" {
-					_ = database.DB.QueryRow(`SELECT id FROM restaurants WHERE lower(slug)=lower($1) ORDER BY id LIMIT 1`, slug).Scan(&found)
-					if found != 0 {
-						rid = found
-					}
+					rid = RestaurantBySlug(slug)
 				}
 			}
 		}
-		// local fallback /r/:slug or /r/slug query
+		// local fallback /r/:slug route param
 		if rid == 0 {
 			if slug := c.Param("restaurantSlug"); slug != "" {
-				var found int
-				_ = database.DB.QueryRow(`SELECT id FROM restaurants WHERE lower(slug)=lower($1) LIMIT 1`, strings.ToLower(slug)).Scan(&found)
-				if found != 0 {
-					rid = found
-				}
+				rid = RestaurantBySlug(slug)
 			}
 		}
 		// NOTE: ?restaurant= query param intentionally NOT honored here.
 		// It allowed unauthenticated tenant selection on read and write routes,
 		// which is an IDOR/brute-force vector. Tenant is resolved only from
 		// host/domain or /r/:slug path.
+		// Opt-in dev tenant header (OFF by default). For local/path-based
+		// multi-tenant development set ALLOW_TENANT_HEADER=1 on the bot and
+		// send X-Tenant-Slug from a trusted dev origin. Production leaves this
+		// disabled so an attacker cannot pick a tenant with a header.
+		if rid == 0 && strings.EqualFold(strings.TrimSpace(os.Getenv("ALLOW_TENANT_HEADER")), "1") {
+			if slug := strings.TrimSpace(c.GetHeader("X-Tenant-Slug")); slug != "" {
+				rid = RestaurantBySlug(slug)
+			}
+		}
 		if rid != 0 {
 			c.Set("restaurantID", rid)
 			// default outlet for public (delivery)
@@ -166,9 +167,8 @@ func TenantResolverMiddleware(baseDomain string, trustedProxiesCSV string) gin.H
 					c.Set("outletID", oid)
 				}
 			}
-			// also set orgID for entitlements
-			var orgID int
-			if err := database.DB.QueryRow(`SELECT organization_id FROM restaurants WHERE id=$1`, rid).Scan(&orgID); err == nil {
+			// also set orgID for entitlements (cached)
+			if orgID := RestaurantOrgID(rid); orgID != 0 {
 				c.Set("orgID", orgID)
 			}
 		}
@@ -177,15 +177,14 @@ func TenantResolverMiddleware(baseDomain string, trustedProxiesCSV string) gin.H
 			parts := strings.Split(strings.TrimPrefix(c.Request.URL.Path, "/r/"), "/")
 			if len(parts) > 0 && parts[0] != "" {
 				slug := strings.ToLower(parts[0])
-				var found int
-				if err := database.DB.QueryRow(`SELECT id FROM restaurants WHERE lower(slug)=lower($1) ORDER BY id LIMIT 1`, slug).Scan(&found); err == nil && found != 0 {
+				if found := RestaurantBySlug(slug); found != 0 {
 					c.Set("restaurantID", found)
 					if oid2 := DefaultOutletID(found); oid2 != 0 {
 						c.Set("outletID", oid2)
 					}
-					var orgID int
-					_ = database.DB.QueryRow(`SELECT organization_id FROM restaurants WHERE id=$1`, found).Scan(&orgID)
-					c.Set("orgID", orgID)
+					if orgID := RestaurantOrgID(found); orgID != 0 {
+						c.Set("orgID", orgID)
+					}
 				} else {
 					// keep slug for handler to render 404
 					c.Set("restaurantSlug", slug)

@@ -4,7 +4,10 @@ import (
 	"errors"
 	"log"
 	"os"
+	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"orangecheesepizza/bot/database"
@@ -37,8 +40,109 @@ func TenantOrgID(c *gin.Context) int {
 	return c.GetInt("orgID")
 }
 
+// RestaurantByDomain resolves a verified custom domain to a restaurant id.
+func RestaurantByDomain(domain string) int {
+	key := "domain:" + strings.ToLower(strings.TrimSpace(domain))
+	if v, ok := tenantCacheGet(key); ok {
+		return v
+	}
+	if database.DB == nil {
+		return 0
+	}
+	var id int
+	err := database.DB.QueryRow(
+		`SELECT restaurant_id FROM domains WHERE lower(domain)=lower($1) AND verified_at IS NOT NULL LIMIT 1`, domain).Scan(&id)
+	if err != nil {
+		return 0
+	}
+	tenantCacheSet(key, id)
+	return id
+}
+
+// RestaurantBySlug resolves a restaurant slug to its id.
+func RestaurantBySlug(slug string) int {
+	key := "slug:" + strings.ToLower(strings.TrimSpace(slug))
+	if v, ok := tenantCacheGet(key); ok {
+		return v
+	}
+	if database.DB == nil {
+		return 0
+	}
+	var id int
+	err := database.DB.QueryRow(
+		`SELECT id FROM restaurants WHERE lower(slug)=lower($1) ORDER BY id LIMIT 1`, slug).Scan(&id)
+	if err != nil {
+		return 0
+	}
+	tenantCacheSet(key, id)
+	return id
+}
+
+// RestaurantOrgID returns the organization that owns a restaurant.
+func RestaurantOrgID(restaurantID int) int {
+	key := "org:" + strconv.Itoa(restaurantID)
+	if v, ok := tenantCacheGet(key); ok {
+		return v
+	}
+	if database.DB == nil {
+		return 0
+	}
+	var id int
+	err := database.DB.QueryRow(
+		`SELECT organization_id FROM restaurants WHERE id=$1`, restaurantID).Scan(&id)
+	if err != nil {
+		return 0
+	}
+	tenantCacheSet(key, id)
+	return id
+}
+
+// tenantCache bounds the repeated tenant/domain/outlet lookups that were
+// previously issued on every single request. Entries expire after
+// TENANT_CACHE_TTL_SECS (default 300) so new tenants propagate quickly.
+// InvalidateTenantCache() is called after provisioning.
+var tenantCache = struct {
+	sync.RWMutex
+	items map[string]tenantCacheEntry
+}{items: make(map[string]tenantCacheEntry)}
+
+type tenantCacheEntry struct {
+	value     int
+	expiresAt time.Time
+}
+
+func tenantCacheGet(key string) (int, bool) {
+	tenantCache.RLock()
+	e, ok := tenantCache.items[key]
+	tenantCache.RUnlock()
+	if !ok || time.Now().After(e.expiresAt) {
+		return 0, false
+	}
+	return e.value, true
+}
+
+func tenantCacheSet(key string, value int) {
+	if tenantCacheTTL() <= 0 || value == 0 {
+		return
+	}
+	tenantCache.Lock()
+	tenantCache.items[key] = tenantCacheEntry{value: value, expiresAt: time.Now().Add(tenantCacheTTL())}
+	tenantCache.Unlock()
+}
+
+// InvalidateTenantCache clears all cached tenant resolution (call after
+// provisioning a new restaurant/outlet so it is discoverable immediately).
+func InvalidateTenantCache() {
+	tenantCache.Lock()
+	tenantCache.items = make(map[string]tenantCacheEntry)
+	tenantCache.Unlock()
+}
+
 // DefaultRestaurantID returns the first restaurant (bootstrap tenant).
 func DefaultRestaurantID() int {
+	if v, ok := tenantCacheGet("default_restaurant"); ok {
+		return v
+	}
 	if database.DB == nil {
 		return 0
 	}
@@ -47,6 +151,7 @@ func DefaultRestaurantID() int {
 		`SELECT id FROM restaurants ORDER BY id LIMIT 1`).Scan(&id); err != nil {
 		return 0
 	}
+	tenantCacheSet("default_restaurant", id)
 	return id
 }
 
@@ -55,6 +160,10 @@ func DefaultOutletID(restaurantID int) int {
 	if database.DB == nil {
 		return 0
 	}
+	key := "default_outlet:" + strconv.Itoa(restaurantID)
+	if v, ok := tenantCacheGet(key); ok {
+		return v
+	}
 	var id int
 	err := database.DB.QueryRow(
 		`SELECT id FROM outlets WHERE restaurant_id = $1 AND active = true ORDER BY sort_order, id LIMIT 1`,
@@ -62,6 +171,7 @@ func DefaultOutletID(restaurantID int) int {
 	if err != nil {
 		return 0
 	}
+	tenantCacheSet(key, id)
 	return id
 }
 

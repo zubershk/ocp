@@ -115,11 +115,12 @@ func ListMessages(phone string, limit, restaurantID int) ([]ChatMessage, error) 
 		limit = 50
 	}
 	rid := ResolveRestaurant(restaurantID)
+	// Scope strictly to the message's owning tenant. Legacy rows with a NULL
+	// restaurant_id attach to the default tenant only (single-tenant compat).
 	rows, err := database.DB.Query(`
 		SELECT id, customer_phone, direction, body, COALESCE(message_id,''), created_at::text
 		FROM whatsapp_messages WHERE customer_phone = $1
-		  AND (EXISTS (SELECT 1 FROM customers c WHERE c.whatsapp_number = whatsapp_messages.customer_phone AND c.restaurant_id = $3)
-		       OR $3 = $4)
+		  AND (restaurant_id = $3 OR (restaurant_id IS NULL AND $3 = $4))
 		ORDER BY created_at ASC LIMIT $2
 	`, phone, limit, rid, ResolveRestaurant(0))
 	if err != nil {
@@ -139,9 +140,16 @@ func ListMessages(phone string, limit, restaurantID int) ([]ChatMessage, error) 
 
 // SetConversationState forces a conversation into a state (e.g. HUMAN_SUPPORT for live takeover).
 func SetConversationState(phone, state string) error {
-	cust, err := GetOrCreateCustomer(phone)
-	if err != nil {
-		return err
+	return SetConversationStateFor(phone, state, 0)
+}
+
+// SetConversationStateFor is tenant-aware. It never creates a customer in the
+// default tenant for an arbitrary phone supplied by another tenant's admin.
+func SetConversationStateFor(phone, state string, restaurantID int) error {
+	rid := ResolveRestaurant(restaurantID)
+	cust, err := getCustomerFor(phone, rid)
+	if err != nil || cust == nil {
+		return ErrTenantRequired
 	}
 	// preserve existing context
 	var raw []byte

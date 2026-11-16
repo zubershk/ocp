@@ -98,7 +98,7 @@ func (e *ConversationEngine) sendButtonsWithImage(phone, title, body, imageURL s
 		footer = "Restaurant"
 	}
 	if err := e.evolution.SendButtonWithImage(phone, title, body, footer, imageURL, buttons); err != nil {
-		log.Printf("WA button send failed to %s: %v", phone, err)
+		log.Printf("WA button send failed to %s: %v", MaskPhone(phone), err)
 	}
 }
 
@@ -147,7 +147,7 @@ func (e *ConversationEngine) evolutionSendList(conv *conversation, phone, title 
 	err := e.evolution.SendList(phone, title, "Choose an option", "Select",
 		footer, []Section{{Title: "Options", Rows: rows}})
 	if err != nil {
-		log.Printf("WA list send failed to %s: %v", phone, err)
+		log.Printf("WA list send failed to %s: %v", MaskPhone(phone), err)
 	}
 }
 
@@ -951,7 +951,7 @@ func (e *ConversationEngine) placeOrder(conv *conversation, phone string) {
 	}
 	result, err := e.orders.CreateFor(req, "", e.tenantID(conv))
 	if err != nil {
-		log.Printf("WA order create failed for %s: %v", phone, err)
+		log.Printf("WA order create failed for %s: %v", MaskPhone(phone), err)
 		e.evolution.SendText(phone, e.msg("order_failed", map[string]interface{}{"Error": "please try again in a moment"}))
 		return
 	}

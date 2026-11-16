@@ -152,16 +152,19 @@ func (e *ConversationEngine) HandleInbound(phone, input, messageID string) error
 	lk := lockFor(phone)
 	lk.Lock()
 	defer lk.Unlock()
+	// Cross-replica guard: the in-process lock alone is insufficient when a
+	// redelivery lands on another replica. Configurable via PG_PHONE_LOCKS_ENABLED.
+	releasePhone, err := acquirePhoneLock(phone)
+	if err != nil {
+		log.Printf("[WA] phone advisory lock failed for %s: %v", MaskPhone(phone), err)
+	} else {
+		defer releasePhone()
+	}
 
-	if messageID != "" {
-		var exists bool
-		_ = database.DB.QueryRow(
-			`SELECT EXISTS(SELECT 1 FROM processed_messages WHERE message_id=$1)`, messageID).Scan(&exists)
-		if exists {
-			log.Printf("[WA] duplicate id=%s from *%s ignored", shortID(messageID), shortPhone(phone))
-			return nil
-		}
-		database.DB.Exec(`INSERT INTO processed_messages (message_id) VALUES ($1) ON CONFLICT DO NOTHING`, messageID)
+	if messageID != "" && !TryClaimMessage(messageID) {
+		// Atomic INSERT ... ON CONFLICT DO NOTHING: only one replica wins.
+		log.Printf("[WA] duplicate id=%s from *%s ignored", shortID(messageID), MaskPhone(phone))
+		return nil
 	}
 
 	// Resolve the tenant from the customer's phone. Unknown phones fall
@@ -194,7 +197,7 @@ func (e *ConversationEngine) HandleInbound(phone, input, messageID string) error
 
 	if reply != "" {
 		if err := e.evolution.SendText(phone, reply); err != nil {
-			log.Printf("WA text send failed to %s: %v", phone, err)
+			log.Printf("WA text send failed to %s: %v", MaskPhone(phone), err)
 		}
 	}
 	return nil
@@ -742,13 +745,21 @@ func (e *ConversationEngine) stateOptions(conv *conversation) string {
 // LoadConversationForPhone exposes conversation lookup for the admin
 // debug endpoint.
 func LoadConversationForPhone(phone string) (state string, contextJSON string, err error) {
-	cust, err := GetOrCreateCustomer(phone)
-	if err != nil {
-		return "", "", err
+	return LoadConversationForPhoneFor(phone, 0)
+}
+
+// LoadConversationForPhoneFor is tenant-aware: it resolves the customer within
+// the given restaurant so a tenant cannot read another tenant's conversation
+// state/context (which contains cart, address and order-draft PII).
+func LoadConversationForPhoneFor(phone string, restaurantID int) (state string, contextJSON string, err error) {
+	rid := ResolveRestaurant(restaurantID)
+	cust, err := getCustomerFor(phone, rid)
+	if err != nil || cust == nil {
+		return "IDLE", "{}", nil
 	}
 	conv, err := loadConversation(cust.ID)
 	if err != nil {
-		return "", "", err
+		return "IDLE", "{}", nil
 	}
 	raw, _ := json.Marshal(conv.Context)
 	return conv.State, string(raw), nil
