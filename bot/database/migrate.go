@@ -1,12 +1,15 @@
 package database
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 )
 
 // migrationsTableName tracks which migration FILES were applied so each
@@ -44,23 +47,34 @@ func RunMigrations() error {
 	if err := ensureTracker(); err != nil {
 		return fmt.Errorf("failed to create %s: %w", migrationsTableName, err)
 	}
-	// advisory lock to prevent concurrent runners (k8s/Docker multiple replicas)
-	var locked bool
-	if err := DB.QueryRow(`SELECT pg_try_advisory_lock(87654321)`).Scan(&locked); err != nil {
-		log.Printf("warning: advisory lock query failed: %v", err)
-	} else if !locked {
-		return fmt.Errorf("another migration runner holds the advisory lock; aborting")
-	} else {
-		defer func() {
-			_, _ = DB.Exec(`SELECT pg_advisory_unlock(87654321)`)
-		}()
+	// Advisory lock to serialize concurrent runners (multi-replica deploys).
+	// Hold the lock on ONE dedicated connection — a session-scoped advisory
+	// lock acquired via DB.QueryRow and released via DB.Exec could land on a
+	// different pooled connection and never actually be released.
+	// Blocking lock with a configurable timeout avoids the old crash-storm
+	// where every replica but one called log.Fatalf on STARTUP.
+	lockConn, err := DB.Conn(context.Background())
+	if err != nil {
+		return fmt.Errorf("failed to acquire migration lock connection: %w", err)
 	}
+	defer lockConn.Close()
+	timeoutSecs := 60
+	if v, e := strconv.Atoi(os.Getenv("MIGRATION_LOCK_TIMEOUT_SECS")); e == nil && v > 0 {
+		timeoutSecs = v
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSecs)*time.Second)
+	defer cancel()
+	if _, err := lockConn.ExecContext(ctx, `SELECT pg_advisory_lock(87654321)`); err != nil {
+		return fmt.Errorf("failed to acquire migration advisory lock within %ds: %w", timeoutSecs, err)
+	}
+	defer func() {
+		_, _ = lockConn.ExecContext(context.Background(), `SELECT pg_advisory_unlock(87654321)`)
+	}()
 
 	// Support both run styles: repo root (bot/migrations) and bot/ cwd.
 	candidates := []string{"migrations", "bot/migrations"}
 	var migrationsDir string
 	var entries []os.DirEntry
-	var err error
 	for _, dir := range candidates {
 		entries, err = os.ReadDir(dir)
 		if err == nil {

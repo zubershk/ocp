@@ -3,6 +3,7 @@ package services
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"orangecheesepizza/bot/database"
 )
@@ -16,12 +17,15 @@ func TestTenantIsolationMatrix(t *testing.T) {
 	if database.DB == nil {
 		t.Skip("no DB")
 	}
-	// seed two isolated tenants via provisioning helper (creates org->restaurant->outlet)
-	orgA, restA, outA, _, err := ProvisionRestaurant("iso A", "iso-restaurant-a", fmt.Sprintf("iso-a-%d", 1000000000000), "owner A", "")
+	// Seed two isolated tenants via the provisioning helper (org->restaurant->outlet).
+	// Use a time-based unique suffix so a prior interrupted run cannot collide
+	// with a leftover fixed slug and make this merge gate fail spuriously.
+	nonce := time.Now().UnixNano()
+	orgA, restA, outA, _, err := ProvisionRestaurant("iso A", "iso-restaurant-a", fmt.Sprintf("iso-a-%d", nonce), "owner A", "")
 	if err != nil {
 		t.Fatalf("provision A: %v", err)
 	}
-	orgB, restB, outB, _, err := ProvisionRestaurant("iso B", "iso-restaurant-b", fmt.Sprintf("iso-b-%d", 1000000000001), "owner B", "")
+	orgB, restB, outB, _, err := ProvisionRestaurant("iso B", "iso-restaurant-b", fmt.Sprintf("iso-b-%d", nonce), "owner B", "")
 	if err != nil {
 		t.Fatalf("provision B: %v", err)
 	}
@@ -74,8 +78,12 @@ func TestTenantIsolationMatrix(t *testing.T) {
 	if cnt == 0 {
 		t.Fatalf("expected B orders")
 	}
-	// cross read should be zero
-	_ = database.DB.QueryRow(`SELECT COUNT(*) FROM orders WHERE restaurant_id=$1 AND order_number LIKE 'ORD-ISOMAT-A%'`, restB).Scan(&cnt)
+	// cross read should be zero — check the scan error so a failing query
+	// cannot leave cnt=0 and make this assertion pass falsely.
+	cnt = -1
+	if err := database.DB.QueryRow(`SELECT COUNT(*) FROM orders WHERE restaurant_id=$1 AND order_number LIKE 'ORD-ISOMAT-A%'`, restB).Scan(&cnt); err != nil {
+		t.Fatalf("cross-tenant read query failed: %v", err)
+	}
 	if cnt != 0 {
 		t.Fatalf("cross-tenant read: B saw A's order")
 	}
@@ -96,7 +104,10 @@ func TestTenantIsolationMatrix(t *testing.T) {
 		if ca == 0 || cb == 0 {
 			t.Fatalf("expected wa cart per tenant")
 		}
-		_ = database.DB.QueryRow(`SELECT COUNT(*) FROM whatsapp_cart_items WHERE restaurant_id=$1 AND customer_phone=$2 AND menu_item_id=$3`, restB, phone, itemA).Scan(&cnt)
+		cnt = -1
+		if err := database.DB.QueryRow(`SELECT COUNT(*) FROM whatsapp_cart_items WHERE restaurant_id=$1 AND customer_phone=$2 AND menu_item_id=$3`, restB, phone, itemA).Scan(&cnt); err != nil {
+			t.Fatalf("cross-tenant cart query failed: %v", err)
+		}
 		if cnt != 0 {
 			t.Fatalf("cross-tenant cart leak")
 		}

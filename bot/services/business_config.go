@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"orangecheesepizza/bot/database"
 	"orangecheesepizza/bot/services/currency"
@@ -99,7 +101,44 @@ func (c *BusinessConfig) GetPublicBaseURL() string {
 var globalBizCfg *BusinessConfig
 var bizCfgMu sync.RWMutex
 var bizCfgCache = map[int]*BusinessConfig{}
+var bizCfgLoadedAt = map[int]time.Time{}
 var bizCacheMu sync.RWMutex
+
+// bizConfigCacheTTL bounds how long a tenant's config is served from memory
+// before it is re-read from PostgreSQL. With multiple bot replicas, an admin
+// config save only invalidates the local process immediately; a short TTL
+// ensures the other replicas converge within this window.
+// Env BIZ_CONFIG_CACHE_TTL_SECS (default 60, 0 = no expiry / legacy behaviour).
+func bizConfigCacheTTL() time.Duration {
+	secs, err := strconv.Atoi(os.Getenv("BIZ_CONFIG_CACHE_TTL_SECS"))
+	if err != nil || secs < 0 || secs > 86400 {
+		return 60 * time.Second
+	}
+	return time.Duration(secs) * time.Second
+}
+
+// cacheEntryFresh reports whether a cached entry for rid exists and is still
+// within its TTL. Caller must hold at least bizCacheMu.RLock.
+func cacheEntryFresh(rid int) (*BusinessConfig, bool) {
+	cached, ok := bizCfgCache[rid]
+	if !ok {
+		return nil, false
+	}
+	ttl := bizConfigCacheTTL()
+	if ttl > 0 {
+		loaded, ok := bizCfgLoadedAt[rid]
+		if !ok || time.Since(loaded) > ttl {
+			return nil, false
+		}
+	}
+	return cached, true
+}
+
+// setCacheEntry stores a config with its load timestamp.
+func setCacheEntry(rid int, cfg *BusinessConfig) {
+	bizCfgCache[rid] = cfg
+	bizCfgLoadedAt[rid] = time.Now()
+}
 
 func LoadBusinessConfig() *BusinessConfig {
 	return LoadBusinessConfigFor(0)
@@ -112,15 +151,15 @@ func LoadBusinessConfigFor(restaurantID int) *BusinessConfig {
 		return defaultBusinessConfig()
 	}
 	rid := ResolveRestaurant(restaurantID)
-	// fast path cache
+	// fast path cache (with TTL)
 	bizCacheMu.RLock()
-	if cached, ok := bizCfgCache[rid]; ok {
-		bizCacheMu.RUnlock()
+	cached, fresh := cacheEntryFresh(rid)
+	bizCacheMu.RUnlock()
+	if fresh {
 		// still return copy to prevent mutation
 		out := *cached
 		return &out
 	}
-	bizCacheMu.RUnlock()
 
 	var raw []byte
 	err := database.DB.QueryRow(
@@ -131,7 +170,7 @@ func LoadBusinessConfigFor(restaurantID int) *BusinessConfig {
 		log.Printf("[BusinessConfig] failed to load from DB: %v (using defaults)", err)
 		cfg := defaultBusinessConfig()
 		bizCacheMu.Lock()
-		bizCfgCache[rid] = cfg
+		setCacheEntry(rid, cfg)
 		bizCacheMu.Unlock()
 		if rid == ResolveRestaurant(0) {
 			bizCfgMu.Lock()
@@ -146,7 +185,7 @@ func LoadBusinessConfigFor(restaurantID int) *BusinessConfig {
 		log.Printf("[BusinessConfig] JSON parse error: %v (using defaults)", err)
 		cfg2 := defaultBusinessConfig()
 		bizCacheMu.Lock()
-		bizCfgCache[rid] = cfg2
+		setCacheEntry(rid, cfg2)
 		bizCacheMu.Unlock()
 		if rid == ResolveRestaurant(0) {
 			bizCfgMu.Lock()
@@ -183,7 +222,7 @@ func LoadBusinessConfigFor(restaurantID int) *BusinessConfig {
 	}
 
 	bizCacheMu.Lock()
-	bizCfgCache[rid] = &cfg
+	setCacheEntry(rid, &cfg)
 	bizCacheMu.Unlock()
 	if rid == ResolveRestaurant(0) {
 		bizCfgMu.Lock()
@@ -223,14 +262,9 @@ func GetBusinessConfigFor(restaurantID int) *BusinessConfig {
 }
 
 func GetBizConfig() *BusinessConfig {
-	bizCfgMu.RLock()
-	defer bizCfgMu.RUnlock()
-	if globalBizCfg == nil {
-		return defaultBusinessConfig()
-	}
-	// Return a copy so callers cannot mutate the cached global config.
-	out := *globalBizCfg
-	return &out
+	// Route through the tenant-aware cache so the default tenant's config
+	// also benefits from TTL refresh and stays in sync across replicas.
+	return LoadBusinessConfigFor(0)
 }
 
 func GetBizConfigFor(restaurantID int) *BusinessConfig {
@@ -238,12 +272,12 @@ func GetBizConfigFor(restaurantID int) *BusinessConfig {
 		return GetBizConfig()
 	}
 	bizCacheMu.RLock()
-	if c, ok := bizCfgCache[restaurantID]; ok {
-		bizCacheMu.RUnlock()
+	c, fresh := cacheEntryFresh(restaurantID)
+	bizCacheMu.RUnlock()
+	if fresh {
 		out := *c
 		return &out
 	}
-	bizCacheMu.RUnlock()
 	return LoadBusinessConfigFor(restaurantID)
 }
 
@@ -256,6 +290,7 @@ func ReloadBizConfig() {
 func InvalidateBizCache(restaurantID int) {
 	bizCacheMu.Lock()
 	delete(bizCfgCache, restaurantID)
+	delete(bizCfgLoadedAt, restaurantID)
 	bizCacheMu.Unlock()
 }
 
@@ -305,7 +340,7 @@ func SaveBusinessConfig(cfg *BusinessConfig, restaurantID int) error {
 	// the pointer they passed in (cross-request corruption).
 	cfgCopy := *cfg
 	bizCacheMu.Lock()
-	bizCfgCache[rid] = &cfgCopy
+	setCacheEntry(rid, &cfgCopy)
 	bizCacheMu.Unlock()
 	if rid == ResolveRestaurant(0) {
 		globalCopy := *cfg

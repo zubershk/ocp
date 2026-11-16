@@ -4,13 +4,33 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
+	"math"
 	"net/http"
+	"os"
+	"strconv"
 	"sync"
 	"time"
 
 	"orangecheesepizza/bot/config"
 	"orangecheesepizza/bot/database"
 )
+
+// WhatsApp send retry policy. Transient gateway/5xx/network failures should
+// not silently drop OTPs or order notifications. Configurable via env so
+// operators can tune for their Evolution GO deployment.
+func waSendMaxRetries() int {
+	if v, err := strconv.Atoi(os.Getenv("WHATSAPP_SEND_MAX_RETRIES")); err == nil && v >= 0 && v <= 10 {
+		return v
+	}
+	return 3
+}
+func waSendRetryBase() time.Duration {
+	if v, err := strconv.Atoi(os.Getenv("WHATSAPP_SEND_RETRY_BASE_MS")); err == nil && v >= 50 && v <= 10000 {
+		return time.Duration(v) * time.Millisecond
+	}
+	return 300 * time.Millisecond
+}
 
 type EvolutionClient struct {
 	baseURL       string
@@ -42,36 +62,60 @@ func (c *EvolutionClient) sendRequest(method, endpoint string, payload interface
 		}
 	}
 
-	req, err := http.NewRequest(method, url, bytes.NewBuffer(body))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-
-	// Use instance token for send endpoints, global API key for admin endpoints
+	apiKey := c.apiKey
 	if useInstanceToken && c.instanceToken != "" {
-		req.Header.Set("apikey", c.instanceToken)
-	} else {
-		req.Header.Set("apikey", c.apiKey)
+		apiKey = c.instanceToken
 	}
 
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-	defer resp.Body.Close()
+	// Bounded retry with exponential backoff + jitter for transient failures.
+	// A duplicate message is preferable to a dropped OTP / order alert.
+	maxRetries := waSendMaxRetries()
+	base := waSendRetryBase()
+	var lastErr error
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		req, err := http.NewRequest(method, url, bytes.NewBuffer(body))
+		if err != nil {
+			return nil, fmt.Errorf("failed to create request: %w", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("apikey", apiKey)
 
-	var result map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
+		resp, err := c.httpClient.Do(req)
+		if err != nil {
+			lastErr = fmt.Errorf("request failed: %w", err)
+		} else {
+			respBody, readErr := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			if readErr != nil {
+				lastErr = fmt.Errorf("failed to read response: %w", readErr)
+			} else {
+				status := resp.StatusCode
+				if status >= 200 && status < 300 {
+					var result map[string]interface{}
+					if err := json.Unmarshal(respBody, &result); err != nil {
+						// Success with a non-JSON body is fine for some endpoints.
+						return map[string]interface{}{}, nil
+					}
+					return result, nil
+				}
+				var result map[string]interface{}
+				_ = json.Unmarshal(respBody, &result)
+				lastErr = fmt.Errorf("API error (status %d): %v", status, result)
+				// Retry only transient statuses: 429 and 5xx. 4xx (bad payload,
+				// invalid number) will never succeed on retry.
+				if status != http.StatusTooManyRequests && status < 500 {
+					return nil, lastErr
+				}
+			}
+		}
+		if attempt < maxRetries {
+			// Exponential backoff with full jitter.
+			delay := time.Duration(float64(base) * math.Pow(2, float64(attempt)))
+			jitter := time.Duration(float64(delay) * (0.5 + 0.5*float64(time.Now().UnixNano()%1000)/1000))
+			time.Sleep(jitter)
+		}
 	}
-
-	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("API error: %v", result)
-	}
-
-	return result, nil
+	return nil, lastErr
 }
 
 type TextMessagePayload struct {
@@ -296,7 +340,16 @@ func (c *EvolutionClient) ConfigureWebhook(webhookURL string) error {
 	return err
 }
 
-var evoCache sync.Map // map[int]*EvolutionClient
+var evoCache sync.Map // map[int]evoCacheEntry — TTL-bounded (config changes are rare but must propagate)
+
+type evoCacheEntry struct {
+	client    *EvolutionClient
+	expiresAt time.Time
+}
+
+// evoCacheTTL bounds how long a per-restaurant Evolution client is reused.
+// Prevents a stale instance/token after config changes on another replica.
+func evoCacheTTL() time.Duration { return tenantCacheTTL() }
 
 // ForRestaurant returns a per-restaurant Evolution client if the restaurant has
 // dedicated instance config, otherwise the global client. Cache per restaurant.
@@ -305,8 +358,8 @@ func (c *EvolutionClient) ForRestaurant(restaurantID int) *EvolutionClient {
 		return c
 	}
 	if cached, ok := evoCache.Load(restaurantID); ok {
-		if ec, ok := cached.(*EvolutionClient); ok {
-			return ec
+		if entry, ok := cached.(evoCacheEntry); ok && time.Now().Before(entry.expiresAt) {
+			return entry.client
 		}
 	}
 	var inst, token string
@@ -321,7 +374,7 @@ func (c *EvolutionClient) ForRestaurant(restaurantID int) *EvolutionClient {
 	if token != "" {
 		clone.instanceToken = token
 	}
-	evoCache.Store(restaurantID, &clone)
+	evoCache.Store(restaurantID, evoCacheEntry{client: &clone, expiresAt: time.Now().Add(evoCacheTTL())})
 	return &clone
 }
 

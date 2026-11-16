@@ -52,6 +52,42 @@ func (s *MenuService) GetCategoryByID(id, restaurantID int) (*models.MenuCategor
 	return &cat, err
 }
 
+// GetAllMenuItemsWithOptionsFor loads ALL active/available items for a tenant
+// in one items query + one batched options query (used by the admin menu to
+// avoid the old 1-query-per-category N+1). Callers group by CategoryID.
+func (s *MenuService) GetAllMenuItemsWithOptionsFor(restaurantID int) ([]models.MenuItem, error) {
+	if database.DB == nil {
+		return nil, nil
+	}
+	rows, err := database.DB.Query(`
+		SELECT id, category_id, name, description, price, image_url, available, sort_order, active, created_at, updated_at
+		FROM menu_items
+		WHERE active = true AND available = true AND restaurant_id = $1
+		ORDER BY sort_order, name
+	`, ResolveRestaurant(restaurantID))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []models.MenuItem
+	var ids []int
+	for rows.Next() {
+		var item models.MenuItem
+		if err := rows.Scan(&item.ID, &item.CategoryID, &item.Name, &item.Description, &item.Price, &item.ImageURL, &item.Available, &item.SortOrder, &item.Active, &item.CreatedAt, &item.UpdatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+		ids = append(ids, item.ID)
+	}
+	optsByItem, _ := s.GetOptionsByItemIDs(ids)
+	for i := range items {
+		if opts, ok := optsByItem[items[i].ID]; ok {
+			items[i].Options = opts
+		}
+	}
+	return items, rows.Err()
+}
+
 func (s *MenuService) GetItemsByCategory(categoryID, restaurantID int) ([]models.MenuItem, error) {
 	rows, err := database.DB.Query(`
 		SELECT id, category_id, name, description, price, image_url, available, sort_order, active, created_at, updated_at
@@ -771,4 +807,9 @@ func (s *MenuService) GetActiveCrustsFor(restaurantID int) ([]CrustInfo, error) 
 // GetCartDebug returns the WhatsApp cart lines for admin diagnostics.
 func (s *MenuService) GetCartDebug(phone string) ([]WACartLine, error) {
 	return GetWACart(phone)
+}
+
+// GetCartDebugFor is the tenant-scoped variant for admin diagnostics.
+func (s *MenuService) GetCartDebugFor(phone string, restaurantID int) ([]WACartLine, error) {
+	return GetWACartFor(phone, restaurantID)
 }
