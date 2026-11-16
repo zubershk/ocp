@@ -2,7 +2,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { PartyPopper, RefreshCw, Star, Send, CheckCircle, Clock } from 'lucide-react';
 import { orderService, type OrderView } from '../services/orderService';
-import { apiBaseUrl } from '../services/api';
+import { apiBaseUrl, apiGet } from '../services/api';
 import { useCart } from '../context/CartContext';
 import { useRestaurantName } from '../context/RestaurantContext';
 import { menuService } from '../services/menuService';
@@ -11,16 +11,18 @@ import { useGsapFadeIn } from '../hooks/useGsap';
 import { useToast } from '../context/ToastContext';
 import { ComboBreakdown, toComboPicks } from '../components/ComboBreakdown';
 
-const labels: Record<string, string> = { placed: 'Order Placed', confirmed: 'Confirmed', out_for_delivery: 'Out for Delivery', delivered: 'Delivered', completed: 'Completed', cancelled: 'Cancelled' };
-const orderSteps = ['placed', 'confirmed', 'out_for_delivery', 'delivered'];
+const labels: Record<string, string> = { placed: 'Order Placed', confirmed: 'Confirmed', preparing: 'Preparing', ready: 'Ready', out_for_delivery: 'Out for Delivery', delivered: 'Delivered', completed: 'Completed', cancelled: 'Cancelled' };
+const orderSteps = ['placed', 'confirmed', 'preparing', 'ready', 'out_for_delivery', 'delivered'];
 const stepHints: Record<number, string> = {
   0: 'We received your order',
   1: 'Restaurant confirmed',
-  2: 'Rider on the way',
-  3: 'Delivered! Enjoy your meal',
+  2: 'Being freshly prepared',
+  3: 'Packed and ready',
+  4: 'Rider on the way',
+  5: 'Delivered! Enjoy your meal',
 };
-// Pre-simplify statuses still stored on old rows map onto the short flow.
-const legacyStep: Record<string, string> = { preparing: 'confirmed', ready: 'confirmed', completed: 'delivered' };
+// Only terminal/cancelled aliases need mapping; preparing and ready are real steps now.
+const legacyStep: Record<string, string> = { completed: 'delivered' };
 
 export default function Order() {
   const { id } = useParams();
@@ -32,7 +34,7 @@ export default function Order() {
   const titleRef = useGsapFadeIn({ y: 16 });
   const restaurantPhone = useRestaurantPhone();
   const deliveryHours = useDeliveryHours();
-  const { addItem, clear } = useCart();
+  const { addItem, addCombo, clear } = useCart();
   const { push } = useToast();
   const [rating, setRating] = useState(0);
   const [hoverRating, setHoverRating] = useState(0);
@@ -118,16 +120,21 @@ export default function Order() {
         } catch (e) {
           if ((e as Error).name === 'AbortError') return;
         }
-        if (alive) {
-          // fallback poll after stream breaks
-          setTimeout(fetchOrder, 5000);
-        }
       })();
     };
 
+    // Baseline polling (10s) keeps status fresh even if the SSE stream hangs
+    // open without delivering events, or breaks. The stream remains the fast
+    // path; polling is the reliable fallback promised in the docs.
+    const poll = setInterval(() => { if (alive) fetchOrder(); }, 10_000);
+
     connectStream();
 
-    return () => { alive = false; abortCtrl?.abort(); };
+    return () => {
+      alive = false;
+      clearInterval(poll);
+      abortCtrl?.abort();
+    };
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (state === 'loading') return (
@@ -198,18 +205,40 @@ export default function Order() {
     setReordering(true);
     try {
       const menu = await menuService.getMenu();
+      let combos: { slug: string; name: string; image: string; price: number }[] = [];
+      try {
+        const cRes = await apiGet<{ combos?: { slug: string; name: string; image_url?: string; price: number }[] }>('/api/combos');
+        combos = (cRes.combos ?? []).map((c) => ({ slug: c.slug, name: c.name, image: c.image_url ?? '', price: c.price }));
+      } catch { /* combos optional */ }
       clear();
+      let added = 0;
+      let skipped = 0;
       for (const it of order.items) {
-        const mi = menu.find((m) => m.name === it.name);
-        if (!mi) continue;
+        if (it.comboSlug) {
+          const combo = combos.find((c) => c.slug === it.comboSlug);
+          if (!combo) { skipped++; continue; }
+          addCombo(combo, [], it.quantity || 1);
+          added++;
+          continue;
+        }
+        // Prefer the stable slug/id; fall back to name for legacy orders.
+        const mi = menu.find((m) => (it.slug && m.id === it.slug) || m.name === it.name);
+        if (!mi) { skipped++; continue; }
         const s = (it.size || '').toLowerCase();
         const size: 'regular' | 'medium' | 'large' = s.includes('large') ? 'large' : s.includes('medium') ? 'medium' : 'regular';
-        const crust = it.crust || 'tossed';
-        addItem(mi, size, crust, it.quantity || 1);
+        addItem(mi, size, it.crust || 'tossed', it.quantity || 1);
+        added++;
       }
-      push({ type: 'success', title: 'Items added to cart' });
-      nav('/r/cart');
-    } catch (e) {
+      if (added > 0) {
+        push({
+          type: skipped > 0 ? 'warning' : 'success',
+          title: skipped > 0 ? `Added ${added} item${added === 1 ? '' : 's'}; ${skipped} no longer available` : 'Items added to cart',
+        });
+        nav('/r/cart');
+      } else {
+        push({ type: 'error', title: 'These items are no longer available' });
+      }
+    } catch {
       push({ type: 'error', title: 'Could not reorder' });
     } finally {
       setReordering(false);
@@ -324,6 +353,9 @@ export default function Order() {
           <div className="mt-4 border-t border-stone-100 pt-3 space-y-1.5 text-sm">
             <div className="flex justify-between text-zinc-500"><span>Subtotal</span><span>₹{order.subtotal}</span></div>
             <div className="flex justify-between text-zinc-500"><span>Delivery</span><span>{order.deliveryFee === 0 ? 'Free' : `₹${order.deliveryFee}`}</span></div>
+            {order.discount > 0 && (
+              <div className="flex justify-between text-emerald-600"><span>Discount</span><span>−₹{order.discount}</span></div>
+            )}
             <div className="flex justify-between font-bold text-lg pt-1 border-t border-stone-100 mt-1"><span>Total</span><span>₹{order.total}</span></div>
             <div className="text-[11px] text-zinc-400 text-right">incl. tax</div>
           </div>

@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, useMemo } from 'react';
 import { apiGet } from '../services/api';
+import { brandRamp } from '../utils/color';
 
 interface BrandSettings {
   logo_url?: string;
@@ -365,6 +366,14 @@ function applyCSSVars(brand: BrandSettings) {
   setCSSVar('--color-primary', brand.primary_color);
   setCSSVar('--color-secondary', brand.secondary_color);
   setCSSVar('--color-accent', brand.accent_color);
+  // Override the static @theme brand ramp so bg-brand-*/text-brand-* across
+  // the storefront follow the admin-configured primary colour (white-label).
+  if (brand.primary_color) {
+    const ramp = brandRamp(brand.primary_color);
+    for (const [shade, hex] of Object.entries(ramp)) {
+      setCSSVar(`--color-brand-${shade}`, hex);
+    }
+  }
   setCSSVar('--font-heading', brand.font_heading);
   setCSSVar('--font-body', brand.font_body);
 }

@@ -13,6 +13,11 @@ type CartContextType = {
   clear: () => void;
   count: number;
   subtotal: number;
+  /** Server-validated promo code shared between Cart and Checkout. */
+  couponCode: string;
+  couponDiscount: number;
+  setCoupon: (code: string, discount: number, subtotalAtApply: number) => void;
+  clearCoupon: () => void;
 };
 
 const CartContext = createContext<CartContextType>(null!);
@@ -57,8 +62,34 @@ export function CartProvider({ children }: { children: ReactNode }) {
     setItems(prev=>prev.map(p=>p.id===id?{...p, quantity:qty, subtotal:qty*p.basePrice}:p));
   };
   const removeItem = (id: string)=> setItems(prev=>prev.filter(p=>p.id!==id));
-  const clear = ()=> setItems([]);
+  const COUPON_KEY = 'ocp_applied_coupon';
+  const loadCoupon = (): { code: string; discount: number; subtotalAtApply: number } => {
+    try {
+      const raw = sessionStorage.getItem(COUPON_KEY);
+      if (raw) {
+        const c = JSON.parse(raw);
+        if (c && typeof c.code === 'string' && typeof c.discount === 'number') return c;
+      }
+    } catch { /* sessionStorage may be unavailable */ }
+    return { code: '', discount: 0, subtotalAtApply: 0 };
+  };
+  const [coupon, setCouponState] = useState(loadCoupon);
+  const persistCoupon = (c: { code: string; discount: number; subtotalAtApply: number }) => {
+    setCouponState(c);
+    try {
+      if (c.code) sessionStorage.setItem(COUPON_KEY, JSON.stringify(c));
+      else sessionStorage.removeItem(COUPON_KEY);
+    } catch { /* ignore */ }
+  };
+  const setCoupon = (code: string, discount: number, subtotalAtApply: number) => persistCoupon({ code, discount, subtotalAtApply });
+  const clearCoupon = () => persistCoupon({ code: '', discount: 0, subtotalAtApply: 0 });
   const count = items.reduce((a,b)=>a+b.quantity,0);
   const subtotal = items.reduce((a,b)=>a+b.subtotal,0);
-  return <CartContext.Provider value={{ items, addItem, addCombo, updateQty, removeItem, clear, count, subtotal }}>{children}</CartContext.Provider>;
+  // A coupon's discount is tied to the subtotal it was validated against.
+  // If the cart changes, drop the code rather than show/submit a stale discount.
+  useEffect(() => {
+    if (coupon.code && Math.abs(coupon.subtotalAtApply - subtotal) > 0.01) clearCoupon();
+  }, [subtotal, coupon.code]);
+  const clear = ()=> { setItems([]); clearCoupon(); };
+  return <CartContext.Provider value={{ items, addItem, addCombo, updateQty, removeItem, clear, count, subtotal, couponCode: coupon.code, couponDiscount: coupon.discount, setCoupon, clearCoupon }}>{children}</CartContext.Provider>;
 }

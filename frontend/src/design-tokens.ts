@@ -8,11 +8,14 @@ export const tokens = {
   // Colors
   // ------------------------------------------------------------------
   colors: {
+    // NOTE: index.css @theme (--color-brand-*) is the single source of truth.
+    // These mirror its default ramp for TS consumers; the runtime brandRamp()
+    // overrides the CSS vars from admin settings during white-labelling.
     brand: {
-      50: '#fef7ee',
-      100: '#fdeedc',
-      500: '#ea580c',   // Primary brand orange
-      600: '#c2410c',   // Darker orange for hover
+      50: '#fff7ed',
+      100: '#ffedd5',
+      500: '#f97316',   // Primary brand orange (matches index.css @theme)
+      600: '#ea580c',   // Darker orange for hover
       950: '#451a03',
     },
     emerald: {

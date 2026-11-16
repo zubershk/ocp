@@ -5,6 +5,9 @@ interface AddressAutocompleteProps {
   value: string;
   onChange: (address: string, city?: string, postal?: string) => void;
   placeholder?: string;
+  id?: string;
+  'aria-invalid'?: boolean;
+  'aria-describedby'?: string;
 }
 
 interface Suggestion {
@@ -20,7 +23,7 @@ interface Suggestion {
   };
 }
 
-export default function AddressAutocomplete({ value, onChange, placeholder = 'Start typing your address...' }: AddressAutocompleteProps) {
+export default function AddressAutocomplete({ value, onChange, placeholder = 'Start typing your address...', id, 'aria-invalid': ariaInvalid, 'aria-describedby': ariaDescribedBy }: AddressAutocompleteProps) {
   const [query, setQuery] = useState(value);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [open, setOpen] = useState(false);
@@ -72,10 +75,13 @@ export default function AddressAutocomplete({ value, onChange, placeholder = 'St
       <div className="relative">
         <MapPin size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" />
         <input
+          id={id}
           value={query}
           onChange={(e) => { setQuery(e.target.value); search(e.target.value); onChange(e.target.value); }}
           onFocus={() => query.length >= 3 && suggestions.length > 0 && setOpen(true)}
           placeholder={placeholder}
+          aria-invalid={ariaInvalid}
+          aria-describedby={ariaDescribedBy}
           className="w-full pl-10 pr-4 py-3 rounded-2xl border border-stone-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-400 transition-all"
           autoComplete="off"
         />

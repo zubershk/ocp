@@ -15,7 +15,20 @@ function getTenantSlug(): string | null {
   return slug;
 }
 
+// When VITE_TENANT_HEADER=1 (dev/local path-based multi-tenancy), send the
+// slug in a header the backend resolves only if ALLOW_TENANT_HEADER=1.
+// Otherwise fall back to the legacy query param for older backends. Production
+// custom-domain deployments resolve tenants from Host and need neither.
+const TENANT_HEADER_MODE = import.meta.env.VITE_TENANT_HEADER === '1';
+
+function tenantHeaders(): Record<string, string> {
+  if (!TENANT_HEADER_MODE) return {};
+  const slug = getTenantSlug();
+  return slug ? { 'X-Tenant-Slug': slug } : {};
+}
+
 function withTenant(path: string): string {
+  if (TENANT_HEADER_MODE) return path; // tenant travels in the header instead
   const slug = getTenantSlug();
   if (!slug) return path;
   const sep = path.includes('?') ? '&' : '?';
@@ -24,7 +37,7 @@ function withTenant(path: string): string {
 
 export async function apiGet<T>(path: string, headers: Record<string, string> = {}): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${withTenant(path)}`, {
-    headers: { Accept: 'application/json', ...headers },
+    headers: { Accept: 'application/json', ...tenantHeaders(), ...headers },
   });
   if (!response.ok) {
     // ApiError carries the HTTP status so callers can distinguish
@@ -35,10 +48,10 @@ export async function apiGet<T>(path: string, headers: Record<string, string> = 
   return response.json() as Promise<T>;
 }
 
-export async function apiPost<T>(path: string, body: unknown): Promise<T> {
+export async function apiPost<T>(path: string, body: unknown, headers: Record<string, string> = {}): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${withTenant(path)}`, {
     method: 'POST',
-    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json', ...tenantHeaders(), ...headers },
     body: JSON.stringify(body),
   });
   const payload = await response.json().catch(() => null);
@@ -80,6 +93,7 @@ export async function adminFetch<T>(path: string, options: RequestInit = {}): Pr
       Accept: 'application/json',
       'Content-Type': 'application/json',
       'X-Admin-Key': getAdminKey(),
+      ...tenantHeaders(),
       ...(options.headers ?? {}),
     },
   });

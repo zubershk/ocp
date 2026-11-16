@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Minus, Plus, Trash2, ShoppingBag, Plus as PlusIcon, ArrowRight, ShieldCheck, Clock, Tag } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useToast } from '../context/ToastContext';
+import { useBusinessConfig } from '../hooks/useBusinessConfig';
 import { useDeliveryHours } from '../context/RestaurantContext';
 import { useHomepage } from '../context/SiteSettingsContext';
 import { apiPost } from '../services/api';
@@ -11,15 +12,13 @@ import { ItemThumb } from '../components/ItemThumb';
 import { CompleteMealSection } from '../components/CompleteMealSection';
 
 export default function Cart() {
-  const { items, updateQty, removeItem, clear, subtotal } = useCart();
+  const { items, updateQty, removeItem, clear, subtotal, couponCode, couponDiscount, setCoupon, clearCoupon } = useCart();
   const { push } = useToast();
   const deliveryHours = useDeliveryHours();
+  const { deliveryFee } = useBusinessConfig();
   const hp = useHomepage();
   const [removingIds, setRemovingIds] = useState<Set<string>>(new Set());
   const [promoCode, setPromoCode] = useState('');
-  const [promoApplied, setPromoApplied] = useState(false);
-  const [appliedCode, setAppliedCode] = useState('');
-  const [discountAmount, setDiscountAmount] = useState(0);
 
   const totalItems = items.reduce((a, b) => a + b.quantity, 0);
 
@@ -38,24 +37,24 @@ export default function Cart() {
         { code, subtotal }
       );
       if (result.ok && result.result) {
-        setPromoApplied(true);
-        setAppliedCode(result.result.code || code.toUpperCase());
-        setDiscountAmount(result.result.discount);
+        setCoupon(result.result.code || code.toUpperCase(), result.result.discount, subtotal);
         push({ type: 'success', title: `Promo code applied! ${formatCurrency(result.result.discount)} off` });
       } else {
-        setPromoApplied(false);
-        setDiscountAmount(0);
+        clearCoupon();
         push({ type: 'error', title: result.error || 'Invalid promo code' });
       }
     } catch (e: any) {
-      setPromoApplied(false);
-      setDiscountAmount(0);
+      clearCoupon();
       push({ type: 'error', title: e?.message || 'Invalid promo code' });
     }
   };
 
-  const discount = discountAmount;
-  const total = subtotal - discount;
+  const promoApplied = Boolean(couponCode);
+  const appliedCode = couponCode;
+  const discountAmount = couponDiscount;
+  const discount = couponDiscount;
+  // Delivery is charged on the order total at checkout; show the real fee here.
+  const total = Math.max(0, subtotal - discount + deliveryFee);
 
   if (items.length === 0) return (
     <div className="container-page py-20 text-center animate-fade-up">
@@ -180,8 +179,16 @@ export default function Cart() {
               </div>
               <div className="flex justify-between">
                 <dt className="text-zinc-500">Delivery</dt>
-                <dd className="font-medium text-emerald-600">Free</dd>
+                <dd className={`font-medium ${deliveryFee > 0 ? 'text-zinc-900' : 'text-emerald-600'}`}>
+                  {deliveryFee > 0 ? formatCurrency(deliveryFee) : 'Free'}
+                </dd>
               </div>
+              {discount > 0 && (
+                <div className="flex justify-between text-emerald-600">
+                  <dt>Promo ({appliedCode})</dt>
+                  <dd className="font-medium">−{formatCurrency(discount)}</dd>
+                </div>
+              )}
               <div className="flex justify-between">
                 <dt className="text-zinc-500">Taxes</dt>
                 <dd className="font-medium text-zinc-500">Included</dd>
@@ -201,9 +208,15 @@ export default function Cart() {
                   value={promoCode}
                   onChange={(e) => setPromoCode(e.target.value)}
                   placeholder="Promo code"
+                  aria-label="Promo code"
                   className="flex-1 text-sm px-3 py-2 rounded-full border border-stone-200 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-400 transition-all"
                   disabled={promoApplied}
                 />
+                {promoApplied && (
+                  <button type="button" onClick={clearCoupon} aria-label="Remove promo code" className="text-xs text-zinc-500 hover:text-red-600 underline cursor-pointer">
+                    Remove
+                  </button>
+                )}
                 <button
                   onClick={applyPromo}
                   disabled={promoApplied || !promoCode.trim()}
@@ -225,12 +238,12 @@ export default function Cart() {
                 <ShieldCheck size={12} /> Secure checkout
               </span>
               <span className="inline-flex items-center gap-1 bg-brand-50 text-brand-700 px-3 py-1.5 rounded-full font-medium shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
-                <Clock size={12} /> Free delivery
+                <Clock size={12} /> {deliveryFee > 0 ? `${formatCurrency(deliveryFee)} delivery` : 'Free delivery'}
               </span>
             </div>
 
             <p className="text-[11px] text-zinc-500 mt-3 leading-relaxed">
-              Free delivery {deliveryHours || '11 AM – 4 AM'} · Pay cash or UPI on arrival.
+              Delivery {deliveryFee > 0 ? formatCurrency(deliveryFee) : 'free'} {deliveryHours || '11 AM – 4 AM'} · Pay cash or UPI on arrival.
             </p>
 
             <Link

@@ -554,6 +554,18 @@
   outline-offset: 1px;
 }
 
+/* Dialog/modal entrance — quick fade + small scale, ease-out (220ms). */
+@keyframes dialog-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes dialog-panel-in {
+  from { opacity: 0; transform: scale(0.96) translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+.dialog-backdrop-in { animation: dialog-backdrop-in 0.22s ease-out both; }
+.dialog-panel-in { animation: dialog-panel-in 0.24s cubic-bezier(0.16, 1, 0.3, 1) both; }
+
 /* Fresh-order arrival pulse */
 @keyframes order-arrive {
   0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.55); }

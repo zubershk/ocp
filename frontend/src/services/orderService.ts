@@ -48,6 +48,18 @@ export interface CreateOrderPayload {
   landmark?: string;
   payment_method: 'cod' | 'upi' | 'online';
   items: CreateOrderItemPayload[];
+  /** Applied promo code — the backend validates and prices it server-side. */
+  coupon_code?: string;
+}
+
+// RFC4122 v4 UUID using crypto when available, with a safe fallback.
+function newIdempotencyKey(): string {
+  const c = globalThis.crypto as Crypto | undefined;
+  if (c?.randomUUID) return c.randomUUID();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (ch) => {
+    const r = (Math.random() * 16) | 0;
+    return (ch === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+  });
 }
 
 interface ApiOrderResponse {
@@ -166,8 +178,14 @@ function toView(raw: ApiOrderResponse['order'], notification?: ApiOrderResponse[
 
 export const orderService = {
   /** Creates a real order. Throws with the server's validation message on failure. */
-  async createOrder(payload: CreateOrderPayload): Promise<OrderView> {
-    const response = await apiPost<ApiOrderResponse>('/api/orders', payload);
+  async createOrder(payload: CreateOrderPayload, idempotencyKey?: string): Promise<OrderView> {
+    // Send an Idempotency-Key so a retry / double-submit cannot create two
+    // orders and two WhatsApp alerts. The backend de-dupes on this header.
+    // Callers should pass a STABLE key for the whole checkout attempt; a new
+    // one is generated only when none is supplied.
+    const response = await apiPost<ApiOrderResponse>('/api/orders', payload, {
+      'Idempotency-Key': idempotencyKey || newIdempotencyKey(),
+    });
     const view = toView(response.order, response.notification);
     // Persist the per-order access token so THIS device can track later.
     saveOrderToken(view.orderNumber, view.id, response.order.access_token ?? '');

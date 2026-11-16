@@ -1,5 +1,6 @@
 import { createContext, useContext, ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { apiGet } from '../services/api';
 
 export interface CrustOption {
   slug: string;
@@ -25,10 +26,15 @@ export function CrustProvider({ children }: { children: ReactNode }) {
   const { data, isLoading } = useQuery<CrustOption[]>({
     queryKey: ['crusts'],
     queryFn: async () => {
-      const res = await fetch('/api/crusts');
-      if (!res.ok) return [];
-      const d = await res.json();
-      return d.crusts ?? [];
+      // Use apiGet so apiBaseUrl + tenant context are applied. A raw relative
+      // fetch breaks in split-origin (Vite API base URL) deployments and can
+      // silently drop crust surcharges from displayed prices.
+      try {
+        const d = await apiGet<{ crusts?: CrustOption[] }>('/api/crusts');
+        return d.crusts ?? [];
+      } catch {
+        return [];
+      }
     },
     staleTime: 5 * 60 * 1000,
   });

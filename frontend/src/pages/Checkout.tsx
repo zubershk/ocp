@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { ShieldCheck, Bike, Store, Banknote, Smartphone, User, LogIn, MapPin, CreditCard, ShoppingBag, ArrowRight } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
+import { useBusinessConfig } from '../hooks/useBusinessConfig';
 import { orderService } from '../services/orderService';
 import { useToast } from '../context/ToastContext';
 import AddressAutocomplete from '../components/ui/AddressAutocomplete';
@@ -37,8 +38,9 @@ function validate(form: FormState): FieldErrors {
 }
 
 export default function Checkout() {
-  const { items, subtotal, clear } = useCart();
+  const { items, subtotal, clear, couponCode, couponDiscount } = useCart();
   const { customer } = useAuth();
+  const { paymentMethods, deliveryFee } = useBusinessConfig();
   const nav = useNavigate();
   const { push } = useToast();
   const deliveryHours = useDeliveryHours();
@@ -52,12 +54,34 @@ export default function Checkout() {
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
+  // Stable per-attempt key so a retry reuses it (idempotent order creation).
+  const idempotencyKeyRef = useRef<string>('');
 
   const fieldErrors = validate(form);
   const showFieldError = (field: keyof FormState) => touched[field] ? fieldErrors[field] : undefined;
   const isDelivery = form.delivery === 'delivery';
   const hasErrors = Object.keys(fieldErrors).length > 0;
+
+  const discount = couponDiscount;
+  const effectiveDeliveryFee = isDelivery ? deliveryFee : 0;
+  const grandTotal = Math.max(0, subtotal - discount + effectiveDeliveryFee);
   const summaryErrors = hasSubmitted ? Object.entries(fieldErrors) : [];
+
+  // Payment options are driven by admin config (legacy keys cod/upi/online).
+  // Fall back to COD + UPI when the config has not loaded yet.
+  const paymentIconFor = (key: string) => key === 'upi' ? Smartphone : key === 'online' ? CreditCard : Banknote;
+  const activeMethods = paymentMethods.filter((m) => m.active);
+  const paymentOptions: { id: 'cod' | 'upi' | 'online'; label: string; icon: typeof Banknote }[] =
+    activeMethods.length > 0
+      ? activeMethods.map((m) => ({
+          id: (['cod', 'upi', 'online'].includes(m.key) ? m.key : 'cod') as 'cod' | 'upi' | 'online',
+          label: m.label || m.key,
+          icon: paymentIconFor(m.key),
+        }))
+      : [
+          { id: 'cod' as const, label: 'Cash on Delivery', icon: Banknote },
+          { id: 'upi' as const, label: 'UPI on Delivery', icon: Smartphone },
+        ];
 
   useEffect(() => {
     if (customer) {
@@ -107,6 +131,16 @@ export default function Checkout() {
     const errs = validate(form);
     if (Object.keys(errs).length > 0) return;
     setSubmitting(true);
+    // Generate the key once for this attempt; retries reuse it.
+    if (!idempotencyKeyRef.current) {
+      const c = globalThis.crypto as Crypto | undefined;
+      idempotencyKeyRef.current = c?.randomUUID
+        ? c.randomUUID()
+        : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (ch) => {
+            const r = (Math.random() * 16) | 0;
+            return (ch === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+          });
+    }
     try {
       const order = await orderService.createOrder({
         customer: { name: form.name.trim(), phone: form.phone.replace(/\s|-/g, ''), email: form.email || undefined },
@@ -114,6 +148,7 @@ export default function Checkout() {
         address: isDelivery ? [form.address.trim(), form.city.trim(), form.postal].filter(Boolean).join(', ') : undefined,
         landmark: form.landmark || undefined,
         payment_method: form.payment,
+        coupon_code: couponCode || undefined,
         items: items.map((i) => ({
           id: i.menuItemId,
           size: i.size,
@@ -132,8 +167,9 @@ export default function Checkout() {
               }
             : {}),
         })),
-      });
+      }, idempotencyKeyRef.current);
       clear();
+      idempotencyKeyRef.current = '';
       push({ type: 'success', title: `Order ${order.orderNumber} placed!` });
       nav(`/r/order/${order.id}`);
     } catch (err) {
@@ -307,9 +343,12 @@ export default function Checkout() {
                   <label htmlFor="field-address" className="text-xs font-medium text-zinc-700">Address *</label>
                   <div className="mt-1.5">
                     <AddressAutocomplete
+                      id="field-address"
                       value={form.address}
                       onChange={(addr, city, postal) => update({ address: addr, ...(city ? { city } : {}), ...(postal ? { postal } : {}) })}
                       placeholder="Start typing your address..."
+                      aria-invalid={Boolean(showFieldError('address'))}
+                      aria-describedby={showFieldError('address') ? 'err-address' : undefined}
                     />
                   </div>
                   {showFieldError('address') && <p id="err-address" className="text-xs text-red-600 mt-1">{showFieldError('address')}</p>}
@@ -376,10 +415,7 @@ export default function Checkout() {
               Payment
             </legend>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 mt-4">
-              {[
-                { id: 'cod' as const, label: 'Cash on Delivery', icon: Banknote },
-                { id: 'upi' as const, label: 'UPI on Delivery', icon: Smartphone },
-              ].map((p) => {
+              {paymentOptions.map((p) => {
                 const Icon = p.icon;
                 return (
                   <button
@@ -409,7 +445,7 @@ export default function Checkout() {
               disabled={submitting}
               className="w-full mt-6 py-4 rounded-full bg-brand-600 text-white font-semibold hover:bg-brand-700 disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] cursor-pointer"
             >
-              {submitting ? 'Placing your order…' : `Place Order · ₹${subtotal}`}
+              {submitting ? 'Placing your order…' : `Place Order · ₹${grandTotal.toFixed(2)}`}
             </button>
             <p className="text-xs text-zinc-500 mt-2 text-center">You can review everything on the next screen.</p>
           </fieldset>
@@ -461,17 +497,23 @@ export default function Checkout() {
               </div>
               <div className="flex justify-between">
                 <dt className="text-zinc-500">Delivery</dt>
-                <dd className={isDelivery ? 'text-emerald-600 font-medium' : 'text-zinc-500'}>{isDelivery ? 'Free' : 'Pickup'}</dd>
+                <dd className={isDelivery ? 'text-zinc-900 font-medium' : 'text-zinc-500'}>{isDelivery ? (effectiveDeliveryFee > 0 ? `₹${effectiveDeliveryFee.toFixed(2)}` : 'Free') : 'Pickup'}</dd>
               </div>
+              {discount > 0 && (
+                <div className="flex justify-between text-emerald-600">
+                  <dt>Promo ({couponCode})</dt>
+                  <dd className="font-medium">−₹{discount.toFixed(2)}</dd>
+                </div>
+              )}
               <div className="flex justify-between">
                 <dt className="text-zinc-500">Taxes</dt>
                 <dd className="text-zinc-500">Included</dd>
               </div>
               <div className="flex justify-between font-bold text-base border-t border-stone-100 pt-3">
                 <dt className="text-zinc-900">Total</dt>
-                <dd className="text-zinc-900">₹{subtotal}</dd>
+                <dd className="text-zinc-900">₹{grandTotal.toFixed(2)}</dd>
               </div>
-              <div className="text-xs text-zinc-500">All prices include tax · Free delivery {deliveryHours || '11 AM – 4 AM'}</div>
+              <div className="text-xs text-zinc-500">All prices include tax · Delivery {effectiveDeliveryFee > 0 ? `₹${effectiveDeliveryFee.toFixed(2)}` : 'free'} {deliveryHours || '11 AM – 4 AM'}</div>
             </dl>
           </div>
         </aside>
@@ -482,7 +524,7 @@ export default function Checkout() {
         <div className="flex items-center justify-between gap-3">
           <div>
             <div className="text-xs text-zinc-500">{items.length} items</div>
-            <div className="text-lg font-bold text-zinc-900">₹{subtotal}</div>
+            <div className="text-lg font-bold text-zinc-900">₹{grandTotal.toFixed(2)}</div>
           </div>
           <Link
             to="/r/checkout"
