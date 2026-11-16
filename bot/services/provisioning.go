@@ -69,12 +69,16 @@ func ProvisionRestaurant(orgName, restName, slug, ownerName, ownerKeyHash string
 	} else if err != nil {
 		return 0, 0, 0, 0, fmt.Errorf("outlet: %w", err)
 	}
-	// ensure roles for org
-	_, _ = tx.Exec(`INSERT INTO roles (organization_id, name, is_system, description) VALUES
+	// ensure roles for org. These seeds are REQUIRED for a usable tenant;
+	// fail the whole transaction if any of them fails so we never return a
+	// half-provisioned restaurant.
+	if _, err = tx.Exec(`INSERT INTO roles (organization_id, name, is_system, description) VALUES
 	 ($1,'owner',true,'Full access'),($1,'manager',true,''),($1,'cashier',true,''),($1,'kitchen',true,''),($1,'viewer',true,'')
-	 ON CONFLICT (organization_id, name) DO NOTHING`, orgID)
+	 ON CONFLICT (organization_id, name) DO NOTHING`, orgID); err != nil {
+		return 0, 0, 0, 0, fmt.Errorf("roles seed: %w", err)
+	}
 	// ensure pos.* permissions exist and seed per-org grants (mirrors 026 for new tenants)
-	_, _ = tx.Exec(`INSERT INTO permissions (key, description) VALUES
+	if _, err = tx.Exec(`INSERT INTO permissions (key, description) VALUES
 	 ('pos.read','View POS menu, orders, tables, discounts, prices'),
 	 ('pos.create_order','Create POS draft orders'),
 	 ('pos.update_order','Update, hold, resume, complete, cancel POS orders'),
@@ -82,13 +86,21 @@ func ProvisionRestaurant(orgName, restName, slug, ownerName, ownerKeyHash string
 	 ('pos.take_payment','Record POS payments'),
 	 ('pos.refund','Record POS refunds'),
 	 ('pos.manage_tables','Assign and manage POS tables')
-	 ON CONFLICT (key) DO NOTHING`)
-	_, _ = tx.Exec(`INSERT INTO role_permissions (role_id, permission_id)
-	 SELECT r.id, p.id FROM roles r JOIN permissions p ON p.key LIKE 'pos.%' WHERE r.organization_id=$1 AND r.is_system AND r.name IN ('owner','manager') ON CONFLICT DO NOTHING`, orgID)
-	_, _ = tx.Exec(`INSERT INTO role_permissions (role_id, permission_id)
-	 SELECT r.id, p.id FROM roles r JOIN permissions p ON p.key IN ('pos.read','pos.create_order','pos.update_order','pos.take_payment') WHERE r.organization_id=$1 AND r.is_system AND r.name='cashier' ON CONFLICT DO NOTHING`, orgID)
-	_, _ = tx.Exec(`INSERT INTO role_permissions (role_id, permission_id)
-	 SELECT r.id, p.id FROM roles r JOIN permissions p ON p.key IN ('pos.read') WHERE r.organization_id=$1 AND r.is_system AND r.name IN ('kitchen','viewer') ON CONFLICT DO NOTHING`, orgID)
+	 ON CONFLICT (key) DO NOTHING`); err != nil {
+		return 0, 0, 0, 0, fmt.Errorf("permissions seed: %w", err)
+	}
+	if _, err = tx.Exec(`INSERT INTO role_permissions (role_id, permission_id)
+	 SELECT r.id, p.id FROM roles r JOIN permissions p ON p.key LIKE 'pos.%' WHERE r.organization_id=$1 AND r.is_system AND r.name IN ('owner','manager') ON CONFLICT DO NOTHING`, orgID); err != nil {
+		return 0, 0, 0, 0, fmt.Errorf("owner grants: %w", err)
+	}
+	if _, err = tx.Exec(`INSERT INTO role_permissions (role_id, permission_id)
+	 SELECT r.id, p.id FROM roles r JOIN permissions p ON p.key IN ('pos.read','pos.create_order','pos.update_order','pos.take_payment') WHERE r.organization_id=$1 AND r.is_system AND r.name='cashier' ON CONFLICT DO NOTHING`, orgID); err != nil {
+		return 0, 0, 0, 0, fmt.Errorf("cashier grants: %w", err)
+	}
+	if _, err = tx.Exec(`INSERT INTO role_permissions (role_id, permission_id)
+	 SELECT r.id, p.id FROM roles r JOIN permissions p ON p.key IN ('pos.read') WHERE r.organization_id=$1 AND r.is_system AND r.name IN ('kitchen','viewer') ON CONFLICT DO NOTHING`, orgID); err != nil {
+		return 0, 0, 0, 0, fmt.Errorf("viewer grants: %w", err)
+	}
 	// owner user if provided — never reassign existing key to another org
 	if ownerKeyHash != "" {
 		err = tx.QueryRow(`INSERT INTO users (organization_id, name, key_hash, role, active) VALUES ($1,$2,$3,'owner',true)
@@ -159,6 +171,9 @@ func ProvisionRestaurant(orgName, restName, slug, ownerName, ownerKeyHash string
 	if err = tx.Commit(); err != nil {
 		return 0, 0, 0, 0, err
 	}
+	// New tenant/outlet/domain — make it resolvable immediately across
+	// all replicas once their short tenant cache TTL expires.
+	InvalidateTenantCache()
 	return orgID, restID, outletID, userID, nil
 }
 

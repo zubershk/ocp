@@ -30,7 +30,7 @@ type ContactSubmission struct {
 }
 
 var validCategories = map[string]bool{
-	"general": true, "order": true, "feedback": true, "complaint": true, "other": true,
+	"general": true, "order": true, "feedback": true, "complaint": true, "other": true, "reservation": true,
 }
 
 var validPriorities = map[string]bool{

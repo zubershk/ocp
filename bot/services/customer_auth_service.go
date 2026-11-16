@@ -34,6 +34,20 @@ const otpExpiry = 5 * time.Minute
 const otpCooldown = 30 * time.Second
 const defaultSessionExpiry = 30 * 24 * time.Hour
 
+// EmailVerificationRequired controls whether new email/password accounts must
+// verify their address before login, and whether changing an email clears the
+// verified flag. Default false keeps registration usable out of the box; set
+// EMAIL_VERIFICATION_REQUIRED=1 when a verified email flow (and the matching
+// /r/verify-email + /r/reset-password frontend pages) is deployed.
+func EmailVerificationRequired() bool {
+	raw := strings.TrimSpace(os.Getenv("EMAIL_VERIFICATION_REQUIRED"))
+	v, err := strconv.ParseBool(raw)
+	if err != nil {
+		return false
+	}
+	return v
+}
+
 // sessionTTL returns the configured customer session lifetime.
 // Env CUSTOMER_SESSION_TTL_SECONDS overrides the 30d default; invalid values fall back to default.
 func sessionTTL() time.Duration {
@@ -167,7 +181,11 @@ func SendOTPFor(phone string, restaurantID int, evolution *EvolutionClient) (str
 		return "", fmt.Errorf("otp lookup failed: %w", err)
 	}
 	var dailyCount int
-	_ = database.DB.QueryRow(`SELECT COUNT(*) FROM customer_otps WHERE phone=$1 AND restaurant_id=$2 AND created_at > NOW() - INTERVAL '24 hours'`, normalized, rid).Scan(&dailyCount)
+	if err := database.DB.QueryRow(`SELECT COUNT(*) FROM customer_otps WHERE phone=$1 AND restaurant_id=$2 AND created_at > NOW() - INTERVAL '24 hours'`, normalized, rid).Scan(&dailyCount); err != nil {
+		// Fail closed: a DB error must not silently reset the counter to 0
+		// and disable the 10-per-day OTP cap.
+		return "", fmt.Errorf("otp rate-limit lookup failed: %w", err)
+	}
 	if dailyCount >= 10 {
 		return "", &ValidationError{Msg: "too many codes sent today — try again tomorrow"}
 	}
@@ -198,7 +216,7 @@ func SendOTPFor(phone string, restaurantID int, evolution *EvolutionClient) (str
 		// The failure is logged without the code; the code is returned to the
 		// caller (which never echoes it to the client) so the flow can be
 		// diagnosed with the WhatsApp gateway logs.
-		log.Printf("[auth] WhatsApp send failed for %s: %v", normalized, err)
+		log.Printf("[auth] WhatsApp send failed for %s: %v", MaskPhone(normalized), err)
 		return code, fmt.Errorf("whatsapp send failed: %w", err)
 	}
 	return code, nil
@@ -346,7 +364,11 @@ func ValidateSessionFor(token string, restaurantID int) (string, *Customer, erro
 	// cutting DB write amplification on active sessions ~4x.
 	if time.Until(expiresAt) < ttl/4 {
 		newExp := time.Now().Add(ttl)
-		_, _ = database.DB.Exec(`UPDATE customer_sessions SET expires_at=$1 WHERE token=$2`, newExp, hashed)
+		if _, err := database.DB.Exec(`UPDATE customer_sessions SET expires_at=$1 WHERE token=$2`, newExp, hashed); err != nil {
+			// Rotation is best-effort (the token is still valid until the
+			// original expiry), but log it so premature-logout spikes are visible.
+			log.Printf("[auth] session rotation failed: %v", err)
+		}
 		expiresAt = newExp
 	}
 	// tenant check: if request has tenant, session must match or be global (NULL) for transition
@@ -437,6 +459,10 @@ func CleanupExpired() {
 	database.DB.Exec(`DELETE FROM customer_email_verification WHERE expires_at < CURRENT_TIMESTAMP`)
 	database.DB.Exec(`DELETE FROM customer_password_reset WHERE expires_at < CURRENT_TIMESTAMP`)
 	database.DB.Exec(`DELETE FROM customer_login_attempts WHERE locked_until < CURRENT_TIMESTAMP AND attempts = 0`)
+	// WhatsApp message-ID dedup rows are write-heavy; without a rolling purge
+	// this becomes the largest table in the database. 7 days comfortably
+	// exceeds the webhook replay window.
+	database.DB.Exec(`DELETE FROM processed_messages WHERE created_at < CURRENT_TIMESTAMP - INTERVAL '7 days'`)
 }
 
 // hashPassword bcrypt-hashes a plaintext password with cost 12.
@@ -473,7 +499,7 @@ func sendResendEmail(to, subject, html string) error {
 	apiKey := os.Getenv("RESEND_API_KEY")
 	if apiKey == "" {
 		// In dev mode without Resend configured, log instead of sending
-		log.Printf("[email] RESEND_API_KEY not set. Would send to %s: %s", to, subject)
+		log.Printf("[email] RESEND_API_KEY not set. Would send to %s: %s", MaskEmail(to), subject)
 		return nil
 	}
 
@@ -760,12 +786,17 @@ func RegisterCustomer(email, password, phone, name string, restaurantID int) (*C
 	if hasPhone {
 		phoneVal = whatsappNumber
 	}
+	// When verification is not required (default), mark the account verified
+	// at creation so the immediate auto-login in Register succeeds. When a
+	// verified flow is enabled, leave it false and let RequestEmailVerification
+	// drive the confirmation step.
+	initialVerified := !EmailVerificationRequired()
 	var id int
 	err = database.DB.QueryRow(`
-		INSERT INTO customers (email, password_hash, whatsapp_number, auth_provider, name, last_seen_at, restaurant_id)
-		VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, $6)
+		INSERT INTO customers (email, password_hash, whatsapp_number, auth_provider, name, last_seen_at, restaurant_id, email_verified)
+		VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, $6, $7)
 		RETURNING id
-	`, email, hashedPassword, phoneVal, authProvider, name, rid).Scan(&id)
+	`, email, hashedPassword, phoneVal, authProvider, name, rid, initialVerified).Scan(&id)
 	if err != nil {
 		// Fallback for DBs still on old global unique (pre-027) during transition
 		_, _ = database.DB.Exec(`
@@ -930,7 +961,7 @@ func RequestPasswordReset(email string, restaurantID int) error {
 	`, cust.Name.String, getRestaurantName(rid), resetURL, token, getRestaurantName(rid))
 
 	if err := sendResendEmail(email, "Reset your OCP password", html); err != nil {
-		log.Printf("[auth] failed to send password reset email to %s: %v", email, err)
+		log.Printf("[auth] failed to send password reset email to %s: %v", MaskEmail(email), err)
 		// Don't return error - token is stored, user can retry
 	}
 
@@ -1100,7 +1131,7 @@ func RequestEmailVerification(email string, restaurantID int) error {
 	`, cust.Name.String, getRestaurantName(rid), verifyURL, token, getRestaurantName(rid))
 
 	if err := sendResendEmail(email, "Verify your email - "+getRestaurantName(rid), html); err != nil {
-		log.Printf("[auth] failed to send verification email to %s: %v", email, err)
+		log.Printf("[auth] failed to send verification email to %s: %v", MaskEmail(email), err)
 		// Don't return error - token is stored, user can retry
 	}
 

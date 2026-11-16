@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"net/http"
@@ -9,6 +10,16 @@ import (
 	"github.com/gin-gonic/gin"
 	"orangecheesepizza/bot/services"
 )
+
+// generateOwnerKey returns a high-entropy admin key for a newly provisioned
+// tenant. It is shown to the caller exactly once and only its hash is stored.
+func generateOwnerKey() (string, error) {
+	b := make([]byte, 24)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
+}
 
 type ProvisioningHandler struct{}
 
@@ -40,10 +51,20 @@ func (h *ProvisioningHandler) Signup(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	keyHash := ""
-	if strings.TrimSpace(req.OwnerKey) != "" {
-		keyHash = hashKey(req.OwnerKey)
+	// Always create a usable owner. If the caller did not supply a key,
+	// generate a high-entropy one and return it exactly once in the response.
+	ownerKey := strings.TrimSpace(req.OwnerKey)
+	generatedKey := ""
+	if ownerKey == "" {
+		var err error
+		ownerKey, err = generateOwnerKey()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate owner key"})
+			return
+		}
+		generatedKey = ownerKey
 	}
+	keyHash := hashKey(ownerKey)
 	orgID, restID, outletID, userID, err := services.ProvisionRestaurant(req.OrgName, req.RestName, slug, req.OwnerName, keyHash)
 	if err != nil {
 		if err == services.ErrSlugTaken {
@@ -53,14 +74,20 @@ func (h *ProvisioningHandler) Signup(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "provision failed"})
 		return
 	}
-	c.JSON(http.StatusCreated, gin.H{
+	resp := gin.H{
 		"organization_id": orgID,
 		"restaurant_id":   restID,
 		"outlet_id":       outletID,
 		"user_id":         userID,
 		"slug":            slug,
 		"domain":          slug + ".ocp.app",
-	})
+	}
+	if generatedKey != "" {
+		// Shown exactly once — the caller must save it. Only the hash is stored.
+		resp["owner_key"] = generatedKey
+		resp["warning"] = "Save this owner key now; it cannot be retrieved again."
+	}
+	c.JSON(http.StatusCreated, resp)
 }
 
 func (h *ProvisioningHandler) GetOnboarding(c *gin.Context) {

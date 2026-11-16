@@ -43,7 +43,7 @@ func (h *AuthHandler) SendOTP(c *gin.Context) {
 			return
 		}
 		// WhatsApp send failure: OTP is already stored and verifiable.
-		log.Printf("[auth] whatsapp send failed for %s: %v", req.Phone, err)
+		log.Printf("[auth] whatsapp send failed for %s: %v", services.MaskPhone(req.Phone), err)
 		c.JSON(http.StatusOK, gin.H{"sent": false, "delivered": false, "message": "code generated — delivery failed, please retry"})
 		return
 	}
@@ -129,7 +129,11 @@ func (h *AuthHandler) UpdateMe(c *gin.Context) {
 			return
 		}
 		fields["email"] = strings.TrimSpace(req.Email)
-		fields["email_verified"] = "false" // Reset verification until new email is confirmed
+		// Only clear the verified flag when the verified-email flow is active.
+		// customer_service_append.go now honours this field (previously dropped).
+		if services.EmailVerificationRequired() {
+			fields["email_verified"] = "false"
+		}
 	}
 	if strings.TrimSpace(req.Phone) != "" {
 		// Allow adding/updating phone for email-registered accounts
@@ -143,7 +147,7 @@ func (h *AuthHandler) UpdateMe(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "update failed"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"updated": true, "email_verified": false})
+	c.JSON(http.StatusOK, gin.H{"updated": true, "email_verified": !services.EmailVerificationRequired(), "requires_verification": services.EmailVerificationRequired() && strings.TrimSpace(req.Email) != cust.Email.String})
 }
 
 // Register handles POST /api/auth/register - creates account with email + password.
@@ -172,7 +176,21 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "registration failed"})
 		return
 	}
-	// Auto-login after registration
+	// When a verified-email flow is enabled, do not auto-login an unverified
+	// account (LoginCustomer would reject it and increment the lockout counter).
+	// Send the verification email and tell the client to check their inbox.
+	if services.EmailVerificationRequired() {
+		if err := services.RequestEmailVerification(req.Email, rid); err != nil {
+			log.Printf("register verification email failed: %v", err)
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"registered": true,
+			"requires_verification": true,
+			"message": "account created — check your email to verify before logging in",
+		})
+		return
+	}
+	// Auto-login after registration (verification not required)
 	token, cust2, err := services.LoginCustomer(req.Email, req.Password, rid)
 	if err != nil {
 		log.Printf("register auto-login failed: %v", err)
@@ -283,6 +301,11 @@ func (h *AuthHandler) RequestEmailVerification(c *gin.Context) {
 	rid, _ := services.RequireRestaurant(c)
 	if err := services.RequestEmailVerification(req.Email, rid); err != nil {
 		if ve, ok := err.(*services.ValidationError); ok {
+			// Do not reveal whether the email exists (account enumeration).
+			if strings.Contains(strings.ToLower(ve.Msg), "not found") {
+				c.JSON(http.StatusOK, gin.H{"message": "if the address is registered, a verification email has been sent"})
+				return
+			}
 			c.JSON(http.StatusBadRequest, gin.H{"error": ve.Msg})
 			return
 		}

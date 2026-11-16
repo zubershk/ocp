@@ -24,6 +24,17 @@ func UpdateCustomerProfileByID(customerID, restaurantID int, fields map[string]s
 			continue
 		}
 		switch column {
+		// email_verified must be handled explicitly: it is a boolean column
+		// and dropping it here left accounts verified after an email change,
+		// enabling durable account takeover via password reset.
+		case "email_verified":
+			verified, err := strconv.ParseBool(strings.TrimSpace(value))
+			if err != nil {
+				continue
+			}
+			setClauses = append(setClauses, "email_verified = $"+strconv.Itoa(n))
+			args = append(args, verified)
+			n++
 		case "name", "email", "default_address", "landmark", "whatsapp_number":
 			setClauses = append(setClauses, column+" = $"+strconv.Itoa(n))
 			args = append(args, strings.TrimSpace(value))

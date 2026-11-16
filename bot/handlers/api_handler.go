@@ -505,7 +505,11 @@ func customerPhoneFromBearer(c *gin.Context) string {
 	rid, _ := services.RequireRestaurant(c)
 	phone, _, err := services.ValidateSessionFor(token, rid)
 	if err != nil {
-		// fallback to global for open-source single-tenant transition
+		// Tenant-agnostic fallback ONLY in single-tenant mode. In SaaS mode a
+		// session minted for tenant A must not be accepted on tenant B's storefront.
+		if !services.IsSingleTenantMode() {
+			return ""
+		}
 		phone, _, err = services.ValidateSession(token)
 		if err != nil {
 			return ""
