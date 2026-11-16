@@ -22,6 +22,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"orangecheesepizza/bot/config"
 	"orangecheesepizza/bot/database"
+	"orangecheesepizza/bot/models"
 	"orangecheesepizza/bot/services"
 )
 
@@ -31,6 +32,7 @@ type AdminHandler struct {
 	posOrderService *services.POSOrderService
 	evolutionClient *services.EvolutionClient
 	config          *config.Config
+	failedAuth      *failedAuthLimiter
 }
 
 func NewAdminHandler(menuService *services.MenuService, orderService *services.OrderService, posOrderService *services.POSOrderService, evolutionClient *services.EvolutionClient, cfg *config.Config) *AdminHandler {
@@ -40,7 +42,91 @@ func NewAdminHandler(menuService *services.MenuService, orderService *services.O
 		posOrderService: posOrderService,
 		evolutionClient: evolutionClient,
 		config:          cfg,
+		failedAuth:      newFailedAuthLimiter(),
 	}
+}
+
+// failedAuthLimiter counts only REJECTED admin-key attempts per IP, so a
+// brute-forcer is throttled while legitimate dashboard polling (which sends
+// a valid key on every request) is never limited. Reuses Gin's trusted-proxy
+// aware c.ClientIP() via the caller.
+type failedAuthLimiter struct {
+	mu      sync.Mutex
+	windows map[string]*struct{ count int; start time.Time }
+	limit   int
+	window  time.Duration
+}
+
+func newFailedAuthLimiter() *failedAuthLimiter {
+	limit, _ := strconv.Atoi(os.Getenv("ADMIN_FAILED_AUTH_LIMIT"))
+	if limit <= 0 {
+		limit = 10
+	}
+	secs, _ := strconv.Atoi(os.Getenv("ADMIN_FAILED_AUTH_WINDOW_SECS"))
+	if secs <= 0 {
+		secs = 60
+	}
+	l := &failedAuthLimiter{
+		windows: make(map[string]*struct{ count int; start time.Time }),
+		limit:   limit,
+		window:  time.Duration(secs) * time.Second,
+	}
+	go func() {
+		for range time.Tick(10 * time.Minute) {
+			l.mu.Lock()
+			cutoff := time.Now().Add(-l.window)
+			for ip, w := range l.windows {
+				if w.start.Before(cutoff) {
+					delete(l.windows, ip)
+				}
+			}
+			l.mu.Unlock()
+		}
+	}()
+	return l
+}
+
+// record returns false when this IP has exhausted its failed-attempt budget.
+func (l *failedAuthLimiter) record(ip string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	now := time.Now()
+	w, ok := l.windows[ip]
+	if !ok || now.Sub(w.start) >= l.window {
+		l.windows[ip] = &struct{ count int; start time.Time }{count: 1, start: now}
+		return true
+	}
+	if w.count >= l.limit {
+		return false
+	}
+	w.count++
+	return true
+}
+
+// pgFailedAuthAllow mirrors the shared rate-limit counter for admin auth
+// failures (same table as handlers.pgAllow, different key namespace).
+func pgFailedAuthAllow(key string) bool {
+	if database.DB == nil {
+		return true
+	}
+	var count int
+	err := database.DB.QueryRow(`
+		INSERT INTO rate_limit_counters (key, window_start, count) VALUES ($1, NOW(), 1)
+		ON CONFLICT (key) DO UPDATE SET
+			count = CASE WHEN EXTRACT(EPOCH FROM (NOW() - rate_limit_counters.window_start)) >= $2
+				THEN 1 ELSE rate_limit_counters.count + 1 END,
+			window_start = CASE WHEN EXTRACT(EPOCH FROM (NOW() - rate_limit_counters.window_start)) >= $2
+				THEN NOW() ELSE rate_limit_counters.window_start END
+		RETURNING count
+	`, key, 60).Scan(&count)
+	if err != nil {
+		return true // fail open
+	}
+	limit, _ := strconv.Atoi(os.Getenv("ADMIN_FAILED_AUTH_LIMIT"))
+	if limit <= 0 {
+		limit = 10
+	}
+	return count <= limit
 }
 
 func hashAdminKey(k string) string {
@@ -66,7 +152,9 @@ func getAdminUserByKey(key string) (*adminUserCtx, error) {
 		`SELECT id, name, role, organization_id FROM users WHERE key_hash=$1 AND active=true`,
 		h).Scan(&u.ID, &u.Name, &u.Role, &u.OrgID)
 	if err == nil {
-		_, _ = database.DB.Exec(`UPDATE users SET last_seen_at=CURRENT_TIMESTAMP WHERE id=$1`, u.ID)
+		// Throttle: one write per minute per user (admin polls hit this on every
+		// request). SQL predicate works across replicas without shared state.
+		_, _ = database.DB.Exec(`UPDATE users SET last_seen_at=CURRENT_TIMESTAMP WHERE id=$1 AND (last_seen_at IS NULL OR last_seen_at < CURRENT_TIMESTAMP - INTERVAL '1 minute')`, u.ID)
 		return &u, nil
 	}
 	if err != sql.ErrNoRows {
@@ -82,8 +170,8 @@ func getAdminUserByKey(key string) (*adminUserCtx, error) {
 	if err != nil {
 		return nil, err
 	}
-	// touch last_seen
-	_, _ = database.DB.Exec(`UPDATE admin_users SET last_seen_at=CURRENT_TIMESTAMP WHERE id=$1`, legacy.ID)
+	// touch last_seen (throttled — see above)
+	_, _ = database.DB.Exec(`UPDATE admin_users SET last_seen_at=CURRENT_TIMESTAMP WHERE id=$1 AND (last_seen_at IS NULL OR last_seen_at < CURRENT_TIMESTAMP - INTERVAL '1 minute')`, legacy.ID)
 	return &legacy, nil
 }
 
@@ -117,9 +205,13 @@ func auditLog(c *gin.Context, action, target string, details interface{}) {
 	if orgID <= 0 {
 		orgID = 1 // bootstrap org until every caller carries tenant context
 	}
-	if adminID != nil {
+	if adminID != nil && *adminID > 0 {
+		// Real DB-backed admin user — admin_user_id has a FK to admin_users(id).
 		_, _ = database.DB.Exec(`INSERT INTO admin_audit_log (admin_user_id, admin_name, action, target, details, ip, organization_id) VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7)`, *adminID, adminName, action, target, string(b), ip, orgID)
 	} else {
+		// Env owner (adminUserCtx.ID == 0) or no user context. Writing id=0
+		// would violate the FK to admin_users(id) and silently drop EVERY
+		// audit entry — omit the column entirely for these callers.
 		_, _ = database.DB.Exec(`INSERT INTO admin_audit_log (admin_name, action, target, details, ip, organization_id) VALUES ($1,$2,$3,$4::jsonb,$5,$6)`, adminName, action, target, string(b), ip, orgID)
 	}
 }
@@ -151,9 +243,19 @@ func posStatusError(c *gin.Context, err error) {
 
 func (h *AdminHandler) RequireAdminKey() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// Resolve client IP (Gin trusted-proxy aware) for the failed-auth budget.
+		ip := c.ClientIP()
+		if ip == "" {
+			ip = c.Request.RemoteAddr
+		}
+		if ip == "" {
+			ip = "unknown"
+		}
+
 		apiKey := c.GetHeader("X-Admin-Key")
 		// Query param removed for SaaS — header only to avoid log leakage
 		if apiKey == "" {
+			h.failedAuth.record(ip)
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized — X-Admin-Key header required"})
 			c.Abort()
 			return
@@ -170,6 +272,18 @@ func (h *AdminHandler) RequireAdminKey() gin.HandlerFunc {
 			c.Set("adminUser", &adminUserCtx{ID: 0, Name: "env_owner", Role: "owner"})
 			c.Set("adminRole", "owner")
 			c.Next()
+			return
+		}
+		// Invalid key: consume one failed-attempt token. Shared PG counter when
+		// RATE_LIMIT_BACKEND=postgres, so brute-force can't hop between replicas.
+		allowed := h.failedAuth.record(ip)
+		if allowed && strings.EqualFold(strings.TrimSpace(os.Getenv("RATE_LIMIT_BACKEND")), "local") == false {
+			allowed = pgFailedAuthAllow("admin_auth|" + ip)
+		}
+		if !allowed {
+			c.Header("Retry-After", strconv.Itoa(int(h.failedAuth.window.Seconds())))
+			c.JSON(http.StatusTooManyRequests, gin.H{"error": "too many failed login attempts — please slow down"})
+			c.Abort()
 			return
 		}
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
@@ -352,6 +466,26 @@ func (h *AdminHandler) BroadcastSend(c *gin.Context) {
 		}
 	}
 
+	// Async durable queue (default): persist the job and return 202 immediately.
+	// Prevents 60s request truncation, serial sends, and in-memory idem loss.
+	if services.BroadcastAsyncEnabled() {
+		phonesJSON, _ := json.Marshal(req.Phones)
+		rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
+		orgID := c.GetInt("orgID")
+		var jobID int64
+		err := database.DB.QueryRow(`
+			INSERT INTO broadcast_jobs (restaurant_id, org_id, phones, message, image_url, idempotency_base, total)
+			VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id
+		`, rid, orgID, string(phonesJSON), req.Message, req.ImageURL, req.IdempotencyBase, len(req.Phones)).Scan(&jobID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to queue broadcast"})
+			return
+		}
+		auditLog(c, "broadcast_queued", "campaign", map[string]interface{}{"job_id": jobID, "total": len(req.Phones)})
+		c.JSON(http.StatusAccepted, gin.H{"accepted": true, "job_id": jobID, "status": "queued"})
+		return
+	}
+
 	type result struct {
 		Phone string `json:"phone"`
 		OK    bool   `json:"ok"`
@@ -416,6 +550,154 @@ func (h *AdminHandler) BroadcastSend(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": success, "failed": failed, "results": results})
 }
 
+// BroadcastJobStatus handles GET /admin/broadcast/jobs/:id — poll an async job.
+func (h *AdminHandler) BroadcastJobStatus(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid job id"})
+		return
+	}
+	var status string
+	var success, failed, total int
+	var results, errorText sql.NullString
+	err = database.DB.QueryRow(`
+		SELECT status, success, failed, total, COALESCE(results::text,''), COALESCE(error,'')
+		FROM broadcast_jobs WHERE id=$1`, id).Scan(&status, &success, &failed, &total, &results, &errorText)
+	if err == sql.ErrNoRows {
+		c.JSON(http.StatusNotFound, gin.H{"error": "job not found"})
+		return
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load job"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"job_id": id, "status": status, "success": success, "failed": failed, "total": total,
+		"results": json.RawMessage(results.String), "error": errorText.String,
+	})
+}
+
+type broadcastJob struct {
+	ID              int64
+	RestaurantID    int
+	Phones          []string
+	Message         string
+	ImageURL        string
+	IdempotencyBase string
+}
+
+// StartBroadcastWorker claims queued jobs with FOR UPDATE SKIP LOCKED and
+// processes them with bounded concurrency. Safe with any number of replicas.
+func (h *AdminHandler) StartBroadcastWorker() {
+	if !services.BroadcastAsyncEnabled() {
+		return
+	}
+	go func() {
+		for {
+			job, ok := h.claimBroadcastJob()
+			if !ok {
+				time.Sleep(services.BroadcastPollInterval())
+				continue
+			}
+			h.processBroadcastJob(job)
+		}
+	}()
+}
+
+func (h *AdminHandler) claimBroadcastJob() (broadcastJob, bool) {
+	var job broadcastJob
+	var phonesJSON string
+	var imageURL, idemBase sql.NullString
+	err := database.DB.QueryRow(`
+		SELECT id, restaurant_id, phones, message, COALESCE(image_url,''), COALESCE(idempotency_base,''), status
+		FROM broadcast_jobs WHERE status='queued' ORDER BY id
+		FOR UPDATE SKIP LOCKED LIMIT 1
+	`).Scan(&job.ID, &job.RestaurantID, &phonesJSON, &job.Message, &imageURL, &idemBase, new(string))
+	if err != nil {
+		return job, false
+	}
+	job.ImageURL = imageURL.String
+	job.IdempotencyBase = idemBase.String
+	_ = json.Unmarshal([]byte(phonesJSON), &job.Phones)
+	_, _ = database.DB.Exec(`UPDATE broadcast_jobs SET status='processing', started_at=NOW(), updated_at=NOW() WHERE id=$1`, job.ID)
+	return job, true
+}
+
+func (h *AdminHandler) processBroadcastJob(job broadcastJob) {
+	type result struct {
+		Phone string `json:"phone"`
+		OK    bool   `json:"ok"`
+		Error string `json:"error,omitempty"`
+	}
+	results := make([]result, 0, len(job.Phones))
+	success, failed := 0, 0
+	sem := make(chan struct{}, services.BroadcastWorkers())
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	for _, raw := range job.Phones {
+		phone := strings.TrimSpace(strings.ReplaceAll(raw, "+", ""))
+		if len(phone) > 10 {
+			phone = phone[len(phone)-10:]
+		}
+		if phone == "" {
+			continue
+		}
+		idemKey := idemKeyFor(job.IdempotencyBase, phone)
+		wg.Add(1)
+		go func(phone, idemKey string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			// DB-backed idempotency: INSERT ... ON CONFLICT DO NOTHING RETURNING.
+			// Only the winner sends; replayed jobs return the stored outcome.
+			if idemKey != "" {
+				var prevOK bool
+				var prevErr sql.NullString
+				err := database.DB.QueryRow(`SELECT ok, COALESCE(error,'') FROM broadcast_idem WHERE key=$1`, idemKey).Scan(&prevOK, &prevErr)
+				if err == nil {
+					mu.Lock()
+					r := result{Phone: phone, OK: prevOK, Error: prevErr.String}
+					results = append(results, r)
+					if prevOK { success++ } else { failed++ }
+					mu.Unlock()
+					return
+				}
+			}
+
+			dest := phone
+			if len(phone) == 10 {
+				dest = "91" + phone
+			}
+			var sendErr error
+			if job.ImageURL != "" {
+				sendErr = h.evolutionClient.SendMedia(dest, job.ImageURL, "image", job.Message)
+			} else {
+				sendErr = h.evolutionClient.SendText(dest, job.Message)
+			}
+			r := result{Phone: phone, OK: sendErr == nil}
+			if sendErr != nil {
+				r.Error = sendErr.Error()
+			} else {
+				_ = services.SaveWhatsAppMessage(phone, "out", job.Message, "")
+			}
+			if idemKey != "" && r.OK {
+				_, _ = database.DB.Exec(`INSERT INTO broadcast_idem (key, job_id, phone, ok, error) VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING`, idemKey, job.ID, phone, r.OK, r.Error)
+			}
+			mu.Lock()
+			results = append(results, r)
+			if r.OK { success++ } else { failed++ }
+			mu.Unlock()
+		}(phone, idemKey)
+	}
+	wg.Wait()
+	resultsJSON, _ := json.Marshal(results)
+	status := "done"
+	_, _ = database.DB.Exec(`
+		UPDATE broadcast_jobs SET status=$1, success=$2, failed=$3, results=$4::jsonb, updated_at=NOW(), finished_at=NOW() WHERE id=$5
+	`, status, success, failed, string(resultsJSON), job.ID)
+}
+
 func (h *AdminHandler) GetMenu(c *gin.Context) {
 	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
 	categories, err := h.menuService.GetCategories(rid)
@@ -424,10 +706,20 @@ func (h *AdminHandler) GetMenu(c *gin.Context) {
 		return
 	}
 
-	result := make(map[string]interface{})
+	// One bulk query + one batched options query, then group in Go — instead
+	// of the old 1+2*categories query N+1 that every open admin tab polled.
+	allItems, err := h.menuService.GetAllMenuItemsWithOptionsFor(rid)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
+		return
+	}
+	byCategory := make(map[int][]models.MenuItem, len(categories))
+	for _, it := range allItems {
+		byCategory[it.CategoryID] = append(byCategory[it.CategoryID], it)
+	}
+	result := make(map[string]interface{}, len(categories))
 	for _, cat := range categories {
-		items, _ := h.menuService.GetItemsByCategory(cat.ID, rid)
-		result[cat.Name] = items
+		result[cat.Name] = byCategory[cat.ID]
 	}
 
 	c.JSON(http.StatusOK, result)
@@ -833,35 +1125,19 @@ func (h *AdminHandler) UploadImage(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "file is not a supported image (jpeg/png/webp/gif only)"})
 		return
 	}
-	// tenant-aware dir: ./uploads/<restaurant_id>/
-	dir := "./uploads"
-	if rid != 0 {
-		dir = fmt.Sprintf("./uploads/%d", rid)
-	}
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot create upload dir"})
-		return
-	}
 	rnd := make([]byte, 8)
 	if _, err := rand.Read(rnd); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot generate filename"})
 		return
 	}
 	name := hex.EncodeToString(rnd) + ext
-	dst := filepath.Join(dir, name)
-	out, err := os.Create(dst)
+	// Object key is tenant-scoped; the storage layer chooses local disk or S3.
+	key := fmt.Sprintf("%d/%s", rid, name)
+	url, err := services.PutObject(c.Request.Context(), key, header.Size, file, ct)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot save image"})
 		return
 	}
-	defer out.Close()
-	if _, err := io.Copy(out, file); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save image"})
-		return
-	}
-	// return path usable via GET /uploads/<restaurant_id>/<name> — also support legacy /uploads/<name>
-	url := fmt.Sprintf("/uploads/%d/%s", rid, name)
-	// also symlink/copy fallback? keep legacy compat: also ensure global lookup works via static
 	auditLog(c, "upload_image", name, map[string]interface{}{"url": url, "restaurant_id": rid})
 	c.JSON(http.StatusOK, gin.H{"url": url, "filename": name})
 }
@@ -881,34 +1157,16 @@ func (h *AdminHandler) ListUploads(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "tenant required"})
 		return
 	}
-	dir, _ := tenantUploadDir(rid)
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"files": []interface{}{}})
-		return
+	objects, err := services.ListObjects(c.Request.Context(), strconv.Itoa(rid))
+	if err != nil || objects == nil {
+		objects = []services.StorageObject{}
 	}
-	out := []map[string]interface{}{}
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		info, err := e.Info()
-		if err != nil {
-			continue
-		}
-		// tenant-aware URL
-		url := fmt.Sprintf("/uploads/%d/%s", rid, e.Name())
-		// legacy files are at /uploads/<name> — keep both reachable but list as legacy url
-		if entries != nil {
-			if _, statErr := os.Stat(fmt.Sprintf("./uploads/%d/%s", rid, e.Name())); statErr != nil {
-				url = "/uploads/" + e.Name()
-			}
-		}
+	out := make([]map[string]interface{}, 0, len(objects))
+	for _, o := range objects {
 		out = append(out, map[string]interface{}{
-			"name": e.Name(), "size": info.Size(),
-			"modified":   info.ModTime().UTC().Format(time.RFC3339),
-			"url":        url,
-			"referenced": h.uploadReferenced(e.Name(), rid),
+			"name": o.Name, "size": o.Size, "modified": o.Modified,
+			"url":        o.URL,
+			"referenced": h.uploadReferenced(o.Name, rid),
 		})
 	}
 	c.JSON(http.StatusOK, gin.H{"files": out})
@@ -939,13 +1197,8 @@ func (h *AdminHandler) DeleteUpload(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "tenant required"})
 		return
 	}
-	p, _ := tenantUploadDir(rid)
-	p = filepath.Join(p, name)
-	if _, err := os.Stat(p); err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
-		return
-	}
-	if err := os.Remove(p); err != nil {
+	key := fmt.Sprintf("%d/%s", rid, name)
+	if err := services.DeleteObject(c.Request.Context(), key); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete file"})
 		return
 	}
@@ -1987,13 +2240,14 @@ func (h *AdminHandler) GetChatMessages(c *gin.Context) {
 			limit = v
 		}
 	}
-	msgs, err := services.ListMessages(phone, limit, services.ResolveRestaurant(c.GetInt("restaurantID")))
+	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
+	msgs, err := services.ListMessages(phone, limit, rid)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
 	}
-	state, ctx, _ := services.LoadConversationForPhone(phone)
-	cart, _ := h.menuService.GetCartDebug(phone)
+	state, ctx, _ := services.LoadConversationForPhoneFor(phone, rid)
+	cart, _ := h.menuService.GetCartDebugFor(phone, rid)
 	c.JSON(http.StatusOK, gin.H{
 		"phone":    phone,
 		"state":    state,
@@ -2039,9 +2293,9 @@ func (h *AdminHandler) SendChatMessage(c *gin.Context) {
 	}
 	_ = services.SaveWhatsAppMessageFor(phone, "out", body, "", rid)
 	services.BroadcastRealtimeFor(rid, 0, c.GetInt("orgID"), "chat.message", map[string]interface{}{"phone": phone, "dir": "out", "restaurant_id": rid})
-	// Mark takeover so bot pauses
+	// Mark takeover so bot pauses (tenant-scoped)
 	if cust != nil {
-		_ = services.SetConversationState(phone, "HUMAN_SUPPORT")
+		_ = services.SetConversationStateFor(phone, "HUMAN_SUPPORT", rid)
 	}
 	auditLog(c, "send_chat", phone, map[string]interface{}{"body": body})
 	c.JSON(http.StatusOK, gin.H{"sent": true})
@@ -2068,7 +2322,12 @@ func (h *AdminHandler) SetConversationState(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid conversation state"})
 		return
 	}
-	if err := services.SetConversationState(phone, req.State); err != nil {
+	rid := services.ResolveRestaurant(c.GetInt("restaurantID"))
+	if err := services.SetConversationStateFor(phone, req.State, rid); err != nil {
+		if err == services.ErrTenantRequired {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "customer not found in this restaurant"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
 	}
@@ -2112,6 +2371,47 @@ func (h *AdminHandler) ListAdminUsers(c *gin.Context) {
 		out = []map[string]interface{}{}
 	}
 	c.JSON(http.StatusOK, gin.H{"users": out})
+}
+
+// generateAdminKey returns a high-entropy key; only its hash is stored.
+func generateAdminKey() (string, error) {
+	b := make([]byte, 24)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
+}
+
+// RotateAdminKey rotates the authenticated admin user's own key. Returns the
+// new plaintext key exactly once (only its hash is stored). The env master key
+// remains a break-glass credential and is not rotatable at runtime.
+func (h *AdminHandler) RotateAdminKey(c *gin.Context) {
+	u, ok := c.Get("adminUser")
+	if !ok || u == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	ctx, isCtx := u.(*adminUserCtx)
+	if !isCtx || ctx.ID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "env master key cannot be rotated via API — update BOT_ADMIN_KEY and restart"})
+		return
+	}
+	newKey, err := generateAdminKey() // high-entropy hex
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "key generation failed"})
+		return
+	}
+	res, err := database.DB.Exec(`UPDATE users SET key_hash=$1, updated_at=NOW() WHERE id=$2 AND organization_id=$3`, hashAdminKey(newKey), ctx.ID, c.GetInt("orgID"))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "rotation failed"})
+		return
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		return
+	}
+	auditLog(c, "admin_key_rotated", "self", map[string]interface{}{"user_id": ctx.ID})
+	c.JSON(http.StatusOK, gin.H{"key": newKey, "warning": "save this key now — it will not be shown again"})
 }
 
 func (h *AdminHandler) CreateAdminUser(c *gin.Context) {
@@ -2178,9 +2478,16 @@ func (h *AdminHandler) GetAuditLog(c *gin.Context) {
 			limit = v
 		}
 	}
+	// Audit writes fall back to the bootstrap org (1) when the request has no
+	// org context (e.g. the env owner). Use the SAME fallback here or every
+	// env-owner audit entry becomes invisible to the audit page.
+	orgID := c.GetInt("orgID")
+	if orgID <= 0 {
+		orgID = 1
+	}
 	rows, err := database.DB.Query(
 		`SELECT id, COALESCE(admin_name,'') , action, COALESCE(target,''), COALESCE(details::text,'{}'), COALESCE(ip,''), created_at::text FROM admin_audit_log WHERE organization_id=$2 ORDER BY id DESC LIMIT $1`,
-		limit, c.GetInt("orgID"))
+		limit, orgID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": safeError(err)})
 		return
