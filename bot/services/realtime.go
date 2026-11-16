@@ -45,8 +45,23 @@ func BroadcastRealtime(eventType string, data interface{}) {
 	BroadcastRealtimeFor(0, 0, 0, eventType, data)
 }
 
-// BroadcastRealtimeFor fans only to subscribers matching tenant (0 = restaurant-wide, specific outletID filters).
+// BroadcastRealtimeFor delivers to local subscribers AND publishes to other
+// replicas via PostgreSQL NOTIFY (see pubsub.go). Tenant-less events are
+// dropped: with no tenant to scope them to, fan-out would leak one tenant's
+// data to every other tenant's dashboard.
 func BroadcastRealtimeFor(restaurantID, outletID, orgID int, eventType string, data interface{}) {
+	if restaurantID == 0 {
+		return
+	}
+	broadcastRealtimeLocal(restaurantID, outletID, orgID, eventType, data)
+	publish(pubSubEnvelope{
+		Kind: "realtime", RestaurantID: restaurantID, OutletID: outletID,
+		OrgID: orgID, EventType: eventType, Data: data,
+	})
+}
+
+// broadcastRealtimeLocal fans out to subscribers on THIS replica only.
+func broadcastRealtimeLocal(restaurantID, outletID, orgID int, eventType string, data interface{}) {
 	hub.mu.RLock()
 	defer hub.mu.RUnlock()
 	ev := realtimeEvent{Type: eventType, At: time.Now().UTC(), Data: data, RestaurantID: restaurantID, OutletID: outletID, OrgID: orgID}
@@ -70,6 +85,12 @@ func BroadcastRealtimeFor(restaurantID, outletID, orgID int, eventType string, d
 
 // StreamEvents handles GET /admin/events/stream — long-lived SSE feed.
 func StreamEvents(c *gin.Context) {
+	// Disable the server's global WriteTimeout for this connection; a 60s
+	// write deadline otherwise kills long-lived SSE streams mid-flight.
+	// Errors are ignored deliberately (unsupported controllers just keep the
+	// server default, which still works for short streams).
+	_ = http.NewResponseController(c.Writer).SetWriteDeadline(time.Time{})
+
 	flusher, ok := c.Writer.(http.Flusher)
 	if !ok {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "streaming unsupported"})
@@ -85,7 +106,9 @@ func StreamEvents(c *gin.Context) {
 	hub.mu.Lock()
 	hub.subs[ch] = sub
 	hub.mu.Unlock()
+	sseSubscribers.Add(1)
 	defer func() {
+		sseSubscribers.Add(-1)
 		hub.mu.Lock()
 		delete(hub.subs, ch)
 		close(ch)

@@ -2,6 +2,7 @@ package services
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
@@ -11,8 +12,66 @@ import (
 	"orangecheesepizza/bot/models"
 )
 
-// defaultOrderService reuses the existing order persistence layer.
+// defaultOrderService reuses the existing order persistence layer (shared
+// across order_stream.go, website_order_service.go and this file).
 var defaultOrderService = NewOrderService()
+
+// queryRower is implemented by both *sql.DB and *sql.Tx.
+type queryRower interface {
+	QueryRow(query string, args ...interface{}) *sql.Row
+	Query(query string, args ...interface{}) (*sql.Rows, error)
+}
+
+// getOrderByIDTx loads one order (with items) inside a transaction, taking a
+// row lock (FOR UPDATE) on the orders row so status transitions are serialized.
+func getOrderByIDTx(q queryRower, id, restaurantID int) (*models.Order, error) {
+	var order models.Order
+	var advanceAt sql.NullTime
+	var discountID, tableID sql.NullInt64
+	err := q.QueryRow(`
+		SELECT id, order_number, customer_name, customer_phone, order_type, COALESCE(address,''), COALESCE(landmark,''), payment_method,
+		       subtotal, delivery_fee, discount, total, status, created_at, updated_at,
+		       tax_amount, discount_id, source, table_id, guest_count, container_charge, tip_amount, is_complimentary, advance_at
+		FROM orders WHERE id = $1 AND restaurant_id = $2 FOR UPDATE
+	`, id, restaurantID).Scan(&order.ID, &order.OrderNumber, &order.CustomerName, &order.CustomerPhone, &order.OrderType, &order.Address, &order.Landmark, &order.PaymentMethod, &order.Subtotal, &order.DeliveryFee, &order.Discount, &order.Total, &order.Status, &order.CreatedAt, &order.UpdatedAt,
+		&order.TaxAmount, &discountID, &order.Source, &tableID, &order.GuestCount, &order.ContainerCharge, &order.TipAmount, &order.IsComplimentary, &advanceAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if discountID.Valid {
+		order.DiscountID = int(discountID.Int64)
+	}
+	if tableID.Valid {
+		order.TableID = int(tableID.Int64)
+	}
+	if advanceAt.Valid {
+		order.AdvanceAt = &advanceAt.Time
+	}
+	rows, err := q.Query(`
+		SELECT id, order_id, menu_item_id, name, quantity, unit_price, options, subtotal, created_at,
+		       COALESCE(addons_snapshot, '[]'::jsonb), COALESCE(combo_snapshot, '[]'::jsonb)
+		FROM order_items WHERE order_id = $1
+	`, order.ID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var item models.OrderItem
+		var optionsJSON, addonsJSON, comboJSON []byte
+		if err := rows.Scan(&item.ID, &item.OrderID, &item.MenuItemID, &item.Name, &item.Quantity, &item.UnitPrice, &optionsJSON, &item.Subtotal, &item.CreatedAt, &addonsJSON, &comboJSON); err != nil {
+			return nil, err
+		}
+		_ = json.Unmarshal(optionsJSON, &item.Options)
+		_ = json.Unmarshal(addonsJSON, &item.Addons)
+		_ = json.Unmarshal(comboJSON, &item.Combo)
+		order.Items = append(order.Items, item)
+	}
+	return &order, rows.Err()
+}
 
 // ------------------------------------------------------------------
 // Explicit order lifecycle shared by the website tracker, the admin
@@ -110,7 +169,18 @@ func ApplyStatusChange(orderID int, newStatus string, evolution *EvolutionClient
 		return nil, WhatsAppOutcome{}, fmt.Errorf("unknown status %q", newStatus)
 	}
 
-	order, err := defaultOrderService.GetOrderByID(orderID, ResolveRestaurant(restaurantID))
+	rid := ResolveRestaurant(restaurantID)
+
+	// Lock the order row for the whole read-validate-write sequence so two
+	// concurrent admins cannot both validate the same transition and commit
+	// (last-writer-wins), which could skip states in the state machine.
+	tx, err := database.DB.Begin()
+	if err != nil {
+		return nil, WhatsAppOutcome{}, err
+	}
+	defer tx.Rollback()
+
+	order, err := getOrderByIDTx(tx, orderID, rid)
 	if err != nil {
 		return nil, WhatsAppOutcome{}, err
 	}
@@ -118,22 +188,24 @@ func ApplyStatusChange(orderID int, newStatus string, evolution *EvolutionClient
 		return nil, WhatsAppOutcome{}, sql.ErrNoRows
 	}
 	if order.Status == newStatus {
+		_ = tx.Commit()
 		return order, WhatsAppOutcome{}, nil // no-op, treat as success
 	}
 	if err := ValidateTransition(order.Status, newStatus); err != nil {
 		return nil, WhatsAppOutcome{}, err
 	}
 
-	tx, err := database.DB.Begin()
+	fromStatus := order.Status
+	res, err := tx.Exec(`
+		UPDATE orders SET status = $1, updated_at = CURRENT_TIMESTAMP
+		WHERE id = $2 AND restaurant_id = $3 AND status = $4
+	`, newStatus, orderID, rid, fromStatus)
 	if err != nil {
 		return nil, WhatsAppOutcome{}, err
 	}
-	defer tx.Rollback()
-
-	if _, err := tx.Exec(`
-		UPDATE orders SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 AND restaurant_id = $3
-	`, newStatus, orderID, restaurantID); err != nil {
-		return nil, WhatsAppOutcome{}, err
+	if affected, err := res.RowsAffected(); err != nil || affected == 0 {
+		// Row changed underneath us (or wrong tenant) — do not fake success.
+		return nil, WhatsAppOutcome{}, fmt.Errorf("order status changed concurrently or order not found")
 	}
 	desc := "Status changed to " + newStatus
 	if _, err := tx.Exec(`

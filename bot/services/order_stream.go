@@ -36,8 +36,14 @@ type orderHub struct {
 
 var orderHubInstance = &orderHub{subs: make(map[chan orderStreamEvent]*orderSub)}
 
-// BroadcastOrderStatus fans a status change to all tracking subscribers for that order.
+// BroadcastOrderStatus delivers locally AND publishes to other replicas.
 func BroadcastOrderStatus(orderID int, orderNumber, status string) {
+	broadcastOrderStatusLocal(orderID, orderNumber, status)
+	publish(pubSubEnvelope{Kind: "order", OrderID: orderID, OrderNumber: orderNumber, Status: status})
+}
+
+// broadcastOrderStatusLocal fans out to this replica's tracking subscribers.
+func broadcastOrderStatusLocal(orderID int, orderNumber, status string) {
 	orderHubInstance.mu.RLock()
 	defer orderHubInstance.mu.RUnlock()
 	ev := orderStreamEvent{Type: "order.status", At: time.Now().UTC(), OrderID: orderID, OrderNumber: orderNumber, Status: status}
@@ -54,6 +60,9 @@ func BroadcastOrderStatus(orderID int, orderNumber, status string) {
 
 // StreamOrderEvents handles GET /api/orders/:id/stream — long-lived SSE feed for a single order.
 func StreamOrderEvents(c *gin.Context, orderID int) {
+	// Disable the global WriteTimeout for this long-lived SSE connection.
+	_ = http.NewResponseController(c.Writer).SetWriteDeadline(time.Time{})
+
 	flusher, ok := c.Writer.(http.Flusher)
 	if !ok {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "streaming unsupported"})
@@ -69,7 +78,9 @@ func StreamOrderEvents(c *gin.Context, orderID int) {
 	orderHubInstance.mu.Lock()
 	orderHubInstance.subs[ch] = sub
 	orderHubInstance.mu.Unlock()
+	sseSubscribers.Add(1)
 	defer func() {
+		sseSubscribers.Add(-1)
 		orderHubInstance.mu.Lock()
 		delete(orderHubInstance.subs, ch)
 		close(ch)
@@ -87,9 +98,18 @@ func StreamOrderEvents(c *gin.Context, orderID int) {
 	writeOrderSSE(c, orderStreamEvent{Type: "hello", At: time.Now().UTC()})
 	flusher.Flush()
 
-	statusTicker := time.NewTicker(5 * time.Second)
-	defer statusTicker.Stop()
-	ticker := time.NewTicker(25 * time.Second)
+	// Optional slow resync (default OFF). The old 5s poll made each tracker a
+	// DB load generator (~200 qps at 1000 clients). Push events + a snapshot on
+	// connect are authoritative; set ORDER_STREAM_RESYNC_SECS to a slow value
+	// (e.g. 60) only if drift between replicas must be self-healed.
+	var statusTicker *time.Ticker
+	var statusChan <-chan time.Time
+	if interval := orderStreamResyncInterval(); interval > 0 {
+		statusTicker = time.NewTicker(interval)
+		defer statusTicker.Stop()
+		statusChan = statusTicker.C
+	}
+	ticker := time.NewTicker(ssePingInterval())
 	defer ticker.Stop()
 	ctx := c.Request.Context()
 	for {
@@ -102,7 +122,7 @@ func StreamOrderEvents(c *gin.Context, orderID int) {
 			}
 			writeOrderSSE(c, ev)
 			flusher.Flush()
-		case <-statusTicker.C:
+		case <-statusChan:
 			if o, err := defaultOrderService.GetOrderByID(orderID, 0); err == nil && o != nil {
 				if o.Status != lastStatus {
 					lastStatus = o.Status
