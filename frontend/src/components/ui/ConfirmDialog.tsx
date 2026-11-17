@@ -57,8 +57,8 @@ export default function ConfirmDialog({
 
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" onClick={onCancel}>
-      <div ref={containerRef} onClick={(e) => e.stopPropagation()} className="bg-white rounded-2xl max-w-sm w-full shadow-2xl overflow-hidden" role="alertdialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={descId}>
+    <div className="dialog-backdrop-in fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" onClick={onCancel}>
+      <div ref={containerRef} onClick={(e) => e.stopPropagation()} className="dialog-panel-in bg-white rounded-2xl max-w-sm w-full shadow-2xl overflow-hidden" role="alertdialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={descId}>
         <div className="p-6 text-center">
           <div className={`w-12 h-12 rounded-2xl mx-auto flex items-center justify-center mb-4 ${danger ? 'bg-red-100' : 'bg-amber-100'}`} aria-hidden>
             <AlertTriangle size={24} className={danger ? 'text-red-600' : 'text-amber-600'} />

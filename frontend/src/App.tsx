@@ -18,6 +18,7 @@ import Checkout from './pages/Checkout';
 import Order from './pages/Order';
 import Register from './pages/Register';
 import About from './pages/About';
+import TokenAction from './pages/TokenAction';
 import Offers from './pages/Offers';
 import Locations from './pages/Locations';
 import FAQ from './pages/FAQ';
@@ -151,6 +152,8 @@ function AppRoutes() {
   return (
     <Routes location={location} key={location.pathname}>
       <Route path="/" element={<PageShell><Landing /></PageShell>} />
+      <Route path="/verify-email" element={<PageShell><TokenAction mode="verify-email" /></PageShell>} />
+      <Route path="/reset-password" element={<PageShell><TokenAction mode="reset-password" /></PageShell>} />
       <Route path="/r" element={<PageShell><Layout><Home /></Layout></PageShell>} />
       <Route path="/r/menu" element={<PageShell><Layout><Menu /></Layout></PageShell>} />
       <Route path="/r/menu/item/:id" element={<PageShell><Layout><Product /></Layout></PageShell>} />
@@ -167,6 +170,8 @@ function AppRoutes() {
       <Route path="/r/terms" element={<PageShell><Layout><Terms /></Layout></PageShell>} />
       <Route path="/r/login" element={<PageShell><Layout><Login /></Layout></PageShell>} />
       <Route path="/r/register" element={<PageShell><Layout><Register /></Layout></PageShell>} />
+      <Route path="/r/verify-email" element={<PageShell><TokenAction mode="verify-email" /></PageShell>} />
+      <Route path="/r/reset-password" element={<PageShell><TokenAction mode="reset-password" /></PageShell>} />
       <Route path="/r/account" element={<PageShell><Layout><Account /></Layout></PageShell>} />
       {/* Redirect /r/admin to /admin since /r/admin matches slug route */}
       <Route path="/r/admin" element={<Navigate to="/admin" replace />} />
@@ -186,6 +191,8 @@ function AppRoutes() {
       <Route path="/r/:restaurantSlug/privacy" element={<PageShell><Layout><Privacy /></Layout></PageShell>} />
       <Route path="/r/:restaurantSlug/terms" element={<PageShell><Layout><Terms /></Layout></PageShell>} />
       <Route path="/r/:restaurantSlug/login" element={<PageShell><Layout><Login /></Layout></PageShell>} />
+      <Route path="/r/:restaurantSlug/verify-email" element={<PageShell><TokenAction mode="verify-email" /></PageShell>} />
+      <Route path="/r/:restaurantSlug/reset-password" element={<PageShell><TokenAction mode="reset-password" /></PageShell>} />
       <Route path="/r/:restaurantSlug/account" element={<PageShell><Layout><Account /></Layout></PageShell>} />
       <Route path="/admin" element={<AdminSuspense><AdminPageShell><Admin /></AdminPageShell></AdminSuspense>} />
       <Route path="/admin/catalog" element={<AdminSuspense><AdminPageShell><AdminCatalog /></AdminPageShell></AdminSuspense>} />

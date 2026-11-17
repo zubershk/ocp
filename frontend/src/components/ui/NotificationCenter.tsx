@@ -4,8 +4,9 @@ import {
   X,
   CheckCircle,
 } from 'lucide-react';
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useToast } from '../../context/ToastContext';
+import { useRealtime } from '../../context/RealtimeContext';
 
 export interface Notification {
   id: string;
@@ -18,38 +19,28 @@ export interface Notification {
   actionLabel?: string;
 }
 
-const INITIAL_NOTIFICATIONS: Notification[] = [
-  {
-    id: 'notif-1',
-    title: 'Order #OCP-20261029-0042 delivered',
-    message: 'Customer marked order as delivered. You can now request a review.',
-    type: 'success',
-    read: false,
-    createdAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
-    actionUrl: '/admin/orders',
-    actionLabel: 'View order',
-  },
-  {
-    id: 'notif-2',
-    title: 'New WhatsApp message',
-    message: "919876543210 asked about today's specials.",
-    type: 'info',
-    read: false,
-    createdAt: new Date(Date.now() - 12 * 60 * 1000).toISOString(),
-    actionUrl: '/admin/chats',
-    actionLabel: 'Open chat',
-  },
-  {
-    id: 'notif-3',
-    title: 'Low stock alert',
-    message: 'Mozzarella cheese is running low (3 units left).',
-    type: 'warning',
-    read: true,
-    createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-    actionUrl: '/admin/catalog',
-    actionLabel: 'Restock',
-  },
-];
+// Notifications are populated from the real admin SSE event stream — no fake
+// seed data. The center starts empty and fills as events arrive.
+const MAX_NOTIFICATIONS = 50;
+
+function eventToNotification(ev: { type: string; at: string; data?: Record<string, unknown> }, id: string): Notification | null {
+  const d = ev.data ?? {};
+  const orderNo = d.order_number ? String(d.order_number) : '';
+  switch (ev.type) {
+    case 'order.created':
+    case 'order.new':
+      return { id, title: `New order ${orderNo}`.trim(), message: 'A new order was placed.', type: 'info', read: false, createdAt: ev.at, actionUrl: '/admin', actionLabel: 'View orders' };
+    case 'order.status':
+    case 'order.updated':
+      return { id, title: `Order ${orderNo} updated`.trim(), message: d.status ? `Status: ${String(d.status).replace(/_/g, ' ')}` : undefined, type: 'success', read: false, createdAt: ev.at, actionUrl: '/admin', actionLabel: 'View order' };
+    case 'chat.message':
+      return { id, title: 'New WhatsApp message', message: d.dir === 'out' ? 'You sent a reply.' : 'A customer sent a message.', type: 'info', read: false, createdAt: ev.at, actionUrl: '/admin/chats', actionLabel: 'Open chat' };
+    case 'review.created':
+      return { id, title: 'New review', message: 'A customer left a review awaiting moderation.', type: 'info', read: false, createdAt: ev.at, actionUrl: '/admin/reviews', actionLabel: 'Moderate' };
+    default:
+      return null; // ignore ping/hello and unknown event types
+  }
+}
 
 const typeColor: Record<string, string> = {
   success: 'bg-emerald-50/20 text-emerald-600',
@@ -62,9 +53,20 @@ const dismissingNotifications = new Set<string>();
 
 export function NotificationCenter() {
   const { push } = useToast();
+  const { lastEvent, lastSeq } = useRealtime();
   const [open, setOpen] = useState(false);
-  const [notifications, setNotifications] = useState<Notification[]>(INITIAL_NOTIFICATIONS);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const swipeRefs = useRef<Map<string, { x: number; startX: number }>>(new Map());
+
+  // Convert incoming realtime events into notifications (dedup by lastSeq).
+  const lastSeqRef = useRef(0);
+  useEffect(() => {
+    if (!lastEvent || lastSeq === lastSeqRef.current) return;
+    lastSeqRef.current = lastSeq;
+    const n = eventToNotification(lastEvent, `evt-${lastSeq}`);
+    if (!n) return;
+    setNotifications((prev) => [n, ...prev].slice(0, MAX_NOTIFICATIONS));
+  }, [lastEvent, lastSeq]);
 
   const markRead = useCallback((id: string) => {
     setNotifications((prev) =>

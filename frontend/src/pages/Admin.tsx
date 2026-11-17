@@ -627,7 +627,7 @@ ${bodyHtml}
                 {STATUS_TABS.map((t) => {
                   const count = counts[t.id] ?? 0; const active = tab === t.id;
                   return (
-                    <button key={t.id} onClick={() => setTab(t.id)} className={`px-3 py-1.5 rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 transition-all ${active ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-background hover:text-foreground'}`}>
+                    <button key={t.id} onClick={() => setTab(t.id)} className={`px-3 py-1.5 rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 transition-[background-color,color,box-shadow] duration-150 ease-out ${active ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-background hover:text-foreground'}`}>
                       {t.label} <span className={`px-1.5 py-0.5 rounded-lg text-[10px] font-bold tabular-nums ${active ? 'bg-white/15 text-white' : 'bg-background border border-border text-muted-foreground'}`}>{count}</span>
                     </button>
                   );
@@ -762,7 +762,7 @@ ${bodyHtml}
               const meta = STATUS_META[o.status] ?? STATUS_META.placed;
               const urgent = isUrgent(o);
               return (
-                <Card key={o.id} id={`order-${o.id}`} className={`group stagger-child flex flex-col overflow-hidden transition-all hover:shadow-md hover:-translate-y-[1px] ${urgent ? 'border-red-200 ring-1 ring-red-100' : ''} ${selId === o.id ? 'ring-2 ring-primary' : ''} ${freshIds.has(o.id) ? 'ring-2 ring-emerald-400 order-arrive' : ''}`} style={{ animationDelay: `${i * 30}ms` }}>
+                <Card key={o.id} id={`order-${o.id}`} className={`group stagger-child flex flex-col overflow-hidden transition-[box-shadow,transform] duration-200 ease-out hover:shadow-md hover:-translate-y-px ${urgent ? 'border-red-200 ring-1 ring-red-100' : ''} ${selId === o.id ? 'ring-2 ring-primary' : ''} ${freshIds.has(o.id) ? 'ring-2 ring-emerald-400 order-arrive' : ''}`} style={{ animationDelay: `${i * 30}ms` }}>
                   {/* accent */}
                   <div className={`h-1 w-full ${urgent ? 'bg-red-500' : o.status === 'placed' ? 'bg-orange-500' : o.status === 'ready' ? 'bg-emerald-500' : 'bg-primary'}`} />
                   <CardContent className="p-5 flex flex-col flex-1">
