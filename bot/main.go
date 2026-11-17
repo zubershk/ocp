@@ -23,7 +23,38 @@ import (
 
 const maxRequestBodySize = 1 << 20 // 1 MB
 
+// runMigrationsOnly applies migrations + bootstrap seeds then exits. Used by
+// the one-shot init container so app replicas start with SKIP_MIGRATIONS=1.
+func runMigrationsOnly() {
+	for _, p := range []string{"bot/.env", ".env", "../bot/.env"} {
+		if err := godotenv.Load(p); err == nil {
+			break
+		}
+	}
+	cfg := config.Load()
+	if err := cfg.Validate(); err != nil {
+		log.Fatal(err)
+	}
+	if err := database.Init(cfg); err != nil {
+		log.Fatalf("init db: %v", err)
+	}
+	defer database.Close()
+	if err := database.RunMigrations(); err != nil {
+		log.Fatalf("migrations: %v", err)
+	}
+	admin.EnsureOwnerSeed(cfg)
+	admin.EnsureTenantBootstrap(cfg)
+	services.LoadBusinessConfig()
+	log.Println("migrations + bootstrap complete")
+}
+
 func main() {
+	// One-shot migration/init mode (used by the bot-init compose service so
+	// app replicas never race DDL on startup).
+	if len(os.Args) > 1 && os.Args[1] == "-run-migrations-only" {
+		runMigrationsOnly()
+		return
+	}
 	// Load .env — try repo root then bot/ so `go run ./bot` and systemd both work.
 	// Production systemd supplies EnvironmentFile, so this is best-effort for dev.
 	for _, p := range []string{"bot/.env", ".env", "../bot/.env"} {
@@ -46,14 +77,18 @@ func main() {
 	}
 	defer database.Close()
 
-	// Run migrations
-	if err := database.RunMigrations(); err != nil {
-		log.Fatalf("Failed to run migrations: %v", err)
+	// Migrations + seeds are normally run by the one-shot bot-init container.
+	// SKIP_MIGRATIONS=1 on app replicas; local single-node installs run them here.
+	if os.Getenv("SKIP_MIGRATIONS") != "1" {
+		if err := database.RunMigrations(); err != nil {
+			log.Fatalf("Failed to run migrations: %v", err)
+		}
+		admin.EnsureOwnerSeed(cfg)
+		admin.EnsureTenantBootstrap(cfg)
 	}
-	// Seed owner from BOT_ADMIN_KEY if no admin_users yet (SaaS bootstrap)
-	admin.EnsureOwnerSeed(cfg)
-	// Ensure bootstrap tenant rows exist using env-driven identity (idempotent; mirrors 021)
-	admin.EnsureTenantBootstrap(cfg)
+
+	// Cross-replica event fan-out via PostgreSQL LISTEN/NOTIFY (configurable).
+	services.StartPubSub()
 
 	// Load business config from DB (sizes, payments, icons, delivery fee, etc.)
 	services.LoadBusinessConfig()
@@ -110,12 +145,17 @@ func main() {
 	// Initialize admin handler
 	adminHandler := admin.NewAdminHandler(menuService, orderService, posOrderService, evolutionClient, cfg)
 	admin.SetBotMessageService(botMessageService)
+	// Start the durable broadcast worker (async queue, multi-replica safe).
+	adminHandler.StartBroadcastWorker()
 
 	// Site settings handler
 	siteHandler := handlers.NewSiteSettingsHandler()
 	reviewHandler := handlers.NewReviewHandler()
 	provisionHandler := handlers.NewProvisioningHandler()
 	contactHandler := handlers.NewContactHandler()
+
+	// Structured logging (JSON in production; request IDs + tenant context).
+	handlers.InitLogger()
 
 	// Setup Gin router
 	gin.SetMode(gin.ReleaseMode)
@@ -139,6 +179,8 @@ func main() {
 		c.Header("X-Request-ID", rid)
 		c.Next()
 	})
+	router.Use(handlers.StructuredLogging())
+	router.Use(handlers.ETagMiddleware())
 	// Enforce max request body size to prevent OOM via large payloads.
 	// Image uploads get a higher cap; UploadImage enforces 5MB itself.
 	router.Use(func(c *gin.Context) {
@@ -153,7 +195,17 @@ func main() {
 		c.Next()
 	})
 	router.Use(handlers.SecurityHeaders())
+	// Observability: per-route request/latency/error metrics + DB pool stats.
+	handlers.SetDBStatsProvider(func() (int, int) {
+		s := database.DB.Stats()
+		return s.InUse, s.MaxOpenConnections
+	})
+	handlers.SetSSEProvider(services.SSESubscriberCount)
+	router.Use(handlers.MetricsMiddleware())
 	router.Use(services.TenantResolverMiddleware(cfg.BaseDomain, cfg.TrustedProxies))
+	if os.Getenv("METRICS_ENABLED") != "0" {
+		router.GET("/metrics", handlers.MetricsHandler)
+	}
 	// Open-source media — tenant-aware: ./uploads/<restaurant_id>/<file>
 	_ = os.MkdirAll("./uploads", 0755)
 	router.Static("/uploads", "./uploads")
@@ -234,7 +286,7 @@ func main() {
 		apiGroup.POST("/auth/change-password", handlers.RateLimit(10, time.Minute), authHandler.ChangePassword, handlers.RequireCustomerAuth())
 		apiGroup.POST("/auth/request-password-reset", handlers.RateLimit(3, time.Minute), authHandler.RequestPasswordReset)
 		apiGroup.POST("/auth/reset-password", handlers.RateLimit(10, time.Minute), authHandler.ResetPassword)
-		apiGroup.POST("/auth/request-email-verification", handlers.RateLimit(3, time.Minute), authHandler.RequestEmailVerification, handlers.RequireCustomerAuth())
+		apiGroup.POST("/auth/request-email-verification", handlers.RateLimit(3, time.Minute), handlers.RequireCustomerAuth(), authHandler.RequestEmailVerification)
 		apiGroup.POST("/auth/verify-email", handlers.RateLimit(10, time.Minute), authHandler.VerifyEmail)
 		apiGroup.GET("/auth/me", authHandler.Me)
 		apiGroup.PATCH("/auth/me", authHandler.UpdateMe, handlers.RequireCustomerAuth())
@@ -244,11 +296,10 @@ func main() {
 
 	// Admin endpoints (protected by admin key)
 	adminGroup := router.Group("/admin")
-	// Failed-auth rate limit: every rejected admin request still costs
-	// DB lookups before rejection, so cap attempts to prevent brute-force
-	// of BOT_ADMIN_KEY and DB pool exhaustion. SSE/polling endpoints that
-	// pass admin key are unaffected (they succeed, not count against limit).
-	adminGroup.Use(handlers.RateLimit(30, time.Minute))
+	// NO blanket request limit here: the dashboard polls several endpoints
+	// and holds a long-lived SSE stream, so a per-request budget throttles
+	// legitimate use. Brute-force is prevented inside RequireAdminKey via a
+	// FAILED-AUTH-ONLY limiter (bad keys capped, valid keys never counted).
 	adminGroup.Use(adminHandler.RequireAdminKey())
 	// Tenant context for every admin call. Handlers ignore these keys
 	// until PR 3 scopes them; behavior is unchanged in PR 2.
@@ -256,6 +307,10 @@ func main() {
 	{
 		adminGroup.GET("/health", adminHandler.Health)
 		adminGroup.GET("/tenant/context", adminHandler.GetTenantContext)
+		// Onboarding progress for the authenticated tenant (handlers existed
+		// but were never routed, so self-service setup could not persist steps).
+		adminGroup.GET("/onboarding", provisionHandler.GetOnboarding)
+		adminGroup.PUT("/onboarding", adminHandler.RequireRole("owner", "manager"), provisionHandler.UpdateOnboarding)
 		adminGroup.GET("/menu", adminHandler.GetMenu)
 		adminGroup.POST("/menu", adminHandler.RequireRole("owner", "manager"), adminHandler.RequirePermission("menu.update"), adminHandler.CreateMenuItem)
 		adminGroup.PUT("/menu/:id", adminHandler.RequireRole("owner", "manager"), adminHandler.RequirePermission("menu.update"), adminHandler.UpdateMenuItem)
@@ -283,12 +338,14 @@ func main() {
 		adminGroup.DELETE("/users/:id", adminHandler.RequireRole("owner"), adminHandler.DeleteAdminUser)
 		adminGroup.GET("/audit", adminHandler.RequireRole("owner", "manager"), adminHandler.GetAuditLog)
 		adminGroup.GET("/me", adminHandler.GetMeAdmin)
+		adminGroup.POST("/me/rotate-key", adminHandler.RotateAdminKey)
 		adminGroup.GET("/orders", adminHandler.RequirePermission("orders.view"), adminHandler.GetOrders)
 		adminGroup.GET("/orders/:id", adminHandler.RequirePermission("orders.view"), adminHandler.GetOrder)
 		adminGroup.PATCH("/orders/:id/status", adminHandler.RequireRole("owner", "manager", "kitchen"), adminHandler.RequirePermission("orders.update"), adminHandler.UpdateOrderStatus)
 		// Campaign runner integration
 		adminGroup.GET("/customers", adminHandler.RequireRole("owner", "manager"), adminHandler.ListCustomers)
 		adminGroup.POST("/broadcast/send", adminHandler.RequireRole("owner", "manager"), adminHandler.BroadcastSend)
+		adminGroup.GET("/broadcast/jobs/:id", adminHandler.BroadcastJobStatus)
 		// Site settings admin endpoints
 		adminGroup.GET("/site-settings", siteHandler.GetSiteSettingsAdmin)
 		adminGroup.PUT("/site-settings/:key", siteHandler.UpdateSiteSetting)
