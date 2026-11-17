@@ -12,6 +12,7 @@ FROM nginx:1.27.1-alpine3.20@sha256:a5127daff3d6f4606be3100a252419bfa84fd6ee5cd7
 WORKDIR /usr/share/nginx/html
 COPY --from=builder /app/dist .
 COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
+COPY frontend/nginx-main.conf /etc/nginx/nginx.conf
 EXPOSE 80
 USER nginx
 CMD ["nginx", "-g", "daemon off;"]

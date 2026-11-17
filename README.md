@@ -88,7 +88,7 @@ curl -fsSL https://raw.githubusercontent.com/zubershk/ocp/master/install.sh | ba
 
 | Layer | Technology |
 |-------|-----------|
-| Backend | Go 1.25 + Gin web framework |
+| Backend | Go 1.27.3 + Gin web framework |
 | Database | PostgreSQL 16.4 (alpine, compose) — requires 16+ |
 | Frontend | React 19 + TypeScript + Vite |
 | Styling | Tailwind CSS + shadcn/ui (admin dashboard) |
@@ -143,7 +143,7 @@ Tech-OCP/
 │   │   ├── live_chat_service.go  # WhatsApp message persistence
 │   │   ├── evolution_client.go   # Evolution GO HTTP client
 │   │   └── whatsapp_cart_service.go  # Persistent WhatsApp cart
-│   ├── migrations/               # 32 SQL migration files (001→032)
+│   ├── migrations/               # 51 SQL migration files (001→051)
 │   ├── uploads/                  # Menu item product photos
 │   ├── .env.example              # Environment template
 │   └── go.mod / go.sum
@@ -261,7 +261,7 @@ createdb ocp
 # Migrations run automatically when the bot starts
 ```
 
-The bot runs 32 migrations (001→032) on startup covering:
+The bot runs 51 migrations (001→051) on startup covering:
 
 | Migration | What it creates |
 |-----------|----------------|
@@ -383,6 +383,24 @@ Set `CORS_ALLOWED_ORIGINS` in `bot/.env` to include your Vercel domain.
 
 ---
 
+## Scaling & operations
+
+The compose stack is horizontally scalable. All cross-replica shared state lives in PostgreSQL, so no sticky sessions are needed:
+
+- **PgBouncer** (transaction pooling) sits in front of Postgres so `BOT_REPLICAS` can grow without exhausting connections. Point clients at `pgbouncer:6432`.
+- **One-shot `bot-init`** runs migrations + bootstrap seeds before replicas start; app replicas set `SKIP_MIGRATIONS=1`. The advisory lock is held on a dedicated connection with a configurable `MIGRATION_LOCK_TIMEOUT_SECS`.
+- **`bot-lb`** round-robins across replicas with SSE-safe proxy timeouts; the frontend nginx proxies to it (`worker_connections 8192`).
+- **Cross-replica realtime** uses PostgreSQL `LISTEN/NOTIFY` (`PG_PUBSUB_ENABLED`): SSE events pushed on one replica reach subscribers on all others.
+- **Phone-level serialisation** uses advisory locks (`PG_PHONE_LOCKS_ENABLED`) so duplicate WhatsApp taps on different replicas cannot double-create orders.
+- **Rate limits are shared** (`RATE_LIMIT_BACKEND=postgres`) so limits hold across replicas; set `TRUSTED_PROXIES` to your LB subnet so `ClientIP()` is correct.
+- **Broadcasts are async**: `POST /admin/broadcast/send` returns `202 {job_id}` immediately; a durable DB queue with bounded workers (`BROADCAST_WORKERS`) drains it, and `GET /admin/broadcast/jobs/:id` reports status. The campaign runner polls automatically.
+- **Tenant/domain resolution is cached** (`TENANT_CACHE_TTL_SECS`); order SSE no longer polls the DB every 5s (`ORDER_STREAM_RESYNC_SECS=0` disables it).
+- **Observability**: `GET /metrics` exposes Prometheus-format counters (requests/latency/5xx by route, DB pool usage, rate-limit rejects, SSE subscribers, goroutines). Disable with `METRICS_ENABLED=0`.
+- **Backups**: schedule `scripts/backup.sh` (retention `BACKUP_RETENTION_DAYS`, optional `BACKUP_S3_BUCKET`); restore with `scripts/restore.sh`. Both are env-driven.
+- **Admin key rotation**: `POST /admin/me/rotate-key` rotates a DB user's own key (returned once). The env `BOT_ADMIN_KEY` is break-glass only.
+
+All new knobs are documented in `.env.example` (root) and `bot/.env.example`.
+
 ## Security
 
 The codebase has been audited and hardened for production use:
@@ -393,7 +411,7 @@ The codebase has been audited and hardened for production use:
   - `/auth/send-otp` — 3 requests/min
   - `/auth/verify-otp` — 10 requests/min
   - `/api/*` — 120 requests/min
-  - `/admin/*` — 60 requests/min
+  - `/admin/*` — failed admin-key attempts only (10/60s by default); legitimate polling is never throttled
   - `/api/orders` — 20 requests/min
   - `/webhook/*` — 300 requests/min
 - **OTP verification** — transactional with `SELECT ... FOR UPDATE` to prevent brute-force race conditions; 3 max attempts, 30s cooldown between sends

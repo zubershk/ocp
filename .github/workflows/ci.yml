@@ -24,6 +24,20 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  # ── SAST (CodeQL) — static analysis for Go + JS/TS ──
+  sast:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: go, javascript-typescript
+      - uses: github/codeql-action/autobuild@v3
+      - uses: github/codeql-action/analyze@v3
+
   # ── Go bot ──
   bot:
     runs-on: ubuntu-latest
@@ -60,11 +74,13 @@ jobs:
         run: go vet ./...
       - name: Go vulnerability check
         working-directory: bot
-        continue-on-error: true
+        # Fail closed: a known-vulnerable dependency must block the merge.
+        # Pinned version (no @latest supply-chain risk). -scan module focuses
+        # on our dependencies; stdlib issues are avoided by pinning Go 1.27.3.
         run: |
-          go install golang.org/x/vuln/cmd/govulncheck@latest
+          go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
           export PATH=$(go env GOPATH)/bin:$PATH
-          govulncheck ./...
+          govulncheck -scan module ./...
       - name: Test bot (strict tenant isolation)
         working-directory: bot
         env:
@@ -104,15 +120,14 @@ jobs:
         run: npm ci --ignore-scripts
       - name: Audit
         working-directory: frontend
-        # Retry on registry outages; fail open only when the endpoint itself
-        # is down (real findings still fail). Advisories are also covered
-        # by Dependabot PRs, so a down endpoint must not block the repo.
+        # Retry transient registry outages, but FAIL CLOSED: a vulnerable
+        # release must never ship just because the audit endpoint was down.
         run: |
           for i in 1 2 3; do
-            out=$(npm audit --omit=dev --audit-level=high 2>&1) && { echo "$out"; break; }
+            out=$(npm audit --omit=dev --audit-level=high 2>&1) && { echo "$out"; exit 0; }
             if echo "$out" | grep -q "audit endpoint returned an error"; then
-              echo "WARNING: npm audit endpoint unavailable (attempt $i/3)"
-              [ "$i" = "3" ] && { echo "$out"; echo "Failing open with warning"; break; }
+              echo "npm audit endpoint unavailable (attempt $i/3)"
+              [ "$i" = "3" ] && { echo "$out"; echo "ERROR: audit endpoint unavailable after 3 attempts — failing closed"; exit 1; }
               sleep 15
             else
               echo "$out"; exit 1
@@ -148,15 +163,13 @@ jobs:
         run: npm ci --ignore-scripts
       - name: Audit
         working-directory: campaign-runner
-        # Retry on registry outages; fail open only when the endpoint itself
-        # is down (real findings still fail). Advisories are also covered
-        # by Dependabot PRs, so a down endpoint must not block the repo.
+        # Retry transient registry outages, but FAIL CLOSED (see frontend).
         run: |
           for i in 1 2 3; do
-            out=$(npm audit --omit=dev --audit-level=high 2>&1) && { echo "$out"; break; }
+            out=$(npm audit --omit=dev --audit-level=high 2>&1) && { echo "$out"; exit 0; }
             if echo "$out" | grep -q "audit endpoint returned an error"; then
-              echo "WARNING: npm audit endpoint unavailable (attempt $i/3)"
-              [ "$i" = "3" ] && { echo "$out"; echo "Failing open with warning"; break; }
+              echo "npm audit endpoint unavailable (attempt $i/3)"
+              [ "$i" = "3" ] && { echo "$out"; echo "ERROR: audit endpoint unavailable after 3 attempts — failing closed"; exit 1; }
               sleep 15
             else
               echo "$out"; exit 1

@@ -27,6 +27,7 @@ secrets/
 bot/bot-ocp
 bot/*.exe
 bot-ocp
+*.bak-pre-rebuild
 frontend/dist/
 frontend/node_modules/
 bot/vendor/

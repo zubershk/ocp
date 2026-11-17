@@ -8,6 +8,7 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+    command: ["postgres", "-c", "max_connections=${POSTGRES_MAX_CONNECTIONS:-200}"]
     environment:
       POSTGRES_DB: ocp
       POSTGRES_USER: ocp
@@ -21,6 +22,42 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: "${PG_CPU_LIMIT:-2.0}"
+          memory: "${PG_MEM_LIMIT:-2G}"
+
+  # ── PgBouncer (transaction pooling — lets bot replicas scale past PG connection cap) ──
+  pgbouncer:
+    image: edoburu/pgbouncer:v1.21.0-p1 # TF-PIN: pin to digest in your registry before production
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    environment:
+      DATABASE_URL: postgresql://ocp:${DB_PASSWORD:?Set DB_PASSWORD in .env}@postgres:5432/ocp
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: ${PGBOUNCER_MAX_CLIENT_CONN:-2000}
+      DEFAULT_POOL_SIZE: ${PGBOUNCER_POOL_SIZE:-20}
+      RESERVE_POOL_SIZE: ${PGBOUNCER_RESERVE_POOL:-5}
+      SERVER_IDLE_TIMEOUT: 600
+      AUTH_TYPE: md5
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "psql -h 127.0.0.1 -p 6432 -U ocp -d ocp -c 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: "256M"
 
   # ── Evolution GO (WhatsApp API) ──
   evolution:
@@ -62,13 +99,45 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "${EVOLUTION_CPU_LIMIT:-2.0}"
+          memory: "${EVOLUTION_MEM_LIMIT:-2G}"
 
-  # ── OCP Bot (Go API) ──
+  # ── One-shot migrations/seeds (run before app replicas start) ──
+  bot-init:
+    build:
+      context: .
+      dockerfile: bot/Dockerfile
+    restart: "no"
+    command: ["/app/bot-ocp", "-run-migrations-only"]
+    environment:
+      - BOT_DATABASE_URL=postgresql://ocp:${DB_PASSWORD:?Set DB_PASSWORD in .env}@pgbouncer:6432/ocp?sslmode=disable
+      - BOT_ADMIN_KEY=${BOT_ADMIN_KEY:?Set BOT_ADMIN_KEY in .env}
+      - INITIAL_ORG_NAME=${INITIAL_ORG_NAME:-}
+      - INITIAL_ORG_SLUG=${INITIAL_ORG_SLUG:-}
+      - INITIAL_CURRENCY=${INITIAL_CURRENCY:-INR}
+      - INITIAL_TIMEZONE=${INITIAL_TIMEZONE:-UTC}
+      - INITIAL_OUTLET_NAME=${INITIAL_OUTLET_NAME:-Main Outlet}
+      - TEMPLATE_RESTAURANT_SLUG=${TEMPLATE_RESTAURANT_SLUG:-}
+      - GIN_MODE=release
+    depends_on:
+      pgbouncer:
+        condition: service_healthy
+
+  # ── OCP Bot (Go API) — horizontally scalable ──
   bot:
     build:
       context: .
       dockerfile: bot/Dockerfile
     restart: unless-stopped
+    deploy:
+      replicas: ${BOT_REPLICAS:-1}
+      resources:
+        limits:
+          cpus: "${BOT_CPU_LIMIT:-1.0}"
+          memory: "${BOT_MEM_LIMIT:-512M}"
     logging:
       driver: json-file
       options:
@@ -76,7 +145,8 @@ services:
         max-file: "3"
     environment:
       - BOT_PORT=8090
-      - BOT_DATABASE_URL=postgresql://ocp:${DB_PASSWORD:?Set DB_PASSWORD in .env}@postgres:5432/ocp?sslmode=${PGSSLMODE:-disable}
+      - BOT_DATABASE_URL=postgresql://ocp:${DB_PASSWORD:?Set DB_PASSWORD in .env}@pgbouncer:6432/ocp?sslmode=disable
+      - SKIP_MIGRATIONS=1
       - EVOLUTION_API_URL=http://evolution:8080
       - EVOLUTION_API_KEY=${EVOLUTION_API_KEY:-}
       - EVOLUTION_INSTANCE=${EVOLUTION_INSTANCE:-OCP}
@@ -92,19 +162,67 @@ services:
       - BASE_DOMAIN=${BASE_DOMAIN:-ocp.app}
       - TRUSTED_PROXIES=${TRUSTED_PROXIES:-}
       - OTP_PEPPER=${OTP_PEPPER:-}
-    ports:
-      - "8090:8090"
+      - REDIS_URL=${REDIS_URL:-}
+      - RATE_LIMIT_BACKEND=${RATE_LIMIT_BACKEND:-postgres}
+      - TENANT_CACHE_TTL_SECS=${TENANT_CACHE_TTL_SECS:-300}
+      - BIZ_CONFIG_CACHE_TTL_SECS=${BIZ_CONFIG_CACHE_TTL_SECS:-60}
+      - PG_PUBSUB_ENABLED=${PG_PUBSUB_ENABLED:-true}
+      - PG_PHONE_LOCKS_ENABLED=${PG_PHONE_LOCKS_ENABLED:-true}
+      - BROADCAST_ASYNC=${BROADCAST_ASYNC:-true}
+      - BROADCAST_WORKERS=${BROADCAST_WORKERS:-8}
+      - ORDER_STREAM_RESYNC_SECS=${ORDER_STREAM_RESYNC_SECS:-0}
+      - METRICS_ENABLED=${METRICS_ENABLED:-1}
+      - LOG_FORMAT=${LOG_FORMAT:-json}
+      - ETAG_ENABLED=${ETAG_ENABLED:-1}
+      - STORAGE_BACKEND=${STORAGE_BACKEND:-local}
+      - STORAGE_ENDPOINT=${STORAGE_ENDPOINT:-}
+      - STORAGE_BUCKET=${STORAGE_BUCKET:-}
+      - STORAGE_REGION=${STORAGE_REGION:-us-east-1}
+      - STORAGE_ACCESS_KEY=${STORAGE_ACCESS_KEY:-}
+      - STORAGE_SECRET_KEY=${STORAGE_SECRET_KEY:-}
+      - STORAGE_USE_SSL=${STORAGE_USE_SSL:-1}
+      - STORAGE_PUBLIC_URL=${STORAGE_PUBLIC_URL:-}
+    expose:
+      - "8090"
     volumes:
       - bot_uploads:/app/uploads
     depends_on:
-      postgres:
+      bot-init:
+        condition: service_completed_successfully
+      pgbouncer:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8090/health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8090/ready || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 5
       start_period: 10s
+
+  # ── Load balancer (round-robin across bot replicas; sticky not required) ──
+  bot-lb:
+    image: nginx:1.27-alpine # TF-PIN: pin to digest in your registry before production
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    volumes:
+      - ./bot-lb.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "8090:80"
+    depends_on:
+      - bot
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:80/health || exit 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: "128M"
 
   # ── Frontend (React + nginx) ──
   frontend:
@@ -122,7 +240,7 @@ services:
     ports:
       - "3000:80"
     depends_on:
-      bot:
+      bot-lb:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:80/health || exit 1"]
@@ -130,6 +248,11 @@ services:
       timeout: 3s
       retries: 3
       start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: "256M"
 
   # ── Campaign Runner ──
   campaign:
@@ -139,6 +262,10 @@ services:
     restart: unless-stopped
     deploy:
       replicas: 1
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: "512M"
     logging:
       driver: json-file
       options:
@@ -146,16 +273,22 @@ services:
         max-file: "3"
     environment:
       - PORT=3001
-      - BOT_API_URL=http://bot:8090
+      - BOT_API_URL=http://bot-lb:80
       - BOT_ADMIN_KEY=${BOT_ADMIN_KEY:?Set BOT_ADMIN_KEY in .env}
       - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:5174,http://localhost:3001,http://localhost:3000,http://localhost}
+      - BROADCAST_POLL_TIMEOUT_MS=${BROADCAST_POLL_TIMEOUT_MS:-600000}
+      - BROADCAST_POLL_INTERVAL_MS=${BROADCAST_POLL_INTERVAL_MS:-1000}
+      - CAMPAIGN_DATABASE_URL=postgresql://ocp:${DB_PASSWORD:?Set DB_PASSWORD in .env}@pgbouncer:6432/ocp?sslmode=disable
+      - CAMPAIGN_PG_ENABLED=${CAMPAIGN_PG_ENABLED:-1}
+      - CAMPAIGN_PG_REFRESH_MS=${CAMPAIGN_PG_REFRESH_MS:-5000}
+      - CAMPAIGN_ENCRYPTION_KEY=${CAMPAIGN_ENCRYPTION_KEY:-}
     ports:
       - "3001:3001"
     volumes:
       - campaign_data:/app/data
       - campaign_uploads:/app/uploads
     depends_on:
-      bot:
+      bot-lb:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:3001/health || exit 1"]

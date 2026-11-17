@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import multer from 'multer';
 import crypto from 'crypto';
+import pg from 'pg';
 import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync, unlinkSync, openSync, closeSync, fsyncSync, realpathSync } from 'fs';
 import { join, dirname, resolve, extname, basename, sep } from 'path';
 import { fileURLToPath } from 'url';
@@ -31,6 +32,16 @@ function loadEnvFile(p) {
   }
 }
 for (const p of [join(ROOT, '..', 'bot', '.env'), join(ROOT, '..', '.env'), join(ROOT, '.env')]) loadEnvFile(p);
+
+// ── Shared persistence configuration ──
+// campaign_state in Postgres is the source of truth when enabled (default),
+// so restarts and multiple replicas never lose state. CAMPAIGN_PG_ENABLED=false
+// keeps the legacy data/*.json files for local development.
+const CAMPAIGN_DATABASE_URL = process.env.CAMPAIGN_DATABASE_URL || process.env.BOT_DATABASE_URL || 'postgresql://ocp:password@localhost:5432/ocp?sslmode=disable';
+const CAMPAIGN_PG_ENABLED = String(process.env.CAMPAIGN_PG_ENABLED ?? 'true').toLowerCase() !== 'false';
+// Fixed advisory-lock key for the scheduler (distinct from bot migrations'
+// 87654321). Kept inside the JS safe-integer range for pg's int8 binding.
+const SCHEDULER_LOCK_KEY = 765432109876543;
 
 // Env-only bot configuration (SSRF-safe, no UI override)
 // Default http://localhost:8090 for local dev; docker-compose overrides with http://bot:8090
@@ -188,7 +199,13 @@ function encryptJson(data) {
 function decryptJson(token) {
   return JSON.parse(decryptValue(token));
 }
-// ── Data helpers (hardened JSON) ──
+// ── Data helpers (in-memory cache + Postgres write-through) ──
+// Replaces the old single-replica assumption ("data/*.json is owned by one
+// process; two containers sharing the volume can lost-update"). State now
+// lives in shared Postgres campaign_state: replicas hydrate on boot, refresh
+// periodically, and serialize their writes per key. load()/save() stay
+// synchronous so every route and helper is unchanged. With PG disabled the
+// legacy hardened JSON files are used for single-process local dev.
 function safeParse(text, fb) {
   try {
     return JSON.parse(text, (k, v) => (k === '__proto__' || k === 'constructor' || k === 'prototype' ? undefined : v));
@@ -196,49 +213,52 @@ function safeParse(text, fb) {
     throw e;
   }
 }
-function load(name, fb = []) {
-  if (!/^[a-z_]+$/.test(name)) throw new Error('invalid store');
-  const p = join(DATA_DIR, `${name}.json`);
-  if (!existsSync(p)) return fb;
-  try {
-    const raw = readFileSync(p, 'utf-8');
-    let data;
-    if (ENCRYPTED_STORES.has(name) && ENC_KEY) {
-      // Try encrypted first, fall back to plaintext migration
-      try {
-        data = decryptJson(raw);
-      } catch {
-        // Existing plaintext file: parse then re-save encrypted
-        data = safeParse(raw, null);
-        if (data === null || data === undefined) throw new Error('empty');
-        try { save(name, data); } catch {}
-      }
-    } else {
-      data = safeParse(raw, null);
-    }
-    if (data === null || data === undefined) throw new Error('empty');
-    return data;
-  } catch (e) {
-    // corrupt recovery: backup, return fallback, log
-    try {
-      const bak = `${p}.corrupt-${Date.now()}.bak`;
-      renameSync(p, bak);
-      console.error(JSON.stringify({ ts: new Date().toISOString(), op: 'load-corrupt', store: name, backup: bak }));
-    } catch {}
-    // do not erase state with defaults silently for critical stores; return fallback but caller logs
-    if (Array.isArray(fb)) return fb;
-    if (typeof fb === 'object' && fb !== null) return fb;
-    return fb;
+const STORES = ['settings', 'customers', 'customer_tags', 'campaigns', 'invalid_phones', 'media', 'templates'];
+const STORE_CACHE = new Map();   // name -> parsed value (decrypted in memory)
+const storeMeta = new Map();     // name -> { chain, pending, lastWritten }
+let pgClient = null;             // dedicated client for state reads/writes
+let refreshTimer = null;
+
+function scrubSettings(obj) {
+  // Legacy settings.json held secrets; never keep them in the shared store.
+  if (obj && typeof obj === 'object' && !Array.isArray(obj) && ('botAdminKey' in obj || 'botApiUrl' in obj)) {
+    const { botAdminKey: _k, botApiUrl: _u, ...rest } = obj;
+    return rest;
   }
+  return obj;
 }
-function save(name, data) {
-  if (!/^[a-z_]+$/.test(name)) throw new Error('invalid store');
+function decodeStoreValue(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  if (typeof raw.enc === 'string') {
+    if (!ENC_KEY) throw new Error('encrypted store but no encryption key');
+    return scrubSettings(decryptJson(raw.enc));
+  }
+  return raw.data === undefined ? null : scrubSettings(raw.data);
+}
+function encodeStoreValue(name, data) {
+  // Encrypt PII at rest in Postgres just as the JSON files were encrypted.
+  return (ENCRYPTED_STORES.has(name) && ENC_KEY) ? { enc: encryptJson(data) } : { data };
+}
+function decodeFileValue(name, raw) {
+  let value;
+  if (ENCRYPTED_STORES.has(name) && ENC_KEY) {
+    try {
+      value = decryptJson(raw);
+    } catch {
+      // Existing plaintext file: parse it; hydration re-saves it encrypted.
+      value = safeParse(raw, null);
+    }
+  } else {
+    value = safeParse(raw, null);
+  }
+  if (value === null || value === undefined) throw new Error('empty');
+  return scrubSettings(value);
+}
+function saveFileSync(name, data) {
   const p = join(DATA_DIR, `${name}.json`);
   const tmp = `${p}.${process.pid}.${Date.now()}.${crypto.randomBytes(4).toString('hex')}.tmp`;
   let json = JSON.stringify(data, null, 2);
-  if (ENCRYPTED_STORES.has(name) && ENC_KEY) {
-    json = encryptJson(data);
-  }
+  if (ENCRYPTED_STORES.has(name) && ENC_KEY) json = encryptJson(data);
   const fd = openSync(tmp, 'w', 0o600);
   try {
     writeFileSync(fd, json);
@@ -252,24 +272,143 @@ function save(name, data) {
     try { fsyncSync(dfd); } finally { closeSync(dfd); }
   } catch {}
 }
-function uid() { return crypto.randomUUID(); }
-
-// Startup: strip legacy secrets from data/settings.json (never persist keys at rest).
-// Single-replica assumption: data/*.json is owned by one process; two containers
-// sharing the volume can lost-update (documented limitation, no Postgres per scope).
-try {
-  const sp = join(DATA_DIR, 'settings.json');
-  if (existsSync(sp)) {
-    try {
-      const raw = safeParse(readFileSync(sp, 'utf-8'), null);
-      if (raw && typeof raw === 'object' && !Array.isArray(raw) && ('botAdminKey' in raw || 'botApiUrl' in raw)) {
-        const { botAdminKey: _k, botApiUrl: _u, ...rest } = raw;
-        save('settings', rest);
-        clog(null, 'settings-secrets-scrubbed', {});
-      }
-    } catch {}
+function load(name, fb = []) {
+  if (!/^[a-z_]+$/.test(name)) throw new Error('invalid store');
+  return STORE_CACHE.has(name) ? STORE_CACHE.get(name) : fb;
+}
+function save(name, data) {
+  if (!/^[a-z_]+$/.test(name)) throw new Error('invalid store');
+  STORE_CACHE.set(name, data);
+  const meta = storeMeta.get(name) || { chain: Promise.resolve(), pending: false, lastWritten: 0 };
+  meta.pending = true;
+  meta.lastWritten = Date.now();
+  storeMeta.set(name, meta);
+  if (!pgClient) {
+    // Legacy dev path: synchronous durable write, no async work to flush.
+    try { saveFileSync(name, data); } catch (e) {
+      console.error(JSON.stringify({ ts: new Date().toISOString(), op: 'store-write-failed', store: name, error: String(e.message || e) }));
+    }
+    meta.pending = false;
+    return;
   }
-} catch {}
+  const payload = JSON.stringify(encodeStoreValue(name, data));
+  // Serialize per key: an older write can never land after a newer one.
+  meta.chain = meta.chain.then(async () => {
+    try {
+      await pgClient.query(
+        `INSERT INTO campaign_state (key, value, updated_at) VALUES ($1, $2::jsonb, NOW())
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+        [name, payload],
+      );
+      meta.lastWritten = Date.now();
+    } catch (e) {
+      console.error(JSON.stringify({ ts: new Date().toISOString(), op: 'store-write-failed', store: name, error: String(e.message || e) }));
+      // Last resort: keep a durable local copy so a crash cannot lose the write.
+      try { saveFileSync(name, data); } catch {}
+    } finally {
+      meta.pending = false;
+    }
+  });
+}
+async function flushStores() {
+  await Promise.all([...storeMeta.values()].map(m => m.chain.catch(() => {})));
+}
+function corruptBackup(name, err) {
+  const p = join(DATA_DIR, `${name}.json`);
+  try {
+    const bak = `${p}.corrupt-${Date.now()}.bak`;
+    renameSync(p, bak);
+    console.error(JSON.stringify({ ts: new Date().toISOString(), op: 'load-corrupt', store: name, backup: bak, error: String(err?.message || err) }));
+  } catch {}
+}
+function hydrateFrom(rows) {
+  const seen = new Set();
+  for (const row of rows) {
+    try {
+      const value = decodeStoreValue(row.value);
+      if (value === null || value === undefined) continue;
+      STORE_CACHE.set(row.key, value);
+      storeMeta.set(row.key, { chain: Promise.resolve(), pending: false, lastWritten: Date.now() });
+      seen.add(row.key);
+    } catch (e) {
+      console.error(JSON.stringify({ ts: new Date().toISOString(), op: 'store-decode-failed', store: row.key, error: String(e.message || e) }));
+    }
+  }
+  return seen;
+}
+function hydrateFromFiles(seen = new Set()) {
+  for (const name of STORES) {
+    if (seen.has(name)) continue;
+    const p = join(DATA_DIR, `${name}.json`);
+    if (!existsSync(p)) continue;
+    try {
+      const raw = readFileSync(p, 'utf-8');
+      const value = decodeFileValue(name, raw);
+      STORE_CACHE.set(name, value);
+      storeMeta.set(name, { chain: Promise.resolve(), pending: false, lastWritten: Date.now() });
+      seen.add(name);
+      // Legacy secrets were scrubbed on hydration; rewrite the file encrypted
+      // so the next boot starts clean, and migrate it into PG when enabled.
+      if (!raw.startsWith('ocp-enc:v1:') || pgClient) save(name, value);
+    } catch (e) {
+      corruptBackup(name, e);
+    }
+  }
+  return seen;
+}
+function startStoreRefresh() {
+  const ms = parseInt(process.env.CAMPAIGN_PG_REFRESH_MS || '5000', 10);
+  if (!Number.isFinite(ms) || ms < 1000) return;
+  refreshTimer = setInterval(async () => {
+    if (!pgClient) return;
+    try {
+      const { rows } = await pgClient.query('SELECT key, value, updated_at FROM campaign_state');
+      for (const row of rows) {
+        const meta = storeMeta.get(row.key);
+        if (meta?.pending) continue;                       // our own write is in flight
+        // Never swap campaign state under an in-process send: the sender owns it.
+        if (row.key === 'campaigns' && activeSenders.size > 0) continue;
+        const ts = Date.parse(row.updated_at);
+        if (meta && Number.isFinite(ts) && ts <= meta.lastWritten) continue;
+        const value = decodeStoreValue(row.value);
+        if (value === null || value === undefined) continue;
+        STORE_CACHE.set(row.key, value);
+        storeMeta.set(row.key, { chain: Promise.resolve(), pending: false, lastWritten: Date.now() });
+      }
+    } catch (e) {
+      console.error(JSON.stringify({ ts: new Date().toISOString(), op: 'store-refresh-failed', error: String(e.message || e) }));
+    }
+  }, ms);
+  refreshTimer.unref();
+}
+async function initStore() {
+  if (CAMPAIGN_PG_ENABLED) {
+    try {
+      pgClient = new pg.Client({ connectionString: CAMPAIGN_DATABASE_URL, connectionTimeoutMillis: 5000 });
+      await pgClient.connect();
+      // Safety net for runners that boot before the bot migration runs.
+      await pgClient.query(`CREATE TABLE IF NOT EXISTS campaign_state (
+        key TEXT PRIMARY KEY,
+        value JSONB NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`);
+      const { rows } = await pgClient.query('SELECT key, value, updated_at FROM campaign_state');
+      hydrateFrom(rows);
+      // One-time lift of legacy JSON stores that have no PG row yet.
+      hydrateFromFiles();
+      startStoreRefresh();
+      console.log('Campaign state: Postgres (campaign_state)');
+      return;
+    } catch (e) {
+      console.error(JSON.stringify({ ts: new Date().toISOString(), op: 'store-pg-unavailable', error: String(e.message || e), fallback: 'json' }));
+      try { await pgClient?.end(); } catch {}
+      pgClient = null;
+    }
+  }
+  hydrateFromFiles();
+  console.log('Campaign state: JSON files (legacy)');
+}
+function uid() { return crypto.randomUUID(); }
 
 // ═══════════════════════════════════════════
 // SETTINGS (safe, env-only secrets)
@@ -845,6 +984,24 @@ async function botApiWithRetry(path, opts = {}, retries = 3) {
       delayMs = Math.min(delayMs * 2, 30000);
     }
   }
+}
+
+// The bot may accept a broadcast asynchronously (202 + job_id). Poll the job
+// until it settles, then return a normalised { results, success, failed }.
+// BROADCAST_POLL_TIMEOUT_MS and BROADCAST_POLL_INTERVAL_MS are configurable.
+async function resolveBroadcastResult(result) {
+  if (!result || !result.job_id) return result;
+  const timeoutMs = parseInt(process.env.BROADCAST_POLL_TIMEOUT_MS || '600000', 10); // 10 min
+  const intervalMs = parseInt(process.env.BROADCAST_POLL_INTERVAL_MS || '1000', 10);
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    await new Promise(r => setTimeout(r, intervalMs));
+    const job = await botApiWithRetry('/admin/broadcast/jobs/' + encodeURIComponent(result.job_id), {}, 2);
+    if (job.status === 'done' || job.status === 'failed') {
+      return { results: job.results || [], success: job.success || 0, failed: job.failed || 0, error: job.error };
+    }
+  }
+  return { results: [], success: 0, failed: result.total || 0, error: 'broadcast job timed out' };
 }
 
 // ═══════════════════════════════════════════
@@ -1961,11 +2118,11 @@ async function sendCampaignViaBot(campaignId, phones) {
       // Retry clones carry the ORIGINAL campaign id as base so already-delivered
       // phones replay instead of re-sending.
       const idemBase = stored.idempotencyBase || campaignId;
-      const result = await botApiWithRetry('/admin/broadcast/send', {
+      const result = await resolveBroadcastResult(await botApiWithRetry('/admin/broadcast/send', {
         method: 'POST',
         body: JSON.stringify({ phones: batch, message: text, image_url: image, idempotency_base: idemBase }),
         timeoutMs: 90000,
-      }, 3);
+      }, 3));
       const cur = load('campaigns');
       const idx = cur.findIndex(c => c.id === campaignId);
       if (idx === -1) return;
@@ -2122,10 +2279,10 @@ app.post('/api/test-send', rateLimit({ windowMs: 60 * 1000, max: 10 }), async (r
     const customers = await allCustomers();
     const contact = customers.find(c => normPhone(c.phone) === normed) || { phone: normed, name: '' };
     const text = renderMessage(message.slice(0, 4096), contact, settings, sanitizeVariables(variables));
-    const result = await botApiWithRetry('/admin/broadcast/send', {
+    const result = await resolveBroadcastResult(await botApiWithRetry('/admin/broadcast/send', {
       method: 'POST',
       body: JSON.stringify({ phones: [normed], message: text, image_url: image }),
-    }, 2);
+    }, 2));
     const r = result.results?.[0];
     res.json({ ok: r?.ok || false, result: r || { ok: false }, rendered: text });
   } catch (err) {
@@ -2136,12 +2293,51 @@ app.post('/api/test-send', rateLimit({ windowMs: 60 * 1000, max: 10 }), async (r
   }
 });
 
-// ── Scheduled campaign checker (serialized, every 30s) ──
+// Hydrate the shared store before any route, scheduler tick or boot recovery
+// runs. Top-level await is available (type: module) and keeps all existing
+// synchronous callers of load()/save() unchanged.
+await initStore();
+
+// ── Scheduled campaign checker (every 30s, DB-backed leader election) ──
+// The advisory lock lives on a dedicated connection: a session-scoped lock
+// acquired via a pooled client could be released on a different connection.
+// Exactly one replica ticks at a time, so no scheduled campaign is sent twice.
 let schedulerTimer = null;
-async function schedulerTick() {
-  if (schedulerRunning) return;
-  schedulerRunning = true;
+let schedulerLockClient = null;
+async function acquireSchedulerLock() {
+  // JSON dev mode has a single process: preserve the old local-only behaviour.
+  if (!pgClient) return { client: null, acquired: true };
   try {
+    if (!schedulerLockClient) {
+      schedulerLockClient = new pg.Client({ connectionString: CAMPAIGN_DATABASE_URL, connectionTimeoutMillis: 5000 });
+      await schedulerLockClient.connect();
+    }
+    const r = await schedulerLockClient.query('SELECT pg_try_advisory_lock($1) AS acquired', [SCHEDULER_LOCK_KEY]);
+    return { client: schedulerLockClient, acquired: !!r.rows?.[0]?.acquired };
+  } catch (e) {
+    console.error(JSON.stringify({ ts: new Date().toISOString(), op: 'scheduler-lock-error', error: String(e.message || e) }));
+    schedulerLockClient = null; // force a fresh connection on the next tick
+    return { client: null, acquired: false };
+  }
+}
+async function releaseSchedulerLock(client) {
+  if (!client) return;
+  try {
+    await client.query('SELECT pg_advisory_unlock($1)', [SCHEDULER_LOCK_KEY]);
+  } catch (e) {
+    console.error(JSON.stringify({ ts: new Date().toISOString(), op: 'scheduler-unlock-error', error: String(e.message || e) }));
+  }
+}
+async function schedulerTick() {
+  if (schedulerRunning) return;      // local guard: never overlap in one process
+  schedulerRunning = true;
+  let lockClient = null;
+  let acquired = false;
+  try {
+    const lock = await acquireSchedulerLock();
+    lockClient = lock.client;
+    acquired = lock.acquired;
+    if (!acquired) return;            // another replica holds the lock
     const campaigns = load('campaigns');
     if (!Array.isArray(campaigns)) return;
     const now = new Date();
@@ -2165,10 +2361,12 @@ async function schedulerTick() {
   } catch (e) {
     console.error(JSON.stringify({ ts: new Date().toISOString(), op: 'scheduler-error' }));
   } finally {
+    if (acquired) await releaseSchedulerLock(lockClient);
     schedulerRunning = false;
   }
 }
 schedulerTimer = setInterval(() => { schedulerTick().catch(() => {}); }, 30000);
+schedulerTimer.unref();
 // crash recovery: mark stale sending as failed on boot
 try {
   const existing = load('campaigns');
@@ -2215,11 +2413,16 @@ app.use((err, _req, res, _next) => {
 
 const PORT = process.env.PORT || 3001;
 const server = app.listen(PORT, () => console.log(`Campaign Runner on http://localhost:${PORT} — connected to bot`));
-function shutdown() {
+async function shutdown() {
   console.log('Shutting down campaign runner...');
   try { if (schedulerTimer) clearInterval(schedulerTimer); } catch {}
+  try { if (refreshTimer) clearInterval(refreshTimer); } catch {}
+  // Drain write-through queue so a graceful restart cannot lose the last save.
+  try { await flushStores(); } catch {}
+  try { await pgClient?.end(); } catch {}
+  try { await schedulerLockClient?.end(); } catch {}
   server.close(() => process.exit(0));
   setTimeout(() => process.exit(0), 5000).unref();
 }
-process.on('SIGTERM', shutdown);
-process.on('SIGINT', shutdown);
+process.on('SIGTERM', () => { shutdown().catch(() => process.exit(0)); });
+process.on('SIGINT', () => { shutdown().catch(() => process.exit(0)); });

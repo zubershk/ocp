@@ -35,7 +35,14 @@ check_cmd() {
 
 MISSING=0
 check_cmd docker "install from https://docs.docker.com/get-docker/" || MISSING=1
-check_cmd docker compose "included with Docker Desktop" || MISSING=1
+# `command -v` cannot resolve a name containing a space; probe the compose
+# plugin the way Docker itself documents (`docker compose version`).
+if docker compose version &> /dev/null; then
+    echo -e "  ${GREEN}✓${NC} docker compose found"
+else
+    echo -e "  ${RED}✗${NC} docker compose not found — ${YELLOW}included with Docker Desktop / install the Compose plugin${NC}"
+    MISSING=1
+fi
 check_cmd openssl "install via: apt install openssl / brew install openssl" || MISSING=1
 
 if [ $MISSING -eq 1 ]; then
@@ -51,6 +58,8 @@ echo -e "${BOLD}Generating secure secrets...${NC}"
 DB_PASSWORD=$(openssl rand -hex 16)
 BOT_ADMIN_KEY=$(openssl rand -hex 16)
 WEBHOOK_SECRET=$(openssl rand -hex 16)
+# OTP_PEPPER is REQUIRED by the bot at startup — never leave it unset.
+OTP_PEPPER=$(openssl rand -hex 32)
 EVOLUTION_API_KEY=$(openssl rand -hex 16)
 EVOLUTION_INSTANCE_TOKEN=$(cat /proc/sys/kernel/random/uuid 2>/dev/null || uuidgen 2>/dev/null || openssl rand -hex 16)
 echo -e "  ${GREEN}✓${NC} Secrets generated"
@@ -127,6 +136,7 @@ DB_PASSWORD=${DB_PASSWORD}
 
 # ── Bot ──
 BOT_ADMIN_KEY=${BOT_ADMIN_KEY}
+OTP_PEPPER=${OTP_PEPPER}
 EVOLUTION_WEBHOOK_SECRET=${WEBHOOK_SECRET}
 EVOLUTION_API_KEY=${EVOLUTION_API_KEY}
 EVOLUTION_INSTANCE=${EVOLUTION_INSTANCE}
