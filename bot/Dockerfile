@@ -1,5 +1,5 @@
 # Stage 1: Build
-FROM golang:1.27.3-alpine3.21 AS builder
+FROM golang:1.27.4-alpine3.21 AS builder
 RUN apk add --no-cache git
 WORKDIR /app
 COPY bot/go.mod bot/go.sum ./

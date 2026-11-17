@@ -88,7 +88,7 @@ curl -fsSL https://raw.githubusercontent.com/zubershk/ocp/master/install.sh | ba
 
 | Layer | Technology |
 |-------|-----------|
-| Backend | Go 1.27.3 + Gin web framework |
+| Backend | Go 1.27.4 + Gin web framework |
 | Database | PostgreSQL 16.4 (alpine, compose) — requires 16+ |
 | Frontend | React 19 + TypeScript + Vite |
 | Styling | Tailwind CSS + shadcn/ui (admin dashboard) |

@@ -59,9 +59,9 @@ jobs:
           --health-retries 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Install Go 1.27.3
+      - name: Install Go 1.27.4
         run: |
-          curl -sSL https://go.dev/dl/go1.27.3.linux-amd64.tar.gz -o /tmp/go.tar.gz
+          curl -sSL https://go.dev/dl/go1.27.4.linux-amd64.tar.gz -o /tmp/go.tar.gz
           sudo rm -rf /usr/local/go
           sudo tar -C /usr/local -xzf /tmp/go.tar.gz
           echo "/usr/local/go/bin" >> $GITHUB_PATH
@@ -75,12 +75,13 @@ jobs:
       - name: Go vulnerability check
         working-directory: bot
         # Fail closed: a known-vulnerable dependency must block the merge.
-        # Pinned version (no @latest supply-chain risk). -scan module focuses
-        # on our dependencies; stdlib issues are avoided by pinning Go 1.27.3.
+        # Pinned version (no @latest supply-chain risk). -scan module accepts
+        # NO package pattern (use it bare) — adding ./... errors out with
+        # "patterns are not accepted for module only scanning".
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
           export PATH=$(go env GOPATH)/bin:$PATH
-          govulncheck -scan module ./...
+          govulncheck -scan module
       - name: Test bot (strict tenant isolation)
         working-directory: bot
         env:
