@@ -17,6 +17,15 @@ connections**, which is why a pure Vercel-serverless deployment is not viable
 | Ops complexity | 4 services to configure | One box to maintain |
 | Best for | Teams wanting managed infra / global edge | Simplest single-tenant deployment |
 
+> **Deploys are opt-in in CI.** The two deploy workflows are skipped by default
+> so a push to `master` never fails just because credentials are not configured
+> yet. To enable:
+> - Hybrid: set repository variable `DEPLOY_VERCEL_ENABLED=true` and secrets
+>   `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`; set
+>   `DEPLOY_FLY_ENABLED=true` and secret `FLY_API_TOKEN`.
+> - Optional WhatsApp bridge: set `DEPLOY_EVOLUTION=false` to skip it.
+> The always-green `CI` workflow runs on every push regardless.
+
 ---
 
 ## Option 1 — Hybrid (Vercel + Fly.io + Neon/Supabase + R2)

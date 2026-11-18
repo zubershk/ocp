@@ -24,6 +24,10 @@ concurrency:
 
 jobs:
   bot:
+    # Opt-in until Fly credentials are configured. Set repository variable
+    # DEPLOY_FLY_ENABLED=true plus the FLY_API_TOKEN secret (and app names /
+    # secrets documented in docs/DEPLOYMENT.md) to enable real deploys.
+    if: ${{ vars.DEPLOY_FLY_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     environment: production
     steps:
@@ -36,6 +40,7 @@ jobs:
 
   campaign:
     needs: bot
+    if: ${{ vars.DEPLOY_FLY_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     environment: production
     steps:
@@ -51,7 +56,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     # Optional: skip if the WhatsApp bridge is not used in this deployment.
-    if: ${{ vars.DEPLOY_EVOLUTION != 'false' }}
+    if: ${{ vars.DEPLOY_FLY_ENABLED == 'true' && vars.DEPLOY_EVOLUTION != 'false' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: superfly/flyctl-actions/setup-flyctl@master

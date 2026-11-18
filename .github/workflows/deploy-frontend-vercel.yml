@@ -24,6 +24,10 @@ env:
 
 jobs:
   deploy:
+    # Deploys are opt-in until the Vercel secrets are configured in the repo.
+    # Set repository variable DEPLOY_VERCEL_ENABLED=true (and the three
+    # VERCEL_* secrets) to enable. Without it, this job is skipped, not failed.
+    if: ${{ vars.DEPLOY_VERCEL_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     environment: production
     steps:
