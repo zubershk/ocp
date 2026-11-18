@@ -183,3 +183,21 @@ jobs:
         uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── Infrastructure / deployment config ──
+  infra-config:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install Go 1.27.4
+        run: |
+          curl -sSL https://go.dev/dl/go1.27.4.linux-amd64.tar.gz -o /tmp/go.tar.gz
+          sudo rm -rf /usr/local/go
+          sudo tar -C /usr/local -xzf /tmp/go.tar.gz
+          echo "/usr/local/go/bin" >> $GITHUB_PATH
+          go version
+      - name: Validate compose, nginx, Vercel, Fly, Caddy and env templates
+        working-directory: bot
+        run: go run ./scripts/validate_infra -root ..

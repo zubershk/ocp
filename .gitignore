@@ -23,6 +23,14 @@ id_rsa
 secrets/
 *.tfvars
 
+# Load-test output / local binaries
+loadtest-summary.json
+scripts/loadtest/*.exe
+
+# Deployment secrets / tool state
+deploy/vps/.env
+.vercel/
+
 # Build artifacts
 bot/bot-ocp
 bot/*.exe
