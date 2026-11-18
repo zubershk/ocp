@@ -56,6 +56,7 @@ type HTTPConfig struct {
 	MaxHeaderBytes        int
 	StaleMessageTTLSecs   int // max age of an inbound WhatsApp message before it is held silently
 	CustomerSessionTTLSecs int // customer session lifetime in seconds (default 30d)
+	APIRateLimitPerMin     int // global /api/* write budget per IP (reads bypass; default 300)
 	LogLevel              string
 }
 
@@ -120,6 +121,7 @@ func Load() *Config {
 			MaxHeaderBytes:         getEnvInt("HTTP_MAX_HEADER_BYTES", 1<<20),
 			StaleMessageTTLSecs:    getEnvInt("STALE_MESSAGE_TTL_SECONDS", 120),
 			CustomerSessionTTLSecs: getEnvInt("CUSTOMER_SESSION_TTL_SECONDS", 30*24*3600),
+			APIRateLimitPerMin:     getEnvInt("API_RATE_LIMIT_PER_MIN", 300),
 			LogLevel:               getEnv("LOG_LEVEL", "info"),
 		},
 		SecurityConfig: SecurityConfig{

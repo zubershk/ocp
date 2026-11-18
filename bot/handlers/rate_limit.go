@@ -111,11 +111,31 @@ func (l *ipLimiter) cleanupLoop() {
 // replicas; otherwise a local in-process limiter is used. c.ClientIP() respects
 // gin TrustedProxies — configure TRUSTED_PROXIES behind a real load balancer.
 func RateLimit(limit int, window time.Duration) gin.HandlerFunc {
+	return rateLimitWithOptions(limit, window, false)
+}
+
+// RateLimitSkipSafe behaves like RateLimit but does not count idempotent
+// GET/HEAD/OPTIONS reads. This protects write endpoints from abuse while
+// allowing read-heavy storefront traffic (which is ETag-cacheable and cheap)
+// from many users behind a single NAT/CGNAT IP. Use only on route groups where
+// every state-changing endpoint also carries its own strict per-endpoint limit.
+func RateLimitSkipSafe(limit int, window time.Duration) gin.HandlerFunc {
+	return rateLimitWithOptions(limit, window, true)
+}
+
+func rateLimitWithOptions(limit int, window time.Duration, skipSafe bool) gin.HandlerFunc {
 	lim := newIPLimiter(limit, window)
 	go lim.cleanupLoop()
 	startRateLimitCleanup()
 	shared := rateLimitBackend() == "postgres"
 	return func(c *gin.Context) {
+		if skipSafe {
+			m := c.Request.Method
+			if m == http.MethodGet || m == http.MethodHead || m == http.MethodOptions {
+				c.Next()
+				return
+			}
+		}
 		ip := c.ClientIP()
 		if ip == "" {
 			ip = c.Request.RemoteAddr

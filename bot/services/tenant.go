@@ -248,6 +248,10 @@ func IsSingleTenantMode() bool {
 	return true
 }
 
+// singleTenantFallbackWarn keeps the single-tenant fallback notice to one line
+// per process instead of one per request.
+var singleTenantFallbackWarn sync.Once
+
 // RequireTenant extracts tenant IDs or returns 400/404 semantics for SaaS callers.
 // In single-tenant mode it falls back to the default restaurant for backward compat.
 func RequireTenant(c *gin.Context) (restaurantID, outletID int, err error) {
@@ -267,7 +271,12 @@ func RequireTenant(c *gin.Context) (restaurantID, outletID int, err error) {
 		if rid == 0 {
 			return 0, 0, ErrTenantNotFound
 		}
-		log.Printf("[WARN] single-tenant fallback active: no restaurant context, falling back to bootstrap restaurant %d (SINGLE_TENANT_MODE fallback)", rid)
+		// This fallback applies to every unscoped request; logging it per call
+		// floods stdout under load (thousands of identical lines/sec). It is a
+		// startup configuration fact, so emit it once per process.
+		singleTenantFallbackWarn.Do(func() {
+			log.Printf("[WARN] single-tenant fallback active: no restaurant context, falling back to bootstrap restaurant %d (SINGLE_TENANT_MODE fallback)", rid)
+		})
 		if c != nil {
 			c.Set("restaurantID", rid)
 			if outletID == 0 {

@@ -157,9 +157,12 @@ func main() {
 	// Structured logging (JSON in production; request IDs + tenant context).
 	handlers.InitLogger()
 
-	// Setup Gin router
+	// Setup Gin router. Use gin.New() + Recovery instead of gin.Default():
+	// StructuredLogging below already emits a richer access log, and
+	// gin.Default()'s extra line doubles stdout I/O under high traffic.
 	gin.SetMode(gin.ReleaseMode)
-	router := gin.Default()
+	router := gin.New()
+	router.Use(gin.Recovery())
 	// Trusted proxies from env (comma-separated CIDRs/hosts).
 	// Always set explicitly: when TRUSTED_PROXIES is unset, SetTrustedProxies(nil)
 	// tells Gin NOT to trust any proxy, so c.ClientIP() returns the immediate
@@ -245,7 +248,13 @@ func main() {
 	}
 	// Domain-aware public routes need tenant resolver; already global above
 	apiGroup := router.Group("/api")
-	apiGroup.Use(handlers.RateLimit(120, time.Minute))
+	// Global write budget per IP. Safe reads bypass this limiter so many users
+	// behind one NAT/CGNAT IP are not throttled; every state-changing endpoint
+	// in this group carries its own strict per-endpoint limit.
+	apiGroup.Use(handlers.RateLimitSkipSafe(cfg.APIRateLimitPerMin, time.Minute))
+	// Short-TTL read-through cache for anonymous storefront GETs. Registered
+	// after the tenant resolver so tenant id is part of the cache key.
+	apiGroup.Use(handlers.PublicReadCache())
 	{
 		apiGroup.GET("/menu", apiHandler.GetMenu)
 		apiGroup.GET("/menu/:id", apiHandler.GetItem)
@@ -304,6 +313,9 @@ func main() {
 	// Tenant context for every admin call. Handlers ignore these keys
 	// until PR 3 scopes them; behavior is unchanged in PR 2.
 	adminGroup.Use(admin.TenantMiddleware())
+	// Successful admin writes invalidate cached public reads immediately on
+	// this replica; other replicas converge within PUBLIC_MENU_CACHE_TTL_SECS.
+	adminGroup.Use(handlers.InvalidatePublicCacheOnWrite())
 	{
 		adminGroup.GET("/health", adminHandler.Health)
 		adminGroup.GET("/tenant/context", adminHandler.GetTenantContext)
