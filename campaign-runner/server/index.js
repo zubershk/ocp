@@ -215,8 +215,16 @@ function safeParse(text, fb) {
 }
 const STORES = ['settings', 'customers', 'customer_tags', 'campaigns', 'invalid_phones', 'media', 'templates'];
 const STORE_CACHE = new Map();   // name -> parsed value (decrypted in memory)
-const storeMeta = new Map();     // name -> { chain, pending, lastWritten }
-let pgClient = null;             // dedicated client for state reads/writes
+// name -> { chain, pending, version, epoch, lastWritten }
+//   version: Postgres xmin::text of the row our cached value is based on
+//            (null = we have no corresponding row yet).
+//   epoch:   bumped whenever our cache is refreshed to a different DB version.
+//            Saves queued under an older epoch are stale and get dropped rather
+//            than clobbering a value another replica has since written.
+const storeMeta = new Map();
+let pgClient = null;             // dedicated client for state reads / refresh / hydration
+let pgWriteClient = null;        // dedicated client for transactional, CAS-protected writes
+let writeChain = Promise.resolve(); // process-wide mutex: one write txn at a time
 let refreshTimer = null;
 
 function scrubSettings(obj) {
@@ -276,42 +284,153 @@ function load(name, fb = []) {
   if (!/^[a-z_]+$/.test(name)) throw new Error('invalid store');
   return STORE_CACHE.has(name) ? STORE_CACHE.get(name) : fb;
 }
+function getStoreMeta(name) {
+  let meta = storeMeta.get(name);
+  if (!meta) {
+    meta = { chain: Promise.resolve(), pending: 0, version: null, epoch: 0, lastWritten: 0 };
+    storeMeta.set(name, meta);
+  }
+  return meta;
+}
+// Emit a structured, secret-free record whenever optimistic concurrency
+// rejects a write. Operators can alert on `op: store-write-conflict`.
+function logStoreConflict(name, cachedVersion, dbVersion, action) {
+  console.error(JSON.stringify({
+    ts: new Date().toISOString(), op: 'store-write-conflict', store: name,
+    cachedVersion, dbVersion, action,
+  }));
+}
+// Adopt a freshly read DB row into the local cache and invalidate saves that
+// were queued against the older value. Returns true if the row was adopted.
+function adoptDbRow(name, value, version, meta) {
+  if (value === null || value === undefined) return false;
+  // Never swap campaign state out from under an in-process send: the sender owns it.
+  if (name === 'campaigns' && activeSenders.size > 0) return false;
+  STORE_CACHE.set(name, value);
+  meta.version = version;
+  meta.lastWritten = Date.now();
+  meta.epoch++;
+  return true;
+}
+// One write transaction at a time on the dedicated write connection. Other
+// replicas are fenced out by the advisory lock taken inside casWrite.
+function enqueueDbWrite(fn) {
+  const run = writeChain.then(fn, fn);
+  writeChain = run.catch(() => {});
+  return run;
+}
+// Connect (or reconnect) the dedicated transactional write client.
+async function ensureWriteClient() {
+  if (pgWriteClient) return pgWriteClient;
+  if (!CAMPAIGN_PG_ENABLED) return null;
+  const client = new pg.Client({ connectionString: CAMPAIGN_DATABASE_URL, connectionTimeoutMillis: 5000 });
+  client.on('error', (e) => console.error(JSON.stringify({
+    ts: new Date().toISOString(), op: 'store-write-client-error', error: String(e.message || e),
+  })));
+  try {
+    await client.connect();
+  } catch (e) {
+    try { await client.end(); } catch {}
+    throw e;
+  }
+  pgWriteClient = client;
+  return client;
+}
+// Optimistic-concurrency write-through. Inside a single transaction we take an
+// advisory lock keyed by the store name, re-read the row, and overwrite it ONLY
+// if its version (Postgres xmin) still matches the version our cached value was
+// based on. If another replica changed the key meanwhile we do not clobber it:
+// we adopt the winner's value and bump the epoch so saves queued against our now
+// stale state are dropped rather than written. save() stays synchronous.
+async function casWrite(name, payload, meta) {
+  const cachedVersion = meta.version;
+  const client = await ensureWriteClient();
+  let conflicted = false, dbValue = null, dbVersion = null, newVersion = null;
+  try {
+    await enqueueDbWrite(async () => {
+      await client.query('BEGIN');
+      try {
+        await client.query('SELECT pg_advisory_xact_lock(hashtext($1)::bigint)', [name]);
+        const { rows } = await client.query(
+          'SELECT value, xmin::text AS ver FROM campaign_state WHERE key = $1', [name]);
+        const current = rows[0];
+        const currentVer = current ? current.ver : null;
+        if (currentVer === cachedVersion) {
+          const r = await client.query(
+            `INSERT INTO campaign_state (key, value, updated_at) VALUES ($1, $2::jsonb, NOW())
+             ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
+             RETURNING xmin::text AS ver`,
+            [name, payload],
+          );
+          newVersion = r.rows?.[0]?.ver ?? null;
+        } else {
+          conflicted = true;
+          dbVersion = currentVer;
+          dbValue = current ? decodeStoreValue(current.value) : null;
+        }
+        await client.query('COMMIT');
+      } catch (e) {
+        try { await client.query('ROLLBACK'); } catch {}
+        throw e;
+      }
+    });
+  } catch (e) {
+    // A failed transaction leaves this connection unusable; force a reconnect.
+    if (pgWriteClient === client) {
+      try { await client.end(); } catch {}
+      pgWriteClient = null;
+    }
+    throw e;
+  }
+  if (conflicted) {
+    const adopted = adoptDbRow(name, dbValue, dbVersion, meta);
+    logStoreConflict(name, cachedVersion, dbVersion,
+      adopted ? 'refreshed-to-winner' : 'skipped-no-swap');
+    if (!dbValue) STORE_CACHE.delete(name);
+    return;
+  }
+  meta.version = newVersion;
+}
 function save(name, data) {
   if (!/^[a-z_]+$/.test(name)) throw new Error('invalid store');
   STORE_CACHE.set(name, data);
-  const meta = storeMeta.get(name) || { chain: Promise.resolve(), pending: false, lastWritten: 0 };
-  meta.pending = true;
+  const meta = getStoreMeta(name);
+  meta.pending++;
   meta.lastWritten = Date.now();
-  storeMeta.set(name, meta);
-  if (!pgClient) {
-    // Legacy dev path: synchronous durable write, no async work to flush.
+  const baseEpoch = meta.epoch;
+  if (!pgClient || !pgWriteClient) {
+    // Legacy dev / degraded path: synchronous durable write, no async work to flush.
     try { saveFileSync(name, data); } catch (e) {
       console.error(JSON.stringify({ ts: new Date().toISOString(), op: 'store-write-failed', store: name, error: String(e.message || e) }));
     }
-    meta.pending = false;
+    meta.pending = Math.max(0, meta.pending - 1);
     return;
   }
   const payload = JSON.stringify(encodeStoreValue(name, data));
-  // Serialize per key: an older write can never land after a newer one.
+  // Per-key chain keeps same-key saves in call order; the global write mutex in
+  // casWrite prevents transactions on different keys from overlapping.
   meta.chain = meta.chain.then(async () => {
     try {
-      await pgClient.query(
-        `INSERT INTO campaign_state (key, value, updated_at) VALUES ($1, $2::jsonb, NOW())
-         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
-        [name, payload],
-      );
+      if (baseEpoch !== meta.epoch) {
+        // Our cache moved to a newer DB version after this save was queued:
+        // the payload is stale, so drop it instead of clobbering the winner.
+        logStoreConflict(name, meta.version, meta.version, 'stale-save-skipped');
+        return;
+      }
+      await casWrite(name, payload, meta);
       meta.lastWritten = Date.now();
     } catch (e) {
       console.error(JSON.stringify({ ts: new Date().toISOString(), op: 'store-write-failed', store: name, error: String(e.message || e) }));
       // Last resort: keep a durable local copy so a crash cannot lose the write.
       try { saveFileSync(name, data); } catch {}
     } finally {
-      meta.pending = false;
+      meta.pending = Math.max(0, meta.pending - 1);
     }
   });
 }
 async function flushStores() {
   await Promise.all([...storeMeta.values()].map(m => m.chain.catch(() => {})));
+  await writeChain.catch(() => {});
 }
 function corruptBackup(name, err) {
   const p = join(DATA_DIR, `${name}.json`);
@@ -328,7 +447,13 @@ function hydrateFrom(rows) {
       const value = decodeStoreValue(row.value);
       if (value === null || value === undefined) continue;
       STORE_CACHE.set(row.key, value);
-      storeMeta.set(row.key, { chain: Promise.resolve(), pending: false, lastWritten: Date.now() });
+      // Remember the row version our cached value came from. Every later write
+      // is a CAS against this token (see casWrite), so a stale replica can never
+      // silently overwrite a row another replica has changed in the meantime.
+      storeMeta.set(row.key, {
+        chain: Promise.resolve(), pending: 0, version: row.ver ?? null,
+        epoch: 0, lastWritten: Date.now(),
+      });
       seen.add(row.key);
     } catch (e) {
       console.error(JSON.stringify({ ts: new Date().toISOString(), op: 'store-decode-failed', store: row.key, error: String(e.message || e) }));
@@ -345,7 +470,8 @@ function hydrateFromFiles(seen = new Set()) {
       const raw = readFileSync(p, 'utf-8');
       const value = decodeFileValue(name, raw);
       STORE_CACHE.set(name, value);
-      storeMeta.set(name, { chain: Promise.resolve(), pending: false, lastWritten: Date.now() });
+      // No PG row exists yet: version null makes the first write an INSERT.
+      storeMeta.set(name, { chain: Promise.resolve(), pending: 0, version: null, epoch: 0, lastWritten: Date.now() });
       seen.add(name);
       // Legacy secrets were scrubbed on hydration; rewrite the file encrypted
       // so the next boot starts clean, and migrate it into PG when enabled.
@@ -362,18 +488,21 @@ function startStoreRefresh() {
   refreshTimer = setInterval(async () => {
     if (!pgClient) return;
     try {
-      const { rows } = await pgClient.query('SELECT key, value, updated_at FROM campaign_state');
+      const { rows } = await pgClient.query('SELECT key, value, xmin::text AS ver FROM campaign_state');
       for (const row of rows) {
         const meta = storeMeta.get(row.key);
         if (meta?.pending) continue;                       // our own write is in flight
-        // Never swap campaign state under an in-process send: the sender owns it.
-        if (row.key === 'campaigns' && activeSenders.size > 0) continue;
-        const ts = Date.parse(row.updated_at);
-        if (meta && Number.isFinite(ts) && ts <= meta.lastWritten) continue;
+        // Our own last write already advanced meta.version: adopting it again is
+        // a no-op. A different version means another replica changed the row.
+        if (meta && row.ver === meta.version) continue;
         const value = decodeStoreValue(row.value);
         if (value === null || value === undefined) continue;
-        STORE_CACHE.set(row.key, value);
-        storeMeta.set(row.key, { chain: Promise.resolve(), pending: false, lastWritten: Date.now() });
+        if (meta) {
+          adoptDbRow(row.key, value, row.ver, meta);
+        } else {
+          STORE_CACHE.set(row.key, value);
+          storeMeta.set(row.key, { chain: Promise.resolve(), pending: 0, version: row.ver ?? null, epoch: 0, lastWritten: Date.now() });
+        }
       }
     } catch (e) {
       console.error(JSON.stringify({ ts: new Date().toISOString(), op: 'store-refresh-failed', error: String(e.message || e) }));
@@ -392,17 +521,25 @@ async function initStore() {
         value JSONB NOT NULL,
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )`);
-      const { rows } = await pgClient.query('SELECT key, value, updated_at FROM campaign_state');
-      hydrateFrom(rows);
-      // One-time lift of legacy JSON stores that have no PG row yet.
-      hydrateFromFiles();
+      // Writes use a dedicated connection so their BEGIN/COMMIT pairs cannot
+      // interleave with hydration/refresh reads on pgClient.
+      await ensureWriteClient();
+      const { rows } = await pgClient.query('SELECT key, value, xmin::text AS ver FROM campaign_state');
+      // Only lift legacy JSON stores that have NO PG row. Passing `seen` also
+      // preserves each hydrated row's version token — without it a file-backed
+      // store would be re-saved on every boot with a null version, turning the
+      // next write into a spurious conflict.
+      const seen = hydrateFrom(rows);
+      hydrateFromFiles(seen);
       startStoreRefresh();
       console.log('Campaign state: Postgres (campaign_state)');
       return;
     } catch (e) {
       console.error(JSON.stringify({ ts: new Date().toISOString(), op: 'store-pg-unavailable', error: String(e.message || e), fallback: 'json' }));
       try { await pgClient?.end(); } catch {}
+      try { await pgWriteClient?.end(); } catch {}
       pgClient = null;
+      pgWriteClient = null;
     }
   }
   hydrateFromFiles();
@@ -2420,6 +2557,7 @@ async function shutdown() {
   // Drain write-through queue so a graceful restart cannot lose the last save.
   try { await flushStores(); } catch {}
   try { await pgClient?.end(); } catch {}
+  try { await pgWriteClient?.end(); } catch {}
   try { await schedulerLockClient?.end(); } catch {}
   server.close(() => process.exit(0));
   setTimeout(() => process.exit(0), 5000).unref();
