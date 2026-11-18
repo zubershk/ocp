@@ -1,0 +1,48 @@
+# Fly.io — Evolution GO (WhatsApp bridge). Deploy with:
+#   fly deploy --config fly.evolution.toml --remote-only
+#
+# This is a persistent WhatsApp session, so the machine must never auto-stop.
+# It is the heaviest image (ffmpeg + poppler); check Fly's current free
+# allowance before enabling. If you do not need the WhatsApp bot in a given
+# deployment, skip this app entirely — the storefront and campaign runner do
+# not depend on it for API requests.
+
+app = "ocp-evolution" # TODO: rename to your unique Fly app name
+primary_region = "sin" # TODO: match fly.bot.toml region
+
+[build]
+  dockerfile = "evolution-go/Dockerfile"
+
+[env]
+  SERVER_PORT = "8080"
+  GIN_MODE = "release"
+  DATABASE_ENABLED = "true"
+  DATABASE_PROVIDER = "postgresql"
+  DATABASE_SAVE_MESSAGES = "true"
+  DATABASE_SAVE_DATA_INSTANCE = "true"
+  DATABASE_SAVE_DATA_NEW_MESSAGE = "true"
+  DATABASE_SAVE_MESSAGE_UPDATE = "true"
+  DATABASE_SAVE_DATA_CONTACTS = "true"
+  DATABASE_SAVE_DATA_CHATS = "true"
+  DELIVERY_RETRIES = "5"
+  WEBHOOK_GLOBAL_ENABLED = "false"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "20s"
+    method = "GET"
+    path = "/health"
+
+[vm]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 1024

@@ -1,0 +1,48 @@
+# Fly.io — Campaign Runner (Node). Deploy with:
+#   fly deploy --config fly.campaign.toml --remote-only
+#
+# The leader-elected scheduler and broadcast poller are long-lived: never
+# enable auto_stop_machines. State lives in Postgres, so scaling to >1 machine
+# is safe (CAS rejects a stale writer and refreshes it).
+
+app = "ocp-campaign" # TODO: rename to your unique Fly app name
+primary_region = "sin" # TODO: match fly.bot.toml region
+
+[build]
+  dockerfile = "campaign-runner/Dockerfile"
+
+[env]
+  PORT = "3001"
+  NODE_ENV = "production"
+  CAMPAIGN_PG_ENABLED = "true"
+  CAMPAIGN_PG_REFRESH_MS = "5000"
+  BROADCAST_POLL_TIMEOUT_MS = "600000"
+  BROADCAST_POLL_INTERVAL_MS = "1000"
+
+[http_service]
+  internal_port = 3001
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "15s"
+    method = "GET"
+    path = "/health"
+
+[vm]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 512
+
+[[mounts]]
+  source = "campaign_data"
+  destination = "/app/data"
+
+[[mounts]]
+  source = "campaign_uploads"
+  destination = "/app/uploads"

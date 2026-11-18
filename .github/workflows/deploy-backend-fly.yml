@@ -1,0 +1,61 @@
+name: Deploy backend to Fly.io
+
+# Deploys the always-on services in dependency order:
+#   bot (runs migrations via release_command) -> campaign + evolution
+# All three MUST keep min_machines_running = 1 (SSE, LISTEN/NOTIFY, workers,
+# scheduler are long-lived). See docs/DEPLOYMENT.md for required secrets.
+on:
+  push:
+    branches: [master]
+    paths:
+      - "bot/**"
+      - "campaign-runner/**"
+      - "evolution-go/**"
+      - "fly.*.toml"
+      - ".github/workflows/deploy-backend-fly.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-fly-production
+  cancel-in-progress: false
+
+jobs:
+  bot:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: superfly/flyctl-actions/setup-flyctl@master # official Fly action
+      - name: Deploy bot (migrations run as release_command)
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: flyctl deploy --config fly.bot.toml --remote-only
+
+  campaign:
+    needs: bot
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Deploy campaign runner
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: flyctl deploy --config fly.campaign.toml --remote-only
+
+  evolution:
+    needs: bot
+    runs-on: ubuntu-latest
+    environment: production
+    # Optional: skip if the WhatsApp bridge is not used in this deployment.
+    if: ${{ vars.DEPLOY_EVOLUTION != 'false' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Deploy Evolution GO
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: flyctl deploy --config fly.evolution.toml --remote-only
