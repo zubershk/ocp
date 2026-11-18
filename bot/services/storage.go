@@ -18,6 +18,10 @@ import (
 // existing on-disk behaviour; "s3" uses any S3-compatible service (AWS S3,
 // MinIO, Cloudflare R2). All knobs are env-driven. Public URLs can be served
 // through a CDN by setting STORAGE_PUBLIC_URL.
+//
+// The implementation lives on storageProvider so it can be constructed with
+// explicit config in tests (and, later, with non-env config sources) rather
+// than being permanently bound to the package-level sync.Once.
 // ------------------------------------------------------------------
 
 type StorageConfig struct {
@@ -56,37 +60,47 @@ func LoadStorageConfig() StorageConfig {
 	return c
 }
 
-var storage struct {
-	sync.Once
+type storageProvider struct {
 	cfg    StorageConfig
 	client *minio.Client
 }
 
-func storageRuntime() (StorageConfig, *minio.Client) {
-	storage.Do(func() {
-		storage.cfg = LoadStorageConfig()
-		if storage.cfg.Backend == "s3" && storage.cfg.Endpoint != "" {
-			client, err := minio.New(storage.cfg.Endpoint, &minio.Options{
-				Creds:  credentials.NewStaticV4(storage.cfg.AccessKey, storage.cfg.SecretKey, ""),
-				Secure: storage.cfg.UseSSL,
-				Region: storage.cfg.Region,
-			})
-			if err == nil {
-				storage.client = client
-			}
+func newStorageProvider(cfg StorageConfig) *storageProvider {
+	p := &storageProvider{cfg: cfg}
+	if cfg.Backend == "s3" && cfg.Endpoint != "" {
+		client, err := minio.New(cfg.Endpoint, &minio.Options{
+			Creds:  credentials.NewStaticV4(cfg.AccessKey, cfg.SecretKey, ""),
+			Secure: cfg.UseSSL,
+			Region: cfg.Region,
+		})
+		if err == nil {
+			p.client = client
 		}
+	}
+	return p
+}
+
+var storage struct {
+	sync.Once
+	provider *storageProvider
+}
+
+func storageRuntime() *storageProvider {
+	storage.Do(func() {
+		storage.provider = newStorageProvider(LoadStorageConfig())
 	})
-	return storage.cfg, storage.client
+	return storage.provider
 }
 
 // StorageURL returns the public URL for a stored object key.
-func StorageURL(key string) string {
-	cfg, _ := storageRuntime()
-	if cfg.Backend == "s3" && cfg.PublicURL != "" {
-		return cfg.PublicURL + "/" + key
+func (p *storageProvider) url(key string) string {
+	if p.cfg.Backend == "s3" && p.cfg.PublicURL != "" {
+		return p.cfg.PublicURL + "/" + key
 	}
 	return "/" + key // local: served by gin Static / nginx proxy
 }
+
+func StorageURL(key string) string { return storageRuntime().url(key) }
 
 // StorageObject describes a stored object for the admin media library.
 type StorageObject struct {
@@ -98,20 +112,19 @@ type StorageObject struct {
 
 // StorageIsS3 reports whether the S3 backend is active.
 func StorageIsS3() bool {
-	cfg, client := storageRuntime()
-	return cfg.Backend == "s3" && client != nil
+	p := storageRuntime()
+	return p.cfg.Backend == "s3" && p.client != nil
 }
 
 // ListObjects lists objects under a tenant prefix.
-func ListObjects(ctx context.Context, prefix string) ([]StorageObject, error) {
-	cfg, client := storageRuntime()
+func (p *storageProvider) list(ctx context.Context, prefix string) ([]StorageObject, error) {
 	out := []StorageObject{}
-	if cfg.Backend == "s3" {
-		if client == nil || cfg.Bucket == "" {
+	if p.cfg.Backend == "s3" {
+		if p.client == nil || p.cfg.Bucket == "" {
 			return out, fmt.Errorf("S3 storage not configured")
 		}
 		opts := minio.ListObjectsOptions{Prefix: prefix + "/", Recursive: true}
-		for obj := range client.ListObjects(ctx, cfg.Bucket, opts) {
+		for obj := range p.client.ListObjects(ctx, p.cfg.Bucket, opts) {
 			if obj.Err != nil {
 				continue
 			}
@@ -120,13 +133,13 @@ func ListObjects(ctx context.Context, prefix string) ([]StorageObject, error) {
 				Name:     parts[len(parts)-1],
 				Size:     obj.Size,
 				Modified: obj.LastModified.UTC().Format("2006-01-02T15:04:05Z"),
-				URL:      StorageURL(obj.Key),
+				URL:      p.url(obj.Key),
 			})
 		}
 		return out, nil
 	}
 	// local
-	entries, err := os.ReadDir(filepath.Join(cfg.LocalDir, filepath.FromSlash(prefix)))
+	entries, err := os.ReadDir(filepath.Join(p.cfg.LocalDir, filepath.FromSlash(prefix)))
 	if err != nil {
 		return out, nil
 	}
@@ -141,42 +154,48 @@ func ListObjects(ctx context.Context, prefix string) ([]StorageObject, error) {
 		out = append(out, StorageObject{
 			Name: e.Name(), Size: info.Size(),
 			Modified: info.ModTime().UTC().Format("2006-01-02T15:04:05Z"),
-			URL:      StorageURL(prefix + "/" + e.Name()),
+			URL:      p.url(prefix + "/" + e.Name()),
 		})
 	}
 	return out, nil
 }
 
+func ListObjects(ctx context.Context, prefix string) ([]StorageObject, error) {
+	return storageRuntime().list(ctx, prefix)
+}
+
 // DeleteObject removes an object by tenant-scoped key.
-func DeleteObject(ctx context.Context, key string) error {
-	cfg, client := storageRuntime()
-	if cfg.Backend == "s3" {
-		if client == nil || cfg.Bucket == "" {
+func (p *storageProvider) delete(ctx context.Context, key string) error {
+	if p.cfg.Backend == "s3" {
+		if p.client == nil || p.cfg.Bucket == "" {
 			return fmt.Errorf("S3 storage not configured")
 		}
-		return client.RemoveObject(ctx, cfg.Bucket, key, minio.RemoveObjectOptions{})
+		return p.client.RemoveObject(ctx, p.cfg.Bucket, key, minio.RemoveObjectOptions{})
 	}
-	return os.Remove(filepath.Join(cfg.LocalDir, filepath.FromSlash(key)))
+	return os.Remove(filepath.Join(p.cfg.LocalDir, filepath.FromSlash(key)))
+}
+
+func DeleteObject(ctx context.Context, key string) error {
+	return storageRuntime().delete(ctx, key)
 }
 
 // PutObject stores bytes at key. Key uses "<restaurant>/<name>" form.
-func PutObject(ctx context.Context, key string, size int64, reader io.Reader, ct string) (string, error) {
-	cfg, client := storageRuntime()
-	if cfg.Backend == "s3" {
-		if client == nil {
+func (p *storageProvider) put(ctx context.Context, key string, size int64, reader io.Reader, ct string) (string, error) {
+	if p.cfg.Backend == "s3" {
+		if p.client == nil {
 			return "", fmt.Errorf("S3 storage backend configured but client init failed")
 		}
-		if cfg.Bucket == "" {
+		if p.cfg.Bucket == "" {
 			return "", fmt.Errorf("STORAGE_BUCKET required for s3 backend")
 		}
-		_, err := client.PutObject(ctx, cfg.Bucket, key, reader, size, minio.PutObjectOptions{ContentType: ct})
+		_, err := p.client.PutObject(ctx, p.cfg.Bucket, key, reader, size, minio.PutObjectOptions{ContentType: ct})
 		if err != nil {
 			return "", err
 		}
-		return StorageURL(key), nil
+		return p.url(key), nil
 	}
 	// local backend
-	full := filepath.Join(cfg.LocalDir, filepath.FromSlash(key))
+	full := filepath.Join(p.cfg.LocalDir, filepath.FromSlash(key))
 	if err := os.MkdirAll(filepath.Dir(full), 0755); err != nil {
 		return "", err
 	}
@@ -188,5 +207,9 @@ func PutObject(ctx context.Context, key string, size int64, reader io.Reader, ct
 	if _, err := io.Copy(out, reader); err != nil {
 		return "", err
 	}
-	return StorageURL(key), nil
+	return p.url(key), nil
+}
+
+func PutObject(ctx context.Context, key string, size int64, reader io.Reader, ct string) (string, error) {
+	return storageRuntime().put(ctx, key, size, reader, ct)
 }
