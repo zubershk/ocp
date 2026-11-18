@@ -1,0 +1,69 @@
+# Caddyfile for the single-VPS deployment. Hostnames come from the env vars
+# injected in deploy/vps/docker-compose.prod.yml. Caddy obtains and renews
+# Let's Encrypt certificates automatically — DNS must point at this VPS and
+# ports 80/443 must be open before first start.
+
+# ── Storefront (static frontend) ──
+{$DOMAIN}, {$WWW_DOMAIN} {
+	encode zstd gzip
+
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+
+	# Hashed Vite assets are immutable.
+	@assets path /assets/*
+	header @assets Cache-Control "public, max-age=31536000, immutable"
+
+	# Service worker / manifest must always revalidate.
+	@revalidate path /sw.js /manifest.json /offline.html
+	header @revalidate Cache-Control "public, max-age=0, must-revalidate"
+
+	# The frontend nginx already does try_files -> /index.html, so client-side
+	# routes (e.g. /admin) fall back to the SPA without a Caddy rewrite.
+	reverse_proxy frontend:80
+}
+
+# ── Bot API (Go, behind bot-lb) ──
+{$API_DOMAIN} {
+	encode zstd gzip
+
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+
+	# SSE order streams and /admin/events need unbuffered, long-lived responses.
+	reverse_proxy bot-lb:80 {
+		flush_interval -1
+	}
+}
+
+# ── Campaign runner ──
+{$CAMPAIGN_DOMAIN} {
+	encode zstd gzip
+
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+
+	reverse_proxy campaign:3001 {
+		flush_interval -1
+	}
+}
+
+# ── Evolution GO (WhatsApp bridge) — remove this block if unused ──
+{$EVOLUTION_DOMAIN} {
+	reverse_proxy evolution:8080
+}

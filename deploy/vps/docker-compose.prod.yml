@@ -1,0 +1,55 @@
+# Production override for a single-VPS deployment.
+# Usage (from repo root):
+#   docker compose -f docker-compose.yml -f deploy/vps/docker-compose.prod.yml up -d --build
+#
+# Base compose publishes raw HTTP ports for local dev. This override removes
+# all host port exposure except Caddy (80/443), which terminates TLS and routes
+# by hostname. Postgres stays bound to 127.0.0.1 only.
+
+services:
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    depends_on:
+      - frontend
+      - bot-lb
+      - campaign
+      - evolution
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp" # HTTP/3 (QUIC)
+    volumes:
+      - ./deploy/vps/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN in deploy/vps/.env}
+      API_DOMAIN: ${API_DOMAIN:-api.${DOMAIN}}
+      CAMPAIGN_DOMAIN: ${CAMPAIGN_DOMAIN:-campaign.${DOMAIN}}
+      EVOLUTION_DOMAIN: ${EVOLUTION_DOMAIN:-evolution.${DOMAIN}}
+      WWW_DOMAIN: ${WWW_DOMAIN:-www.${DOMAIN}}
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: "256M"
+
+  # Remove dev host ports — everything goes through Caddy.
+  evolution:
+    ports: !reset []
+  bot-lb:
+    ports: !reset []
+  frontend:
+    ports: !reset []
+  campaign:
+    ports: !reset []
+
+volumes:
+  caddy_data:
+  caddy_config:
