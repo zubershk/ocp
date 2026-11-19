@@ -1,0 +1,339 @@
+{
+  "$schema": "https://api.northflank.com/v1/schemas/template",
+  "apiVersion": "v1.2",
+  "name": "OCP Free Stack",
+  "description": "OCP pizza platform on Northflank free Sandbox: Postgres + bot + Evolution GO. Auto-deploys from GitHub. Campaign runner is intentionally omitted (2-service free limit).",
+  "arguments": {
+    "PROJECT_REGION": "europe-west",
+    "REPO_URL": "https://github.com/zubershk/ocp",
+    "REPO_BRANCH": "master",
+    "BOT_DOMAIN": "",
+    "EVOLUTION_DOMAIN": "",
+    "BOT_ADMIN_KEY": "",
+    "OTP_PEPPER": "",
+    "EVOLUTION_WEBHOOK_SECRET": "",
+    "EVOLUTION_API_KEY": "",
+    "EVOLUTION_INSTANCE_TOKEN": "",
+    "RESTAURANT_WHATSAPP_NUMBER": "",
+    "CORS_ALLOWED_ORIGINS": "",
+    "STORAGE_ENDPOINT": "",
+    "STORAGE_BUCKET": "",
+    "STORAGE_ACCESS_KEY": "",
+    "STORAGE_SECRET_KEY": "",
+    "STORAGE_PUBLIC_URL": "",
+    "STORAGE_HOST": ""
+  },
+  "options": {
+    "autorun": false,
+    "concurrencyPolicy": "queue"
+  },
+  "spec": {
+    "kind": "Workflow",
+    "spec": {
+      "type": "sequential",
+      "steps": [
+        {
+          "kind": "Project",
+          "ref": "project",
+          "spec": {
+            "name": "ocp",
+            "description": "Orange Cheese Pizza — free production stack",
+            "region": "${args.PROJECT_REGION}",
+            "networking": {
+              "allowedIngressProjects": []
+            }
+          }
+        },
+        {
+          "kind": "Workflow",
+          "spec": {
+            "type": "sequential",
+            "context": {
+              "projectId": "${refs.project.id}"
+            },
+            "steps": [
+              {
+                "kind": "Addon",
+                "ref": "database",
+                "spec": {
+                  "type": "postgres",
+                  "name": "ocp-postgres",
+                  "version": "16",
+                  "tlsEnabled": true,
+                  "externalAccessEnabled": false,
+                  "billing": {
+                    "replicas": 1,
+                    "storage": 10240,
+                    "storageClass": "nvme",
+                    "deploymentPlan": "nf-compute-20"
+                  }
+                }
+              },
+              {
+                "kind": "SecretGroup",
+                "ref": "secrets",
+                "spec": {
+                  "type": "secret",
+                  "secretType": "environment-arguments",
+                  "priority": 10,
+                  "name": "ocp-runtime",
+                  "secrets": {
+                    "variables": {
+                      "GIN_MODE": "release",
+                      "BOT_PORT": "8090",
+                      "SERVER_PORT": "8080",
+                      "SINGLE_TENANT_MODE": "true",
+                      "RATE_LIMIT_BACKEND": "postgres",
+                      "API_RATE_LIMIT_PER_MIN": "300",
+                      "PUBLIC_READ_CACHE_TTL_SECS": "15",
+                      "TENANT_CACHE_TTL_SECS": "300",
+                      "BIZ_CONFIG_CACHE_TTL_SECS": "60",
+                      "PG_PUBSUB_ENABLED": "1",
+                      "PG_NOTIFY_CHANNEL": "ocp_events",
+                      "PG_PHONE_LOCKS_ENABLED": "true",
+                      "BROADCAST_ASYNC": "1",
+                      "BROADCAST_WORKERS": "8",
+                      "ORDER_STREAM_RESYNC_SECS": "0",
+                      "METRICS_ENABLED": "1",
+                      "ETAG_ENABLED": "1",
+                      "LOG_FORMAT": "json",
+                      "LOG_LEVEL": "info",
+                      "STORAGE_BACKEND": "s3",
+                      "STORAGE_REGION": "auto",
+                      "STORAGE_USE_SSL": "1",
+                      "DATABASE_ENABLED": "true",
+                      "DATABASE_PROVIDER": "postgresql",
+                      "DATABASE_SAVE_MESSAGES": "true",
+                      "DATABASE_SAVE_DATA_INSTANCE": "true",
+                      "DATABASE_SAVE_DATA_NEW_MESSAGE": "true",
+                      "DATABASE_SAVE_MESSAGE_UPDATE": "true",
+                      "DATABASE_SAVE_DATA_CONTACTS": "true",
+                      "DATABASE_SAVE_DATA_CHATS": "true",
+                      "DELIVERY_RETRIES": "5",
+                      "WEBHOOK_GLOBAL_ENABLED": "false",
+                      "BOT_ADMIN_KEY": "${args.BOT_ADMIN_KEY}",
+                      "OTP_PEPPER": "${args.OTP_PEPPER}",
+                      "EVOLUTION_WEBHOOK_SECRET": "${args.EVOLUTION_WEBHOOK_SECRET}",
+                      "EVOLUTION_API_KEY": "${args.EVOLUTION_API_KEY}",
+                      "EVOLUTION_INSTANCE_TOKEN": "${args.EVOLUTION_INSTANCE_TOKEN}",
+                      "RESTAURANT_WHATSAPP_NUMBER": "${args.RESTAURANT_WHATSAPP_NUMBER}",
+                      "CORS_ALLOWED_ORIGINS": "${args.CORS_ALLOWED_ORIGINS}",
+                      "STORAGE_ENDPOINT": "${args.STORAGE_ENDPOINT}",
+                      "STORAGE_BUCKET": "${args.STORAGE_BUCKET}",
+                      "STORAGE_ACCESS_KEY": "${args.STORAGE_ACCESS_KEY}",
+                      "STORAGE_SECRET_KEY": "${args.STORAGE_SECRET_KEY}",
+                      "STORAGE_PUBLIC_URL": "${args.STORAGE_PUBLIC_URL}",
+                      "SERVER_URL": "${args.EVOLUTION_DOMAIN}",
+                      "IMAGE_ALLOWLIST": "${args.STORAGE_HOST}"
+                    },
+                    "files": {}
+                  },
+                  "addonDependencies": [
+                    {
+                      "addonId": "${refs.database.id}",
+                      "keys": [
+                        {
+                          "keyName": "POSTGRES_URI",
+                          "aliases": [
+                            "BOT_DATABASE_URL",
+                            "POSTGRES_USERS_DB",
+                            "POSTGRES_AUTH_DB",
+                            "DATABASE_CONNECTION_URI"
+                          ]
+                        }
+                      ]
+                    }
+                  ],
+                  "restrictions": {
+                    "restricted": false,
+                    "nfObjects": [],
+                    "tags": []
+                  }
+                }
+              },
+              {
+                "kind": "Condition",
+                "spec": {
+                  "kind": "Addon",
+                  "spec": {
+                    "data": {
+                      "addonId": "${refs.database.id}"
+                    },
+                    "type": "running"
+                  }
+                }
+              },
+              {
+                "kind": "CombinedService",
+                "ref": "bot",
+                "spec": {
+                  "name": "bot",
+                  "vcsData": {
+                    "projectType": "github",
+                    "projectUrl": "${args.REPO_URL}",
+                    "projectBranch": "${args.REPO_BRANCH}"
+                  },
+                  "buildSettings": {
+                    "dockerfile": {
+                      "buildEngine": "buildkit",
+                      "dockerWorkDir": "/",
+                      "dockerFilePath": "/bot/Dockerfile",
+                      "buildkit": {
+                        "useCache": false,
+                        "cacheStorageSize": 16384
+                      }
+                    }
+                  },
+                  "billing": {
+                    "deploymentPlan": "nf-compute-20",
+                    "buildPlan": "nf-compute-400-16"
+                  },
+                  "deployment": {
+                    "instances": 1,
+                    "docker": {
+                      "configType": "default"
+                    },
+                    "storage": {
+                      "ephemeralStorage": {
+                        "storageSize": 1024
+                      },
+                      "shmSize": 64
+                    }
+                  },
+                  "runtimeEnvironment": {
+                    "EVOLUTION_API_URL": "http://evolution:8080",
+                    "EVOLUTION_INSTANCE": "OCP",
+                    "RESTAURANT_NAME": "Orange Cheese Pizza"
+                  },
+                  "runtimeFiles": {},
+                  "buildArguments": {},
+                  "buildFiles": {},
+                  "ports": [
+                    {
+                      "internalPort": 8090,
+                      "protocol": "HTTP",
+                      "name": "p01",
+                      "public": true,
+                      "domains": [],
+                      "security": {
+                        "policies": [],
+                        "credentials": []
+                      },
+                      "disableNfDomain": false
+                    }
+                  ],
+                  "healthChecks": [
+                    {
+                      "protocol": "HTTP",
+                      "type": "livenessProbe",
+                      "port": 8090,
+                      "path": "/health",
+                      "initialDelaySeconds": 15,
+                      "periodSeconds": 30,
+                      "timeoutSeconds": 5,
+                      "failureThreshold": 3,
+                      "successThreshold": 1
+                    },
+                    {
+                      "protocol": "HTTP",
+                      "type": "readinessProbe",
+                      "port": 8090,
+                      "path": "/ready",
+                      "initialDelaySeconds": 10,
+                      "periodSeconds": 15,
+                      "timeoutSeconds": 5,
+                      "failureThreshold": 2,
+                      "successThreshold": 1
+                    }
+                  ],
+                  "disabledCI": false,
+                  "buildConfiguration": {
+                    "pathIgnoreRules": ["bot/**"],
+                    "isAllowList": true,
+                    "ciIgnoreFlagsEnabled": false
+                  }
+                }
+              },
+              {
+                "kind": "CombinedService",
+                "ref": "evolution",
+                "spec": {
+                  "name": "evolution",
+                  "vcsData": {
+                    "projectType": "github",
+                    "projectUrl": "${args.REPO_URL}",
+                    "projectBranch": "${args.REPO_BRANCH}"
+                  },
+                  "buildSettings": {
+                    "dockerfile": {
+                      "buildEngine": "buildkit",
+                      "dockerWorkDir": "/evolution-go",
+                      "dockerFilePath": "/evolution-go/Dockerfile",
+                      "buildkit": {
+                        "useCache": false,
+                        "cacheStorageSize": 16384
+                      }
+                    }
+                  },
+                  "billing": {
+                    "deploymentPlan": "nf-compute-20",
+                    "buildPlan": "nf-compute-400-16"
+                  },
+                  "deployment": {
+                    "instances": 1,
+                    "docker": {
+                      "configType": "default"
+                    },
+                    "storage": {
+                      "ephemeralStorage": {
+                        "storageSize": 1024
+                      },
+                      "shmSize": 64
+                    }
+                  },
+                  "runtimeEnvironment": {},
+                  "runtimeFiles": {},
+                  "buildArguments": {},
+                  "buildFiles": {},
+                  "ports": [
+                    {
+                      "internalPort": 8080,
+                      "protocol": "HTTP",
+                      "name": "p01",
+                      "public": true,
+                      "domains": [],
+                      "security": {
+                        "policies": [],
+                        "credentials": []
+                      },
+                      "disableNfDomain": false
+                    }
+                  ],
+                  "healthChecks": [
+                    {
+                      "protocol": "HTTP",
+                      "type": "livenessProbe",
+                      "port": 8080,
+                      "path": "/health",
+                      "initialDelaySeconds": 20,
+                      "periodSeconds": 30,
+                      "timeoutSeconds": 5,
+                      "failureThreshold": 3,
+                      "successThreshold": 1
+                    }
+                  ],
+                  "disabledCI": false,
+                  "buildConfiguration": {
+                    "pathIgnoreRules": ["evolution-go/**"],
+                    "isAllowList": true,
+                    "ciIgnoreFlagsEnabled": false
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}
