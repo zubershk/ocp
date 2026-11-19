@@ -7,6 +7,10 @@
 
 Full-stack food ordering platform with WhatsApp integration, real-time order management, a production-ready admin dashboard, and a WhatsApp marketing campaign runner. Built for small food businesses that want an online ordering presence without paying third-party commissions.
 
+**The storefront home page** (`/r`) — customers browse categories and popular items, with live prices and ratings:
+
+![OCP storefront home page showing pizza categories and popular items](docs/screenshots/storefront-home.png)
+
 ### Quick Start
 
 ```bash
@@ -40,6 +44,11 @@ Before go-live, work through the [production checklist](docs/PRODUCTION_CHECKLIS
 ---
 
 ## What This Does
+
+The open-source landing page (`/`):
+
+![OCP landing page](docs/screenshots/landing.png)
+*Open-source, free-forever landing page with links to the live demo and docs.*
 
 **For customers:**
 - Browse the full menu with real product photos, prices, and dietary info
@@ -690,6 +699,17 @@ Access at `your-domain/admin` (or `localhost:5173/admin` in development).
 
 Login with your `BOT_ADMIN_KEY`. The key is stored in browser localStorage only.
 
+| Dashboard | Analytics | Catalog |
+|:---:|:---:|:---:|
+| ![Admin dashboard](docs/screenshots/admin-dashboard.png) | ![Admin analytics](docs/screenshots/admin-analytics.png) | ![Admin catalog](docs/screenshots/admin-catalog.png) |
+
+| Live chat | Coupons | POS |
+|:---:|:---:|:---:|
+| ![Admin live chat](docs/screenshots/admin-chats.png) | ![Admin coupons](docs/screenshots/admin-coupons.png) | ![POS terminal](docs/screenshots/admin-pos.png) |
+
+![Admin settings](docs/screenshots/admin-settings.png)
+*Admin settings — restaurant config and site customization links.*
+
 **Tabs:**
 - **Orders** — Live order queue with status controls, sound alerts, filter by status (New, Confirmed, Cooking, Ready, En Route, Delivered, Completed, Cancelled)
 - **Menu Studio** — Add/edit/delete menu items with image upload, manage categories; **Crusts tab** to create/edit/delete crusts with per-size pricing; per-item flags (spicy, Jain, new, available, hide-crust-selector)
@@ -729,7 +749,7 @@ Login with your `BOT_ADMIN_KEY`. The key is stored in browser localStorage only.
 | `/r/menu/item/:id` | Product | Image zoom, crust selection (hidden for bundles), size picker, live ratings, add to cart with flying animation |
 | `/r/cart` | Cart | Item list, quantity adjust, subtotal, tax, proceed to checkout |
 | `/r/checkout` | Checkout | Address autocomplete (Nominatim), OTP flow, order summary, idempotency |
-| `/r/order/:id` | Order Tracking | Real-time status timeline with timestamps (10s polling), order details, review form on delivery |
+| `/r/order/:id` | Order Tracking | Real-time status timeline via SSE (push) with per-step timestamps, order details, review form on delivery |
 | `/r/login` | Login | WhatsApp OTP send/verify, phone input |
 | `/r/account` | Account | Profile, order history, logout |
 | `/r/offers` | Offers | Admin-managed promos with copy-code buttons, live family packs with real prices |
@@ -741,6 +761,20 @@ Login with your `BOT_ADMIN_KEY`. The key is stored in browser localStorage only.
 | `/r/privacy` | Privacy | API-driven privacy policy content |
 | `/r/terms` | Terms | API-driven terms of service content |
 | `/r/reservations` | Reservations | Table booking form, time slots, guest count |
+
+**Storefront in action:**
+
+| Home | Menu | Product detail |
+|:---:|:---:|:---:|
+| ![Storefront home](docs/screenshots/storefront-home.png) | ![Storefront menu](docs/screenshots/storefront-menu.png) | ![Product detail](docs/screenshots/storefront-product.png) |
+
+| Cart | Checkout | Login |
+|:---:|:---:|:---:|
+| ![Cart](docs/screenshots/storefront-cart.png) | ![Checkout](docs/screenshots/storefront-checkout.png) | ![Login](docs/screenshots/storefront-login.png) |
+
+| Offers | Reviews |
+|:---:|:---:|
+| ![Offers](docs/screenshots/storefront-offers.png) | ![Reviews](docs/screenshots/storefront-reviews.png) |
 
 ---
 
@@ -876,6 +910,14 @@ npm run dev
 ```
 
 Open `http://localhost:5173` — go to Settings → enter Bot API URL (`http://localhost:8090`) and your admin key.
+
+| Dashboard | Customers | Campaigns |
+|:---:|:---:|:---:|
+| ![Campaign dashboard](docs/screenshots/campaign-dashboard.png) | ![Campaign customers](docs/screenshots/campaign-customers.png) | ![Campaigns](docs/screenshots/campaign-campaigns.png) |
+
+| Templates | Media |
+|:---:|:---:|
+| ![Message templates](docs/screenshots/campaign-templates.png) | ![Media library](docs/screenshots/campaign-media.png) |
 
 **6 tabs:**
 - **Dashboard** — Stats cards, 7-day activity chart, recent campaigns, tag breakdown
