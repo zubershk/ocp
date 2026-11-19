@@ -289,6 +289,43 @@ func main() {
 		fmt.Println("deploy/vps/.env.example: OK")
 	}
 
+	// Northflank template: valid JSON with the resources the free tier allows.
+	if nb := readFile(root, filepath.Join("northflank", "template.json"), check); nb != nil {
+		var t struct {
+			APIVersion string                 `json:"apiVersion"`
+			Name       string                 `json:"name"`
+			Arguments  map[string]interface{} `json:"arguments"`
+			Spec       json.RawMessage        `json:"spec"`
+		}
+		check(json.Unmarshal(nb, &t) == nil, "northflank/template.json is not valid JSON")
+		check(t.APIVersion == "v1.2", "northflank/template.json apiVersion = %q, want v1.2", t.APIVersion)
+		raw := string(nb)
+		check(strings.Contains(raw, `"kind": "Addon"`), "northflank template missing Postgres addon")
+		check(strings.Contains(raw, `"type": "postgres"`), "northflank template addon is not postgres")
+		check(strings.Contains(raw, `"auto_stop_machines"`) == false,
+			"northflank template must use always-on services (no auto-stop)")
+
+		// Exactly two services (free Sandbox limit) and no pooler (breaks LISTEN).
+		serviceCount := strings.Count(raw, `"kind": "CombinedService"`)
+		check(serviceCount == 2, "northflank template should declare 2 services (bot + evolution), found %d", serviceCount)
+		check(!strings.Contains(raw, "postgresqlConnectionPoolerEnabled\": true"),
+			"northflank template must not enable the Postgres connection pooler (breaks LISTEN/NOTIFY)")
+
+		// Build contexts must match each Dockerfile's COPY paths.
+		check(strings.Contains(raw, `"dockerWorkDir": "/"`), "bot build context must be repo root")
+		check(strings.Contains(raw, `"dockerWorkDir": "/evolution-go"`), "Evolution build context must be /evolution-go")
+		check(strings.Contains(raw, `"/bot/Dockerfile"`), "bot Dockerfile path missing")
+		check(strings.Contains(raw, `"/evolution-go/Dockerfile"`), "Evolution Dockerfile path missing")
+
+		// Required secrets are arguments, never committed values.
+		for _, arg := range []string{"BOT_ADMIN_KEY", "OTP_PEPPER", "EVOLUTION_WEBHOOK_SECRET",
+			"EVOLUTION_API_KEY", "EVOLUTION_INSTANCE_TOKEN", "STORAGE_ACCESS_KEY", "STORAGE_SECRET_KEY", "STORAGE_HOST"} {
+			_, ok := t.Arguments[arg]
+			check(ok, "northflank template missing secret argument %s", arg)
+		}
+		fmt.Println("northflank/template.json: OK")
+	}
+
 	if fail > 0 {
 		fmt.Printf("\n%d validation error(s)\n", fail)
 		os.Exit(1)
