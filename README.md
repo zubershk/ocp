@@ -3,6 +3,7 @@
 [![CI](https://github.com/zubershk/ocp/actions/workflows/ci.yml/badge.svg)](https://github.com/zubershk/ocp/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Docker](https://img.shields.io/badge/Docker-ready-blue.svg)](docker-compose.yml)
+[![Deploy docs](https://img.shields.io/badge/docs-deployment-blue.svg)](docs/DEPLOYMENT.md)
 
 Full-stack food ordering platform with WhatsApp integration, real-time order management, a production-ready admin dashboard, and a WhatsApp marketing campaign runner. Built for small food businesses that want an online ordering presence without paying third-party commissions.
 
@@ -20,9 +21,21 @@ curl -fsSL https://raw.githubusercontent.com/zubershk/ocp/master/install.sh | ba
 
 ### Deploy to Cloud
 
-[![Deploy to Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/zubershk/ocp/tree/master/frontend&env=VITE_API_BASE_URL)
+OCP needs always-on processes with persistent Postgres connections — PostgreSQL `LISTEN/NOTIFY` SSE fan-out, advisory phone locks, and background broadcast workers cannot run in a pure serverless frontend deploy. Three production paths are supported; pick the one that suits you:
 
-[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/template/ocp)
+| Option | Best for | Cost at low traffic | Guide |
+|--------|----------|---------------------|-------|
+| **Northflank free Sandbox (recommended)** — bot + Evolution GO + managed Postgres; frontend on Vercel; campaign runner omitted | Free, managed, zero-ops, WhatsApp included | ~$17.37/mo of resources under the $20 Sandbox cap; frontend free on Vercel | [northflank/README.md](northflank/README.md) · [DEPLOYMENT.md § Option 0](docs/DEPLOYMENT.md) |
+| **Hybrid** — Vercel frontend + Fly.io backend + Neon/Supabase + R2 (Fly backend is *legacy*) | Managed infra / global edge | Vercel/Neon/R2 free tiers; Fly has no free tier | [DEPLOYMENT.md § Option 1](docs/DEPLOYMENT.md) |
+| **Single VPS** — Docker Compose + Caddy with automatic TLS | Full control, one box | $0 on Oracle always-free ARM, else ~$5–10/mo | [DEPLOYMENT.md § Option 2](docs/DEPLOYMENT.md) · [deploy/vps/](deploy/vps/) |
+
+[![Deploy to Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/zubershk/ocp&env=VITE_API_BASE_URL)
+
+The frontend deploys to Vercel for Options 0 and 1. Import the repository at the **root** (the root `vercel.json` builds `frontend/`) and set `VITE_API_BASE_URL` in the Vercel project *before* the build — Vite inlines it at build time.
+
+**CI deploys are opt-in:** the `Deploy frontend to Vercel` and `Deploy backend to Fly.io` workflows are skipped unless `DEPLOY_VERCEL_ENABLED` / `DEPLOY_FLY_ENABLED` are set to `true` (with the matching `VERCEL_*` / `FLY_API_TOKEN` secrets), so a push never fails just because deploy credentials are absent. Northflank is the exception — it auto-deploys on push to `master` via native Git integration.
+
+Before go-live, work through the [production checklist](docs/PRODUCTION_CHECKLIST.md), run the [1000-user load test](docs/LOAD_TEST.md), and review the [infrastructure validator](#infrastructure-validation).
 
 ---
 
@@ -35,7 +48,7 @@ curl -fsSL https://raw.githubusercontent.com/zubershk/ocp/master/install.sh | ba
 - Customise pizzas (size, crust, toppings) and see price updates live
 - Place orders with address autocomplete (Nominatim-powered) and delivery radius check
 - Pay by cash or UPI on arrival
-- Track order status in real-time (10-second polling) with a visual timeline and per-step timestamps
+- Track order status in real-time via Server-Sent Events (push, no polling) with a visual timeline and per-step timestamps
 - Rate delivered orders with overall + per-item stars (verified purchase, moderated before going public)
 - Browse verified customer reviews with live rating aggregates on every product
 - WhatsApp OTP login — no passwords, just a 6-digit code
@@ -43,7 +56,7 @@ curl -fsSL https://raw.githubusercontent.com/zubershk/ocp/master/install.sh | ba
 - PWA support — works offline, installs to home screen, push notification ready
 
 **For the restaurant:**
-- Real-time order dashboard with live polling and sound alerts
+- Real-time order dashboard with an SSE event stream and sound alerts
 - Menu management — add/edit/delete items, upload product photos, manage categories and crust variants
 - Order lifecycle: New → Confirmed → Preparing → Ready → Out for Delivery → Delivered (with cancel)
 - WhatsApp notifications sent automatically on every status change
@@ -125,7 +138,10 @@ Tech-OCP/
 │   │   ├── auth_handler.go       # WhatsApp OTP login
 │   │   ├── site_settings_handler.go  # Site settings, pages, categories, offers, banners, packs API
 │   │   ├── review_handler.go     # Verified-purchase reviews + moderation
-│   │   └── rate_limit.go         # IP-based rate limiting
+│   │   ├── rate_limit.go         # Shared Postgres + write-only global limiter
+│   │   ├── public_cache.go       # Short-TTL read-through cache for public GETs
+│   │   ├── metrics.go            # Prometheus /metrics endpoint
+│   │   └── etag.go               # Strong ETag / 304 revalidation
 │   ├── admin/
 │   │   └── admin_handler.go      # Admin CRUD, analytics, team, audit, broadcast
 │   ├── services/
@@ -139,11 +155,18 @@ Tech-OCP/
 │   │   ├── bot_message_service.go    # Template rendering engine (DB + fallback)
 │   │   ├── bot_message_defaults.go   # Compiled-in default messages
 │   │   ├── business_config.go        # Sizes, payments, icons from DB
-│   │   ├── wa_emoji.go              # WhatsApp emoji constants
 │   │   ├── live_chat_service.go  # WhatsApp message persistence
 │   │   ├── evolution_client.go   # Evolution GO HTTP client
-│   │   └── whatsapp_cart_service.go  # Persistent WhatsApp cart
-│   ├── migrations/               # 51 SQL migration files (001→051)
+│   │   ├── whatsapp_cart_service.go  # Persistent WhatsApp cart
+│   │   ├── pubsub.go             # PostgreSQL LISTEN/NOTIFY cross-replica SSE fan-out
+│   │   ├── phone_lock.go         # Advisory per-phone locks (duplicate-order prevention)
+│   │   ├── storage.go            # Injectable local/S3 object storage provider
+│   │   ├── storage_s3_test.go    # Mock-S3 put/list/delete tests
+│   │   ├── image_policy.go       # Image URL allowlist / SSRF guards
+│   │   └── scale_config.go       # Env-driven scale knobs
+│   ├── scripts/
+│   │   └── validate_infra/        # Daemon-free config validator (CI infra-config job)
+│   ├── migrations/               # SQL migration files (001→051)
 │   ├── uploads/                  # Menu item product photos
 │   ├── .env.example              # Environment template
 │   └── go.mod / go.sum
@@ -176,11 +199,34 @@ Tech-OCP/
 │   ├── docker/                   # Docker compose configs
 │   └── go.mod / go.sum
 ├── docs/
-│   └── ARCHITECTURE.md           # System diagram, data flow, security model
+│   ├── ARCHITECTURE.md           # System diagram, data flow, security model
+│   ├── DEPLOYMENT.md             # All production deployment paths
+│   ├── LOAD_TEST.md              # 1000-user load harness + results
+│   ├── PRODUCTION_CHECKLIST.md   # Pre-go-live validation
+│   └── DEPENDABOT_TRIAGE.md      # Security advisory history
+├── northflank/                   # Recommended free deployment
+│   ├── template.json             # Northflank IaC template (bot + Evolution + Postgres)
+│   └── README.md                 # Import/run guide
+├── deploy/vps/                   # Single-VPS production stack
+│   ├── setup.sh                  # Bootstrap (Docker, firewall, secrets, backup cron)
+│   ├── deploy.sh                 # Validate + build + start + health check
+│   ├── docker-compose.prod.yml   # Caddy + host-port hardening override
+│   ├── Caddyfile                 # Hostname routing + auto TLS
+│   └── .env.example              # Production env template
+├── scripts/
+│   ├── loadtest/                 # Stdlib 1000-user load harness (own go.mod)
+│   ├── backup.sh                 # pg_dump + retention + optional S3 offsite
+│   └── restore.sh                # Destructive restore with confirmation
+├── vercel.json                   # Frontend Vercel config (root build command)
+├── fly.bot.toml                  # Fly.io bot service (legacy path)
+├── fly.campaign.toml             # Fly.io campaign service (legacy path)
+├── fly.evolution.toml            # Fly.io Evolution service (legacy path)
 ├── .github/
 │   ├── workflows/
-│   │   ├── ci.yml                # Build + vet on every push/PR
-│   │   └── release.yml           # Docker publish + GitHub release on tags
+│   │   ├── ci.yml                # CI: build, vet, tests, SAST, secret scan, infra validation
+│   │   ├── release.yml           # Docker publish + GitHub release on tags
+│   │   ├── deploy-frontend-vercel.yml   # Opt-in Vercel deploy
+│   │   └── deploy-backend-fly.yml       # Opt-in Fly deploy (legacy)
 │   ├── ISSUE_TEMPLATE/
 │   │   ├── bug_report.yml
 │   │   └── feature_request.yml
@@ -201,8 +247,11 @@ Tech-OCP/
 
 ## Prerequisites
 
-- **Docker** and **Docker Compose** (recommended)
-- Or: **Node.js** 20+, **Go** 1.25+, **PostgreSQL** 16+
+- **Docker** and **Docker Compose** (recommended — the compose stack pins PostgreSQL 16.4 and all service images)
+- Manual development: **Go 1.27.4+**, **Node.js 24+**, **PostgreSQL 16+**
+  - Go 1.27.4 is what CI installs and what `bot/Dockerfile` builds with
+  - Node 24 is what CI and the frontend/campaign build stages use (the campaign *runtime* image is Node 20.19)
+  - `openssl` is used by `setup.sh` to generate secrets
 
 ---
 
@@ -283,8 +332,7 @@ The bot runs 51 migrations (001→051) on startup covering:
 | 016 | Business config (sizes, payments, fees) |
 | 017 | Family packs page config (promo card + pack list) |
 | 018 | Item `no_crust` flag (hide crust selector for bundles) |
-| 019→032 | Reviews, crusts, tenant foundation/enforcement, POS schema/permissions, whatsapp cart tenant, onboarding, indexes (see `bot/migrations/`) |
-| 019 | Verified-purchase reviews table |
+| 019→051 | Verified-purchase reviews, crusts, tenant foundation/enforcement, POS schema/permissions, WhatsApp cart tenant, onboarding, indexes, broadcast queue + idempotency, campaign state, and later hardening migrations (see `bot/migrations/` for the authoritative list) |
 
 ### 3. Backend
 
@@ -328,6 +376,28 @@ npm run dev      # Server on :3001 + frontend on :5174
 | `CORS_ALLOWED_ORIGINS` | Comma-separated allowed origins | `https://your-app.vercel.app` |
 | `RESTAURANT_WHATSAPP_NUMBER` | Number for order notifications | `919876543210` |
 | `DELIVERY_FEE` | Default delivery fee | `0` |
+| `OTP_PEPPER` | **Required.** Hash pepper for OTPs and sessions — must differ from `BOT_ADMIN_KEY` | `openssl rand -hex 32` |
+| `SINGLE_TENANT_MODE` | Single-restaurant mode; must be `true` in `GIN_MODE=release` or `/api/*` returns "tenant required" | `true` |
+| `TRUSTED_PROXIES` | LB/proxy CIDRs so `ClientIP()` is correct for rate limiting | `172.16.0.0/12` |
+| `RATE_LIMIT_BACKEND` | `postgres` shares counters across replicas | `postgres` |
+| `API_RATE_LIMIT_PER_MIN` | Global **write-only** budget per IP (safe reads bypass) | `300` |
+| `PUBLIC_READ_CACHE_TTL_SECS` | Read-through cache TTL for anonymous storefront GETs; `0` disables | `15` |
+| `ETAG_ENABLED` | Strong ETag + 304 revalidation for small GET JSON | `1` |
+| `BIZ_CONFIG_CACHE_TTL_SECS` | Business-config cache TTL (cross-replica convergence window) | `60` |
+| `TENANT_CACHE_TTL_SECS` | Tenant lookup cache TTL | `300` |
+| `PG_PUBSUB_ENABLED` | Postgres `LISTEN/NOTIFY` cross-replica SSE fan-out (needs a **direct** DB connection, no pooler) | `1` |
+| `PG_PHONE_LOCKS_ENABLED` | Advisory per-phone locks (duplicate-order prevention) | `true` |
+| `BROADCAST_ASYNC` | Durable DB-queue broadcasts (returns `202 + job_id`) | `1` |
+| `BROADCAST_WORKERS` | Bounded broadcast queue workers | `8` |
+| `ORDER_STREAM_RESYNC_SECS` | Order SSE DB re-poll; `0` = push-only (recommended at scale) | `0` |
+| `METRICS_ENABLED` | Prometheus `/metrics` endpoint | `1` |
+| `STORAGE_BACKEND` | `local` (single node) or `s3` (R2/S3/MinIO; required for shared replicas) | `local` |
+| `STORAGE_ENDPOINT` / `STORAGE_BUCKET` / `STORAGE_ACCESS_KEY` / `STORAGE_SECRET_KEY` | S3-compatible storage credentials (R2 endpoint is host-only, no `https://`) | — |
+| `STORAGE_PUBLIC_URL` | CDN/public base URL prepended to object keys | `https://cdn.example.com` |
+| `IMAGE_ALLOWLIST` | Comma-separated **hostnames** allowed in WhatsApp image URLs (empty = uploads only) | `cdn.example.com` |
+| `PGSSLMODE` | `disable` for local Docker Postgres; `require` for managed Postgres (default in root `.env.example`) | `require` |
+
+See [.env.example](.env.example), [bot/.env.example](bot/.env.example), and [deploy/vps/.env.example](deploy/vps/.env.example) for the full, grouped lists.
 
 ---
 
@@ -365,21 +435,22 @@ cd bot && go build -o bot-ocp . && ./bot-ocp
 ### Deploying Frontend to Vercel
 
 1. Push the repo to GitHub
-2. Go to [vercel.com](https://vercel.com) and import the `zubershk/ocp` repo
-3. Set the root directory to `frontend`
-4. Add environment variable: `VITE_API_BASE_URL` = your backend URL
-5. Deploy
+2. Go to [vercel.com](https://vercel.com) and import the `zubershk/ocp` repo — **keep the root directory as the repo root** (the root `vercel.json` runs `npm --prefix frontend ci` and `npm --prefix frontend run build`, output `frontend/dist`)
+3. Add the environment variable `VITE_API_BASE_URL` = your backend URL **before** deploying — Vite inlines it at build time; leaving it unset throws at startup and produces a blank page
+4. Deploy
 
-Vercel config includes security headers (HSTS, CSP, X-Frame-Options), SPA routing rewrites, and 1-year immutable asset caching.
+Vercel config includes security headers (HSTS, CSP, X-Frame-Options), SPA routing rewrites, and 1-year immutable asset caching. See [docs/DEPLOYMENT.md § Option 0](docs/DEPLOYMENT.md) for the full walkthrough.
 
 ### Deploying Backend
 
-The Go backend needs to run on a server with PostgreSQL access. Options:
-- **Railway** / **Render** — easy Go deployment with managed PostgreSQL
-- **VPS** (DigitalOcean, Hetzner) — full control, run via systemd
-- **Your own machine** — for local development only
+The Go backend needs always-on processes with PostgreSQL access. Concrete, validated paths (see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)):
 
-Set `CORS_ALLOWED_ORIGINS` in `bot/.env` to include your Vercel domain.
+- **Northflank free Sandbox (recommended)** — bot + Evolution GO + managed Postgres via [northflank/template.json](northflank/template.json); frontend on Vercel. Campaign runner is omitted on the free tier.
+- **VPS** — Docker Compose + Caddy with automatic TLS via [deploy/vps/](deploy/vps/); run as systemd, or use the provided `start-ocp.sh` / control panel.
+- **Fly.io (legacy)** — always-on Machines via `fly.*.toml`; Fly no longer has a free tier.
+- **Your own machine** — local development only.
+
+Set `CORS_ALLOWED_ORIGINS` to include your Vercel domain, and `TRUSTED_PROXIES` to your proxy/LB CIDR so rate limiting keys on the real client IP.
 
 ---
 
@@ -399,6 +470,8 @@ The compose stack is horizontally scalable. All cross-replica shared state lives
 - **Backups**: schedule `scripts/backup.sh` (retention `BACKUP_RETENTION_DAYS`, optional `BACKUP_S3_BUCKET`); restore with `scripts/restore.sh`. Both are env-driven.
 - **Admin key rotation**: `POST /admin/me/rotate-key` rotates a DB user's own key (returned once). The env `BOT_ADMIN_KEY` is break-glass only.
 
+The scale settings above were validated by the [1000-user load test](docs/LOAD_TEST.md). Two findings changed the defaults: the global `/api/*` limiter now counts **only writes** (`API_RATE_LIMIT_PER_MIN`) so shoppers behind one NAT IP are not all throttled, and a 15s `PUBLIC_READ_CACHE_TTL_SECS` read-through cache keeps storefront GETs off the DB pool. Keeping `ETAG_ENABLED=1` plus setting `TRUSTED_PROXIES` are also required for production. See [Load Test](#load-test) for the measured results and [Production Checklist](docs/PRODUCTION_CHECKLIST.md) for the full go-live list.
+
 All new knobs are documented in `.env.example` (root) and `bot/.env.example`.
 
 ## Security
@@ -407,10 +480,10 @@ The codebase has been audited and hardened for production use:
 
 - **Webhook authentication** — HMAC-SHA256 signature verification; rejects webhooks when `EVOLUTION_WEBHOOK_SECRET` is empty
 - **Admin key comparison** — constant-time via `crypto/subtle` to prevent timing attacks; keys stored as SHA-256 hashes
-- **Rate limiting** — IP-based window counters on all endpoint groups:
+- **Rate limiting** — Postgres-backed shared counters (`RATE_LIMIT_BACKEND=postgres`) that hold across replicas; IP-based windows on endpoint groups:
   - `/auth/send-otp` — 3 requests/min
   - `/auth/verify-otp` — 10 requests/min
-  - `/api/*` — 120 requests/min
+  - `/api/*` — global **write-only** budget (`API_RATE_LIMIT_PER_MIN`, default 300); safe GET/HEAD/OPTIONS reads bypass it so shoppers behind one NAT/CGNAT IP are not throttled — every state-changing endpoint keeps its own strict limit
   - `/admin/*` — failed admin-key attempts only (10/60s by default); legitimate polling is never throttled
   - `/api/orders` — 20 requests/min
   - `/webhook/*` — 300 requests/min
@@ -428,6 +501,82 @@ The codebase has been audited and hardened for production use:
 - **Idempotency** — unique key per order creation request prevents duplicate orders
 - **Memory management** — conversation locks cleaned up every 30 minutes
 - **Docker security** — required env vars (no defaults), locked CORS, minimal base images (alpine)
+
+**Automated security checks in CI** (`ci.yml`, all fail-closed):
+
+- **`govulncheck -scan module`** — Go dependency vulnerability scan on every push/PR (reported "No vulnerabilities found" in the latest run)
+- **CodeQL SAST** — static analysis for Go and JavaScript/TypeScript
+- **gitleaks** — full-history secret scan plus per-job scans
+- **`npm audit --omit=dev --audit-level=high`** — frontend and campaign, retried on registry outages then fails closed
+- **Tenant-isolation guard** — fails the build if a `handlers/*.go` file reintroduces `ResolveRestaurant(0)` on a request path
+
+The dependency-advisory history (6 resolved advisories, 2 dev-only picomatch alerts with dismissal rationale) is tracked in [docs/DEPENDABOT_TRIAGE.md](docs/DEPENDABOT_TRIAGE.md). All open Dependabot PRs have been consolidated and applied; the repo currently has **0 open advisories**.
+
+---
+
+## Load Test
+
+A dependency-free Go harness in [`scripts/loadtest/`](scripts/loadtest/) drives concurrent HTTP traffic at a running bot and reports status counts, latency percentiles, peak DB pool usage (from `/metrics`), and a machine-readable `loadtest-summary.json`. It needs no k6 or external tooling.
+
+```bash
+cd scripts/loadtest
+
+# 1000 shoppers for 30s
+go run . -base http://localhost:8090 -users 1000 -duration 30s
+
+# Include admin dashboard endpoints in the mix
+go run . -base http://localhost:8090 -users 1000 -duration 30s \
+  -with-admin -admin-key "$OCP_ADMIN_KEY"
+```
+
+Flags: `-base` (default `http://localhost:8090`), `-users` (default 100), `-duration` (default 20s), `-admin-key` (falls back to `OCP_ADMIN_KEY`), `-with-admin` (default false). The harness warms up via `/health`, then ramps virtual users that mix the public storefront endpoints with optional admin reads.
+
+**Final results — 1000 concurrent users** (bot and generator on the same machine, so numbers are conservative):
+
+| Scenario | Users | RPS | HTTP status | Network errors | p95 | p99 |
+|----------|------:|----:|-------------|---------------:|----:|----:|
+| Shoppers only | 1000 | **13,700** | **100% 200** | 728 (0.18%) | 160 ms | 380 ms |
+| With admin traffic | 1000 | **6,769** | **100% 200** | 133 (0.06%) | 785 ms | 3.2 s |
+
+Zero HTTP error responses — the "network errors" were client-side 10s timeout tails, not server failures.
+
+**Bottlenecks the test found and fixed:**
+
+| Before | After | Change |
+|--------|-------|--------|
+| 94.6% HTTP 429 at 100 users | 100% 200 | Global limiter now counts writes only (`RateLimitSkipSafe` + `API_RATE_LIMIT_PER_MIN`) |
+| 594 RPS, 3,691 ms p95, DB pool pinned at 25/25 | 13,700 RPS, 160 ms p95 | `PUBLIC_READ_CACHE_TTL_SECS=15` read-through cache for public GETs |
+| Duplicate access logs per request | One structured line | `gin.New()` + `gin.Recovery()` instead of `gin.Default()` |
+| Tenant fallback warning on every request | Once per process | `sync.Once` guard |
+| Harness deadlock above ~3k RPS | Stable | Concurrent result consumption |
+
+**Interpretation and caveats:** single-node local test (no geographic distribution), no 1000-user *write* storm, and the Docker/PgBouncer and S3 paths were not exercised here. For production keep `PUBLIC_READ_CACHE_TTL_SECS=15`, `ETAG_ENABLED=1`, `RATE_LIMIT_BACKEND=postgres`, set `TRUSTED_PROXIES`, and run multiple bot replicas behind `bot-lb` + PgBouncer. Full methodology, progression table, and notes are in [docs/LOAD_TEST.md](docs/LOAD_TEST.md).
+
+---
+
+## Infrastructure validation
+
+A daemon-free Go validator in [`bot/scripts/validate_infra/`](bot/scripts/validate_infra/) checks the whole deployment surface without needing Docker, PgBouncer, or cloud credentials. It runs in CI as the `infra-config` job on every push and pull request.
+
+```bash
+cd bot
+go run ./scripts/validate_infra -root ..
+go run ./scripts/validate_infra -root .. -preflight   # additionally check local env values
+```
+
+It verifies:
+
+- **Docker Compose** — `depends_on` targets, named volumes, bind-mount sources, Dockerfile paths, required `${VAR:?}` env vars
+- **nginx configs** — brace balance, upstream hosts resolve to real services
+- **Vercel** — `vercel.json` is valid JSON with the right `outputDirectory` and SPA rewrite
+- **Fly.io** — TOML syntax, always-on guarantees (`auto_stop_machines = false`, `min_machines_running >= 1`), health checks, Dockerfile paths
+- **GitHub workflows** — YAML parses for the deploy workflows and the VPS compose override
+- **Caddy / VPS** — Caddyfile braces and proxy targets; the VPS env template covers every required variable
+- **Northflank** — the template is valid v1.2 JSON with exactly 2 services, a Postgres addon, **no connection pooler** (it would break `LISTEN`), correct build contexts, and all secret arguments declared
+
+`-preflight` additionally checks the current environment for missing secrets and unsafe defaults (`SINGLE_TENANT_MODE`, `TRUSTED_PROXIES`, short admin key, empty `OTP_PEPPER`, `PUBLIC_READ_CACHE_TTL_SECS=0`, etc.).
+
+Before go-live, combine this with the [production checklist](docs/PRODUCTION_CHECKLIST.md).
 
 ---
 
@@ -465,7 +614,7 @@ The codebase has been audited and hardened for production use:
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/api/auth/send-otp` | Send WhatsApp OTP (rate limited: 3/min, 30s cooldown) |
-| `POST` | `/api/auth/verify-otp` | Verify OTP, get session token (24h expiry) |
+| `POST` | `/api/auth/verify-otp` | Verify OTP, get session token (30d sliding TTL) |
 | `GET` | `/api/auth/me` | Get current user profile |
 | `GET` | `/api/auth/orders` | Get user's order history |
 | `POST` | `/api/auth/logout` | Invalidate session |
@@ -693,8 +842,8 @@ cp .env.example .env
 go build -o evolution-go ./cmd/evolution-go
 ./evolution-go
 
-# Or use Docker (from evolution-go subdir)
-docker compose -f evolution-go/docker/docker-compose.yml up -d
+# Or use Docker (example compose files live under evolution-go/docker/examples/)
+docker compose -f evolution-go/docker/examples/docker-compose.yml up -d
 ```
 
 Evolution GO features:
@@ -785,11 +934,13 @@ When the API is unavailable (offline, slow network), the frontend falls back to 
 
 | Service | Base Image | Build | Port |
 |---------|-----------|-------|------|
-| Bot | golang:1.25.0-alpine3.21 → alpine:3.20.3 | `CGO_ENABLED=0` static build | :8090 |
-| Frontend | node:20.19.0-alpine3.20 → nginx:1.27.1-alpine3.20 | `npm ci` + Vite build | :3000 |
-| Campaign Runner | node:20.19.0-alpine3.20 | `npm ci` + build | :3001 |
+| Bot | golang:1.27.4-alpine3.21 → alpine:3.20.3 | `CGO_ENABLED=0` static build | :8090 |
+| Frontend | node:24.20.0-alpine3.20 → nginx:1.27.1-alpine3.20 | `npm ci` + Vite build | :3000 |
+| Campaign Runner | node:24.20.0-alpine3.20 (builder) → node:20.19.0-alpine3.20 (runtime) | `npm ci` + build | :3001 |
 | Evolution GO | golang:1.25.0-alpine3.21 → alpine:3.21.3 | `CGO_ENABLED=1` with image libs | :8080 |
 | PostgreSQL | postgres:16.4-alpine3.20 | — | :5432 |
+| PgBouncer | edoburu/pgbouncer:v1.21.0-p1 | transaction pooling (`:6432`) | :6432 |
+| bot-lb | nginx:1.27-alpine | round-robin across bot replicas | :80 |
 
 ### Docker Compose
 
@@ -802,15 +953,28 @@ When the API is unavailable (offline, slow network), the frontend falls back to 
 
 ## CI/CD
 
-### GitHub Actions (`ci.yml`)
-- Triggers on every push and pull request
-- Go build and `go vet`
-- Frontend build and TypeScript check
+### Continuous integration (`ci.yml`)
+Triggers on every push and pull request to `master`. All jobs are fail-closed:
 
-### Release Pipeline (`release.yml`)
-- Triggers on version tags
-- Builds and publishes Docker images
-- Creates GitHub release with changelog
+- **`gitleaks`** — full-history secret scan
+- **`sast`** — CodeQL static analysis for Go and JavaScript/TypeScript
+- **`bot`** — Go build, `go vet`, `govulncheck -scan module`, DB-backed `go test -p 1 ./... -count=1` against a `postgres:16` service, plus the tenant-isolation source guard
+- **`frontend`** — `npm audit --omit=dev --audit-level=high`, `npm run build` (tsc + Vite), `npm run lint` (oxlint), gitleaks
+- **`campaign`** — `npm audit`, `npm run build`, gitleaks
+- **`infra-config`** — daemon-free validation of compose, nginx, Vercel, Fly, Caddy, env templates, and the Northflank template (see [Infrastructure validation](#infrastructure-validation))
+
+The CI workflow always runs so a push never fails simply because deploy credentials are absent.
+
+### Deploy workflows (opt-in)
+- `deploy-frontend-vercel.yml` — gated by `DEPLOY_VERCEL_ENABLED=true` + `VERCEL_TOKEN` / `VERCEL_ORG_ID` / `VERCEL_PROJECT_ID`
+- `deploy-backend-fly.yml` (legacy) — gated by `DEPLOY_FLY_ENABLED=true` + `FLY_API_TOKEN`; deploys bot → campaign/Evolution
+- Both use non-cancelling concurrency groups and `workflow_dispatch`; with the gate variables unset the jobs are **skipped, not failed**
+- **Northflank** deploys via native Git integration (no GitHub Action) and auto-deploys on push to `master`
+
+### Release pipeline (`release.yml`)
+- Triggers on version tags (`v*`)
+- Builds and publishes `bot`, `frontend`, and `campaign` images to `ghcr.io` with provenance and SBOM
+- Creates a GitHub release with generated changelog
 
 ---
 
