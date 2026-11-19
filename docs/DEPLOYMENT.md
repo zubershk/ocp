@@ -1,30 +1,42 @@
 # Deployment guide
 
-Two production paths are supported. Both keep the architecture intact —
-Postgres `LISTEN/NOTIFY`, advisory phone locks, the broadcast queue and the
-campaign scheduler all require **always-on processes with persistent DB
-connections**, which is why a pure Vercel-serverless deployment is not viable
-(see the justification at the end).
+Several production paths are supported. All keep the core architecture intact —
+Postgres `LISTEN/NOTIFY`, advisory phone locks and the broadcast queue require
+**always-on processes with persistent DB connections**, which is why a pure
+Vercel-serverless deployment is not viable (see the justification at the end).
 
-| | Option 1 — Hybrid | Option 2 — Single VPS |
-|---|---|---|
-| Frontend | Vercel (free) | Caddy on the VPS |
-| Backend | Fly.io (always-on Machines) | Docker Compose on the VPS |
-| Postgres | Neon / Supabase (free tier) | Local `postgres:16` container |
-| Object storage | Cloudflare R2 (free tier) | Local `bot_uploads` volume |
-| TLS | Vercel + Fly automated | Caddy + Let's Encrypt automated |
-| Cost at low traffic | ~$0 | $0 (Oracle always-free) or ~$5–10/mo |
-| Ops complexity | 4 services to configure | One box to maintain |
-| Best for | Teams wanting managed infra / global edge | Simplest single-tenant deployment |
+| | Option 0 — Northflank (recommended free) | Option 1 — Hybrid | Option 2 — Single VPS |
+|---|---|---|---|
+| Frontend | Vercel (free) | Vercel (free) | Caddy on the VPS |
+| Backend | Northflank free Sandbox (bot + Evolution) | Fly.io (always-on Machines) | Docker Compose on the VPS |
+| Postgres | Northflank addon (free allocation) | Neon / Supabase | Local `postgres:16` container |
+| Object storage | Cloudflare R2 (free) | Cloudflare R2 (free) | Local `bot_uploads` volume |
+| TLS | Northflank + Vercel automated | Vercel + Fly automated | Caddy + Let's Encrypt automated |
+| Cost at low traffic | **$0 (under $20 cap)** | ~$0 but Fly no longer has a free tier | $0 (Oracle always-free) or ~$5–10/mo |
+| Campaign runner | Omitted (2-service free limit) | Included | Included |
+| Best for | Free, managed, zero-ops, WhatsApp included | Managed infra / global edge | Full stack / max control |
 
-> **Deploys are opt-in in CI.** The two deploy workflows are skipped by default
-> so a push to `master` never fails just because credentials are not configured
-> yet. To enable:
-> - Hybrid: set repository variable `DEPLOY_VERCEL_ENABLED=true` and secrets
->   `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`; set
->   `DEPLOY_FLY_ENABLED=true` and secret `FLY_API_TOKEN`.
-> - Optional WhatsApp bridge: set `DEPLOY_EVOLUTION=false` to skip it.
+> **Deploys are opt-in in CI.** The deploy workflows are skipped by default so a
+> push to `master` never fails just because credentials are not configured yet.
+> - Northflank deploys via **native Git integration** (no GitHub Action) — see
+>   `northflank/README.md`.
+> - Vercel: set variable `DEPLOY_VERCEL_ENABLED=true` and secrets `VERCEL_TOKEN`,
+>   `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`.
+> - Fly (legacy): set `DEPLOY_FLY_ENABLED=true` and secret `FLY_API_TOKEN`.
 > The always-green `CI` workflow runs on every push regardless.
+
+## Option 0 — Northflank free Sandbox (bot + Evolution, no campaign)
+
+Full guide: **`northflank/README.md`**, template: **`northflank/template.json`**.
+
+- Two always-on services: bot (port 8090) + Evolution GO (port 8080), plus one
+  10 GB Postgres addon — total ~$17.37/mo, under the $20 free cap.
+- Native GitHub CI auto-deploys on push to `master` with path filters.
+- **Do not enable the Postgres connection pooler** — it silently breaks the
+  session-scoped `LISTEN` used for SSE fan-out.
+- Campaign runner is omitted (free tier limit is 2 services). The bot's own
+  broadcast worker still functions; campaign scheduling/UI does not.
+- Frontend deploys separately on Vercel with `VITE_API_BASE_URL` = bot URL.
 
 ---
 
