@@ -1,15 +1,52 @@
-# Orange Cheese Pizza — Online Ordering System
+<div align="center">
+
+# Orange Cheese Pizza
+
+**An open-source, self-hostable ordering platform for food businesses — web storefront, WhatsApp ordering, live admin, POS and campaigns. No commissions. No vendor lock-in.**
 
 [![CI](https://github.com/zubershk/ocp/actions/workflows/ci.yml/badge.svg)](https://github.com/zubershk/ocp/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/zubershk/ocp)](https://github.com/zubershk/ocp/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Contributors](https://img.shields.io/github/contributors/zubershk/ocp)](https://github.com/zubershk/ocp/graphs/contributors)
+[![Stars](https://img.shields.io/github/stars/zubershk/ocp?style=social)](https://github.com/zubershk/ocp/stargazers)
 [![Docker](https://img.shields.io/badge/Docker-ready-blue.svg)](docker-compose.yml)
-[![Deploy docs](https://img.shields.io/badge/docs-deployment-blue.svg)](docs/DEPLOYMENT.md)
+[![Load test](https://img.shields.io/badge/load%20test-13.7k%20RPS-brightgreen.svg)](docs/LOAD_TEST.md)
 
-Full-stack food ordering platform with WhatsApp integration, real-time order management, a production-ready admin dashboard, and a WhatsApp marketing campaign runner. Built for small food businesses that want an online ordering presence without paying third-party commissions.
+**[Quick Start](#quick-start)** · **[Deployment](#deploy-to-cloud)** · **[Screenshots](#customer-site-pages)** · **[Contributing](#contributing)** · **[Sponsor](#sponsor)**
 
-**The storefront home page** (`/r`) — customers browse categories and popular items, with live prices and ratings:
+![OCP storefront home page showing categories and popular items](docs/screenshots/storefront-home.png)
 
-![OCP storefront home page showing pizza categories and popular items](docs/screenshots/storefront-home.png)
+</div>
+
+OCP is a full-stack food ordering platform with WhatsApp integration, real-time
+order management, a production-ready admin dashboard, a POS terminal and a
+WhatsApp marketing campaign runner. It is MIT-licensed and designed to be
+self-hosted by small food businesses that want an online presence without
+paying third-party marketplace commissions.
+
+> **Why open source?** Ordering platforms lock businesses into fees and data
+> silos. OCP gives you the whole stack — source, schema, deployment configs and
+> your data — under a permissive license. Use it as-is, white-label it, or
+> contribute a feature your business needs.
+
+### Architecture at a glance
+
+```mermaid
+flowchart LR
+  C[Customer / PWA] -->|HTTPS| F[React storefront]
+  F -->|/api/*| B[Go bot API]
+  W[WhatsApp] -->|webhook| B
+  B -->|LISTEN/NOTIFY + SSE| C
+  B --> P[(PostgreSQL)]
+  B --> E[Evolution GO gateway]
+  E --> W
+  X[Campaign runner] -->|/admin/*| B
+  A[Admin / POS] --> F
+```
+
+All cross-replica shared state lives in PostgreSQL — SSE fan-out, advisory phone
+locks, rate-limit counters and the durable broadcast queue — so no sticky
+sessions or extra cache service are required.
 
 ### Quick Start
 
@@ -22,6 +59,11 @@ Or install to a custom directory:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/zubershk/ocp/master/install.sh | bash
 ```
+
+Then open `http://localhost:3000/admin` with the admin key printed by setup,
+pair WhatsApp via the Evolution GO manager, and start adding your menu. Details
+in [Quick Start (Docker)](#quick-start-docker) and
+[WhatsApp Integration](#whatsapp-integration).
 
 ### Deploy to Cloud
 
@@ -48,7 +90,7 @@ Before go-live, work through the [production checklist](docs/PRODUCTION_CHECKLIS
 The open-source landing page (`/`):
 
 ![OCP landing page](docs/screenshots/landing.png)
-*Open-source, free-forever landing page with links to the live demo and docs.*
+*Open-source, free-forever landing page with links to the docs and self-hosting guide.*
 
 **For customers:**
 - Browse the full menu with real product photos, prices, and dietary info
@@ -591,6 +633,9 @@ Before go-live, combine this with the [production checklist](docs/PRODUCTION_CHE
 
 ## API Endpoints
 
+<details>
+<summary><b>Full endpoint reference</b> — public, auth, admin and webhook routes (click to expand)</summary>
+
 ### Public
 
 | Method | Path | Description |
@@ -691,6 +736,8 @@ Before go-live, combine this with the [production checklist](docs/PRODUCTION_CHE
 | `POST` | `/webhook/evolution` | Evolution GO event receiver (HMAC-SHA256 verified, rate limited: 300/min) |
 | `POST` | `/webhook/button` | Evolution GO button click receiver |
 
+</details>
+
 ---
 
 ## Admin Dashboard
@@ -780,6 +827,9 @@ Login with your `BOT_ADMIN_KEY`. The key is stored in browser localStorage only.
 
 ## Frontend Components
 
+<details>
+<summary><b>Component reference</b> — 18 UI components, contexts, hooks and services (click to expand)</summary>
+
 ### UI Components (`frontend/src/components/ui/`)
 
 | Component | What it does |
@@ -833,6 +883,8 @@ Login with your `BOT_ADMIN_KEY`. The key is stored in browser localStorage only.
 | `cartService.ts` | Cart persistence operations |
 | `menuService.ts` | Menu/category/crust data fetching |
 | `orderService.ts` | Order creation, tracking, history |
+
+</details>
 
 ---
 
@@ -1022,7 +1074,43 @@ The CI workflow always runs so a push never fails simply because deploy credenti
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, code style, and PR guidelines.
+OCP is maintainer-friendly by design: the bot is a single Go binary, the frontend
+is a Vite SPA, and CI validates every module independently. Contributions from
+first-time open-source contributors are welcome.
+
+**Developer quick start** (from repo root):
+
+```bash
+# Bot — Go 1.27.4
+cd bot && go build ./... && go vet ./...
+OCP_TEST_DATABASE_URL='postgresql://ocp:test@localhost:5432/ocp?sslmode=disable' \
+SINGLE_TENANT_MODE=0 OTP_PEPPER=dev-pepper go test -p 1 ./... -count=1
+
+# Frontend — Node 24
+cd frontend && npm ci --ignore-scripts && npm run build && npm run lint
+
+# Campaign runner — Node 24
+cd campaign-runner && npm ci --ignore-scripts && npm test && npm run build
+
+# Infrastructure config (no Docker required)
+cd bot && go run ./scripts/validate_infra -root ..
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for code style and PR guidelines, and
+[SECURITY.md](SECURITY.md) to report vulnerabilities privately. Community
+standards are in [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md); notable changes are
+recorded in [CHANGELOG.md](CHANGELOG.md).
+
+**Where you can help most:** currency/localization (the storefront still assumes
+₹), payment gateways, outbound webhooks, a versioned public API, hosted demo,
+and the self-serve onboarding flow. Pick an area, open an issue to discuss, then
+send a PR. We are happy to mentor first-time contributors.
+
+## Sponsor
+
+If OCP saves your business money or you want to support maintenance, sponsor the
+project via the GitHub **Sponsor** button on the repository, or add your own
+link in [.github/FUNDING.yml](.github/FUNDING.yml).
 
 ## License
 
