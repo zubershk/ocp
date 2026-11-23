@@ -1,13 +1,13 @@
-import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
 import {
   motion, AnimatePresence, useScroll, useSpring, useInView, useMotionValue,
-  useMotionTemplate, animate, useReducedMotion,
+  useMotionTemplate, useTransform, animate, useReducedMotion,
 } from 'framer-motion';
 import {
   ArrowRight, MessageSquare, BarChart3, CheckCircle2, XCircle,
   Terminal, Layout, Smartphone, Bell, Users, GitFork, ShieldCheck,
   BookOpen, Heart, Zap, Gauge, Globe2, LockKeyhole, UtensilsCrossed,
-  Coffee, Cloud, Truck, ChevronDown,
+  Coffee, Cloud, Truck, ChevronDown, Menu, X, Pause, Play,
 } from 'lucide-react';
 import { useSocial, useSEO } from '../context/SiteSettingsContext';
 import { useRestaurantName } from '../context/RestaurantContext';
@@ -29,13 +29,13 @@ function Reveal({ children, delay = 0, className = '' }: { children: ReactNode; 
       initial={reduce ? false : { opacity: 0, y: 22 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: '-60px' }}
-      transition={{ type: 'spring', stiffness: 170, damping: 22, mass: 0.7, delay }}>
+      transition={{ type: 'spring', stiffness: 190, damping: 25, delay }}>
       {children}
     </motion.div>
   );
 }
 
-function TiltCard({ children, className = '' }: { children: ReactNode; className?: string }) {
+function TiltCard({ children, className = '', style }: { children: ReactNode; className?: string; style?: CSSProperties }) {
   const rx = useMotionValue(0);
   const ry = useMotionValue(0);
   const srx = useSpring(rx, { stiffness: 180, damping: 18 });
@@ -50,7 +50,7 @@ function TiltCard({ children, className = '' }: { children: ReactNode; className
   return (
     <div style={{ perspective: 900 }}>
       <motion.div onMouseMove={onMove} onMouseLeave={() => { rx.set(0); ry.set(0); }}
-        style={{ rotateX: srx, rotateY: sry, transformStyle: 'preserve-3d' }}
+        style={{ rotateX: srx, rotateY: sry, transformStyle: 'preserve-3d', ...style }}
         className={className}>
         {children}
       </motion.div>
@@ -103,39 +103,41 @@ const orderTimeline = [
 
 function LiveOrderTicket() {
   const [active, setActive] = useState(2);
+  const reduce = useReducedMotion();
   useEffect(() => {
+    if (reduce) return;
     const id = window.setInterval(() => setActive((a) => (a + 1) % orderTimeline.length), 2800);
     return () => window.clearInterval(id);
-  }, []);
+  }, [reduce]);
   return (
-    <div className="relative">
-      <div className="glass-float rounded-[20px] border border-white/70 bg-white/90 p-6 shadow-[0_28px_60px_-28px_rgba(0,0,0,0.55)] backdrop-blur-2xl">
-        <div className="flex items-start justify-between border-b border-stone-200/70 pb-4">
+    <div className="relative h-full">
+      <div className="webflow-lift flex h-full flex-col rounded-lg border border-[#d9d9dd] bg-white p-7">
+        <div className="flex items-start justify-between border-b border-[#d9d9dd] pb-4">
           <div>
-            <p className="font-mono text-xs uppercase tracking-wide text-zinc-400">Live order</p>
-            <p className="mt-1 font-heading text-xl font-semibold text-zinc-900">ORD-20261117-0126</p>
+            <p className="caption-mono text-[#93939f]">Live order</p>
+            <p className="mt-2 font-heading text-xl text-[#212121]">ORD-20261117-0126</p>
           </div>
           <motion.span key={orderTimeline[active].label} initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
-            className="rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+            className="rounded bg-[#fff7ed] px-2.5 py-1 text-xs font-medium text-[#c2410c]">
             {orderTimeline[active].label}
           </motion.span>
         </div>
-        <div className="mt-4 space-y-3">
+        <div className="mt-5 flex-1 space-y-3">
           {orderTimeline.map((s, i) => (
             <div key={s.label} className="flex items-center gap-3">
-              <span className={`h-2.5 w-2.5 shrink-0 rounded-full border-2 transition-colors duration-500 ${i <= active ? 'border-brand-600 bg-brand-600 shadow-[0_0_0_4px_rgba(234,88,12,0.14)]' : 'border-stone-300 bg-white'}`} />
-              <span className={`flex-1 text-sm transition-colors duration-500 ${i <= active ? 'text-zinc-700' : 'text-zinc-400'}`}>{s.label}</span>
-              <span className="font-mono text-xs text-zinc-400 tabular-nums">{i <= active ? s.time : '—'}</span>
+              <span className={`h-2.5 w-2.5 shrink-0 rounded-full border-2 transition-colors duration-500 ${i <= active ? 'border-[#ea580c] bg-[#ea580c]' : 'border-[#d9d9dd] bg-white'}`} />
+              <span className={`flex-1 text-sm transition-colors duration-500 ${i <= active ? 'text-[#212121]' : 'text-[#a1a1aa]'}`}>{s.label}</span>
+              <span className="caption-mono tabular-nums text-[#93939f]">{i <= active ? s.time : '—'}</span>
             </div>
           ))}
         </div>
-        <div className="mt-5 space-y-2 border-t border-stone-200/70 pt-4 text-sm">
-          <div className="flex justify-between text-zinc-600"><span>2 × Cheese &amp; Corn</span><span className="tabular-nums">₹570</span></div>
-          <div className="flex justify-between text-zinc-600"><span>1 × Tandoori Paneer</span><span className="tabular-nums">₹285</span></div>
-          <div className="flex justify-between border-t border-stone-200/70 pt-2 font-semibold text-zinc-900"><span>Total</span><span className="tabular-nums">₹855</span></div>
+        <div className="mt-5 space-y-2 border-t border-[#d9d9dd] pt-4 text-sm">
+          <div className="flex justify-between text-[#616161]"><span>2 × Cheese &amp; Corn</span><span className="tabular-nums">₹570</span></div>
+          <div className="flex justify-between text-[#616161]"><span>1 × Tandoori Paneer</span><span className="tabular-nums">₹285</span></div>
+          <div className="flex justify-between border-t border-[#d9d9dd] pt-2 font-medium text-[#212121]"><span>Total</span><span className="tabular-nums">₹855</span></div>
         </div>
       </div>
-      <p className="mt-3 text-center text-xs text-white/70">Statuses update live over Server-Sent Events</p>
+      <p className="caption-mono mt-3 text-center text-white/60">Statuses update live over Server-Sent Events</p>
     </div>
   );
 }
@@ -158,6 +160,15 @@ const useCases = [
   { icon: Truck, title: 'Food trucks and stalls', desc: 'A shareable ordering link and WhatsApp notifications without a marketplace listing.' },
 ];
 
+// Webflow's signature five-stop chromatic category palette, mapped to OCP surfaces.
+const categoryCards = [
+  { label: 'Messaging', desc: 'WhatsApp ordering and notifications', bg: '#c2410c', color: '#ffffff', icon: MessageSquare },
+  { label: 'Interaction', desc: 'Live admin queue and team roles', bg: '#ea580c', color: '#ffffff', icon: Layout },
+  { label: 'Analytics', desc: 'Reports and campaign progress', bg: '#f97316', color: '#212121', icon: BarChart3 },
+  { label: 'Infrastructure', desc: 'Self-hosted Docker deployment', bg: '#fb923c', color: '#212121', icon: Cloud },
+  { label: 'Commerce', desc: 'Storefront menu, cart and checkout', bg: '#fdba74', color: '#212121', icon: Smartphone },
+];
+
 const steps = [
   { num: '1', title: 'Clone and configure', desc: 'setup.sh generates the secrets and writes .env. It prints your admin key once.' },
   { num: '2', title: 'Start the stack', desc: 'docker compose up -d starts PostgreSQL, the WhatsApp gateway, the API, the site and campaigns.' },
@@ -171,14 +182,6 @@ const comparisons = [
   { feature: 'WhatsApp marketing', ocp: 'Campaign runner included', other: 'Extra tool or unavailable' },
   { feature: 'Branding', ocp: 'Your name and your domain', other: 'Their brand on your page' },
   { feature: 'Source code', ocp: 'Full source, self-hosted', other: 'Closed platform' },
-];
-
-const techStack = [
-  { name: 'Go 1.27', role: 'API' },
-  { name: 'React 19', role: 'Storefront and admin' },
-  { name: 'PostgreSQL 16', role: 'Database' },
-  { name: 'Evolution GO', role: 'WhatsApp gateway' },
-  { name: 'Docker', role: 'Deployment' },
 ];
 
 const stats = [
@@ -202,20 +205,25 @@ const faqs = [
   { q: 'What do I need to deploy it?', a: 'Docker and Docker Compose for the recommended path, plus about 15 environment values that setup.sh generates for you. For public hosting you also point DNS at your server and set CORS_ALLOWED_ORIGINS.' },
 ];
 
+const navLinks = [
+  ['Features', '#features'], ['Who it is for', '#use-cases'], ['Screenshots', '#screenshots'],
+  ['Pricing', '#pricing'], ['FAQ', '#faq'], ['Maintainers', '#maintainers'],
+];
+
 function Faq() {
   const [open, setOpen] = useState<number | null>(0);
   return (
-    <div className="mx-auto max-w-3xl divide-y divide-stone-200 rounded-xl border border-stone-200 bg-white/70 backdrop-blur-sm">
+    <div className="mx-auto max-w-3xl divide-y divide-[#d9d9dd] border-y border-[#d9d9dd]">
       {faqs.map((f, i) => (
         <div key={f.q}>
-          <button onClick={() => setOpen(open === i ? null : i)} className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left text-sm font-semibold text-zinc-900">
+          <button onClick={() => setOpen(open === i ? null : i)} className="flex w-full items-center justify-between gap-4 px-2 py-5 text-left text-base font-medium text-[#212121]">
             {f.q}
-            <motion.span animate={{ rotate: open === i ? 180 : 0 }} className="text-zinc-400"><ChevronDown size={16} /></motion.span>
+            <motion.span animate={{ rotate: open === i ? 180 : 0 }} className="text-[#93939f]"><ChevronDown size={16} /></motion.span>
           </button>
           <AnimatePresence initial={false}>
             {open === i && (
               <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.25 }}>
-                <p className="px-5 pb-5 text-sm leading-relaxed text-zinc-600">{f.a}</p>
+                <p className="max-w-2xl px-2 pb-5 text-sm leading-relaxed text-[#616161]">{f.a}</p>
               </motion.div>
             )}
           </AnimatePresence>
@@ -226,12 +234,106 @@ function Faq() {
 }
 
 const screenshots = [
-  { src: 'https://raw.githubusercontent.com/zubershk/ocp/master/docs/screenshots/storefront-menu.png', alt: 'OCP storefront menu with pizza categories and prices', label: 'Storefront menu' },
-  { src: 'https://raw.githubusercontent.com/zubershk/ocp/master/docs/screenshots/admin-dashboard.png', alt: 'OCP admin dashboard with live orders', label: 'Admin dashboard' },
-  { src: 'https://raw.githubusercontent.com/zubershk/ocp/master/docs/screenshots/campaign-dashboard.png', alt: 'OCP campaign runner dashboard', label: 'Campaign runner' },
+  { src: '/screenshots/storefront-menu.png', alt: 'OCP storefront menu with pizza categories and prices', label: 'Storefront menu' },
+  { src: '/screenshots/admin-dashboard.png', alt: 'OCP admin dashboard with live orders', label: 'Admin dashboard' },
+  { src: '/screenshots/campaign-dashboard.png', alt: 'OCP campaign runner dashboard', label: 'Campaign runner' },
 ];
 
 const DOCS = 'https://github.com/zubershk/ocp#readme';
+
+/* ──────────────── connected surfaces ──────────────── */
+
+function ConnectedSystems() {
+  const reduce = useReducedMotion();
+  const sectionRef = useRef<HTMLElement>(null);
+  const inView = useInView(sectionRef, { margin: '-80px' });
+  const [active, setActive] = useState(0);
+  const [paused, setPaused] = useState(false);
+
+  useEffect(() => {
+    if (reduce || paused || !inView) return;
+    const id = window.setInterval(() => setActive((a) => (a + 1) % categoryCards.length), 3200);
+    return () => window.clearInterval(id);
+  }, [reduce, paused, inView]);
+
+  return (
+    <section ref={sectionRef} className="border-b border-[#d9d9dd] bg-white py-16">
+      <div className="mx-auto max-w-6xl px-5">
+        <Reveal className="mb-10 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="eyebrow text-[#616161]">One platform, five surfaces</p>
+            <h2 className="mt-4 font-heading text-[#212121]">Everything connected, nothing bolted on</h2>
+            <p className="mt-3 max-w-xl text-sm leading-relaxed text-[#616161]">Pick a surface. Each one reads and writes the same tenant data, so an order in the storefront is already in the admin queue.</p>
+          </div>
+          <button type="button" onClick={() => setPaused((p) => !p)}
+            className="inline-flex shrink-0 items-center gap-2 self-start rounded border border-[#d9d9dd] px-3 py-2 text-xs font-medium text-[#616161] transition-colors hover:border-[#ea580c] hover:text-[#c2410c] sm:self-auto"
+            aria-label={paused ? 'Resume the surface rotation' : 'Pause the surface rotation'}>
+            {paused ? <Play size={14} /> : <Pause size={14} />}
+            {paused ? 'Resume' : 'Pause'}
+          </button>
+        </Reveal>
+
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3"
+          onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
+          {categoryCards.map((c, i) => {
+            const Icon = c.icon;
+            const isActive = active === i;
+            return (
+              <Reveal key={c.label} delay={i * 0.06}>
+                <motion.button type="button" aria-pressed={isActive}
+                  onFocus={() => { setActive(i); setPaused(true); }}
+                  onBlur={() => setPaused(false)}
+                  onClick={() => setActive(i)}
+                  animate={reduce ? undefined : { y: isActive ? -4 : 0 }}
+                  transition={{ type: 'spring', stiffness: 260, damping: 22 }}
+                  className="w-full text-left">
+                  <TiltCard className="relative h-full rounded-lg p-8" style={{ backgroundColor: c.bg, color: c.color }}>
+                    <div className="flex items-start justify-between">
+                      <span className="caption-mono">0{i + 1}</span>
+                      <span className="flex h-6 w-6 items-center justify-center">
+                        {isActive && (
+                          <motion.span layoutId="connected-node"
+                            transition={{ type: 'spring', stiffness: 300, damping: 26 }}
+                            className="h-2.5 w-2.5 rounded-full bg-current" />
+                        )}
+                      </span>
+                    </div>
+                    <Icon size={22} strokeWidth={1.5} className="mt-6" />
+                    <h3 className="mt-4 font-heading text-2xl" style={{ color: c.color }}>{c.label}</h3>
+                    <p className="mt-2 text-sm">{c.desc}</p>
+                    <div className="mt-6 h-5">
+                      <AnimatePresence initial={false}>
+                        {isActive && (
+                          <motion.p initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
+                            className="caption-mono font-medium">
+                            Active surface · shared tenant data
+                          </motion.p>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                    <div className="mt-3 h-0.5 w-full overflow-hidden rounded-full" style={{ backgroundColor: c.color, opacity: 0.25 }}>
+                      <motion.div className="h-full w-full" style={{ backgroundColor: c.color, transformOrigin: 'left' }}
+                        animate={{ scaleX: isActive ? 1 : 0 }} transition={{ duration: 0.45 }} />
+                    </div>
+                  </TiltCard>
+                </motion.button>
+              </Reveal>
+            );
+          })}
+        </div>
+
+        <div className="mt-7 flex items-center justify-center gap-2" aria-label="Select a platform surface">
+          {categoryCards.map((c, i) => (
+            <button key={c.label} type="button" aria-label={c.label} aria-pressed={active === i}
+              onClick={() => setActive(i)}
+              className="h-2 rounded-full transition-all duration-300"
+              style={{ width: active === i ? 28 : 10, backgroundColor: active === i ? c.bg : '#d9d9dd' }} />
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
 
 /* ──────────────── component ──────────────── */
 
@@ -239,13 +341,23 @@ export default function Landing() {
   const social = useSocial();
   const seo = useSEO();
   const restaurantName = useRestaurantName();
+  const [menuOpen, setMenuOpen] = useState(false);
   const { scrollYProgress } = useScroll();
   const scaleX = useSpring(scrollYProgress, { stiffness: 140, damping: 26, restDelta: 0.001 });
   const cursorX = useMotionValue(-600);
   const cursorY = useMotionValue(-600);
   const smoothX = useSpring(cursorX, { stiffness: 90, damping: 22 });
   const smoothY = useSpring(cursorY, { stiffness: 90, damping: 22 });
-  const spotlight = useMotionTemplate`radial-gradient(520px circle at ${smoothX}px ${smoothY}px, rgba(251,146,60,0.10), transparent 70%)`;
+  const spotlight = useMotionTemplate`radial-gradient(520px circle at ${smoothX}px ${smoothY}px, rgba(234,88,12,0.07), transparent 70%)`;
+
+  // Scroll-linked hero parallax: depth on exit, disabled for reduced motion.
+  const heroRef = useRef<HTMLElement>(null);
+  const fogRef = useRef<HTMLDivElement>(null);
+  const { scrollYProgress: heroProgress } = useScroll({ target: heroRef, offset: ['start start', 'end start'] });
+  const reduceMotion = Boolean(useReducedMotion());
+  const mediaY = useTransform(heroProgress, [0, 1], reduceMotion ? [0, 0] : [0, 86]);
+  const mediaScale = useTransform(heroProgress, [0, 1], reduceMotion ? [1, 1] : [1, 0.98]);
+  const copyY = useTransform(heroProgress, [0, 1], reduceMotion ? [0, 0] : [0, 52]);
 
   useEffect(() => {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
@@ -254,138 +366,222 @@ export default function Landing() {
     return () => window.removeEventListener('mousemove', move);
   }, [cursorX, cursorY]);
 
+  // Vanta Fog hero background — loaded lazily; the static gradient is the fallback.
+  useEffect(() => {
+    if (reduceMotion) return;
+    let disposed = false;
+    let fog: { destroy: () => void } | undefined;
+
+    (async () => {
+      try {
+        // @ts-ignore - vanta ships no type declarations
+        const fogModule = await import('vanta/dist/vanta.fog.min');
+        // @ts-ignore - three r134 ships no bundled type declarations
+        const threeModule = await import('three');
+        if (disposed || !fogRef.current) return;
+        const createFog = fogModule.default?.default ?? fogModule.default;
+        const THREE = threeModule.default ?? threeModule;
+        fog = createFog({
+          el: fogRef.current,
+          THREE,
+          mouseControls: true,
+          touchControls: true,
+          gyroControls: false,
+          minHeight: 200,
+          minWidth: 200,
+          backgroundAlpha: 1,
+          baseColor: 0x212121,
+          highlightColor: 0xfb923c,
+          midtoneColor: 0xea580c,
+          lowlightColor: 0x7c2d12,
+          blurFactor: 0.56,
+          speed: 3.6,
+          zoom: 1.6,
+          scale: 2,
+          scaleMobile: 4,
+        });
+      } catch {
+        // Keep the static radial-gradient background if WebGL is unavailable.
+      }
+    })();
+
+    return () => { disposed = true; fog?.destroy(); };
+  }, [reduceMotion]);
+
   const heroTitle = seo.metaTitle || 'Your restaurant. Your platform. No commission';
   const heroDescription = seo.metaDescription || 'Online ordering with WhatsApp, a live admin dashboard, POS and campaigns — self-hosted, MIT licensed and entirely yours';
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#faf9f7] text-zinc-800">
+    <div className="webflow-root relative min-h-screen overflow-hidden bg-white text-[#212121]">
       <style>{`
-        @keyframes auroraDrift { 0%{transform:translate3d(0,0,0) scale(1)} 50%{transform:translate3d(4%,-6%,0) scale(1.12)} 100%{transform:translate3d(-3%,5%,0) scale(.96)} }
-        @keyframes marquee { from{transform:translateX(0)} to{transform:translateX(-50%)} }
-        .aurora { position:absolute; border-radius:9999px; filter:blur(90px); pointer-events:none; animation:auroraDrift 20s ease-in-out infinite alternate; }
-        .marquee-track { display:flex; width:max-content; animation:marquee 36s linear infinite; }
-        .marquee-track:hover { animation-play-state:paused; }
-        /* Concentric radii: nested surfaces step down toward their parent's corner */
-        .glass-panel { border-radius: 20px; }
-        .glass-panel > * { border-radius: 12px; }
-        /* Accessibility: Reduce Transparency -> frost to opaque, like iOS */
-        @media (prefers-reduced-transparency: reduce) {
-          .glass-panel, .glass-float { background: #fff !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
-          nav.bg-zinc-950\\/70, .aurora { display: none !important; }
+        .webflow-root {
+          font-family: Inter, 'Arial', system-ui, sans-serif;
+          font-feature-settings: 'ss01';
         }
-        @media (prefers-reduced-motion: reduce) { .aurora,.marquee-track{animation:none!important} }
+        .webflow-root .font-heading {
+          font-family: Inter, 'Arial', system-ui, sans-serif;
+          font-feature-settings: 'ss01';
+          font-weight: 600;
+          letter-spacing: -0.01em;
+        }
+        .webflow-root h1.font-heading {
+          font-size: clamp(2.75rem, 6vw, 5rem);
+          line-height: 1.04;
+          letter-spacing: -0.8px;
+          font-weight: 600;
+        }
+        .webflow-root h2.font-heading {
+          font-size: clamp(2rem, 3.6vw, 2.8rem);
+          line-height: 1.1;
+          letter-spacing: -0.4px;
+          font-weight: 600;
+        }
+        .eyebrow {
+          font-size: 15px;
+          font-weight: 500;
+          line-height: 19.5px;
+          letter-spacing: 1.5px;
+          text-transform: uppercase;
+        }
+        .caption-mono {
+          font-family: 'Inconsolata', ui-monospace, SFMono-Regular, Menlo, monospace;
+          font-size: 12px;
+          line-height: 18px;
+        }
+        .webflow-lift {
+          box-shadow: 0 84px 24px rgba(0,0,0,0), 0 54px 22px rgba(0,0,0,0.01), 0 30px 18px rgba(0,0,0,0.04), 0 13px 13px rgba(0,0,0,0.08), 0 3px 7px rgba(0,0,0,0.09);
+        }
+        @media (prefers-reduced-transparency: reduce) {
+          .webflow-root nav { background: #fff !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+        }
       `}</style>
 
       <motion.div className="pointer-events-none fixed inset-0 z-[2]" style={{ background: spotlight }} />
-      <motion.div className="fixed left-0 right-0 top-0 z-[60] h-0.5 origin-left bg-gradient-to-r from-brand-500 to-amber-400" style={{ scaleX }} />
+      <motion.div className="fixed left-0 right-0 top-0 z-[60] h-0.5 origin-left bg-gradient-to-r from-[#c2410c] via-[#ea580c] to-[#fb923c]" style={{ scaleX }} />
 
       {/* ── Nav ── */}
-      <nav className="sticky top-0 z-50 border-b border-white/10 bg-zinc-950/70 backdrop-blur-xl">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5">
+      <nav className="sticky top-0 z-50 border-b border-[#d9d9dd] bg-white/95 backdrop-blur-md">
+        <div className="relative mx-auto grid h-16 max-w-6xl grid-cols-[1fr_auto_1fr] items-center gap-4 px-5">
           <motion.div initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 shadow-[0_6px_18px_-6px_rgba(251,146,60,0.9)]">
-              <span className="font-heading text-sm font-semibold text-white">O</span>
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-[#212121]">
+              <span className="font-heading text-sm text-white">O</span>
             </div>
-            <span className="font-heading text-base font-semibold text-white">{restaurantName || 'Restaurant'}</span>
+            <span className="font-heading text-sm leading-tight text-[#212121] sm:text-base">{restaurantName || 'Restaurant'}</span>
           </motion.div>
-          <div className="hidden items-center gap-6 text-sm text-zinc-300 sm:flex">
-            {[['Features', '#features'], ['Who it is for', '#use-cases'], ['Screenshots', '#screenshots'], ['Pricing', '#pricing'], ['FAQ', '#faq'], ['Maintainers', '#maintainers']].map(([label, href]) => (
-              <a key={label} href={href} className="transition-colors hover:text-white">{label}</a>
+          <div className="hidden items-center gap-6 text-sm font-medium text-[#212121] lg:flex">
+            {navLinks.map(([label, href]) => (
+              <a key={label} href={href} className="whitespace-nowrap transition-colors hover:text-[#ea580c]">{label}</a>
             ))}
-            <a href="https://github.com/zubershk/ocp" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 transition-colors hover:text-white"><GithubIcon size={15} /> GitHub</a>
           </div>
-          <div className="flex items-center gap-3">
-            <a href={DOCS} target="_blank" rel="noopener noreferrer" className="hidden text-sm font-medium text-zinc-300 transition-colors hover:text-white sm:block">Docs</a>
-            <MagneticLink href="https://github.com/zubershk/ocp#quick-start" external className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-brand-600/25 transition-colors hover:bg-brand-500">
+          <div className="flex items-center justify-end gap-3 sm:gap-4">
+            <a href="https://github.com/zubershk/ocp" target="_blank" rel="noopener noreferrer" className="hidden items-center gap-1.5 text-sm font-medium text-[#212121] transition-colors hover:text-[#ea580c] xl:inline-flex"><GithubIcon size={15} /> GitHub</a>
+            <a href={DOCS} target="_blank" rel="noopener noreferrer" className="hidden text-sm font-medium text-[#212121] transition-colors hover:text-[#ea580c] sm:block">Docs</a>
+            <MagneticLink href="https://github.com/zubershk/ocp#quick-start" external className="hidden items-center gap-1.5 rounded bg-[#212121] px-5 py-3 text-sm font-medium text-white transition-colors hover:bg-[#3f3f46] sm:inline-flex">
               Get started <ArrowRight size={14} />
             </MagneticLink>
+            <button type="button" aria-label={menuOpen ? 'Close menu' : 'Open menu'} aria-expanded={menuOpen}
+              onClick={() => setMenuOpen((v) => !v)}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#d9d9dd] bg-white text-[#212121] lg:hidden">
+              {menuOpen ? <X size={18} /> : <Menu size={18} />}
+            </button>
           </div>
         </div>
+        <AnimatePresence initial={false}>
+          {menuOpen && (
+            <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.22 }} className="overflow-hidden border-t border-[#d9d9dd] bg-white lg:hidden">
+              <div className="mx-auto flex max-w-6xl flex-col px-5 py-3">
+                {navLinks.map(([label, href]) => (
+                  <a key={label} href={href} onClick={() => setMenuOpen(false)} className="border-b border-[#d9d9dd] py-3 text-sm font-medium text-[#212121] last:border-0">{label}</a>
+                ))}
+                <a href="https://github.com/zubershk/ocp" target="_blank" rel="noopener noreferrer" onClick={() => setMenuOpen(false)} className="border-t border-[#d9d9dd] py-3 text-sm font-medium text-[#616161] xl:hidden">GitHub</a>
+                <MagneticLink href="https://github.com/zubershk/ocp#quick-start" external className="my-3 inline-flex items-center justify-center gap-1.5 rounded bg-[#212121] px-5 py-3 text-sm font-medium text-white sm:hidden">
+                  Get started <ArrowRight size={14} />
+                </MagneticLink>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </nav>
 
-      {/* ── Hero: CSS-built warm counter scene + live ticket ── */}
-      <section className="relative isolate overflow-hidden bg-zinc-950">
-        <div className="absolute inset-0 -z-10" style={{ background: 'radial-gradient(60% 80% at 85% 40%, rgba(234,88,12,0.45), transparent 65%), radial-gradient(45% 60% at 70% 80%, rgba(190,24,93,0.25), transparent 70%), linear-gradient(120deg, #18181b 0%, #1c1917 55%, #2a1a10 100%)' }} />
-        <div className="aurora absolute -right-20 top-10 -z-10 h-96 w-96 bg-orange-500/25" />
-        <div className="aurora absolute bottom-0 right-1/4 -z-10 h-80 w-80 bg-amber-500/15" style={{ animationDelay: '-11s' }} />
-        <div className="absolute inset-0 -z-10 bg-gradient-to-r from-zinc-950 via-zinc-950/80 to-transparent" />
-        <div className="absolute inset-0 -z-10 bg-gradient-to-t from-zinc-950/80 via-transparent to-zinc-950/40" />
-        <div className="mx-auto grid max-w-6xl items-center gap-14 px-5 py-24 sm:py-32 lg:grid-cols-2 lg:gap-20">
-          <div className="relative z-10">
-            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className="mb-6 inline-flex items-center gap-2 rounded-full border border-brand-400/30 bg-zinc-900/60 px-3 py-1.5 text-xs font-semibold text-brand-300 backdrop-blur-md">
-              <motion.span animate={{ scale: [1, 1.4, 1], opacity: [1, 0.6, 1] }} transition={{ duration: 2, repeat: Infinity }} className="h-1.5 w-1.5 rounded-full bg-brand-400" />
+      {/* ── Hero: dark band + two-card composition ── */}
+      <section ref={heroRef} className="relative isolate overflow-hidden bg-[#212121]">
+        <div className="absolute inset-0 -z-10 bg-[radial-gradient(55%_60%_at_50%_8%,rgba(234,88,12,0.16),transparent_70%)]" />
+        <div ref={fogRef} className="absolute inset-0 -z-10" aria-hidden="true" />
+        <div className="absolute inset-0 -z-10 bg-gradient-to-b from-[#212121]/75 via-[#212121]/50 to-[#212121]/75" aria-hidden="true" />
+        <div className="mx-auto max-w-6xl px-5 pb-14 pt-16 sm:pt-20">
+          <motion.div style={{ y: copyY }} className="relative z-10 mx-auto max-w-4xl text-center">
+            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className="inline-flex items-center gap-2 rounded border border-white/20 px-3 py-1.5 eyebrow text-white/70">
+              <motion.span animate={reduceMotion ? {} : { scale: [1, 1.4, 1], opacity: [1, 0.6, 1] }} transition={{ duration: 2, repeat: Infinity }} className="h-1.5 w-1.5 rounded-full bg-[#ea580c]" />
               Open source · Free forever · Self-hosted
             </motion.div>
-            <motion.h1 initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.65, delay: 0.05, ease: [0.16, 1, 0.3, 1] as const }} className="max-w-xl font-heading text-4xl font-semibold leading-[1.08] tracking-tight text-white sm:text-5xl lg:text-[3.4rem]">
-              {heroTitle.replace(/\s*No commission\.?$/i, '')}<span className="bg-gradient-to-r from-brand-300 to-amber-300 bg-clip-text text-transparent"> No commission</span>
+            <motion.h1 initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.65, delay: 0.05, ease: [0.16, 1, 0.3, 1] as const }} className="mx-auto mt-8 font-heading text-white">
+              {heroTitle.replace(/\s*No commission\.?$/i, '')}<span className="text-[#fb923c]"> No commission</span>
             </motion.h1>
-            <motion.p initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.65, delay: 0.12 }} className="mt-5 max-w-lg text-base leading-relaxed text-zinc-300 sm:text-lg">
+            <motion.p initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.65, delay: 0.12 }} className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-white/70">
               {heroDescription}
             </motion.p>
-            {/* GlassEffectContainer analogue: one shared glass surface for the action group */}
-            <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ type: 'spring', stiffness: 170, damping: 22, delay: 0.18 }} className="glass-float mt-8 inline-flex flex-wrap items-center gap-2 rounded-[20px] border border-white/15 bg-white/5 p-2 backdrop-blur-xl">
-              <MagneticLink href="https://github.com/zubershk/ocp#quick-start" external className="inline-flex items-center gap-2 rounded-[12px] bg-brand-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-brand-600/25 transition-colors hover:bg-brand-500">
+            <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ type: 'spring', stiffness: 170, damping: 22, delay: 0.18 }} className="mt-9 flex flex-wrap items-center justify-center gap-3">
+              <MagneticLink href="https://github.com/zubershk/ocp#quick-start" external className="inline-flex items-center gap-2 rounded bg-white px-5 py-3 text-sm font-medium text-[#212121] transition-colors hover:bg-white/90">
                 <Terminal size={16} /> Start in three commands
               </MagneticLink>
-              <MagneticLink href="#screenshots" className="inline-flex items-center gap-2 rounded-[12px] px-5 py-3 text-sm font-semibold text-white/90 transition-colors hover:bg-white/10 hover:text-white">
+              <MagneticLink href="#screenshots" className="inline-flex items-center gap-2 rounded border border-white/30 bg-transparent px-5 py-3 text-sm font-medium text-white transition-colors hover:bg-white/10">
                 See the product <ArrowRight size={15} />
               </MagneticLink>
             </motion.div>
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, delay: 0.26 }} className="mt-10 max-w-md rounded-xl border border-white/10 bg-zinc-900/80 p-4 shadow-2xl backdrop-blur-xl">
-              <div className="mb-2 flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-red-400/80" />
-                <span className="h-2 w-2 rounded-full bg-amber-400/80" />
-                <span className="h-2 w-2 rounded-full bg-emerald-500/80" />
-                <span className="ml-2 font-mono text-xs text-zinc-500">terminal</span>
-              </div>
-              <code className="block font-mono text-xs leading-6 text-zinc-300">
-                <span className="text-zinc-500">$</span> git clone https://github.com/zubershk/ocp.git<br />
-                <span className="text-zinc-500">$</span> cd ocp &amp;&amp; bash setup.sh<br />
-                <span className="text-zinc-500">$</span> docker compose up -d<br />
-                <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.2 }} className="text-emerald-400">✓ Ready at http://localhost:3000</motion.span>
-              </code>
-            </motion.div>
-          </div>
-          <motion.div initial={{ opacity: 0, scale: 0.96, y: 24 }} animate={{ opacity: 1, scale: 1, y: 0 }} transition={{ duration: 0.8, delay: 0.2, ease: [0.16, 1, 0.3, 1] as const }} className="relative z-10">
-            <LiveOrderTicket />
+          </motion.div>
+
+          <motion.div style={{ y: mediaY, scale: mediaScale }} className="relative z-10 mx-auto mt-12 max-w-5xl">
+            <div className="grid items-stretch gap-5 md:grid-cols-[1.55fr_1fr]">
+              <Reveal className="rounded-lg border border-white/15 bg-white p-2">
+                <img src={screenshots[1].src} alt={screenshots[1].alt} className="h-56 w-full rounded bg-white object-cover object-top md:h-full" loading="lazy" />
+                <div className="flex items-center justify-between px-3 py-3">
+                  <span className="caption-mono text-[#93939f]">Live admin dashboard</span>
+                  <span className="caption-mono text-[#ea580c]">Orders · Menu · Analytics</span>
+                </div>
+              </Reveal>
+              <Reveal delay={0.1}><LiveOrderTicket /></Reveal>
+            </div>
           </motion.div>
         </div>
       </section>
 
+      {/* ── Connected surfaces ── */}
+      <ConnectedSystems />
+
       {/* ── Stats ── */}
-      <section className="relative z-10 border-b border-stone-200 bg-white/90 backdrop-blur-md">
-        <div className="mx-auto grid max-w-6xl grid-cols-2 gap-px overflow-hidden rounded-xl border border-stone-200/70 bg-stone-200/60 sm:grid-cols-4">
+      <section className="relative z-10 border-b border-[#d9d9dd] bg-white">
+        <div className="mx-auto grid max-w-6xl grid-cols-2 gap-px bg-[#d9d9dd] sm:grid-cols-4">
           {stats.map((s, i) => {
             const Icon = s.icon;
             return (
-              <Reveal key={s.label} delay={i * 0.08} className="bg-white p-6">
-                <Icon size={16} strokeWidth={1.5} className="text-brand-600" />
-                <p className="mt-3 font-heading text-2xl font-semibold text-zinc-900"><CountUp to={s.value} decimals={s.decimals} suffix={s.suffix} /></p>
-                <p className="mt-1 text-xs text-zinc-500">{s.label}</p>
+              <Reveal key={s.label} delay={i * 0.08} className="bg-white px-6 py-8">
+                <Icon size={16} strokeWidth={1.5} className="text-[#ea580c]" />
+                <p className="mt-4 font-heading text-4xl text-[#212121]"><CountUp to={s.value} decimals={s.decimals} suffix={s.suffix} /></p>
+                <p className="caption-mono mt-2 text-[#93939f]">{s.label}</p>
               </Reveal>
             );
           })}
         </div>
-        <div className="mx-auto max-w-6xl px-5 py-6 text-center text-xs text-zinc-500">Measured with the bundled 1,000-user harness — <a className="text-brand-700 underline underline-offset-2" href="https://github.com/zubershk/ocp/blob/master/docs/LOAD_TEST.md" target="_blank" rel="noopener noreferrer">methodology</a></div>
+        <div className="mx-auto max-w-6xl px-5 py-6 text-center text-xs text-[#93939f]">Measured with the bundled 1,000-user harness — <a className="text-[#212121] underline underline-offset-2" href="https://github.com/zubershk/ocp/blob/master/docs/LOAD_TEST.md" target="_blank" rel="noopener noreferrer">methodology</a></div>
       </section>
 
       {/* ── Features ── */}
-      <section id="features" className="relative z-10 border-b border-stone-200/70 bg-[#faf9f7] py-20">
+      <section id="features" className="relative z-10 border-b border-[#d9d9dd] bg-white py-20">
         <div className="mx-auto max-w-6xl px-5">
-          <Reveal className="mb-12 text-center">
-            <p className="text-xs font-semibold text-brand-700">Everything included</p>
-            <h2 className="mt-2 font-heading text-3xl font-semibold text-zinc-900">A complete ordering operation, not a storefront template</h2>
-            <p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-zinc-600">The web menu, WhatsApp bot, admin, POS and campaign tool share one database and one tenant model.</p>
+          <Reveal className="mb-14 text-center">
+            <p className="eyebrow text-[#616161]">Everything included</p>
+            <h2 className="mt-4 font-heading text-[#212121]">A complete ordering operation, not a storefront template</h2>
+            <p className="mx-auto mt-5 max-w-xl text-base leading-relaxed text-[#616161]">The web menu, WhatsApp bot, admin, POS and campaign tool share one database and one tenant model.</p>
           </Reveal>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {features.map((f, i) => {
               const Icon = f.icon;
               return (
                 <Reveal key={f.title} delay={i * 0.06}>
-                  <TiltCard className="h-full rounded-[20px] border border-stone-200 bg-white p-6 shadow-sm">
-                    <Icon size={18} strokeWidth={1.5} className="text-brand-600" />
-                    <h3 className="mt-4 font-heading text-base font-semibold text-zinc-900">{f.title}</h3>
-                    <p className="mt-2 text-sm leading-relaxed text-zinc-600">{f.desc}</p>
+                  <TiltCard className="h-full rounded-lg border border-[#d9d9dd] bg-white p-8">
+                    <Icon size={18} strokeWidth={1.5} className="text-[#ea580c]" />
+                    <h3 className="mt-6 font-heading text-2xl text-[#212121]">{f.title}</h3>
+                    <p className="mt-3 text-sm leading-relaxed text-[#616161]">{f.desc}</p>
                   </TiltCard>
                 </Reveal>
               );
@@ -394,23 +590,49 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── Use cases ── */}
-      <section id="use-cases" className="relative z-10 border-b border-stone-200/70 bg-white py-20">
-        <div className="mx-auto max-w-6xl px-5">
-          <Reveal className="mb-12 text-center">
-            <p className="text-xs font-semibold text-brand-700">Who it is for</p>
-            <h2 className="mt-2 font-heading text-3xl font-semibold text-zinc-900">Any food business that takes orders</h2>
-            <p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-zinc-600">Business type, sizes, payment labels, hours and branding are configuration, not code.</p>
+      {/* ── Dark feature band ── */}
+      <section className="relative z-10 bg-[#212121] py-20">
+        <div className="mx-auto grid max-w-6xl items-center gap-12 px-5 lg:grid-cols-2 lg:gap-20">
+          <Reveal>
+            <p className="eyebrow text-white/50">The core workflow</p>
+            <h2 className="mt-4 font-heading text-white">Orders arrive on WhatsApp. Your team works one queue.</h2>
+            <div className="mt-9 divide-y divide-white/15">
+              {[
+                ['One conversation per customer', 'OTP logins, order updates and delivery alerts all stay on the number people already use.'],
+                ['One queue for the whole team', 'Kitchen, managers and owners see the same live status without passing messages around.'],
+                ['One source of truth', 'Menu, orders, customers and campaigns live in a single database you control.'],
+              ].map(([title, desc]) => (
+                <div key={title} className="py-5 first:pt-0">
+                  <p className="text-base font-medium text-white">{title}</p>
+                  <p className="mt-2 text-sm leading-relaxed text-white/60">{desc}</p>
+                </div>
+              ))}
+            </div>
           </Reveal>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <Reveal delay={0.1} className="rounded-lg border border-white/15 bg-white p-2">
+            <img src={screenshots[0].src} alt={screenshots[0].alt} className="h-64 w-full rounded object-cover object-top sm:h-80" loading="lazy" />
+            <div className="px-3 py-3"><span className="caption-mono text-[#93939f]">Installable storefront menu</span></div>
+          </Reveal>
+        </div>
+      </section>
+
+      {/* ── Use cases ── */}
+      <section id="use-cases" className="relative z-10 border-b border-[#d9d9dd] bg-white py-20">
+        <div className="mx-auto max-w-6xl px-5">
+          <Reveal className="mb-14 text-center">
+            <p className="eyebrow text-[#616161]">Who it is for</p>
+            <h2 className="mt-4 font-heading text-[#212121]">Any food business that takes orders</h2>
+            <p className="mx-auto mt-5 max-w-xl text-base leading-relaxed text-[#616161]">Business type, sizes, payment labels, hours and branding are configuration, not code.</p>
+          </Reveal>
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
             {useCases.map((u, i) => {
               const Icon = u.icon;
               return (
                 <Reveal key={u.title} delay={i * 0.07}>
-                  <TiltCard className="h-full rounded-[20px] border border-stone-200 bg-white p-6">
-                    <Icon size={18} strokeWidth={1.5} className="text-brand-600" />
-                    <h3 className="mt-4 font-heading text-base font-semibold text-zinc-900">{u.title}</h3>
-                    <p className="mt-2 text-sm leading-relaxed text-zinc-600">{u.desc}</p>
+                  <TiltCard className="h-full rounded-lg border border-[#d9d9dd] bg-white p-8">
+                    <Icon size={18} strokeWidth={1.5} className="text-[#ea580c]" />
+                    <h3 className="mt-6 font-heading text-xl text-[#212121]">{u.title}</h3>
+                    <p className="mt-3 text-sm leading-relaxed text-[#616161]">{u.desc}</p>
                   </TiltCard>
                 </Reveal>
               );
@@ -420,41 +642,41 @@ export default function Landing() {
       </section>
 
       {/* ── Screenshots ── */}
-      <section id="screenshots" className="relative z-10 border-b border-stone-200/70 bg-[#faf9f7] py-20">
+      <section id="screenshots" className="relative z-10 border-b border-[#d9d9dd] bg-white py-20">
         <div className="mx-auto max-w-6xl px-5">
-          <Reveal className="mb-12 text-center">
-            <p className="text-xs font-semibold text-brand-700">The real product</p>
-            <h2 className="mt-2 font-heading text-3xl font-semibold text-zinc-900">The world it belongs in, and the screens that run it</h2>
+          <Reveal className="mb-14 text-center">
+            <p className="eyebrow text-[#616161]">The real product</p>
+            <h2 className="mt-4 font-heading text-[#212121]">The screens that run the operation</h2>
           </Reveal>
-          <div className="grid gap-6 sm:grid-cols-3">
+          <div className="grid gap-5 sm:grid-cols-3">
             {screenshots.map((s, i) => (
               <Reveal key={s.label} delay={i * 0.1}>
-                <motion.figure whileHover={{ y: -6 }} transition={{ type: 'spring', stiffness: 260, damping: 22 }} className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm">
-                  <img src={s.src} alt={s.alt} className="h-44 w-full border-b border-stone-200/60 object-cover object-top" loading="lazy" />
-                  <figcaption className="px-4 py-3 text-sm text-zinc-700">{s.label}</figcaption>
+                <motion.figure whileHover={{ y: -6 }} transition={{ type: 'spring', stiffness: 260, damping: 22 }} className="overflow-hidden rounded-lg border border-[#d9d9dd]">
+                  <img src={s.src} alt={s.alt} className="h-48 w-full border-b border-[#d9d9dd] object-cover object-top" />
+                  <figcaption className="px-5 py-4 text-sm text-[#212121]">{s.label}</figcaption>
                 </motion.figure>
               </Reveal>
             ))}
           </div>
-          <Reveal className="mt-4 text-center text-sm text-zinc-500">All 21 screenshots are in the <a className="text-brand-700 underline underline-offset-2" href={DOCS} target="_blank" rel="noopener noreferrer">README</a></Reveal>
+          <Reveal className="mt-6 text-center text-sm text-[#93939f]">All 21 screenshots are in the <a className="text-[#212121] underline underline-offset-2" href={DOCS} target="_blank" rel="noopener noreferrer">README</a></Reveal>
         </div>
       </section>
 
       {/* ── Steps ── */}
-      <section className="relative z-10 border-b border-stone-200/70 bg-white py-20">
+      <section className="relative z-10 border-b border-[#d9d9dd] bg-white py-20">
         <div className="mx-auto max-w-6xl px-5">
-          <Reveal className="mb-12 text-center">
-            <p className="text-xs font-semibold text-brand-700">Getting started</p>
-            <h2 className="mt-2 font-heading text-3xl font-semibold text-zinc-900">From clone to first order</h2>
+          <Reveal className="mb-14 text-center">
+            <p className="eyebrow text-[#616161]">Getting started</p>
+            <h2 className="mt-4 font-heading text-[#212121]">From clone to first order</h2>
           </Reveal>
-          <div className="grid gap-8 sm:grid-cols-3">
+          <div className="grid gap-10 sm:grid-cols-3">
             {steps.map((s, i) => (
               <Reveal key={s.num} delay={i * 0.1}>
-                <div className="relative border-t-2 border-brand-300 pt-5">
-                  <span className="absolute -top-[7px] left-0 h-3 w-3 rounded-full border-2 border-brand-500 bg-white" />
-                  <span className="font-mono text-sm font-semibold text-brand-600">{s.num}</span>
-                  <h3 className="mt-2 font-heading text-base font-semibold text-zinc-900">{s.title}</h3>
-                  <p className="mt-2 text-sm leading-relaxed text-zinc-600">{s.desc}</p>
+                <div className="relative border-t-2 border-[#ea580c] pt-6">
+                  <span className="absolute -top-2 left-0 h-3 w-3 rounded-full bg-[#ea580c]" />
+                  <span className="caption-mono text-[#93939f]">{s.num}</span>
+                  <h3 className="mt-3 font-heading text-2xl text-[#212121]">{s.title}</h3>
+                  <p className="mt-3 text-sm leading-relaxed text-[#616161]">{s.desc}</p>
                 </div>
               </Reveal>
             ))}
@@ -462,38 +684,26 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── Marquee ── */}
-      <section className="relative z-10 overflow-hidden border-b border-stone-200/70 bg-zinc-950 py-6">
-        <div className="marquee-track">
-          {[...techStack, ...techStack, ...techStack].map((t, i) => (
-            <div key={`${t.name}-${i}`} className="mx-3 flex shrink-0 items-center gap-2 rounded-lg border border-white/10 px-4 py-2 text-sm">
-              <span className="font-semibold text-white">{t.name}</span>
-              <span className="text-xs text-zinc-400">{t.role}</span>
-            </div>
-          ))}
-        </div>
-      </section>
-
       {/* ── Comparison ── */}
-      <section className="relative z-10 border-b border-stone-200/70 bg-white py-20">
+      <section className="relative z-10 border-b border-[#d9d9dd] bg-white py-20">
         <div className="mx-auto max-w-3xl px-5">
-          <Reveal className="mb-12 text-center">
-            <p className="text-xs font-semibold text-brand-700">Why self-host</p>
-            <h2 className="mt-2 font-heading text-3xl font-semibold text-zinc-900">Keep the revenue and the relationship</h2>
-            <p className="mt-3 text-sm text-zinc-600">Marketplace commissions are a percentage of every order, forever.</p>
+          <Reveal className="mb-14 text-center">
+            <p className="eyebrow text-[#616161]">Why self-host</p>
+            <h2 className="mt-4 font-heading text-[#212121]">Keep the revenue and the relationship</h2>
+            <p className="mt-5 text-base text-[#616161]">Marketplace commissions are a percentage of every order, forever.</p>
           </Reveal>
-          <div className="overflow-hidden rounded-xl border border-stone-200 bg-white/70 backdrop-blur-sm">
-            <div className="grid grid-cols-3 bg-stone-50/80 text-xs font-semibold text-zinc-500">
+          <div className="border-t border-[#d9d9dd]">
+            <div className="grid grid-cols-3 eyebrow text-[#93939f]">
               <div className="p-4">Area</div>
-              <div className="p-4 text-center text-brand-700">OCP</div>
+              <div className="p-4 text-center text-[#212121]">OCP</div>
               <div className="p-4 text-center">Marketplace</div>
             </div>
-            {comparisons.map((c, i) => (
-              <Reveal key={c.feature} delay={i * 0.04}>
-                <div className="grid grid-cols-3 border-t border-stone-200/60 text-sm">
-                  <div className="p-4 font-medium text-zinc-700">{c.feature}</div>
-                  <div className="p-4 text-center"><span className="inline-flex items-center gap-1.5 text-emerald-700"><CheckCircle2 size={14} /> {c.ocp}</span></div>
-                  <div className="p-4 text-center"><span className="inline-flex items-center gap-1.5 text-zinc-400"><XCircle size={14} /> {c.other}</span></div>
+            {comparisons.map((c) => (
+              <Reveal key={c.feature}>
+                <div className="grid grid-cols-3 border-t border-[#d9d9dd] text-sm">
+                  <div className="p-4 font-medium text-[#212121]">{c.feature}</div>
+                  <div className="p-4 text-center"><span className="inline-flex items-center gap-1.5 text-[#c2410c]"><CheckCircle2 size={14} /> {c.ocp}</span></div>
+                  <div className="p-4 text-center"><span className="inline-flex items-center gap-1.5 text-[#93939f]"><XCircle size={14} /> {c.other}</span></div>
                 </div>
               </Reveal>
             ))}
@@ -502,54 +712,55 @@ export default function Landing() {
       </section>
 
       {/* ── Deployment ── */}
-      <section className="relative z-10 border-b border-stone-200/70 bg-[#faf9f7] py-20">
+      <section className="relative z-10 border-b border-[#d9d9dd] bg-white py-20">
         <div className="mx-auto max-w-4xl px-5">
-          <Reveal className="mb-12 text-center">
-            <p className="text-xs font-semibold text-brand-700">Deployment</p>
-            <h2 className="mt-2 font-heading text-3xl font-semibold text-zinc-900">Run it where it makes sense for you</h2>
+          <Reveal className="mb-14 text-center">
+            <p className="eyebrow text-[#616161]">Deployment</p>
+            <h2 className="mt-4 font-heading text-[#212121]">Run it where it makes sense for you</h2>
           </Reveal>
-          <div className="space-y-3">
+          <div className="grid gap-5 sm:grid-cols-3">
             {deployOptions.map((d, i) => (
               <Reveal key={d.name} delay={i * 0.08}>
-                <TiltCard className="flex flex-col gap-2 rounded-[20px] border border-stone-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-                  <div><h3 className="font-heading text-base font-semibold text-zinc-900">{d.name}</h3><p className="mt-1 text-sm text-zinc-600">{d.detail}</p></div>
-                  <span className="shrink-0 font-mono text-xs text-zinc-500">{d.cost}</span>
+                <TiltCard className="h-full rounded-lg border border-[#d9d9dd] bg-white p-8">
+                  <h3 className="font-heading text-xl text-[#212121]">{d.name}</h3>
+                  <p className="mt-3 text-sm leading-relaxed text-[#616161]">{d.detail}</p>
+                  <p className="caption-mono mt-5 text-[#ea580c]">{d.cost}</p>
                 </TiltCard>
               </Reveal>
             ))}
           </div>
-          <Reveal className="mt-6 text-center text-sm text-zinc-600">Full guides in <a className="text-brand-700 underline underline-offset-2" href="https://github.com/zubershk/ocp/blob/master/docs/DEPLOYMENT.md" target="_blank" rel="noopener noreferrer">DEPLOYMENT.md</a></Reveal>
+          <Reveal className="mt-10 text-center text-sm text-[#616161]">Full guides in <a className="text-[#212121] underline underline-offset-2" href="https://github.com/zubershk/ocp/blob/master/docs/DEPLOYMENT.md" target="_blank" rel="noopener noreferrer">DEPLOYMENT.md</a></Reveal>
         </div>
       </section>
 
       {/* ── Pricing ── */}
-      <section id="pricing" className="relative z-10 border-b border-stone-200/70 bg-white py-20">
+      <section id="pricing" className="relative z-10 border-b border-[#d9d9dd] bg-white py-20">
         <div className="mx-auto max-w-4xl px-5">
-          <Reveal className="mb-12 text-center">
-            <p className="text-xs font-semibold text-brand-700">Pricing</p>
-            <h2 className="mt-2 font-heading text-3xl font-semibold text-zinc-900">No license fee, no commission</h2>
+          <Reveal className="mb-14 text-center">
+            <p className="eyebrow text-[#616161]">Pricing</p>
+            <h2 className="mt-4 font-heading text-[#212121]">No license fee, no commission</h2>
           </Reveal>
           <div className="grid gap-5 sm:grid-cols-2">
             <Reveal>
-              <TiltCard className="h-full rounded-xl border-2 border-brand-200 bg-white p-7 shadow-lg shadow-brand-600/5">
-                <h3 className="font-heading text-lg font-semibold text-zinc-900">Self-hosted</h3>
-                <div className="mt-3 flex items-baseline gap-1"><span className="font-heading text-4xl font-semibold text-zinc-900">₹0</span><span className="text-sm text-zinc-500">forever</span></div>
-                <p className="mt-2 text-sm text-zinc-600">Run it on your own server. Your data stays with you.</p>
-                <ul className="mt-6 space-y-2 text-sm text-zinc-700">
-                  {['Unlimited orders and customers', 'WhatsApp campaigns', 'Full source code', 'Team roles and audit log', 'POS and receipt printing'].map((f) => <li key={f} className="flex items-center gap-2"><CheckCircle2 size={14} className="shrink-0 text-emerald-600" /> {f}</li>)}
+              <TiltCard className="webflow-lift h-full rounded-lg bg-[#212121] p-8">
+                <h3 className="font-heading text-2xl text-white">Self-hosted</h3>
+                <div className="mt-4 flex items-baseline gap-2"><span className="font-heading text-5xl text-white">₹0</span><span className="caption-mono text-white/60">forever</span></div>
+                <p className="mt-3 text-sm text-white/70">Run it on your own server. Your data stays with you.</p>
+                <ul className="mt-8 space-y-3 text-sm text-white">
+                  {['Unlimited orders and customers', 'WhatsApp campaigns', 'Full source code', 'Team roles and audit log', 'POS and receipt printing'].map((f) => <li key={f} className="flex items-center gap-2"><CheckCircle2 size={14} className="shrink-0 text-[#ea580c]" /> {f}</li>)}
                 </ul>
-                <MagneticLink href="https://github.com/zubershk/ocp#quick-start" external className="mt-7 block rounded-lg bg-zinc-900 px-5 py-3 text-center text-sm font-semibold text-white transition-colors hover:bg-zinc-800">Get started</MagneticLink>
+                <MagneticLink href="https://github.com/zubershk/ocp#quick-start" external className="mt-9 block rounded bg-white px-5 py-3 text-center text-sm font-medium text-[#212121] transition-colors hover:bg-white/90">Get started</MagneticLink>
               </TiltCard>
             </Reveal>
             <Reveal delay={0.1}>
-              <TiltCard className="h-full rounded-[20px] border border-stone-200 bg-white p-7">
-                <h3 className="font-heading text-lg font-semibold text-zinc-900">Managed</h3>
-                <div className="mt-3 flex items-baseline gap-1"><span className="font-heading text-4xl font-semibold text-zinc-900">₹999</span><span className="text-sm text-zinc-500">per month</span></div>
-                <p className="mt-2 text-sm text-zinc-600">We host it while you focus on the food.</p>
-                <ul className="mt-6 space-y-2 text-sm text-zinc-700">
-                  {['Everything in self-hosted', 'Managed hosting and backups', 'SSL and domain setup', 'WhatsApp configured', 'Priority support'].map((f) => <li key={f} className="flex items-center gap-2"><CheckCircle2 size={14} className="shrink-0 text-emerald-600" /> {f}</li>)}
+              <TiltCard className="h-full rounded-lg border border-[#d9d9dd] bg-white p-8">
+                <h3 className="font-heading text-2xl text-[#212121]">Managed</h3>
+                <div className="mt-4 flex items-baseline gap-2"><span className="font-heading text-5xl text-[#212121]">₹999</span><span className="caption-mono text-[#93939f]">per month</span></div>
+                <p className="mt-3 text-sm text-[#616161]">We host it while you focus on the food.</p>
+                <ul className="mt-8 space-y-3 text-sm text-[#212121]">
+                  {['Everything in self-hosted', 'Managed hosting and backups', 'SSL and domain setup', 'WhatsApp configured', 'Priority support'].map((f) => <li key={f} className="flex items-center gap-2"><CheckCircle2 size={14} className="shrink-0 text-[#c2410c]" /> {f}</li>)}
                 </ul>
-                <button disabled className="mt-7 block w-full cursor-not-allowed rounded-lg border border-stone-200 px-5 py-3 text-sm font-semibold text-zinc-500">Not available yet</button>
+                <button disabled className="mt-9 block w-full cursor-not-allowed rounded border border-[#d9d9dd] px-5 py-3 text-sm font-medium text-[#93939f]">Not available yet</button>
               </TiltCard>
             </Reveal>
           </div>
@@ -557,29 +768,29 @@ export default function Landing() {
       </section>
 
       {/* ── FAQ ── */}
-      <section id="faq" className="relative z-10 border-b border-stone-200/70 bg-[#faf9f7] py-20">
+      <section id="faq" className="relative z-10 border-b border-[#d9d9dd] bg-white py-20">
         <div className="mx-auto max-w-3xl px-5">
-          <Reveal className="mb-12 text-center">
-            <p className="text-xs font-semibold text-brand-700">Questions</p>
-            <h2 className="mt-2 font-heading text-3xl font-semibold text-zinc-900">The things people ask first</h2>
+          <Reveal className="mb-14 text-center">
+            <p className="eyebrow text-[#616161]">Questions</p>
+            <h2 className="mt-4 font-heading text-[#212121]">The things people ask first</h2>
           </Reveal>
           <Reveal><Faq /></Reveal>
         </div>
       </section>
 
       {/* ── Maintainers ── */}
-      <section id="maintainers" className="relative z-10 border-b border-stone-200/70 bg-white py-20">
+      <section id="maintainers" className="relative z-10 border-b border-[#d9d9dd] bg-white py-20">
         <div className="mx-auto max-w-4xl px-5">
           <Reveal className="text-center">
-            <GitFork size={32} strokeWidth={1.5} className="mx-auto text-zinc-400" />
-            <h2 className="mt-4 font-heading text-3xl font-semibold text-zinc-900">Built in the open, maintained in the open</h2>
-            <p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-zinc-600">MIT licensed, with a documented architecture, a production checklist and CI that checks every module. If you want to improve food ordering software, there is room to do it here.</p>
-            <div className="mt-7 flex flex-wrap justify-center gap-3">
-              <MagneticLink href="https://github.com/zubershk/ocp" external className="inline-flex items-center gap-2 rounded-lg bg-zinc-900 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-zinc-800"><GithubIcon size={15} /> View on GitHub</MagneticLink>
-              <MagneticLink href="https://github.com/zubershk/ocp/blob/master/CONTRIBUTING.md" external className="inline-flex items-center gap-2 rounded-lg border border-stone-200 px-5 py-3 text-sm font-semibold text-zinc-700 transition-colors hover:border-stone-300"><BookOpen size={15} /> Contributing guide</MagneticLink>
+            <GitFork size={32} strokeWidth={1.5} className="mx-auto text-[#93939f]" />
+            <h2 className="mt-5 font-heading text-[#212121]">Built in the open, maintained in the open</h2>
+            <p className="mx-auto mt-5 max-w-xl text-base leading-relaxed text-[#616161]">MIT licensed, with a documented architecture, a production checklist and CI that checks every module. If you want to improve food ordering software, there is room to do it here.</p>
+            <div className="mt-8 flex flex-wrap justify-center gap-3">
+              <MagneticLink href="https://github.com/zubershk/ocp" external className="inline-flex items-center gap-2 rounded bg-[#212121] px-5 py-3 text-sm font-medium text-white transition-colors hover:bg-[#3f3f46]"><GithubIcon size={15} /> View on GitHub</MagneticLink>
+              <MagneticLink href="https://github.com/zubershk/ocp/blob/master/CONTRIBUTING.md" external className="inline-flex items-center gap-2 rounded border border-[#d9d9dd] bg-white px-5 py-3 text-sm font-medium text-[#212121] transition-colors hover:border-[#93939f]"><BookOpen size={15} /> Contributing guide</MagneticLink>
             </div>
           </Reveal>
-          <div className="mt-12 grid gap-4 sm:grid-cols-3">
+          <div className="mt-14 grid gap-5 sm:grid-cols-3">
             {[
               { icon: ShieldCheck, title: 'Safe to run', desc: 'govulncheck, CodeQL, gitleaks and fail-closed npm audits run on every push. Security reports are private.' },
               { icon: LockKeyhole, title: 'Tested at scale', desc: 'A reproducible 1,000-user harness measures throughput, latency and database pool pressure.' },
@@ -588,49 +799,47 @@ export default function Landing() {
               const Icon = c.icon;
               return (
                 <Reveal key={c.title} delay={i * 0.08}>
-                  <TiltCard className="h-full rounded-[20px] border border-stone-200 bg-white p-5 shadow-sm">
-                    <Icon size={18} strokeWidth={1.5} className="text-brand-600" />
-                    <h3 className="mt-3 font-heading text-sm font-semibold text-zinc-900">{c.title}</h3>
-                    <p className="mt-2 text-sm leading-relaxed text-zinc-600">{c.desc}</p>
+                  <TiltCard className="h-full rounded-lg border border-[#d9d9dd] bg-white p-8">
+                    <Icon size={18} strokeWidth={1.5} className="text-[#ea580c]" />
+                    <h3 className="mt-6 font-heading text-xl text-[#212121]">{c.title}</h3>
+                    <p className="mt-3 text-sm leading-relaxed text-[#616161]">{c.desc}</p>
                   </TiltCard>
                 </Reveal>
               );
             })}
           </div>
-          <Reveal className="mt-6 text-center text-sm text-zinc-600">See <a className="text-brand-700 underline underline-offset-2" href="https://github.com/zubershk/ocp/blob/master/docs/DEPENDABOT_TRIAGE.md" target="_blank" rel="noopener noreferrer">security advisories</a> and the <a className="text-brand-700 underline underline-offset-2" href="https://github.com/zubershk/ocp/issues" target="_blank" rel="noopener noreferrer">issue tracker</a></Reveal>
+          <Reveal className="mt-10 text-center text-sm text-[#616161]">See <a className="text-[#212121] underline underline-offset-2" href="https://github.com/zubershk/ocp/blob/master/docs/DEPENDABOT_TRIAGE.md" target="_blank" rel="noopener noreferrer">security advisories</a> and the <a className="text-[#212121] underline underline-offset-2" href="https://github.com/zubershk/ocp/issues" target="_blank" rel="noopener noreferrer">issue tracker</a></Reveal>
         </div>
       </section>
 
       {/* ── CTA ── */}
-      <section className="relative isolate overflow-hidden bg-zinc-950 py-20">
-        <div className="aurora -left-10 top-0 h-64 w-64 bg-orange-500/25" />
-        <div className="aurora bottom-0 right-0 h-72 w-72 bg-amber-500/10" style={{ animationDelay: '-9s' }} />
+      <section className="relative isolate overflow-hidden bg-[#212121] py-24">
         <div className="relative mx-auto max-w-2xl px-5 text-center">
           <Reveal>
-            <h2 className="font-heading text-3xl font-semibold text-white">Own the whole ordering flow</h2>
-            <p className="mt-3 text-sm leading-relaxed text-zinc-400">One repository, one database, no platform taking a cut of every order.</p>
-            <MagneticLink href="https://github.com/zubershk/ocp#quick-start" external className="mt-8 inline-flex items-center gap-2 rounded-lg bg-brand-600 px-6 py-3 text-sm font-semibold text-white shadow-xl shadow-brand-600/25 transition-colors hover:bg-brand-500">Get started <ArrowRight size={15} /></MagneticLink>
+            <h2 className="font-heading text-white">Own the whole ordering flow</h2>
+            <p className="mx-auto mt-5 max-w-lg text-base leading-relaxed text-white/60">One repository, one database, no platform taking a cut of every order.</p>
+            <MagneticLink href="https://github.com/zubershk/ocp#quick-start" external className="mt-9 inline-flex items-center gap-2 rounded bg-white px-5 py-3 text-sm font-medium text-[#212121] transition-colors hover:bg-white/90">Get started <ArrowRight size={15} /></MagneticLink>
           </Reveal>
         </div>
       </section>
 
       {/* ── Footer ── */}
-      <footer className="relative z-10 bg-zinc-950 py-10">
-        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-5 sm:flex-row">
+      <footer className="relative z-10 border-t border-[#d9d9dd] bg-white py-12">
+        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-5 px-5 sm:flex-row">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-brand-600"><span className="font-heading text-xs font-semibold text-white">O</span></div>
-            <span className="font-heading text-sm font-semibold text-white">{restaurantName || 'Restaurant'}</span>
+            <div className="flex h-7 w-7 items-center justify-center rounded bg-[#212121]"><span className="font-heading text-xs text-white">O</span></div>
+            <span className="font-heading text-sm text-[#212121]">{restaurantName || 'Restaurant'}</span>
           </div>
-          <div className="flex flex-wrap items-center justify-center gap-5 text-xs text-zinc-500">
-            <a href="https://github.com/zubershk/ocp" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-zinc-300">GitHub</a>
-            <a href="https://github.com/zubershk/ocp/blob/master/LICENSE" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-zinc-300">MIT License</a>
-            <a href="https://github.com/zubershk/ocp/blob/master/docs/DEPLOYMENT.md" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-zinc-300">Deployment</a>
-            <a href="https://github.com/zubershk/ocp/blob/master/CONTRIBUTING.md" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-zinc-300">Contributing</a>
-            {social.instagram && <a href={social.instagram.startsWith('https://') ? social.instagram : '#'} target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-zinc-300">Instagram</a>}
-            {social.facebook && <a href={social.facebook.startsWith('https://') ? social.facebook : '#'} target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-zinc-300">Facebook</a>}
-            {social.twitter && <a href={social.twitter.startsWith('https://') ? social.twitter : '#'} target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-zinc-300">Twitter</a>}
-            {social.youtube && <a href={social.youtube.startsWith('https://') ? social.youtube : '#'} target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-zinc-300">YouTube</a>}
-            {social.whatsapp && <a href={social.whatsapp.startsWith('https://') ? social.whatsapp : '#'} target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-zinc-300">WhatsApp</a>}
+          <div className="flex flex-wrap items-center justify-center gap-5 text-xs text-[#616161]">
+            <a href="https://github.com/zubershk/ocp" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[#212121]">GitHub</a>
+            <a href="https://github.com/zubershk/ocp/blob/master/LICENSE" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[#212121]">MIT License</a>
+            <a href="https://github.com/zubershk/ocp/blob/master/docs/DEPLOYMENT.md" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[#212121]">Deployment</a>
+            <a href="https://github.com/zubershk/ocp/blob/master/CONTRIBUTING.md" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[#212121]">Contributing</a>
+            {social.instagram && <a href={social.instagram.startsWith('https://') ? social.instagram : '#'} target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[#212121]">Instagram</a>}
+            {social.facebook && <a href={social.facebook.startsWith('https://') ? social.facebook : '#'} target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[#212121]">Facebook</a>}
+            {social.twitter && <a href={social.twitter.startsWith('https://') ? social.twitter : '#'} target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[#212121]">Twitter</a>}
+            {social.youtube && <a href={social.youtube.startsWith('https://') ? social.youtube : '#'} target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[#212121]">YouTube</a>}
+            {social.whatsapp && <a href={social.whatsapp.startsWith('https://') ? social.whatsapp : '#'} target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[#212121]">WhatsApp</a>}
           </div>
         </div>
       </footer>
