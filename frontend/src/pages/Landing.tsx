@@ -520,93 +520,119 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── Dark feature band ── */}
-      <section className="relative z-10 bg-[#212121] py-20">
-        <div className="mx-auto grid max-w-6xl items-center gap-12 px-5 lg:grid-cols-2 lg:gap-20">
-          <Reveal>
-            <p className="eyebrow text-white/50">The core workflow</p>
-            <h2 className="mt-4 font-heading text-white">Orders arrive on WhatsApp. Your team works one queue.</h2>
-            <div className="mt-9 divide-y divide-white/15">
-              {[
-                ['One conversation per customer', 'OTP logins, order updates and delivery alerts all stay on the number people already use.'],
-                ['One queue for the whole team', 'Kitchen, managers and owners see the same live status without passing messages around.'],
-                ['One source of truth', 'Menu, orders, customers and campaigns live in a single database you control.'],
-              ].map(([title, desc]) => (
-                <div key={title} className="py-5 first:pt-0">
-                  <p className="text-base font-medium text-white">{title}</p>
-                  <p className="mt-2 text-sm leading-relaxed text-white/60">{desc}</p>
-                </div>
-              ))}
-            </div>
-          </Reveal>
-          <Reveal delay={0.1} className="rounded-lg border border-white/15 bg-white p-2">
-            <img src={screenshots[0].src} alt={screenshots[0].alt} className="h-64 w-full rounded object-cover object-top sm:h-80" loading="lazy" />
-            <div className="px-3 py-3"><span className="caption-mono text-[#93939f]">Installable storefront menu</span></div>
-          </Reveal>
-        </div>
-      </section>
-
-      {/* ── Use cases ── */}
-      <section id="use-cases" className="relative z-10 border-b border-[#d9d9dd] bg-white py-20">
+      {/* Tabbed use cases */}
+      <section id="use-cases" ref={caseRef} className="border-b border-[#e5e7eb] bg-[#faf7f4] py-20">
         <div className="mx-auto max-w-6xl px-5">
-          <Reveal className="mb-14 text-center">
-            <p className="eyebrow text-[#616161]">Who it is for</p>
+          <Reveal className="mx-auto max-w-2xl text-center">
+            <p className="eyebrow text-[#ea580c]">Built for every kitchen</p>
             <h2 className="mt-4 font-heading text-[#212121]">Any food business that takes orders</h2>
-            <p className="mx-auto mt-5 max-w-xl text-base leading-relaxed text-[#616161]">Business type, sizes, payment labels, hours and branding are configuration, not code.</p>
+            <p className="mt-4 text-base text-[#616161]">Business type, hours, payment labels and branding are configuration — not code.</p>
           </Reveal>
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            {useCases.map((u, i) => {
-              const Icon = u.icon;
-              return (
-                <Reveal key={u.title} delay={i * 0.07}>
-                  <TiltCard className="h-full rounded-lg border border-[#d9d9dd] bg-white p-8">
-                    <Icon size={18} strokeWidth={1.5} className="text-[#ea580c]" />
-                    <h3 className="mt-6 font-heading text-xl text-[#212121]">{u.title}</h3>
-                    <p className="mt-3 text-sm leading-relaxed text-[#616161]">{u.desc}</p>
-                  </TiltCard>
-                </Reveal>
-              );
-            })}
+
+          <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
+            {useCases.map((u, i) => (
+              <button key={u.key} type="button" onClick={() => jumpCase(i)} aria-current={i === useCaseIndex}
+                className={`rounded px-5 py-2.5 text-sm font-medium transition-colors ${i === useCaseIndex ? 'bg-[#ea580c] text-white' : 'border border-[#e5e7eb] bg-white text-[#616161] hover:border-[#fb923c]'}`}>
+                {u.title}
+              </button>
+            ))}
+            <button type="button" onClick={() => setUseCasePaused((p) => !p)} aria-label={useCasePaused ? 'Resume the carousel' : 'Pause the carousel'}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#e5e7eb] bg-white text-[#616161]">
+              {useCasePaused ? <Play size={15} /> : <Pause size={15} />}
+            </button>
+          </div>
+
+          <div className="relative mt-8"
+            onMouseEnter={() => setUseCasePaused(true)} onMouseLeave={() => setUseCasePaused(false)}
+            onFocus={() => setUseCasePaused(true)} onBlur={() => setUseCasePaused(false)}
+            role="region" aria-label="Business type carousel">
+            <AnimatePresence mode="wait" custom={caseDirection} initial={false}>
+              <motion.div key={activeCase.key} custom={caseDirection}
+                variants={{
+                  enter: (d: number) => ({ x: d > 0 ? 90 : -90, opacity: 0 }),
+                  center: { x: 0, opacity: 1 },
+                  exit: (d: number) => ({ x: d > 0 ? -90 : 90, opacity: 0 }),
+                }}
+                initial="enter" animate="center" exit="exit"
+                transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+                className="overflow-hidden rounded-lg bg-gradient-to-br from-[#c2410c] via-[#ea580c] to-[#f97316]">
+                <div className="grid lg:grid-cols-2">
+                  <img src={activeCase.img} alt="" className="h-64 w-full object-cover sm:h-80 lg:h-[26rem]" />
+                  <div className="p-8 sm:p-12">
+                    <ActiveIcon size={30} strokeWidth={1.5} className="text-white" />
+                    <p className="caption-mono mt-6 text-white/60">0{useCaseIndex + 1} / 0{useCases.length}</p>
+                    <h3 className="mt-3 font-heading text-3xl text-white sm:text-4xl">{activeCase.title}</h3>
+                    <p className="mt-4 max-w-lg text-base leading-relaxed text-white/85">{activeCase.desc}</p>
+                    <ul className="mt-8 space-y-3">
+                      {highlights.map((h) => {
+                        const Icon = h.icon;
+                        return (
+                          <li key={h.title} className="flex items-start gap-3 border-t border-white/20 pt-3">
+                            <Icon size={17} strokeWidth={1.5} className="mt-0.5 shrink-0 text-white" />
+                            <div><p className="text-sm font-medium text-white">{h.title}</p><p className="text-sm text-white/70">{h.desc}</p></div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                </div>
+              </motion.div>
+            </AnimatePresence>
+            <button type="button" onClick={() => goCase(-1)} aria-label="Previous business type"
+              className="absolute left-3 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/30 bg-[#1a0f08]/40 text-white backdrop-blur-md transition-colors hover:bg-[#1a0f08]/70">
+              <ChevronLeft size={20} />
+            </button>
+            <button type="button" onClick={() => goCase(1)} aria-label="Next business type"
+              className="absolute right-3 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/30 bg-[#1a0f08]/40 text-white backdrop-blur-md transition-colors hover:bg-[#1a0f08]/70">
+              <ChevronRight size={20} />
+            </button>
+          </div>
+
+          <div className="mt-6 flex items-center justify-center gap-3">
+            {useCases.map((u, i) => (
+              <button key={u.key} type="button" onClick={() => jumpCase(i)} aria-label={`Show ${u.title}`} aria-current={i === useCaseIndex}
+                className={`h-1.5 rounded-full transition-all duration-300 ${i === useCaseIndex ? 'w-10 bg-[#ea580c]' : 'w-4 bg-[#d8cdc4] hover:bg-[#fb923c]'}`} />
+            ))}
           </div>
         </div>
       </section>
 
-      {/* ── Screenshots ── */}
-      <section id="screenshots" className="relative z-10 border-b border-[#d9d9dd] bg-white py-20">
+      {/* Screenshots */}
+      <section id="screenshots" className="border-b border-[#e5e7eb] bg-white py-20">
         <div className="mx-auto max-w-6xl px-5">
-          <Reveal className="mb-14 text-center">
-            <p className="eyebrow text-[#616161]">The real product</p>
-            <h2 className="mt-4 font-heading text-[#212121]">The screens that run the operation</h2>
+          <Reveal className="mx-auto max-w-2xl text-center">
+            <p className="eyebrow text-[#ea580c]">The real product</p>
+            <h2 className="mt-4 font-heading text-[#212121]">See every screen</h2>
           </Reveal>
-          <div className="grid gap-5 sm:grid-cols-3">
-            {screenshots.map((s, i) => (
-              <Reveal key={s.label} delay={i * 0.1}>
-                <motion.figure whileHover={{ y: -6 }} transition={{ type: 'spring', stiffness: 260, damping: 22 }} className="overflow-hidden rounded-lg border border-[#d9d9dd]">
-                  <img src={s.src} alt={s.alt} className="h-48 w-full border-b border-[#d9d9dd] object-cover object-top" />
-                  <figcaption className="px-5 py-4 text-sm text-[#212121]">{s.label}</figcaption>
+          <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {['admin-dashboard', 'storefront-menu', 'campaign-dashboard', 'admin-pos', 'storefront-checkout', 'admin-analytics'].map((name, i) => (
+              <Reveal key={name} delay={i * 0.05}>
+                <motion.figure whileHover={{ y: -6 }} transition={{ type: 'spring', stiffness: 260, damping: 22 }} className="overflow-hidden rounded-lg border border-[#e5e7eb]">
+                  <img src={`/screenshots/${name}.png`} alt={`OCP ${name.replace(/-/g, ' ')} screen`} className="h-56 w-full border-b border-[#e5e7eb] object-cover object-top" />
+                  <figcaption className="px-4 py-3 text-sm text-[#212121]">{name.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}</figcaption>
                 </motion.figure>
               </Reveal>
             ))}
           </div>
-          <Reveal className="mt-6 text-center text-sm text-[#93939f]">All 21 screenshots are in the <a className="text-[#212121] underline underline-offset-2" href={DOCS} target="_blank" rel="noopener noreferrer">README</a></Reveal>
+          <Reveal className="mt-8 text-center text-sm text-[#898989]">All 21 screenshots are in the <a className="text-[#212121] underline underline-offset-2" href="https://github.com/zubershk/ocp#readme" target="_blank" rel="noopener noreferrer">README</a></Reveal>
         </div>
       </section>
 
-      {/* ── Steps ── */}
-      <section className="relative z-10 border-b border-[#d9d9dd] bg-white py-20">
+      {/* Getting started */}
+      <section id="steps" className="border-b border-[#e5e7eb] bg-[#faf7f4] py-20">
         <div className="mx-auto max-w-6xl px-5">
-          <Reveal className="mb-14 text-center">
-            <p className="eyebrow text-[#616161]">Getting started</p>
+          <Reveal className="mx-auto max-w-2xl text-center">
+            <p className="eyebrow text-[#ea580c]">Getting started</p>
             <h2 className="mt-4 font-heading text-[#212121]">From clone to first order</h2>
           </Reveal>
-          <div className="grid gap-10 sm:grid-cols-3">
+          <div className="mt-12 grid gap-8 sm:grid-cols-3">
             {steps.map((s, i) => (
               <Reveal key={s.num} delay={i * 0.1}>
                 <div className="relative border-t-2 border-[#ea580c] pt-6">
                   <span className="absolute -top-2 left-0 h-3 w-3 rounded-full bg-[#ea580c]" />
-                  <span className="caption-mono text-[#93939f]">{s.num}</span>
-                  <h3 className="mt-3 font-heading text-2xl text-[#212121]">{s.title}</h3>
-                  <p className="mt-3 text-sm leading-relaxed text-[#616161]">{s.desc}</p>
+                  <span className="caption-mono text-[#898989]">{s.num}</span>
+                  <h3 className="mt-3 font-heading text-xl text-[#212121]">{s.title}</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-[#616161]">{s.desc}</p>
                 </div>
               </Reveal>
             ))}
