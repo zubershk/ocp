@@ -89,8 +89,7 @@ Before go-live, work through the [production checklist](docs/PRODUCTION_CHECKLIS
 
 The open-source landing page (`/`):
 
-![OCP landing page](docs/screenshots/landing.png)
-*Open-source, free-forever landing page with links to the docs and self-hosting guide.*
+![OCP landing page with animated fog hero and live order preview](docs/screenshots/landing.png)
 
 **For customers:**
 - Browse the full menu with real product photos, prices, and dietary info
