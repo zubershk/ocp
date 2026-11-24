@@ -640,163 +640,334 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── Comparison ── */}
-      <section className="relative z-10 border-b border-[#d9d9dd] bg-white py-20">
-        <div className="mx-auto max-w-3xl px-5">
-          <Reveal className="mb-14 text-center">
-            <p className="eyebrow text-[#616161]">Why self-host</p>
-            <h2 className="mt-4 font-heading text-[#212121]">Keep the revenue and the relationship</h2>
-            <p className="mt-5 text-base text-[#616161]">Marketplace commissions are a percentage of every order, forever.</p>
-          </Reveal>
-          <div className="border-t border-[#d9d9dd]">
-            <div className="grid grid-cols-3 eyebrow text-[#93939f]">
-              <div className="p-4">Area</div>
-              <div className="p-4 text-center text-[#212121]">OCP</div>
-              <div className="p-4 text-center">Marketplace</div>
-            </div>
-            {comparisons.map((c) => (
-              <Reveal key={c.feature}>
-                <div className="grid grid-cols-3 border-t border-[#d9d9dd] text-sm">
-                  <div className="p-4 font-medium text-[#212121]">{c.feature}</div>
-                  <div className="p-4 text-center"><span className="inline-flex items-center gap-1.5 text-[#c2410c]"><CheckCircle2 size={14} /> {c.ocp}</span></div>
-                  <div className="p-4 text-center"><span className="inline-flex items-center gap-1.5 text-[#93939f]"><XCircle size={14} /> {c.other}</span></div>
+      {/* Comparison */}
+      <section id="comparison" className="border-b border-[#e5e7eb] bg-[#faf7f4] py-20">
+        <div className="mx-auto max-w-6xl px-5">
+          <div className="grid gap-10 lg:grid-cols-[0.85fr_1.4fr] lg:gap-16">
+            <Reveal className="self-start lg:sticky lg:top-24">
+              <p className="eyebrow text-[#ea580c]">Why self-host</p>
+              <h2 className="mt-4 font-heading text-[#212121]">Keep the revenue and the relationship</h2>
+              <p className="mt-4 text-base leading-relaxed text-[#616161]">Marketplaces own the channel and take a cut of every order. OCP gives you the whole stack — and the customer relationship that comes with it.</p>
+              <ul className="mt-8 space-y-5">
+                {[
+                  ['No platform commission', 'Every rupee stays with your restaurant.'],
+                  ['Your customer data', 'Orders and contacts live in your database.'],
+                  ['Your brand, your domain', 'White-label the storefront and dashboard.'],
+                ].map(([title, desc]) => (
+                  <li key={title} className="flex gap-3">
+                    <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded bg-[#ea580c]"><CheckCircle2 size={14} className="text-white" /></span>
+                    <div>
+                      <p className="text-sm font-medium text-[#212121]">{title}</p>
+                      <p className="mt-1 text-sm text-[#616161]">{desc}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <MagneticLink href="https://github.com/zubershk/ocp#quick-start" external className="mt-9 inline-flex items-center gap-2 rounded bg-[#17171c] px-5 py-3 text-sm font-medium text-white transition-colors hover:bg-[#3f3f46]">
+                Own your platform <ArrowRight size={15} />
+              </MagneticLink>
+            </Reveal>
+
+            <Reveal className="overflow-hidden rounded-lg border border-[#e5e7eb] bg-white">
+              <div className="hidden grid-cols-[1.1fr_1fr_1fr] gap-4 border-b border-[#e5e7eb] bg-[#fffaf6] px-5 py-4 sm:grid">
+                <span className="eyebrow text-[#898989]">Area</span>
+                <span className="eyebrow text-[#ea580c]">OCP</span>
+                <span className="eyebrow text-[#898989]">Marketplace</span>
+              </div>
+              {comparisons.map((c, i) => (
+                <div key={c.feature} className={`grid gap-3 border-b border-[#e5e7eb] px-5 py-5 last:border-0 sm:grid-cols-[1.1fr_1fr_1fr] sm:gap-4 ${i % 2 ? 'bg-[#fdfbf9]' : 'bg-white'}`}>
+                  <p className="text-sm font-medium text-[#212121]">{c.feature}</p>
+                  <div>
+                    <p className="mb-1 text-xs text-[#898989] sm:hidden">OCP</p>
+                    <span className="inline-flex items-start gap-2 text-sm font-medium text-[#c2410c]"><CheckCircle2 size={15} className="mt-0.5 shrink-0" /> {c.ocp}</span>
+                  </div>
+                  <div>
+                    <p className="mb-1 text-xs text-[#898989] sm:hidden">Marketplace</p>
+                    <span className="inline-flex items-start gap-2 text-sm text-[#898989]"><XCircle size={15} className="mt-0.5 shrink-0" /> {c.other}</span>
+                  </div>
                 </div>
-              </Reveal>
-            ))}
+              ))}
+            </Reveal>
           </div>
         </div>
       </section>
 
-      {/* ── Deployment ── */}
-      <section className="relative z-10 border-b border-[#d9d9dd] bg-white py-20">
-        <div className="mx-auto max-w-4xl px-5">
-          <Reveal className="mb-14 text-center">
-            <p className="eyebrow text-[#616161]">Deployment</p>
-            <h2 className="mt-4 font-heading text-[#212121]">Run it where it makes sense for you</h2>
+      {/* Stats band */}
+      <section className="relative overflow-hidden bg-[radial-gradient(60%_80%_at_50%_0%,rgba(234,88,12,0.35),transparent_70%),linear-gradient(160deg,#1a0f08,#2a1408)] py-20">
+        <div className="relative mx-auto max-w-6xl px-5">
+          <Reveal className="flex flex-col items-start justify-between gap-6 sm:flex-row sm:items-center">
+            <div>
+              <p className="eyebrow text-[#fb923c]">Nothing good is built alone</p>
+              <h2 className="mt-4 max-w-lg font-heading text-white">Measured, not claimed</h2>
+              <p className="mt-3 max-w-lg text-sm text-white/60">Reproducible results from the bundled 1,000-user harness.</p>
+              <MagneticLink href="https://github.com/zubershk/ocp/blob/master/docs/LOAD_TEST.md" external className="mt-6 inline-flex items-center gap-2 rounded bg-[#ea580c] px-5 py-3 text-sm font-medium text-white">Read the methodology <ArrowRight size={15} /></MagneticLink>
+            </div>
+            <div className="grid w-full grid-cols-2 gap-6 sm:w-auto sm:grid-cols-2">
+              {stats.map((s) => {
+                const Icon = s.icon;
+                return (
+                  <div key={s.label} className="text-center">
+                    <Icon size={18} className="mx-auto text-[#fb923c]" />
+                    <p className="mt-3 font-heading text-3xl text-white"><CountUp to={s.value} decimals={s.decimals} suffix={s.suffix} /></p>
+                    <p className="caption-mono mt-1 text-white/50">{s.label}</p>
+                  </div>
+                );
+              })}
+            </div>
           </Reveal>
-          <div className="grid gap-5 sm:grid-cols-3">
-            {deployOptions.map((d, i) => (
-              <Reveal key={d.name} delay={i * 0.08}>
-                <TiltCard className="h-full rounded-lg border border-[#d9d9dd] bg-white p-8">
-                  <h3 className="font-heading text-xl text-[#212121]">{d.name}</h3>
-                  <p className="mt-3 text-sm leading-relaxed text-[#616161]">{d.detail}</p>
-                  <p className="caption-mono mt-5 text-[#ea580c]">{d.cost}</p>
+        </div>
+      </section>
+
+      {/* Community */}
+      <section className="border-b border-[#e5e7eb] bg-[#faf7f4] py-20">
+        <div className="mx-auto max-w-6xl px-5">
+          <div className="grid gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:gap-16">
+            <Reveal className="self-start lg:sticky lg:top-24">
+              <p className="eyebrow text-[#ea580c]">Join the community</p>
+              <h2 className="mt-4 font-heading text-[#212121]">Built in the open, maintained in the open</h2>
+              <p className="mt-4 text-base leading-relaxed text-[#616161]">AGPL-3.0 licensed, with a documented architecture, a production checklist and CI that checks every module.</p>
+              <div className="mt-8 grid grid-cols-3 gap-4 border-y border-[#e5e7eb] py-5">
+                {[['License', 'AGPL-3.0'], ['Screenshots', '21'], ['Checks', 'Green CI']].map(([label, value]) => (
+                  <div key={label}>
+                    <p className="font-heading text-xl text-[#212121]">{value}</p>
+                    <p className="caption-mono mt-1 text-[#898989]">{label}</p>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-6 text-sm leading-relaxed text-[#616161]">If you want to improve food ordering software, there is room to do it here.</p>
+            </Reveal>
+            <div className="space-y-5">
+              <Reveal>
+                <TiltCard className="group flex h-full flex-col gap-5 rounded-lg border border-[#e5e7eb] bg-white p-7 sm:flex-row sm:items-center">
+                  <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg bg-[#fff7ed]"><GithubIcon size={28} className="text-[#ea580c]" /></div>
+                  <div className="flex-1">
+                    <p className="caption-mono text-[#898989]">01 · Source</p>
+                    <h3 className="mt-1 font-heading text-2xl text-[#212121]">GitHub</h3>
+                    <p className="mt-2 text-sm leading-relaxed text-[#616161]">Browse the source, open issues, follow releases and see the CI run on every push.</p>
+                  </div>
+                  <MagneticLink href="https://github.com/zubershk/ocp" external className="inline-flex shrink-0 items-center gap-2 rounded border border-[#e5e7eb] px-4 py-2.5 text-sm font-medium text-[#212121] transition-colors hover:border-[#ea580c] hover:text-[#ea580c]">View repository <ArrowRight size={15} /></MagneticLink>
                 </TiltCard>
               </Reveal>
-            ))}
+              <Reveal delay={0.1}>
+                <TiltCard className="group flex h-full flex-col gap-5 rounded-lg border border-[#e5e7eb] bg-white p-7 sm:flex-row sm:items-center">
+                  <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg bg-[#fff7ed]"><BookOpen size={28} strokeWidth={1.5} className="text-[#ea580c]" /></div>
+                  <div className="flex-1">
+                    <p className="caption-mono text-[#898989]">02 · Guide</p>
+                    <h3 className="mt-1 font-heading text-2xl text-[#212121]">Contributing</h3>
+                    <p className="mt-2 text-sm leading-relaxed text-[#616161]">Localization, payment gateways, webhooks, a versioned API and onboarding need help.</p>
+                  </div>
+                  <MagneticLink href="https://github.com/zubershk/ocp/blob/master/CONTRIBUTING.md" external className="inline-flex shrink-0 items-center gap-2 rounded border border-[#e5e7eb] px-4 py-2.5 text-sm font-medium text-[#212121] transition-colors hover:border-[#ea580c] hover:text-[#ea580c]">Read the guide <ArrowRight size={15} /></MagneticLink>
+                </TiltCard>
+              </Reveal>
+            </div>
           </div>
-          <Reveal className="mt-10 text-center text-sm text-[#616161]">Full guides in <a className="text-[#212121] underline underline-offset-2" href="https://github.com/zubershk/ocp/blob/master/docs/DEPLOYMENT.md" target="_blank" rel="noopener noreferrer">DEPLOYMENT.md</a></Reveal>
         </div>
       </section>
 
-      {/* ── Pricing ── */}
-      <section id="pricing" className="relative z-10 border-b border-[#d9d9dd] bg-white py-20">
-        <div className="mx-auto max-w-4xl px-5">
-          <Reveal className="mb-14 text-center">
-            <p className="eyebrow text-[#616161]">Pricing</p>
+      {/* Pricing: OCP vs Marketplace */}
+      <section id="pricing" className="border-b border-[#e5e7eb] bg-white py-20">
+        <div className="mx-auto max-w-5xl px-5">
+          <Reveal className="mx-auto max-w-2xl text-center">
+            <p className="eyebrow text-[#ea580c]">Pricing</p>
             <h2 className="mt-4 font-heading text-[#212121]">No license fee, no commission</h2>
+            <p className="mt-4 text-base text-[#616161]">The same ordering operation, two very different cost models.</p>
           </Reveal>
-          <div className="grid gap-5 sm:grid-cols-2">
+          <div className="mt-12 grid items-stretch gap-4 lg:grid-cols-[1fr_auto_1fr] lg:gap-6">
             <Reveal>
-              <TiltCard className="webflow-lift h-full rounded-lg bg-[#212121] p-8">
-                <h3 className="font-heading text-2xl text-white">Self-hosted</h3>
-                <div className="mt-4 flex items-baseline gap-2"><span className="font-heading text-5xl text-white">₹0</span><span className="caption-mono text-white/60">forever</span></div>
-                <p className="mt-3 text-sm text-white/70">Run it on your own server. Your data stays with you.</p>
-                <ul className="mt-8 space-y-3 text-sm text-white">
-                  {['Unlimited orders and customers', 'WhatsApp campaigns', 'Full source code', 'Team roles and audit log', 'POS and receipt printing'].map((f) => <li key={f} className="flex items-center gap-2"><CheckCircle2 size={14} className="shrink-0 text-[#ea580c]" /> {f}</li>)}
+              <TiltCard className="layered-shadow relative h-full overflow-hidden rounded-lg bg-[#1a0f08] p-8 sm:p-10">
+                <span className="absolute inset-x-0 top-0 h-1 bg-[#ea580c]" />
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <h3 className="font-heading text-2xl text-white">OCP</h3>
+                  <span className="rounded bg-[#ea580c] px-3 py-1 caption-mono text-white">Self-hosted</span>
+                </div>
+                <div className="mt-6 flex items-end gap-2"><span className="font-heading text-6xl text-white">₹0</span><span className="pb-2 caption-mono text-white/60">forever</span></div>
+                <p className="mt-3 text-sm text-white/70">Run it on your own server. You keep the revenue and the customer relationship.</p>
+                <div className="my-8 h-px bg-white/15" />
+                <ul className="grid gap-3 text-sm text-white sm:grid-cols-2">
+                  {['No per-order commission', 'Unlimited orders', 'WhatsApp campaigns', 'Full source code', 'Team roles and audit log', 'POS and printing'].map((f) => <li key={f} className="flex items-center gap-2"><CheckCircle2 size={15} className="shrink-0 text-[#fb923c]" /> {f}</li>)}
                 </ul>
-                <MagneticLink href="https://github.com/zubershk/ocp#quick-start" external className="mt-9 block rounded bg-white px-5 py-3 text-center text-sm font-medium text-[#212121] transition-colors hover:bg-white/90">Get started</MagneticLink>
+                <MagneticLink href="https://github.com/zubershk/ocp#quick-start" external className="mt-9 block rounded bg-[#ea580c] px-5 py-3 text-center text-sm font-medium text-white transition-colors hover:bg-[#f97316]">Get started</MagneticLink>
               </TiltCard>
+            </Reveal>
+
+            <div className="flex items-center justify-center">
+              <span className="flex h-14 w-14 items-center justify-center rounded-full border-4 border-white bg-[#ea580c] font-heading text-sm font-semibold text-white shadow-md">VS</span>
+            </div>
+
+            <Reveal delay={0.1}>
+              <TiltCard className="relative h-full overflow-hidden rounded-lg border border-[#e5e7eb] bg-white p-8 sm:p-10">
+                <span className="absolute inset-x-0 top-0 h-1 bg-[#d8cdc4]" />
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <h3 className="font-heading text-2xl text-[#212121]">Marketplace</h3>
+                  <span className="rounded bg-[#faf7f4] px-3 py-1 caption-mono text-[#898989]">Typical platform</span>
+                </div>
+                <div className="mt-6 flex items-end gap-2"><span className="font-heading text-6xl text-[#212121]">₹999+</span><span className="pb-2 caption-mono text-[#898989]">per month</span></div>
+                <p className="mt-3 text-sm text-[#616161]">Plus 25-30% on every order, for the privilege of using their channel.</p>
+                <div className="my-8 h-px bg-[#e5e7eb]" />
+                <ul className="grid gap-3 text-sm text-[#898989] sm:grid-cols-2">
+                  {['Commission on every order', 'Customer data on their platform', 'Their brand on your page', 'Campaigns cost extra', 'Closed source', 'No full data export'].map((f) => <li key={f} className="flex items-center gap-2"><XCircle size={15} className="shrink-0 text-[#b8aea5]" /> {f}</li>)}
+                </ul>
+                <MagneticLink href="#comparison" className="mt-9 block rounded border border-[#e5e7eb] px-5 py-3 text-center text-sm font-medium text-[#616161] transition-colors hover:border-[#ea580c] hover:text-[#ea580c]">See the full comparison</MagneticLink>
+              </TiltCard>
+            </Reveal>
+          </div>
+          <Reveal className="mt-8 text-center text-sm text-[#898989]">No license fee. No per-order commission. <a className="text-[#212121] underline underline-offset-2" href="#comparison">Compare all features</a></Reveal>
+        </div>
+      </section>
+
+      {/* FAQ */}
+      <section id="faq" className="border-b border-[#e5e7eb] bg-white py-20">
+        <div className="mx-auto max-w-6xl px-5">
+          <div className="grid gap-10 lg:grid-cols-[0.8fr_1.4fr] lg:gap-16">
+            <Reveal className="self-start lg:sticky lg:top-24">
+              <p className="eyebrow text-[#ea580c]">Questions</p>
+              <h2 className="mt-4 font-heading text-[#212121]">The things people ask first</h2>
+              <p className="mt-4 text-base leading-relaxed text-[#616161]">A few quick answers about licensing, deployment and what you can customise.</p>
+              <div className="mt-8 rounded-lg border border-[#e5e7eb] bg-[#faf7f4] p-6">
+                <p className="font-heading text-lg text-[#212121]">Still have a question?</p>
+                <p className="mt-2 text-sm leading-relaxed text-[#616161]">Open an issue on GitHub and the maintainers will answer in the open.</p>
+                <MagneticLink href="https://github.com/zubershk/ocp/issues" external className="mt-5 inline-flex items-center gap-2 text-sm font-medium text-[#ea580c]">Ask on GitHub <ArrowRight size={15} /></MagneticLink>
+              </div>
+            </Reveal>
+            <Reveal><Faq /></Reveal>
+          </div>
+        </div>
+      </section>
+
+      {/* CTA */}
+      <section className="relative overflow-hidden bg-[radial-gradient(60%_80%_at_50%_0%,rgba(234,88,12,0.4),transparent_70%),linear-gradient(160deg,#1a0f08,#2a1408)] py-28 sm:py-36">
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden" aria-hidden="true">
+          <span className="select-none font-heading text-white/[0.04]" style={{ fontSize: 'clamp(12rem, 28vw, 26rem)', lineHeight: 1 }}>OCP</span>
+        </div>
+        <div className="relative mx-auto max-w-6xl px-5">
+          <div className="grid gap-12 lg:grid-cols-[1.15fr_0.85fr] lg:items-center lg:gap-20">
+            <Reveal>
+              <p className="eyebrow text-[#fb923c]">Start today</p>
+              <h2 className="mt-5 font-heading text-white" style={{ fontSize: 'clamp(2.5rem, 5.5vw, 4.75rem)', lineHeight: 1.04, letterSpacing: '-0.03em' }}>
+                Own the whole ordering flow
+              </h2>
+              <p className="mt-6 max-w-xl text-lg leading-relaxed text-white/70">
+                One repository, one database, no platform taking a cut of every order. Bring your menu, your number and your domain — the rest is already built.
+              </p>
+              <div className="mt-9 flex flex-wrap gap-3">
+                <MagneticLink href="https://github.com/zubershk/ocp#quick-start" external className="inline-flex items-center gap-2 rounded bg-[#ea580c] px-6 py-3.5 text-sm font-medium text-white transition-colors hover:bg-[#f97316]">
+                  Get started <ArrowRight size={16} />
+                </MagneticLink>
+                <MagneticLink href="https://github.com/zubershk/ocp#readme" external className="inline-flex items-center gap-2 rounded border border-white/25 px-6 py-3.5 text-sm font-medium text-white transition-colors hover:bg-white/10">
+                  Read the docs <ArrowRight size={16} />
+                </MagneticLink>
+              </div>
+              <div className="mt-9 flex flex-wrap gap-x-8 gap-y-3 text-sm text-white/60">
+                {['No license fee', 'AGPL-3.0', 'No per-order commission', 'Your own domain'].map((item) => (
+                  <span key={item} className="inline-flex items-center gap-2"><CheckCircle2 size={15} className="text-[#fb923c]" /> {item}</span>
+                ))}
+              </div>
             </Reveal>
             <Reveal delay={0.1}>
-              <TiltCard className="h-full rounded-lg border border-[#d9d9dd] bg-white p-8">
-                <h3 className="font-heading text-2xl text-[#212121]">Managed</h3>
-                <div className="mt-4 flex items-baseline gap-2"><span className="font-heading text-5xl text-[#212121]">₹999</span><span className="caption-mono text-[#93939f]">per month</span></div>
-                <p className="mt-3 text-sm text-[#616161]">We host it while you focus on the food.</p>
-                <ul className="mt-8 space-y-3 text-sm text-[#212121]">
-                  {['Everything in self-hosted', 'Managed hosting and backups', 'SSL and domain setup', 'WhatsApp configured', 'Priority support'].map((f) => <li key={f} className="flex items-center gap-2"><CheckCircle2 size={14} className="shrink-0 text-[#c2410c]" /> {f}</li>)}
-                </ul>
-                <button disabled className="mt-9 block w-full cursor-not-allowed rounded border border-[#d9d9dd] px-5 py-3 text-sm font-medium text-[#93939f]">Not available yet</button>
-              </TiltCard>
+              <div className="rounded-lg border border-white/15 bg-white/[0.06] p-6 backdrop-blur-xl sm:p-8">
+                <div className="flex items-center gap-2">
+                  <Terminal size={16} className="text-[#fb923c]" />
+                  <p className="caption-mono text-white/50">quick start</p>
+                </div>
+                <div className="mt-5 space-y-2 font-mono text-xs leading-6 text-white/80 sm:text-sm">
+                  <p><span className="text-[#fb923c]">$</span> git clone https://github.com/zubershk/ocp.git</p>
+                  <p><span className="text-[#fb923c]">$</span> cd ocp &amp;&amp; bash setup.sh</p>
+                  <p><span className="text-[#fb923c]">$</span> docker compose up -d</p>
+                  <p className="text-[#8fd3b6]">✓ Ready at localhost:3000</p>
+                </div>
+                <div className="mt-6 border-t border-white/10 pt-5">
+                  <p className="text-sm leading-relaxed text-white/65">Three commands from a fresh machine to a working storefront, WhatsApp bot and admin dashboard.</p>
+                  <MagneticLink href="https://github.com/zubershk/ocp#quick-start" external className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-[#fdba74]">See the setup guide <ArrowRight size={15} /></MagneticLink>
+                </div>
+              </div>
             </Reveal>
           </div>
         </div>
       </section>
 
-      {/* ── FAQ ── */}
-      <section id="faq" className="relative z-10 border-b border-[#d9d9dd] bg-white py-20">
-        <div className="mx-auto max-w-3xl px-5">
-          <Reveal className="mb-14 text-center">
-            <p className="eyebrow text-[#616161]">Questions</p>
-            <h2 className="mt-4 font-heading text-[#212121]">The things people ask first</h2>
-          </Reveal>
-          <Reveal><Faq /></Reveal>
+      {/* Footer: poster wordmark + pizza-only Nimbus flight */}
+      <footer className="relative isolate overflow-hidden bg-gradient-to-br from-[#c2410c] via-[#ea580c] to-[#f97316]">
+        <div ref={nimbusRef} className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
+          {nimbusPizzas.map((p, i) => {
+            const size = NIMBUS_BASE_SIZE * p.size;
+            const duration = (2.6 * p.duration) / (NIMBUS_SPEED / 3);
+            const delay = (p.delay * 3) / NIMBUS_SPEED;
+            const bounce = 125 + size * 0.55;
+            const times = [0, 0.38, 0.58, 0.78, 1];
+            return (
+              <motion.img key={i} src={p.src} alt=""
+                className="absolute -bottom-3"
+                style={{ left: `${p.left}%`, width: size, height: size, transform: `rotate(${p.startAngle}deg)` }}
+                animate={reduceMotion ? undefined : {
+                  x: [0, p.drift, -p.drift * 0.65, p.drift * 0.8, 0],
+                  y: [0, -bounce, 0, -bounce * 0.4, 0],
+                  rotate: [p.startAngle, p.startAngle + p.spin, p.startAngle + p.spin * 1.4, p.startAngle + p.spin * 1.7, p.startAngle + p.spin * 2],
+                  scale: [0.85, 1, 0.94, 1, 0.85],
+                }}
+                transition={reduceMotion ? undefined : {
+                  x: { duration, delay, repeat: Infinity, repeatDelay: 0.2, times, ease: 'easeInOut' },
+                  y: { duration, delay, repeat: Infinity, repeatDelay: 0.2, times, ease: ['easeOut', 'easeIn', 'easeOut', 'easeIn'] },
+                  rotate: { duration, delay, repeat: Infinity, repeatDelay: 0.2, times, ease: 'linear' },
+                  scale: { duration, delay, repeat: Infinity, repeatDelay: 0.2, times, ease: 'easeInOut' },
+                }} />
+            );
+          })}
         </div>
-      </section>
-
-      {/* ── Maintainers ── */}
-      <section id="maintainers" className="relative z-10 border-b border-[#d9d9dd] bg-white py-20">
-        <div className="mx-auto max-w-4xl px-5">
-          <Reveal className="text-center">
-            <GitFork size={32} strokeWidth={1.5} className="mx-auto text-[#93939f]" />
-            <h2 className="mt-5 font-heading text-[#212121]">Built in the open, maintained in the open</h2>
-            <p className="mx-auto mt-5 max-w-xl text-base leading-relaxed text-[#616161]">MIT licensed, with a documented architecture, a production checklist and CI that checks every module. If you want to improve food ordering software, there is room to do it here.</p>
-            <div className="mt-8 flex flex-wrap justify-center gap-3">
-              <MagneticLink href="https://github.com/zubershk/ocp" external className="inline-flex items-center gap-2 rounded bg-[#212121] px-5 py-3 text-sm font-medium text-white transition-colors hover:bg-[#3f3f46]"><GithubIcon size={15} /> View on GitHub</MagneticLink>
-              <MagneticLink href="https://github.com/zubershk/ocp/blob/master/CONTRIBUTING.md" external className="inline-flex items-center gap-2 rounded border border-[#d9d9dd] bg-white px-5 py-3 text-sm font-medium text-[#212121] transition-colors hover:border-[#93939f]"><BookOpen size={15} /> Contributing guide</MagneticLink>
+        <div className="relative z-10 mx-auto max-w-6xl px-5 pb-10 pt-8 text-white sm:px-8">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="inline-block rounded bg-[#1a0f08]/25 px-2 py-1 text-xs text-white">Copyright 2026, OCP</p>
+              <p className="mt-3 max-w-sm text-xs leading-relaxed text-white/85">Self-hosted food ordering with WhatsApp, POS and campaigns. AGPL-3.0 licensed.</p>
             </div>
-          </Reveal>
-          <div className="mt-14 grid gap-5 sm:grid-cols-3">
-            {[
-              { icon: ShieldCheck, title: 'Safe to run', desc: 'govulncheck, CodeQL, gitleaks and fail-closed npm audits run on every push. Security reports are private.' },
-              { icon: LockKeyhole, title: 'Tested at scale', desc: 'A reproducible 1,000-user harness measures throughput, latency and database pool pressure.' },
-              { icon: Heart, title: 'Where help is needed', desc: 'Currency and localization, payment gateways, webhooks, a versioned API, the hosted demo and onboarding.' },
-            ].map((c, i) => {
-              const Icon = c.icon;
-              return (
-                <Reveal key={c.title} delay={i * 0.08}>
-                  <TiltCard className="h-full rounded-lg border border-[#d9d9dd] bg-white p-8">
-                    <Icon size={18} strokeWidth={1.5} className="text-[#ea580c]" />
-                    <h3 className="mt-6 font-heading text-xl text-[#212121]">{c.title}</h3>
-                    <p className="mt-3 text-sm leading-relaxed text-[#616161]">{c.desc}</p>
-                  </TiltCard>
-                </Reveal>
-              );
-            })}
+            <a href="https://github.com/zubershk/ocp/blob/master/LICENSE" target="_blank" rel="noopener noreferrer" className="self-start rounded bg-[#1a0f08]/25 px-2 py-1 text-xs text-white underline underline-offset-2">AGPL-3.0 license</a>
           </div>
-          <Reveal className="mt-10 text-center text-sm text-[#616161]">See <a className="text-[#212121] underline underline-offset-2" href="https://github.com/zubershk/ocp/blob/master/docs/DEPENDABOT_TRIAGE.md" target="_blank" rel="noopener noreferrer">security advisories</a> and the <a className="text-[#212121] underline underline-offset-2" href="https://github.com/zubershk/ocp/issues" target="_blank" rel="noopener noreferrer">issue tracker</a></Reveal>
-        </div>
-      </section>
 
-      {/* ── CTA ── */}
-      <section className="relative isolate overflow-hidden bg-[#212121] py-24">
-        <div className="relative mx-auto max-w-2xl px-5 text-center">
-          <Reveal>
-            <h2 className="font-heading text-white">Own the whole ordering flow</h2>
-            <p className="mx-auto mt-5 max-w-lg text-base leading-relaxed text-white/60">One repository, one database, no platform taking a cut of every order.</p>
-            <MagneticLink href="https://github.com/zubershk/ocp#quick-start" external className="mt-9 inline-flex items-center gap-2 rounded bg-white px-5 py-3 text-sm font-medium text-[#212121] transition-colors hover:bg-white/90">Get started <ArrowRight size={15} /></MagneticLink>
-          </Reveal>
+          <div className="mt-12 grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
+            <div>
+              <p className="eyebrow text-white/60">Product</p>
+              <ul className="mt-4 space-y-2 text-sm text-white/90">
+                <li><a href="#features" className="transition-colors hover:text-[#fff7ed]">Features</a></li>
+                <li><a href="#use-cases" className="transition-colors hover:text-[#fff7ed]">Use cases</a></li>
+                <li><a href="#screenshots" className="transition-colors hover:text-[#fff7ed]">Screenshots</a></li>
+                <li><a href="#pricing" className="transition-colors hover:text-[#fff7ed]">Pricing</a></li>
+              </ul>
+            </div>
+            <div>
+              <p className="eyebrow text-white/60">Resources</p>
+              <ul className="mt-4 space-y-2 text-sm text-white/90">
+                <li><a href="https://github.com/zubershk/ocp#readme" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[#fff7ed]">Documentation</a></li>
+                <li><a href="https://github.com/zubershk/ocp/blob/master/docs/DEPLOYMENT.md" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[#fff7ed]">Deployment</a></li>
+                <li><a href="https://github.com/zubershk/ocp/blob/master/docs/LOAD_TEST.md" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[#fff7ed]">Load test</a></li>
+                <li><a href="https://github.com/zubershk/ocp/blob/master/docs/PRODUCTION_CHECKLIST.md" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[#fff7ed]">Production checklist</a></li>
+              </ul>
+            </div>
+            <div>
+              <p className="eyebrow text-white/60">Community</p>
+              <ul className="mt-4 space-y-2 text-sm text-white/90">
+                <li><a href="https://github.com/zubershk/ocp" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[#fff7ed]">GitHub</a></li>
+                <li><a href="https://github.com/zubershk/ocp/issues" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[#fff7ed]">Issues</a></li>
+                <li><a href="https://github.com/zubershk/ocp/blob/master/CONTRIBUTING.md" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[#fff7ed]">Contributing</a></li>
+                <li><a href="https://github.com/zubershk/ocp/blob/master/SECURITY.md" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[#fff7ed]">Security</a></li>
+              </ul>
+            </div>
+            <div>
+              <p className="eyebrow text-white/60">Follow</p>
+              <ul className="mt-4 space-y-2 text-sm text-white/90">
+                {social.instagram && <li><a href={social.instagram} target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[#fff7ed]">Instagram</a></li>}
+                {social.facebook && <li><a href={social.facebook} target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[#fff7ed]">Facebook</a></li>}
+                {social.twitter && <li><a href={social.twitter} target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[#fff7ed]">Twitter</a></li>}
+                {social.youtube && <li><a href={social.youtube} target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[#fff7ed]">YouTube</a></li>}
+                {social.whatsapp && <li><a href={social.whatsapp} target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[#fff7ed]">WhatsApp</a></li>}
+                {!social.instagram && !social.facebook && !social.twitter && !social.youtube && !social.whatsapp && <li><a href="https://github.com/zubershk/ocp" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[#fff7ed]">GitHub</a></li>}
+              </ul>
+            </div>
+          </div>
         </div>
-      </section>
-
-      {/* ── Footer ── */}
-      <footer className="relative z-10 border-t border-[#d9d9dd] bg-white py-12">
-        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-5 px-5 sm:flex-row">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-7 w-7 items-center justify-center rounded bg-[#212121]"><span className="font-heading text-xs text-white">O</span></div>
-            <span className="font-heading text-sm text-[#212121]">{restaurantName || 'Restaurant'}</span>
-          </div>
-          <div className="flex flex-wrap items-center justify-center gap-5 text-xs text-[#616161]">
-            <a href="https://github.com/zubershk/ocp" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[#212121]">GitHub</a>
-            <a href="https://github.com/zubershk/ocp/blob/master/LICENSE" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[#212121]">MIT License</a>
-            <a href="https://github.com/zubershk/ocp/blob/master/docs/DEPLOYMENT.md" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[#212121]">Deployment</a>
-            <a href="https://github.com/zubershk/ocp/blob/master/CONTRIBUTING.md" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[#212121]">Contributing</a>
-            {social.instagram && <a href={social.instagram.startsWith('https://') ? social.instagram : '#'} target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[#212121]">Instagram</a>}
-            {social.facebook && <a href={social.facebook.startsWith('https://') ? social.facebook : '#'} target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[#212121]">Facebook</a>}
-            {social.twitter && <a href={social.twitter.startsWith('https://') ? social.twitter : '#'} target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[#212121]">Twitter</a>}
-            {social.youtube && <a href={social.youtube.startsWith('https://') ? social.youtube : '#'} target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[#212121]">YouTube</a>}
-            {social.whatsapp && <a href={social.whatsapp.startsWith('https://') ? social.whatsapp : '#'} target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[#212121]">WhatsApp</a>}
-          </div>
+        <div className="relative z-10 flex justify-center overflow-hidden">
+          <span className="select-none font-heading font-semibold leading-[0.72] tracking-[-0.08em] text-white"
+            style={{ fontSize: 'clamp(7rem, 31vw, 30rem)', marginBottom: '-0.14em' }}>
+            OCP
+          </span>
         </div>
       </footer>
     </div>
