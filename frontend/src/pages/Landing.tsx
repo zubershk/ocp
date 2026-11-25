@@ -747,7 +747,7 @@ export default function Landing() {
                   ['Your brand, your domain', 'White-label the storefront and dashboard.'],
                 ].map(([title, desc]) => (
                   <li key={title} className="flex gap-3">
-                    <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded bg-[#ea580c]"><CheckCircle2 size={14} className="text-white" /></span>
+                    <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded bg-[#c2410c]"><CheckCircle2 size={14} className="text-white" /></span>
                     <div>
                       <p className="text-sm font-medium text-[#212121]">{title}</p>
                       <p className="mt-1 text-sm text-[#616161]">{desc}</p>
@@ -762,20 +762,20 @@ export default function Landing() {
 
             <Reveal className="overflow-hidden rounded-lg border border-[#e5e7eb] bg-white">
               <div className="hidden grid-cols-[1.1fr_1fr_1fr] gap-4 border-b border-[#e5e7eb] bg-[#fffaf6] px-5 py-4 sm:grid">
-                <span className="eyebrow text-[#898989]">Area</span>
-                <span className="eyebrow text-[#ea580c]">OCP</span>
-                <span className="eyebrow text-[#898989]">Marketplace</span>
+                <span className="eyebrow text-[#616161]">Area</span>
+                <span className="eyebrow text-[#c2410c]">OCP</span>
+                <span className="eyebrow text-[#616161]">Marketplace</span>
               </div>
               {comparisons.map((c, i) => (
                 <div key={c.feature} className={`grid gap-3 border-b border-[#e5e7eb] px-5 py-5 last:border-0 sm:grid-cols-[1.1fr_1fr_1fr] sm:gap-4 ${i % 2 ? 'bg-[#fdfbf9]' : 'bg-white'}`}>
                   <p className="text-sm font-medium text-[#212121]">{c.feature}</p>
                   <div>
-                    <p className="mb-1 text-xs text-[#898989] sm:hidden">OCP</p>
+                    <p className="mb-1 text-xs text-[#616161] sm:hidden">OCP</p>
                     <span className="inline-flex items-start gap-2 text-sm font-medium text-[#c2410c]"><CheckCircle2 size={15} className="mt-0.5 shrink-0" /> {c.ocp}</span>
                   </div>
                   <div>
-                    <p className="mb-1 text-xs text-[#898989] sm:hidden">Marketplace</p>
-                    <span className="inline-flex items-start gap-2 text-sm text-[#898989]"><XCircle size={15} className="mt-0.5 shrink-0" /> {c.other}</span>
+                    <p className="mb-1 text-xs text-[#616161] sm:hidden">Marketplace</p>
+                    <span className="inline-flex items-start gap-2 text-sm text-[#616161]"><XCircle size={15} className="mt-0.5 shrink-0" /> {c.other}</span>
                   </div>
                 </div>
               ))}
@@ -792,7 +792,7 @@ export default function Landing() {
               <p className="eyebrow text-[#fb923c]">Nothing good is built alone</p>
               <h2 className="mt-4 max-w-lg font-heading text-white">Measured, not claimed</h2>
               <p className="mt-3 max-w-lg text-sm text-white/60">Reproducible results from the bundled 1,000-user harness.</p>
-              <MagneticLink href="https://github.com/zubershk/ocp/blob/master/docs/LOAD_TEST.md" external className="mt-6 inline-flex items-center gap-2 rounded bg-[#ea580c] px-5 py-3 text-sm font-medium text-white">Read the methodology <ArrowRight size={15} /></MagneticLink>
+              <MagneticLink href="https://github.com/zubershk/ocp/blob/master/docs/LOAD_TEST.md" external className="mt-6 inline-flex items-center gap-2 rounded bg-[#c2410c] px-5 py-3 text-sm font-medium text-white">Read the methodology <ArrowRight size={15} /></MagneticLink>
             </div>
             <div className="grid w-full grid-cols-2 gap-6 sm:w-auto sm:grid-cols-2">
               {stats.map((s) => {
@@ -801,7 +801,7 @@ export default function Landing() {
                   <div key={s.label} className="text-center">
                     <Icon size={18} className="mx-auto text-[#fb923c]" />
                     <p className="mt-3 font-heading text-3xl text-white"><CountUp to={s.value} decimals={s.decimals} suffix={s.suffix} /></p>
-                    <p className="caption-mono mt-1 text-white/50">{s.label}</p>
+                    <p className="caption-mono mt-1 text-white/70">{s.label}</p>
                   </div>
                 );
               })}
@@ -815,14 +815,14 @@ export default function Landing() {
         <div className="mx-auto max-w-6xl px-5">
           <div className="grid gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:gap-16">
             <Reveal className="self-start lg:sticky lg:top-24">
-              <p className="eyebrow text-[#ea580c]">Join the community</p>
+              <p className="eyebrow text-[#c2410c]">Join the community</p>
               <h2 className="mt-4 font-heading text-[#212121]">Built in the open, maintained in the open</h2>
               <p className="mt-4 text-base leading-relaxed text-[#616161]">AGPL-3.0 licensed, with a documented architecture, a production checklist and CI that checks every module.</p>
               <div className="mt-8 grid grid-cols-3 gap-4 border-y border-[#e5e7eb] py-5">
                 {[['License', 'AGPL-3.0'], ['Screenshots', '21'], ['Checks', 'Green CI']].map(([label, value]) => (
                   <div key={label}>
                     <p className="font-heading text-xl text-[#212121]">{value}</p>
-                    <p className="caption-mono mt-1 text-[#898989]">{label}</p>
+                    <p className="caption-mono mt-1 text-[#616161]">{label}</p>
                   </div>
                 ))}
               </div>
@@ -831,24 +831,24 @@ export default function Landing() {
             <div className="space-y-5">
               <Reveal>
                 <TiltCard className="group flex h-full flex-col gap-5 rounded-lg border border-[#e5e7eb] bg-white p-7 sm:flex-row sm:items-center">
-                  <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg bg-[#fff7ed]"><GithubIcon size={28} className="text-[#ea580c]" /></div>
+                  <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg bg-[#fff7ed]"><GithubIcon size={28} className="text-[#c2410c]" /></div>
                   <div className="flex-1">
-                    <p className="caption-mono text-[#898989]">01 · Source</p>
+                    <p className="caption-mono text-[#616161]">01 · Source</p>
                     <h3 className="mt-1 font-heading text-2xl text-[#212121]">GitHub</h3>
                     <p className="mt-2 text-sm leading-relaxed text-[#616161]">Browse the source, open issues, follow releases and see the CI run on every push.</p>
                   </div>
-                  <MagneticLink href="https://github.com/zubershk/ocp" external className="inline-flex shrink-0 items-center gap-2 rounded border border-[#e5e7eb] px-4 py-2.5 text-sm font-medium text-[#212121] transition-colors hover:border-[#ea580c] hover:text-[#ea580c]">View repository <ArrowRight size={15} /></MagneticLink>
+                  <MagneticLink href="https://github.com/zubershk/ocp" external className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded border border-[#e5e7eb] px-4 py-2.5 text-sm font-medium text-[#212121] transition-colors hover:border-[#ea580c] hover:text-[#c2410c]">View repository <ArrowRight size={15} /></MagneticLink>
                 </TiltCard>
               </Reveal>
               <Reveal delay={0.1}>
                 <TiltCard className="group flex h-full flex-col gap-5 rounded-lg border border-[#e5e7eb] bg-white p-7 sm:flex-row sm:items-center">
-                  <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg bg-[#fff7ed]"><BookOpen size={28} strokeWidth={1.5} className="text-[#ea580c]" /></div>
+                  <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg bg-[#fff7ed]"><BookOpen size={28} strokeWidth={1.5} className="text-[#c2410c]" /></div>
                   <div className="flex-1">
-                    <p className="caption-mono text-[#898989]">02 · Guide</p>
+                    <p className="caption-mono text-[#616161]">02 · Guide</p>
                     <h3 className="mt-1 font-heading text-2xl text-[#212121]">Contributing</h3>
                     <p className="mt-2 text-sm leading-relaxed text-[#616161]">Localization, payment gateways, webhooks, a versioned API and onboarding need help.</p>
                   </div>
-                  <MagneticLink href="https://github.com/zubershk/ocp/blob/master/CONTRIBUTING.md" external className="inline-flex shrink-0 items-center gap-2 rounded border border-[#e5e7eb] px-4 py-2.5 text-sm font-medium text-[#212121] transition-colors hover:border-[#ea580c] hover:text-[#ea580c]">Read the guide <ArrowRight size={15} /></MagneticLink>
+                  <MagneticLink href="https://github.com/zubershk/ocp/blob/master/CONTRIBUTING.md" external className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded border border-[#e5e7eb] px-4 py-2.5 text-sm font-medium text-[#212121] transition-colors hover:border-[#ea580c] hover:text-[#c2410c]">Read the guide <ArrowRight size={15} /></MagneticLink>
                 </TiltCard>
               </Reveal>
             </div>
@@ -860,17 +860,17 @@ export default function Landing() {
       <section id="pricing" className="border-b border-[#e5e7eb] bg-white py-20">
         <div className="mx-auto max-w-5xl px-5">
           <Reveal className="mx-auto max-w-2xl text-center">
-            <p className="eyebrow text-[#ea580c]">Pricing</p>
+            <p className="eyebrow text-[#c2410c]">Pricing</p>
             <h2 className="mt-4 font-heading text-[#212121]">No license fee, no commission</h2>
             <p className="mt-4 text-base text-[#616161]">The same ordering operation, two very different cost models.</p>
           </Reveal>
           <div className="mt-12 grid items-stretch gap-4 lg:grid-cols-[1fr_auto_1fr] lg:gap-6">
             <Reveal>
               <TiltCard className="layered-shadow relative h-full overflow-hidden rounded-lg bg-[#1a0f08] p-8 sm:p-10">
-                <span className="absolute inset-x-0 top-0 h-1 bg-[#ea580c]" />
+                <span className="absolute inset-x-0 top-0 h-1 bg-[#c2410c]" />
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <h3 className="font-heading text-2xl text-white">OCP</h3>
-                  <span className="rounded bg-[#ea580c] px-3 py-1 caption-mono text-white">Self-hosted</span>
+                  <span className="rounded bg-[#c2410c] px-3 py-1 caption-mono text-white">Self-hosted</span>
                 </div>
                 <div className="mt-6 flex items-end gap-2"><span className="font-heading text-6xl text-white">₹0</span><span className="pb-2 caption-mono text-white/60">forever</span></div>
                 <p className="mt-3 text-sm text-white/70">Run it on your own server. You keep the revenue and the customer relationship.</p>
@@ -878,12 +878,12 @@ export default function Landing() {
                 <ul className="grid gap-3 text-sm text-white sm:grid-cols-2">
                   {['No per-order commission', 'Unlimited orders', 'WhatsApp campaigns', 'Full source code', 'Team roles and audit log', 'POS and printing'].map((f) => <li key={f} className="flex items-center gap-2"><CheckCircle2 size={15} className="shrink-0 text-[#fb923c]" /> {f}</li>)}
                 </ul>
-                <MagneticLink href="https://github.com/zubershk/ocp#quick-start" external className="mt-9 block rounded bg-[#ea580c] px-5 py-3 text-center text-sm font-medium text-white transition-colors hover:bg-[#f97316]">Get started</MagneticLink>
+                <MagneticLink href="https://github.com/zubershk/ocp#quick-start" external className="mt-9 block rounded bg-[#c2410c] px-5 py-3 text-center text-sm font-medium text-white transition-colors hover:bg-[#f97316]">Get started</MagneticLink>
               </TiltCard>
             </Reveal>
 
             <div className="flex items-center justify-center">
-              <span className="flex h-14 w-14 items-center justify-center rounded-full border-4 border-white bg-[#ea580c] font-heading text-sm font-semibold text-white shadow-md">VS</span>
+              <span className="flex h-14 w-14 items-center justify-center rounded-full border-4 border-white bg-[#c2410c] font-heading text-sm font-semibold text-white shadow-md">VS</span>
             </div>
 
             <Reveal delay={0.1}>
@@ -891,19 +891,19 @@ export default function Landing() {
                 <span className="absolute inset-x-0 top-0 h-1 bg-[#d8cdc4]" />
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <h3 className="font-heading text-2xl text-[#212121]">Marketplace</h3>
-                  <span className="rounded bg-[#faf7f4] px-3 py-1 caption-mono text-[#898989]">Typical platform</span>
+                  <span className="rounded bg-[#faf7f4] px-3 py-1 caption-mono text-[#616161]">Illustrative example</span>
                 </div>
-                <div className="mt-6 flex items-end gap-2"><span className="font-heading text-6xl text-[#212121]">₹999+</span><span className="pb-2 caption-mono text-[#898989]">per month</span></div>
+                <div className="mt-6 flex items-end gap-2"><span className="font-heading text-6xl text-[#212121]">₹999+</span><span className="pb-2 caption-mono text-[#616161]">per month</span></div>
                 <p className="mt-3 text-sm text-[#616161]">Plus 25-30% on every order, for the privilege of using their channel.</p>
                 <div className="my-8 h-px bg-[#e5e7eb]" />
-                <ul className="grid gap-3 text-sm text-[#898989] sm:grid-cols-2">
+                <ul className="grid gap-3 text-sm text-[#616161] sm:grid-cols-2">
                   {['Commission on every order', 'Customer data on their platform', 'Their brand on your page', 'Campaigns cost extra', 'Closed source', 'No full data export'].map((f) => <li key={f} className="flex items-center gap-2"><XCircle size={15} className="shrink-0 text-[#b8aea5]" /> {f}</li>)}
                 </ul>
-                <MagneticLink href="#comparison" className="mt-9 block rounded border border-[#e5e7eb] px-5 py-3 text-center text-sm font-medium text-[#616161] transition-colors hover:border-[#ea580c] hover:text-[#ea580c]">See the full comparison</MagneticLink>
+                <MagneticLink href="#comparison" className="mt-9 block rounded border border-[#e5e7eb] px-5 py-3 text-center text-sm font-medium text-[#616161] transition-colors hover:border-[#ea580c] hover:text-[#c2410c]">See the full comparison</MagneticLink>
               </TiltCard>
             </Reveal>
           </div>
-          <Reveal className="mt-8 text-center text-sm text-[#898989]">No license fee. No per-order commission. <a className="text-[#212121] underline underline-offset-2" href="#comparison">Compare all features</a></Reveal>
+          <Reveal className="mt-8 text-center text-sm text-[#616161]">No license fee. No per-order commission. <a className="text-[#212121] underline underline-offset-2" href="#comparison">Compare all features</a><br />Marketplace figures are illustrative — check your provider's current rates.</Reveal>
         </div>
       </section>
 
