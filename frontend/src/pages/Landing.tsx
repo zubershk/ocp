@@ -425,6 +425,9 @@ export default function Landing() {
         @media (prefers-reduced-motion: reduce) { .marquee-track { animation: none !important; } }
       `}</style>
 
+      <a href="#main" className="sr-only focus:not-sr-only fixed left-4 top-4 z-[80] rounded bg-[#c2410c] px-4 py-2 text-sm font-medium text-white">Skip to content</a>
+      <noscript><style>{`div[style*="opacity: 0"]{opacity:1!important;transform:none!important}`}</style></noscript>
+
       <motion.div className="pointer-events-none fixed inset-0 z-[2]" style={{ background: spotlight }} />
       <motion.div className="fixed left-0 right-0 top-0 z-[60] h-0.5 origin-left bg-gradient-to-r from-[#c2410c] via-[#ea580c] to-[#fb923c]" style={{ scaleX }} />
 
@@ -432,17 +435,17 @@ export default function Landing() {
       <nav className="sticky top-0 z-50 border-b border-white/10 bg-[#1a0f08]/85 backdrop-blur-md">
         <div className="relative mx-auto grid h-16 max-w-6xl grid-cols-[1fr_auto_1fr] items-center gap-4 px-5">
           <motion.div initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-[#ea580c]"><span className="font-heading text-sm text-white">O</span></div>
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-[#c2410c]"><span className="font-heading text-sm text-white">O</span></div>
             <span className="font-heading text-sm text-white sm:text-base">{restaurantName || 'Restaurant'}</span>
           </motion.div>
           <div className="hidden items-center gap-6 text-sm text-white/70 lg:flex">
-            {navLinks.map(([label, href]) => <a key={label} href={href} className="whitespace-nowrap transition-colors hover:text-white">{label}</a>)}
+            {navLinks.map(([label, href]) => <a key={label} href={href} className="whitespace-nowrap py-2 transition-colors hover:text-white">{label}</a>)}
           </div>
           <div className="flex items-center justify-end gap-3 sm:gap-4">
             <a href="https://github.com/zubershk/ocp" target="_blank" rel="noopener noreferrer" className="hidden items-center gap-1.5 text-sm text-white/70 transition-colors hover:text-white xl:inline-flex"><GithubIcon size={15} /> GitHub</a>
-            <MagneticLink href="https://github.com/zubershk/ocp#quick-start" external className="hidden items-center gap-1.5 rounded bg-[#ea580c] px-5 py-3 text-sm font-medium text-white transition-colors hover:bg-[#f97316] sm:inline-flex">Get started <ArrowRight size={14} /></MagneticLink>
+            <MagneticLink href="https://github.com/zubershk/ocp#quick-start" external className="hidden items-center gap-1.5 rounded bg-[#c2410c] px-5 py-3 text-sm font-medium text-white transition-colors hover:bg-[#f97316] sm:inline-flex">Get started <ArrowRight size={14} /></MagneticLink>
             <button type="button" aria-label={menuOpen ? 'Close menu' : 'Open menu'} aria-expanded={menuOpen} onClick={() => setMenuOpen((v) => !v)}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/20 text-white lg:hidden">
+              className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/20 text-white lg:hidden">
               {menuOpen ? <X size={18} /> : <Menu size={18} />}
             </button>
           </div>
@@ -452,13 +455,14 @@ export default function Landing() {
             <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden border-t border-white/10 bg-[#1a0f08] lg:hidden">
               <div className="mx-auto flex max-w-6xl flex-col px-5 py-3">
                 {navLinks.map(([label, href]) => <a key={label} href={href} onClick={() => setMenuOpen(false)} className="border-b border-white/10 py-3 text-sm text-white last:border-0">{label}</a>)}
-                <MagneticLink href="https://github.com/zubershk/ocp#quick-start" external className="my-3 inline-flex items-center justify-center gap-1.5 rounded bg-[#ea580c] px-5 py-3 text-sm font-medium text-white sm:hidden">Get started <ArrowRight size={14} /></MagneticLink>
+                <MagneticLink href="https://github.com/zubershk/ocp#quick-start" external className="my-3 inline-flex items-center justify-center gap-1.5 rounded bg-[#c2410c] px-5 py-3 text-sm font-medium text-white sm:hidden">Get started <ArrowRight size={14} /></MagneticLink>
               </div>
             </motion.div>
           )}
         </AnimatePresence>
       </nav>
 
+      <main id="main">
       {/* Hero with interactive demo */}
       <section ref={heroRef} className="relative isolate overflow-hidden bg-[#1a0f08]">
         <div className="absolute inset-0 -z-10 bg-[radial-gradient(60%_70%_at_50%_0%,rgba(234,88,12,0.35),transparent_70%),linear-gradient(160deg,#1a0f08,#2a1408_50%,#1a0f08)]" />
@@ -481,7 +485,7 @@ export default function Landing() {
               <LiveOrderFlow />
             </motion.div>
             <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.65, delay: 0.32 }} className="relative z-10 mt-10 flex flex-wrap justify-center gap-3">
-            <MagneticLink href="https://github.com/zubershk/ocp#quick-start" external className="inline-flex items-center gap-2 rounded bg-[#ea580c] px-5 py-3 text-sm font-medium text-white transition-colors hover:bg-[#f97316]">Get started <ArrowRight size={15} /></MagneticLink>
+            <MagneticLink href="https://github.com/zubershk/ocp#quick-start" external className="inline-flex items-center gap-2 rounded bg-[#c2410c] px-5 py-3 text-sm font-medium text-white transition-colors hover:bg-[#f97316]">Get started <ArrowRight size={15} /></MagneticLink>
             <MagneticLink href="#screenshots" className="inline-flex items-center gap-2 rounded border border-white/30 px-5 py-3 text-sm font-medium text-white transition-colors hover:bg-white/10">See the product <ArrowRight size={15} /></MagneticLink>
           </motion.div>
           <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.65, delay: 0.42 }} className="relative z-10 mx-auto mt-12 grid max-w-3xl gap-3 sm:grid-cols-3">
