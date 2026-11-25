@@ -644,41 +644,90 @@ export default function Landing() {
       <section id="screenshots" className="border-b border-[#e5e7eb] bg-white py-20">
         <div className="mx-auto max-w-6xl px-5">
           <Reveal className="mx-auto max-w-2xl text-center">
-            <p className="eyebrow text-[#ea580c]">The real product</p>
+            <p className="eyebrow text-[#c2410c]">The real product</p>
             <h2 className="mt-4 font-heading text-[#212121]">See every screen</h2>
           </Reveal>
           <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {['admin-dashboard', 'storefront-menu', 'campaign-dashboard', 'admin-pos', 'storefront-checkout', 'admin-analytics'].map((name, i) => (
               <Reveal key={name} delay={i * 0.05}>
                 <motion.figure whileHover={{ y: -6 }} transition={{ type: 'spring', stiffness: 260, damping: 22 }} className="overflow-hidden rounded-lg border border-[#e5e7eb]">
-                  <img src={`/screenshots/${name}.png`} alt={`OCP ${name.replace(/-/g, ' ')} screen`} className="h-56 w-full border-b border-[#e5e7eb] object-cover object-top" />
+                  <div className="aspect-[16/10] w-full border-b border-[#e5e7eb] bg-[#faf7f4]">
+                    <img src={`/screenshots/${name}.png`} alt={`OCP ${name.replace(/-/g, ' ')} screen`} className="h-full w-full object-contain" />
+                  </div>
                   <figcaption className="px-4 py-3 text-sm text-[#212121]">{name.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}</figcaption>
                 </motion.figure>
               </Reveal>
             ))}
           </div>
-          <Reveal className="mt-8 text-center text-sm text-[#898989]">All 21 screenshots are in the <a className="text-[#212121] underline underline-offset-2" href="https://github.com/zubershk/ocp#readme" target="_blank" rel="noopener noreferrer">README</a></Reveal>
+          <Reveal className="mt-8 text-center text-sm text-[#616161]">All 21 screenshots are in the <a className="text-[#212121] underline underline-offset-2" href="https://github.com/zubershk/ocp#readme" target="_blank" rel="noopener noreferrer">README</a></Reveal>
         </div>
       </section>
 
-      {/* Getting started */}
-      <section id="steps" className="border-b border-[#e5e7eb] bg-[#faf7f4] py-20">
-        <div className="mx-auto max-w-6xl px-5">
+      {/* Getting started — visual walkthrough */}
+      <section id="steps" className="border-b border-[#e5e7eb] bg-white py-20 lg:py-28">
+        <div className="mx-auto max-w-7xl px-5 lg:px-8">
           <Reveal className="mx-auto max-w-2xl text-center">
-            <p className="eyebrow text-[#ea580c]">Getting started</p>
+            <p className="eyebrow text-[#c2410c]">Getting started</p>
             <h2 className="mt-4 font-heading text-[#212121]">From clone to first order</h2>
+            <p className="mt-4 text-base text-[#616161]">Three commands and one QR scan. No external account is needed to evaluate the whole stack locally.</p>
           </Reveal>
-          <div className="mt-12 grid gap-8 sm:grid-cols-3">
-            {steps.map((s, i) => (
-              <Reveal key={s.num} delay={i * 0.1}>
-                <div className="relative border-t-2 border-[#ea580c] pt-6">
-                  <span className="absolute -top-2 left-0 h-3 w-3 rounded-full bg-[#ea580c]" />
-                  <span className="caption-mono text-[#898989]">{s.num}</span>
-                  <h3 className="mt-3 font-heading text-xl text-[#212121]">{s.title}</h3>
-                  <p className="mt-2 text-sm leading-relaxed text-[#616161]">{s.desc}</p>
+
+          <div className="mt-12 grid gap-10 lg:grid-cols-[0.95fr_1.05fr] lg:gap-16">
+            <Reveal>
+              <div className="overflow-hidden rounded-lg border border-white/10 bg-[#1a0f08]">
+                <div className="flex items-center gap-2 border-b border-white/10 px-5 py-3">
+                  <span className="h-2 w-2 rounded-full bg-[#fb923c]" />
+                  <span className="h-2 w-2 rounded-full bg-white/30" />
+                  <span className="h-2 w-2 rounded-full bg-white/30" />
+                  <span className="caption-mono ml-2 text-white/70">setup.sh</span>
                 </div>
-              </Reveal>
-            ))}
+                <div className="space-y-2 px-5 py-6 font-mono text-xs leading-6 text-white/80 sm:text-sm">
+                  <p><span className="text-[#fb923c]">$</span> git clone https://github.com/zubershk/ocp.git</p>
+                  <p><span className="text-[#fb923c]">$</span> cd ocp &amp;&amp; bash setup.sh</p>
+                  <p className="text-[#8fd3b6]">✓ secrets generated and written to .env</p>
+                  <p className="text-[#8fd3b6]">✓ admin key printed once — save it</p>
+                  <p><span className="text-[#fb923c]">$</span> docker compose up -d</p>
+                  <p className="text-[#8fd3b6]">✓ postgres · bot · gateway · api · site · campaigns</p>
+                  <p><span className="text-[#fb923c]">$</span> open http://localhost:3000</p>
+                </div>
+              </div>
+              <div className="mt-5 flex items-start gap-3 rounded-lg border border-[#e5e7eb] bg-[#faf7f4] p-5">
+                <CheckCircle2 size={18} className="mt-0.5 shrink-0 text-[#c2410c]" />
+                <p className="text-sm leading-relaxed text-[#616161]">Everything runs locally first. Pair WhatsApp only when you are ready to take real orders.</p>
+              </div>
+            </Reveal>
+
+            <div className="space-y-4">
+              {[
+                { icon: Terminal, img: '/screenshots/admin-settings.png', outcome: '.env + one-time admin key' },
+                { icon: Cloud, img: '/screenshots/admin-dashboard.png', outcome: 'six services running in Docker' },
+                { icon: MessageSquare, img: '/screenshots/storefront-home.png', outcome: 'storefront + WhatsApp notifications' },
+              ].map((meta, i) => {
+                const Icon = meta.icon;
+                const s = steps[i];
+                return (
+                  <Reveal key={s.num} delay={i * 0.1}>
+                    <div className="flex gap-5 rounded-lg border border-[#e5e7eb] bg-white p-5 sm:p-6">
+                      <div className="flex flex-col items-center">
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded bg-[#fff7ed] font-heading text-sm text-[#c2410c]">{s.num}</span>
+                        {i < steps.length - 1 && <span className="mt-2 w-px flex-1 bg-[#e5e7eb]" />}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <Icon size={16} strokeWidth={1.5} className="text-[#c2410c]" />
+                          <h3 className="font-heading text-xl text-[#212121]">{s.title}</h3>
+                        </div>
+                        <p className="mt-2 text-sm leading-relaxed text-[#616161]">{s.desc}</p>
+                        <p className="mt-3 inline-flex items-center gap-2 rounded bg-[#faf7f4] px-2 py-1 caption-mono text-[#616161]">
+                          <CheckCircle2 size={12} className="text-[#c2410c]" /> {meta.outcome}
+                        </p>
+                      </div>
+                      <img src={meta.img} alt="" className="hidden h-24 w-32 shrink-0 rounded border border-[#e5e7eb] object-contain sm:block" />
+                    </div>
+                  </Reveal>
+                );
+              })}
+            </div>
           </div>
         </div>
       </section>
@@ -688,7 +737,7 @@ export default function Landing() {
         <div className="mx-auto max-w-6xl px-5">
           <div className="grid gap-10 lg:grid-cols-[0.85fr_1.4fr] lg:gap-16">
             <Reveal className="self-start lg:sticky lg:top-24">
-              <p className="eyebrow text-[#ea580c]">Why self-host</p>
+              <p className="eyebrow text-[#c2410c]">Why self-host</p>
               <h2 className="mt-4 font-heading text-[#212121]">Keep the revenue and the relationship</h2>
               <p className="mt-4 text-base leading-relaxed text-[#616161]">Marketplaces own the channel and take a cut of every order. OCP gives you the whole stack — and the customer relationship that comes with it.</p>
               <ul className="mt-8 space-y-5">
