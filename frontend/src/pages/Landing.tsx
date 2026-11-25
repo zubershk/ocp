@@ -334,6 +334,9 @@ export default function Landing() {
   const fogRef = useRef<HTMLDivElement>(null);
   const nimbusRef = useRef<HTMLDivElement>(null);
   const { scrollYProgress: heroProgress } = useScroll({ target: heroRef, offset: ['start start', 'end start'] });
+  const heroInView = useInView(heroRef, { margin: '0px' });
+  const [pageVisible, setPageVisible] = useState(!document.hidden);
+  const reduceData = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData === true;
   const reduceMotion = Boolean(useReducedMotion());
   const demoY = useTransform(heroProgress, [0, 1], reduceMotion ? [0, 0] : [0, 90]);
   const copyY = useTransform(heroProgress, [0, 1], reduceMotion ? [0, 0] : [0, 48]);
@@ -346,6 +349,27 @@ export default function Landing() {
   }, [cursorX, cursorY]);
 
   useEffect(() => {
+    const controller = new AbortController();
+    fetch('https://api.github.com/repos/zubershk/ocp', { signal: controller.signal })
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((data: { stargazers_count?: number }) => setStars(data.stargazers_count ?? null))
+      .catch(() => { /* keep the static fallback */ });
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    if (!copied) return;
+    const id = window.setTimeout(() => setCopied(false), 2000);
+    return () => window.clearTimeout(id);
+  }, [copied]);
+
+  useEffect(() => {
+    const onVisibility = () => setPageVisible(!document.hidden);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, []);
+
+  useEffect(() => {
     if (reduceMotion || useCasePaused || !caseInView) return;
     const id = window.setInterval(() => {
       setCaseDirection(1);
@@ -355,7 +379,7 @@ export default function Landing() {
   }, [reduceMotion, useCasePaused, caseInView]);
 
   useEffect(() => {
-    if (reduceMotion) return;
+    if (reduceMotion || reduceData || !heroInView || !pageVisible) return;
     let disposed = false;
     let fog: { destroy: () => void } | undefined;
     (async () => {
@@ -378,7 +402,7 @@ export default function Landing() {
       } catch { /* static gradient fallback stays */ }
     })();
     return () => { disposed = true; fog?.destroy(); };
-  }, [reduceMotion]);
+  }, [reduceMotion, reduceData, heroInView, pageVisible]);
 
   const heroTitle = seo.metaTitle || 'Your restaurant. Your platform. No commission';
   const heroDescription = seo.metaDescription || 'Online ordering with WhatsApp, a live admin dashboard, POS and campaigns — self-hosted, AGPL-3.0 licensed and entirely yours';
