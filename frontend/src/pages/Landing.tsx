@@ -7,8 +7,8 @@ import {
   ArrowRight, MessageSquare, CheckCheck, Layout, BarChart3, Smartphone, Bell, Terminal,
   Users, ShieldCheck, Zap, Gauge, Globe2, UtensilsCrossed,
   Coffee, Cloud, Truck, CheckCircle2, XCircle, ChevronDown, Menu, X,
-  Clock, BookOpen, ChevronLeft, ChevronRight, Play, Pause,
-} from 'lucide-react';
+  Clock, BookOpen, ChevronLeft, ChevronRight, Play, Pause, ArrowUp, Star, Copy,
+} from '../components/fa-icons';
 import { useSocial, useSEO } from '../context/SiteSettingsContext';
 import { useRestaurantName } from '../context/RestaurantContext';
 
@@ -203,7 +203,7 @@ function LiveOrderFlow() {
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <span className="eyebrow text-white/70">One order, every surface</span>
         <div className="flex items-center gap-3">
-          <span className="inline-flex items-center gap-1.5 caption-mono text-white/50">
+          <span className="inline-flex items-center gap-1.5 caption-mono text-white/70">
             <span className="h-1.5 w-1.5 rounded-full bg-[#fb923c]" /> SSE live
           </span>
           <button type="button" onClick={() => setPaused((p) => !p)}
@@ -232,7 +232,7 @@ function LiveOrderFlow() {
             <motion.div key={step} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
               className="ml-auto max-w-[86%] rounded-lg rounded-tr-none bg-[#005c4b] p-3 text-sm leading-relaxed text-[#e9edef]">
               {replies[step]}
-              <span className="mt-1 flex items-center justify-end gap-1 text-[10px] text-white/60">
+              <span className="mt-1 flex items-center justify-end gap-1 text-[10px] text-white">
                 {times[step]} <CheckCheck size={13} className="text-[#53bdeb]" />
               </span>
             </motion.div>
@@ -249,28 +249,28 @@ function LiveOrderFlow() {
         <div className="rounded border border-white/10 bg-white p-5 text-[#212121]">
           <div className="flex items-start justify-between border-b border-[#e5e7eb] pb-3">
             <div>
-              <p className="caption-mono text-[#898989]">Live ticket</p>
+              <p className="caption-mono text-[#616161]">Live ticket</p>
               <p className="font-heading text-lg text-[#212121]">ORD-20261117-0126</p>
             </div>
             <motion.span key={stages[step]} initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
-              className="whitespace-nowrap rounded bg-[#fff7ed] px-2 py-1 caption-mono text-[#c2410c]">
+              className="whitespace-nowrap rounded bg-[#fff7ed] px-2 py-1 caption-mono text-[#7c2d12]">
               {stages[step]}
             </motion.span>
           </div>
           <div className="mt-4 h-1 w-full overflow-hidden rounded-full bg-[#e5e7eb]">
-            <div className="h-full rounded-full bg-[#ea580c] transition-[width] duration-500" style={{ width: `${((step + 1) / 4) * 100}%` }} />
+            <div className="h-full rounded-full bg-[#c2410c] transition-[width] duration-500" style={{ width: `${((step + 1) / 4) * 100}%` }} />
           </div>
-          <p className="mt-2 caption-mono text-[#898989]">Step {step + 1} of 4 · click any status to explore</p>
+          <p className="mt-2 caption-mono text-[#616161]">Step {step + 1} of 4 · click any status to explore</p>
           <div className="mt-3 space-y-1">
             {stages.map((s, i) => (
               <button key={s} type="button" onClick={() => setStep(i)} aria-current={i === step}
                 className={`flex w-full items-center gap-3 rounded px-2 py-2 text-left transition-colors ${i === step ? 'bg-[#fff7ed]' : 'hover:bg-[#faf7f4]'}`}>
-                <span className={`h-2.5 w-2.5 shrink-0 rounded-full border-2 transition-colors duration-500 ${i <= step ? 'border-[#ea580c] bg-[#ea580c]' : 'border-[#d8cdc4] bg-white'}`} />
+                <span className={`h-2.5 w-2.5 shrink-0 rounded-full border-2 transition-colors duration-500 ${i <= step ? 'border-[#ea580c] bg-[#c2410c]' : 'border-[#d8cdc4] bg-white'}`} />
                 <span className="min-w-0 flex-1">
-                  <span className={`block text-sm ${i <= step ? 'text-[#212121]' : 'text-[#898989]'}`}>{s}</span>
-                  <span className="block text-xs text-[#898989]">{details[i]}</span>
+                  <span className={`block text-sm ${i <= step ? 'text-[#212121]' : 'text-[#616161]'}`}>{s}</span>
+                  <span className="block text-xs text-[#616161]">{details[i]}</span>
                 </span>
-                <span className="caption-mono shrink-0 text-[#898989]">{i <= step ? times[i] : '—'}</span>
+                <span className="caption-mono shrink-0 text-[#616161]">{i <= step ? times[i] : '—'}</span>
               </button>
             ))}
           </div>
@@ -280,7 +280,7 @@ function LiveOrderFlow() {
           </div>
         </div>
       </div>
-      <p className="caption-mono mt-4 text-center text-white/55">Storefront, WhatsApp and admin share one database and one tenant model</p>
+      <p className="caption-mono mt-4 text-center text-white/75">Storefront, WhatsApp and admin share one database and one tenant model</p>
     </div>
   );
 }
@@ -293,7 +293,7 @@ function Faq() {
         <div key={f.q}>
           <button type="button" onClick={() => setOpen(open === i ? null : i)} className="flex w-full items-center justify-between gap-4 px-2 py-5 text-left text-base font-medium text-[#212121]">
             {f.q}
-            <motion.span animate={{ rotate: open === i ? 180 : 0 }} className="text-[#898989]"><ChevronDown size={16} /></motion.span>
+            <motion.span animate={{ rotate: open === i ? 180 : 0 }} className="text-[#616161]"><ChevronDown size={16} /></motion.span>
           </button>
           <AnimatePresence initial={false}>
             {open === i && (
@@ -315,6 +315,8 @@ export default function Landing() {
   const seo = useSEO();
   const restaurantName = useRestaurantName();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [stars, setStars] = useState<number | null>(null);
+  const [copied, setCopied] = useState(false);
   const [useCaseIndex, setUseCaseIndex] = useState(0);
   const [useCasePaused, setUseCasePaused] = useState(false);
   const [caseDirection, setCaseDirection] = useState(1);
