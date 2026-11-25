@@ -912,13 +912,13 @@ export default function Landing() {
         <div className="mx-auto max-w-6xl px-5">
           <div className="grid gap-10 lg:grid-cols-[0.8fr_1.4fr] lg:gap-16">
             <Reveal className="self-start lg:sticky lg:top-24">
-              <p className="eyebrow text-[#ea580c]">Questions</p>
+              <p className="eyebrow text-[#c2410c]">Questions</p>
               <h2 className="mt-4 font-heading text-[#212121]">The things people ask first</h2>
               <p className="mt-4 text-base leading-relaxed text-[#616161]">A few quick answers about licensing, deployment and what you can customise.</p>
               <div className="mt-8 rounded-lg border border-[#e5e7eb] bg-[#faf7f4] p-6">
                 <p className="font-heading text-lg text-[#212121]">Still have a question?</p>
                 <p className="mt-2 text-sm leading-relaxed text-[#616161]">Open an issue on GitHub and the maintainers will answer in the open.</p>
-                <MagneticLink href="https://github.com/zubershk/ocp/issues" external className="mt-5 inline-flex items-center gap-2 text-sm font-medium text-[#ea580c]">Ask on GitHub <ArrowRight size={15} /></MagneticLink>
+                <MagneticLink href="https://github.com/zubershk/ocp/issues" external className="mt-5 inline-flex items-center gap-2 text-sm font-medium text-[#c2410c]">Ask on GitHub <ArrowRight size={15} /></MagneticLink>
               </div>
             </Reveal>
             <Reveal><Faq /></Reveal>
@@ -942,7 +942,7 @@ export default function Landing() {
                 One repository, one database, no platform taking a cut of every order. Bring your menu, your number and your domain — the rest is already built.
               </p>
               <div className="mt-9 flex flex-wrap gap-3">
-                <MagneticLink href="https://github.com/zubershk/ocp#quick-start" external className="inline-flex items-center gap-2 rounded bg-[#ea580c] px-6 py-3.5 text-sm font-medium text-white transition-colors hover:bg-[#f97316]">
+                <MagneticLink href="https://github.com/zubershk/ocp#quick-start" external className="inline-flex items-center gap-2 rounded bg-[#c2410c] px-6 py-3.5 text-sm font-medium text-white transition-colors hover:bg-[#f97316]">
                   Get started <ArrowRight size={16} />
                 </MagneticLink>
                 <MagneticLink href="https://github.com/zubershk/ocp#readme" external className="inline-flex items-center gap-2 rounded border border-white/25 px-6 py-3.5 text-sm font-medium text-white transition-colors hover:bg-white/10">
@@ -959,7 +959,7 @@ export default function Landing() {
               <div className="rounded-lg border border-white/15 bg-white/[0.06] p-6 backdrop-blur-xl sm:p-8">
                 <div className="flex items-center gap-2">
                   <Terminal size={16} className="text-[#fb923c]" />
-                  <p className="caption-mono text-white/50">quick start</p>
+                  <p className="caption-mono text-white/70">quick start</p>
                 </div>
                 <div className="mt-5 space-y-2 font-mono text-xs leading-6 text-white/80 sm:text-sm">
                   <p><span className="text-[#fb923c]">$</span> git clone https://github.com/zubershk/ocp.git</p>
@@ -976,6 +976,7 @@ export default function Landing() {
           </div>
         </div>
       </section>
+      </main>
 
       {/* Footer: poster wordmark + pizza-only Nimbus flight */}
       <footer className="relative isolate overflow-hidden bg-gradient-to-br from-[#c2410c] via-[#ea580c] to-[#f97316]">
@@ -988,7 +989,7 @@ export default function Landing() {
             const times = [0, 0.38, 0.58, 0.78, 1];
             return (
               <motion.img key={i} src={p.src} alt=""
-                className="absolute -bottom-3"
+                className="absolute -bottom-3 object-contain"
                 style={{ left: `${p.left}%`, width: size, height: size, transform: `rotate(${p.startAngle}deg)` }}
                 animate={reduceMotion ? undefined : {
                   x: [0, p.drift, -p.drift * 0.65, p.drift * 0.8, 0],
@@ -1006,51 +1007,79 @@ export default function Landing() {
           })}
         </div>
         <div className="relative z-10 mx-auto max-w-6xl px-5 pb-10 pt-8 text-white sm:px-8">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <p className="inline-block rounded bg-[#1a0f08]/25 px-2 py-1 text-xs text-white">Copyright 2026, OCP</p>
               <p className="mt-3 max-w-sm text-xs leading-relaxed text-white/85">Self-hosted food ordering with WhatsApp, POS and campaigns. AGPL-3.0 licensed.</p>
+              <a href="https://github.com/zubershk/ocp/blob/master/LICENSE" target="_blank" rel="noopener noreferrer" className="mt-3 inline-block rounded bg-[#1a0f08]/25 px-2 py-1 text-xs text-white underline underline-offset-2">AGPL-3.0 license</a>
             </div>
-            <a href="https://github.com/zubershk/ocp/blob/master/LICENSE" target="_blank" rel="noopener noreferrer" className="self-start rounded bg-[#1a0f08]/25 px-2 py-1 text-xs text-white underline underline-offset-2">AGPL-3.0 license</a>
+            <div className="flex flex-wrap items-center gap-3">
+              <a href="https://github.com/zubershk/ocp" target="_blank" rel="noopener noreferrer"
+                className="inline-flex min-h-11 items-center gap-2 rounded border border-white/25 bg-white/10 px-3 py-2 text-xs text-white transition-colors hover:bg-white/20">
+                <Star size={14} className="text-[#fdba74]" />
+                {stars === null ? 'Star on GitHub' : `${stars.toLocaleString()} ${stars === 1 ? 'star' : 'stars'}`}
+              </a>
+              <button type="button"
+                onClick={() => {
+                  navigator.clipboard?.writeText('git clone https://github.com/zubershk/ocp.git && cd ocp && bash setup.sh')
+                    .then(() => setCopied(true)).catch(() => { /* clipboard unavailable */ });
+                }}
+                className="inline-flex min-h-11 items-center gap-2 rounded border border-white/25 bg-white/10 px-3 py-2 text-xs text-white transition-colors hover:bg-white/20">
+                <Copy size={14} className="text-[#fdba74]" /> {copied ? 'Copied!' : 'Copy install'}
+              </button>
+              <button type="button" aria-label="Back to top"
+                onClick={() => window.scrollTo({ top: 0, behavior: reduceMotion ? 'instant' : 'smooth' })}
+                className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/25 text-white transition-colors hover:bg-white/15">
+                <ArrowUp size={16} />
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-2 border-y border-white/20 py-4 caption-mono text-white/70">
+            <span className="text-white/50">Deploy</span>
+            <a href="https://github.com/zubershk/ocp/blob/master/northflank/README.md" target="_blank" rel="noopener noreferrer" className="inline-block py-1 transition-colors hover:text-white">Northflank</a>
+            <a href="https://github.com/zubershk/ocp/blob/master/docs/DEPLOYMENT.md" target="_blank" rel="noopener noreferrer" className="inline-block py-1 transition-colors hover:text-white">Single VPS</a>
+            <a href="https://github.com/zubershk/ocp/blob/master/docs/DEPLOYMENT.md" target="_blank" rel="noopener noreferrer" className="inline-block py-1 transition-colors hover:text-white">Vercel + Fly.io</a>
           </div>
 
           <div className="mt-12 grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
-            <div>
+            <div role="navigation" aria-label="Product">
               <p className="eyebrow text-white/60">Product</p>
               <ul className="mt-4 space-y-2 text-sm text-white/90">
-                <li><a href="#features" className="transition-colors hover:text-[#fff7ed]">Features</a></li>
-                <li><a href="#use-cases" className="transition-colors hover:text-[#fff7ed]">Use cases</a></li>
-                <li><a href="#screenshots" className="transition-colors hover:text-[#fff7ed]">Screenshots</a></li>
-                <li><a href="#pricing" className="transition-colors hover:text-[#fff7ed]">Pricing</a></li>
+                <li><a href="#features" className="inline-block py-1 transition-colors hover:text-[#fff7ed]">Features</a></li>
+                <li><a href="#use-cases" className="inline-block py-1 transition-colors hover:text-[#fff7ed]">Use cases</a></li>
+                <li><a href="#screenshots" className="inline-block py-1 transition-colors hover:text-[#fff7ed]">Screenshots</a></li>
+                <li><a href="#pricing" className="inline-block py-1 transition-colors hover:text-[#fff7ed]">Pricing</a></li>
               </ul>
             </div>
-            <div>
+            <div role="navigation" aria-label="Resources">
               <p className="eyebrow text-white/60">Resources</p>
               <ul className="mt-4 space-y-2 text-sm text-white/90">
-                <li><a href="https://github.com/zubershk/ocp#readme" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[#fff7ed]">Documentation</a></li>
-                <li><a href="https://github.com/zubershk/ocp/blob/master/docs/DEPLOYMENT.md" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[#fff7ed]">Deployment</a></li>
-                <li><a href="https://github.com/zubershk/ocp/blob/master/docs/LOAD_TEST.md" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[#fff7ed]">Load test</a></li>
-                <li><a href="https://github.com/zubershk/ocp/blob/master/docs/PRODUCTION_CHECKLIST.md" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[#fff7ed]">Production checklist</a></li>
+                <li><a href="https://github.com/zubershk/ocp#readme" target="_blank" rel="noopener noreferrer" className="inline-block py-1 transition-colors hover:text-[#fff7ed]">Documentation</a></li>
+                <li><a href="https://github.com/zubershk/ocp/blob/master/docs/DEPLOYMENT.md" target="_blank" rel="noopener noreferrer" className="inline-block py-1 transition-colors hover:text-[#fff7ed]">Deployment</a></li>
+                <li><a href="https://github.com/zubershk/ocp/blob/master/docs/LOAD_TEST.md" target="_blank" rel="noopener noreferrer" className="inline-block py-1 transition-colors hover:text-[#fff7ed]">Load test</a></li>
+                <li><a href="https://github.com/zubershk/ocp/blob/master/docs/PRODUCTION_CHECKLIST.md" target="_blank" rel="noopener noreferrer" className="inline-block py-1 transition-colors hover:text-[#fff7ed]">Production checklist</a></li>
               </ul>
             </div>
-            <div>
+            <div role="navigation" aria-label="Community">
               <p className="eyebrow text-white/60">Community</p>
               <ul className="mt-4 space-y-2 text-sm text-white/90">
-                <li><a href="https://github.com/zubershk/ocp" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[#fff7ed]">GitHub</a></li>
-                <li><a href="https://github.com/zubershk/ocp/issues" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[#fff7ed]">Issues</a></li>
-                <li><a href="https://github.com/zubershk/ocp/blob/master/CONTRIBUTING.md" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[#fff7ed]">Contributing</a></li>
-                <li><a href="https://github.com/zubershk/ocp/blob/master/SECURITY.md" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[#fff7ed]">Security</a></li>
+                <li><a href="https://github.com/zubershk/ocp" target="_blank" rel="noopener noreferrer" className="inline-block py-1 transition-colors hover:text-[#fff7ed]">GitHub</a></li>
+                <li><a href="https://github.com/zubershk/ocp/issues" target="_blank" rel="noopener noreferrer" className="inline-block py-1 transition-colors hover:text-[#fff7ed]">Issues</a></li>
+                <li><a href="https://github.com/zubershk/ocp/blob/master/CONTRIBUTING.md" target="_blank" rel="noopener noreferrer" className="inline-block py-1 transition-colors hover:text-[#fff7ed]">Contributing</a></li>
+                <li><a href="https://github.com/zubershk/ocp/blob/master/SECURITY.md" target="_blank" rel="noopener noreferrer" className="inline-block py-1 transition-colors hover:text-[#fff7ed]">Security</a></li>
+                <li><a href="https://github.com/zubershk/ocp/issues/new/choose" target="_blank" rel="noopener noreferrer" className="inline-block py-1 transition-colors hover:text-[#fff7ed]">Get help</a></li>
               </ul>
             </div>
-            <div>
+            <div role="navigation" aria-label="Follow">
               <p className="eyebrow text-white/60">Follow</p>
               <ul className="mt-4 space-y-2 text-sm text-white/90">
-                {social.instagram && <li><a href={social.instagram} target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[#fff7ed]">Instagram</a></li>}
-                {social.facebook && <li><a href={social.facebook} target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[#fff7ed]">Facebook</a></li>}
-                {social.twitter && <li><a href={social.twitter} target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[#fff7ed]">Twitter</a></li>}
-                {social.youtube && <li><a href={social.youtube} target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[#fff7ed]">YouTube</a></li>}
-                {social.whatsapp && <li><a href={social.whatsapp} target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[#fff7ed]">WhatsApp</a></li>}
-                {!social.instagram && !social.facebook && !social.twitter && !social.youtube && !social.whatsapp && <li><a href="https://github.com/zubershk/ocp" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[#fff7ed]">GitHub</a></li>}
+                {social.instagram && <li><a href={social.instagram} target="_blank" rel="noopener noreferrer" className="inline-block py-1 transition-colors hover:text-[#fff7ed]">Instagram</a></li>}
+                {social.facebook && <li><a href={social.facebook} target="_blank" rel="noopener noreferrer" className="inline-block py-1 transition-colors hover:text-[#fff7ed]">Facebook</a></li>}
+                {social.twitter && <li><a href={social.twitter} target="_blank" rel="noopener noreferrer" className="inline-block py-1 transition-colors hover:text-[#fff7ed]">Twitter</a></li>}
+                {social.youtube && <li><a href={social.youtube} target="_blank" rel="noopener noreferrer" className="inline-block py-1 transition-colors hover:text-[#fff7ed]">YouTube</a></li>}
+                {social.whatsapp && <li><a href={social.whatsapp} target="_blank" rel="noopener noreferrer" className="inline-block py-1 transition-colors hover:text-[#fff7ed]">WhatsApp</a></li>}
+                {!social.instagram && !social.facebook && !social.twitter && !social.youtube && !social.whatsapp && <li><a href="https://github.com/zubershk/ocp" target="_blank" rel="noopener noreferrer" className="inline-block py-1 transition-colors hover:text-[#fff7ed]">GitHub</a></li>}
               </ul>
             </div>
           </div>
