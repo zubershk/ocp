@@ -500,7 +500,7 @@ export default function Landing() {
                   <Icon size={18} strokeWidth={1.5} className="mt-0.5 shrink-0 text-[#fb923c]" />
                   <div>
                     <p className="text-sm font-medium text-white">{s.title}</p>
-                    <p className="mt-1 text-xs text-white/55">{s.desc}</p>
+                    <p className="mt-1 text-xs text-white/75">{s.desc}</p>
                   </div>
                 </div>
               );
@@ -512,10 +512,10 @@ export default function Landing() {
 
       {/* Powered by marquee */}
       <section className="overflow-hidden border-b border-white/10 bg-[#150b05] py-6">
-        <p className="eyebrow mb-5 text-center text-white/40">Powered by</p>
+        <p className="eyebrow mb-5 text-center text-white/70">Powered by</p>
         <div className="marquee-track">
           {[...technology, ...technology].map((t, i) => (
-            <span key={`${t}-${i}`} className="mx-6 whitespace-nowrap font-heading text-lg text-white/50">{t}</span>
+            <span key={`${t}-${i}`} className="mx-6 whitespace-nowrap font-heading text-lg text-white/70">{t}</span>
           ))}
         </div>
       </section>
@@ -524,7 +524,7 @@ export default function Landing() {
       <section id="features" className="border-b border-[#e5e7eb] bg-white py-20">
         <div className="mx-auto max-w-6xl px-5">
           <Reveal className="mx-auto max-w-2xl text-center">
-            <p className="eyebrow text-[#ea580c]">The next generation of ordering</p>
+            <p className="eyebrow text-[#c2410c]">The next generation of ordering</p>
             <h2 className="mt-4 font-heading text-[#212121]">One system for the whole operation</h2>
             <p className="mt-4 text-base leading-relaxed text-[#616161]">OCP is a self-hosted ordering platform with WhatsApp, a live admin dashboard, POS and campaigns in one database.</p>
           </Reveal>
@@ -538,7 +538,7 @@ export default function Landing() {
                       <img src={f.img} alt="" className="h-full w-full object-contain" />
                     </div>
                     <div className="p-6">
-                      <Icon size={20} strokeWidth={1.5} className="text-[#ea580c]" />
+                      <Icon size={20} strokeWidth={1.5} className="text-[#c2410c]" />
                       <h3 className="mt-4 font-heading text-xl text-[#212121]">{f.title}</h3>
                       <p className="mt-2 text-sm leading-relaxed text-[#616161]">{f.desc}</p>
                     </div>
@@ -550,79 +550,92 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* Tabbed use cases */}
-      <section id="use-cases" ref={caseRef} className="border-b border-[#e5e7eb] bg-[#faf7f4] py-20">
-        <div className="mx-auto max-w-6xl px-5">
-          <Reveal className="mx-auto max-w-2xl text-center">
-            <p className="eyebrow text-[#ea580c]">Built for every kitchen</p>
-            <h2 className="mt-4 font-heading text-[#212121]">Any food business that takes orders</h2>
-            <p className="mt-4 text-base text-[#616161]">Business type, hours, payment labels and branding are configuration — not code.</p>
-          </Reveal>
+      {/* Tabbed use cases — desktop-first split stage */}
+      <section id="use-cases" ref={caseRef} className="border-b border-[#e5e7eb] bg-[#faf7f4] py-20 lg:py-28">
+        <div className="mx-auto max-w-7xl px-5 lg:px-8">
+          <div className="grid gap-10 lg:grid-cols-[340px_1fr] lg:gap-14">
+            <Reveal className="self-start">
+              <p className="eyebrow text-[#c2410c]">Built for every kitchen</p>
+              <h2 className="mt-4 font-heading text-[#212121]">Any food business that takes orders</h2>
+              <p className="mt-4 text-base leading-relaxed text-[#616161]">Business type, hours, payment labels and branding are configuration — not code.</p>
 
-          <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
-            {useCases.map((u, i) => (
-              <button key={u.key} type="button" onClick={() => jumpCase(i)} aria-current={i === useCaseIndex}
-                className={`rounded px-5 py-2.5 text-sm font-medium transition-colors ${i === useCaseIndex ? 'bg-[#ea580c] text-white' : 'border border-[#e5e7eb] bg-white text-[#616161] hover:border-[#fb923c]'}`}>
-                {u.title}
+              <div className="mt-8 border-t border-[#e5e7eb]" role="tablist" aria-label="Business types">
+                {useCases.map((u, i) => (
+                  <button key={u.key} type="button" role="tab" aria-selected={i === useCaseIndex} onClick={() => jumpCase(i)}
+                    className={`group flex w-full items-center gap-3 border-b border-[#e5e7eb] px-3 py-4 text-left transition-colors ${i === useCaseIndex ? 'bg-white text-[#c2410c]' : 'text-[#616161] hover:bg-white/60'}`}>
+                    <span className="caption-mono w-6 shrink-0">0{i + 1}</span>
+                    <span className="flex-1 text-sm font-medium">{u.title}</span>
+                    <ChevronRight size={16} className={i === useCaseIndex ? 'opacity-100' : 'opacity-0 transition-opacity group-hover:opacity-60'} />
+                  </button>
+                ))}
+              </div>
+
+              <button type="button" onClick={() => setUseCasePaused((p) => !p)} aria-label={useCasePaused ? 'Resume rotation' : 'Pause rotation'}
+                className="mt-6 inline-flex min-h-11 items-center gap-2 caption-mono text-[#616161] transition-colors hover:text-[#c2410c]">
+                {useCasePaused ? <Play size={14} /> : <Pause size={14} />}
+                {useCasePaused ? 'Resume rotation' : 'Pause rotation'}
               </button>
-            ))}
-            <button type="button" onClick={() => setUseCasePaused((p) => !p)} aria-label={useCasePaused ? 'Resume the carousel' : 'Pause the carousel'}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#e5e7eb] bg-white text-[#616161]">
-              {useCasePaused ? <Play size={15} /> : <Pause size={15} />}
-            </button>
-          </div>
+            </Reveal>
 
-          <div className="relative mt-8"
-            onMouseEnter={() => setUseCasePaused(true)} onMouseLeave={() => setUseCasePaused(false)}
-            onFocus={() => setUseCasePaused(true)} onBlur={() => setUseCasePaused(false)}
-            role="region" aria-label="Business type carousel">
-            <AnimatePresence mode="wait" custom={caseDirection} initial={false}>
-              <motion.div key={activeCase.key} custom={caseDirection}
-                variants={{
-                  enter: (d: number) => ({ x: d > 0 ? 90 : -90, opacity: 0 }),
-                  center: { x: 0, opacity: 1 },
-                  exit: (d: number) => ({ x: d > 0 ? -90 : 90, opacity: 0 }),
-                }}
-                initial="enter" animate="center" exit="exit"
-                transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
-                className="overflow-hidden rounded-lg bg-gradient-to-br from-[#c2410c] via-[#ea580c] to-[#f97316]">
-                <div className="grid lg:grid-cols-2">
-                  <img src={activeCase.img} alt="" className="h-64 w-full object-cover sm:h-80 lg:h-[26rem]" />
-                  <div className="p-8 sm:p-12">
-                    <ActiveIcon size={30} strokeWidth={1.5} className="text-white" />
-                    <p className="caption-mono mt-6 text-white/60">0{useCaseIndex + 1} / 0{useCases.length}</p>
-                    <h3 className="mt-3 font-heading text-3xl text-white sm:text-4xl">{activeCase.title}</h3>
-                    <p className="mt-4 max-w-lg text-base leading-relaxed text-white/85">{activeCase.desc}</p>
-                    <ul className="mt-8 space-y-3">
-                      {highlights.map((h) => {
-                        const Icon = h.icon;
-                        return (
-                          <li key={h.title} className="flex items-start gap-3 border-t border-white/20 pt-3">
-                            <Icon size={17} strokeWidth={1.5} className="mt-0.5 shrink-0 text-white" />
-                            <div><p className="text-sm font-medium text-white">{h.title}</p><p className="text-sm text-white/70">{h.desc}</p></div>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </div>
+            <Reveal delay={0.1} className="min-w-0">
+              <div className="relative overflow-hidden rounded-lg border border-[#e5e7eb] bg-white"
+                onMouseEnter={() => setUseCasePaused(true)} onMouseLeave={() => setUseCasePaused(false)}
+                onFocus={() => setUseCasePaused(true)} onBlur={() => setUseCasePaused(false)}
+                role="region" aria-label="Business type carousel">
+                <AnimatePresence mode="wait" custom={caseDirection} initial={false}>
+                  <motion.div key={activeCase.key} custom={caseDirection}
+                    variants={{
+                      enter: (d: number) => ({ x: d > 0 ? 70 : -70, opacity: 0 }),
+                      center: { x: 0, opacity: 1 },
+                      exit: (d: number) => ({ x: d > 0 ? -70 : 70, opacity: 0 }),
+                    }}
+                    initial="enter" animate="center" exit="exit"
+                    transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+                    className="grid lg:grid-cols-[1.05fr_0.95fr]">
+                    <div className="aspect-[16/10] w-full bg-[#faf7f4]">
+                      <img src={activeCase.img} alt="" className="h-full w-full object-contain" />
+                    </div>
+                    <div className="p-8 lg:p-10">
+                      <ActiveIcon size={30} strokeWidth={1.5} className="text-[#c2410c]" />
+                      <p className="caption-mono mt-6 text-[#616161]">0{useCaseIndex + 1} / 0{useCases.length}</p>
+                      <h3 className="mt-3 font-heading text-3xl text-[#212121] lg:text-4xl">{activeCase.title}</h3>
+                      <p className="mt-4 text-base leading-relaxed text-[#616161]">{activeCase.desc}</p>
+                      <ul className="mt-8 space-y-3">
+                        {highlights.map((h) => {
+                          const Icon = h.icon;
+                          return (
+                            <li key={h.title} className="flex items-start gap-3 border-t border-[#e5e7eb] pt-3">
+                              <Icon size={17} strokeWidth={1.5} className="mt-0.5 shrink-0 text-[#c2410c]" />
+                              <div><p className="text-sm font-medium text-[#212121]">{h.title}</p><p className="text-sm text-[#616161]">{h.desc}</p></div>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  </motion.div>
+                </AnimatePresence>
+                <button type="button" onClick={() => goCase(-1)} aria-label="Previous business type"
+                  className="absolute left-3 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-[#e5e7eb] bg-white/90 text-[#212121] backdrop-blur-md transition-colors hover:border-[#ea580c] hover:text-[#c2410c]">
+                  <ChevronLeft size={20} />
+                </button>
+                <button type="button" onClick={() => goCase(1)} aria-label="Next business type"
+                  className="absolute right-3 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-[#e5e7eb] bg-white/90 text-[#212121] backdrop-blur-md transition-colors hover:border-[#ea580c] hover:text-[#c2410c]">
+                  <ChevronRight size={20} />
+                </button>
+              </div>
+
+              <div className="mt-6 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  {useCases.map((u, i) => (
+                    <button key={u.key} type="button" onClick={() => jumpCase(i)} aria-label={`Show ${u.title}`} aria-current={i === useCaseIndex}
+                      className="flex h-11 items-center">
+                      <span className={`block h-1.5 rounded-full transition-all duration-300 ${i === useCaseIndex ? 'w-10 bg-[#c2410c]' : 'w-4 bg-[#d8cdc4] hover:bg-[#fb923c]'}`} />
+                    </button>
+                  ))}
                 </div>
-              </motion.div>
-            </AnimatePresence>
-            <button type="button" onClick={() => goCase(-1)} aria-label="Previous business type"
-              className="absolute left-3 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/30 bg-[#1a0f08]/40 text-white backdrop-blur-md transition-colors hover:bg-[#1a0f08]/70">
-              <ChevronLeft size={20} />
-            </button>
-            <button type="button" onClick={() => goCase(1)} aria-label="Next business type"
-              className="absolute right-3 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/30 bg-[#1a0f08]/40 text-white backdrop-blur-md transition-colors hover:bg-[#1a0f08]/70">
-              <ChevronRight size={20} />
-            </button>
-          </div>
-
-          <div className="mt-6 flex items-center justify-center gap-3">
-            {useCases.map((u, i) => (
-              <button key={u.key} type="button" onClick={() => jumpCase(i)} aria-label={`Show ${u.title}`} aria-current={i === useCaseIndex}
-                className={`h-1.5 rounded-full transition-all duration-300 ${i === useCaseIndex ? 'w-10 bg-[#ea580c]' : 'w-4 bg-[#d8cdc4] hover:bg-[#fb923c]'}`} />
-            ))}
+                <p className="caption-mono text-[#616161]">{activeCase.title} · 0{useCaseIndex + 1} / 0{useCases.length}</p>
+              </div>
+            </Reveal>
           </div>
         </div>
       </section>
