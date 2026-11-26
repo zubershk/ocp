@@ -89,7 +89,7 @@ Before go-live, work through the [production checklist](docs/PRODUCTION_CHECKLIS
 
 The open-source landing page (`/`):
 
-![OCP landing page with animated fog hero and live order preview](docs/screenshots/landing.png)
+![OCP landing page hero with "Your restaurant. Your platform. No commission" headline and live order preview](docs/screenshots/landing.png)
 
 **For customers:**
 - Browse the full menu with real product photos, prices, and dietary info
