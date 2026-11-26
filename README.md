@@ -32,21 +32,58 @@ paying third-party marketplace commissions.
 ### Architecture at a glance
 
 ```mermaid
-flowchart LR
-  C[Customer / PWA] -->|HTTPS| F[React storefront]
-  F -->|/api/*| B[Go bot API]
-  W[WhatsApp] -->|webhook| B
-  B -->|LISTEN/NOTIFY + SSE| C
-  B --> P[(PostgreSQL)]
-  B --> E[Evolution GO gateway]
-  E --> W
-  X[Campaign runner] -->|/admin/*| B
-  A[Admin / POS] --> F
+flowchart TD
+  subgraph Client["Client Layer"]
+    C[Customer PWA / Web]:::client
+    A[Admin / POS]:::client
+    W[WhatsApp Business]:::client
+  end
+
+  subgraph Frontend["Frontend (Vercel / nginx)"]
+    F[React storefront + admin dashboard]:::frontend
+  end
+
+  subgraph API["API Layer"]
+    B[Go bot API (Gin)]:::api
+  end
+
+  subgraph Infra["Infrastructure"]
+    P[(PostgreSQL 16)]:::db
+    E[Evolution GO gateway]:::infra
+    X[Campaign runner]:::infra
+    N[(PgBouncer / pooler)]:::db
+  end
+
+  C -->|HTTPS / WSS (SSE)| F
+  A -->|HTTPS| F
+  F -->|/api/* (REST + SSE)| B
+  W -->|webhook (HMAC-SHA256)| B
+  B -->|LISTEN/NOTIFY + SSE fan-out| P
+  B -->|advisory phone locks + rate limits| P
+  B -->|tenant resolution| P
+  B -->|outbound WhatsApp messages| E
+  E -->|WhatsApp API| W
+  X -->|/admin/* campaigns| B
+  B -.->|connection pooling| N
+  N -.-> P
+
+  classDef client fill:#e1f5fe,stroke:#01579b,stroke-width:2px
+  classDef frontend fill:#fff3e0,stroke:#e65100,stroke-width:2px
+  classDef api fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px
+  classDef db fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+  classDef infra fill:#eceff1,stroke:#37474f,stroke-width:2px
 ```
 
-All cross-replica shared state lives in PostgreSQL — SSE fan-out, advisory phone
-locks, rate-limit counters and the durable broadcast queue — so no sticky
-sessions or extra cache service are required.
+**Data flow:**
+
+1. **Customer** opens the PWA on the React storefront (Vercel/nginx). Browses menu, places orders, tracks status via Server-Sent Events (push, no polling).
+2. **Admin / POS** logs in with `BOT_ADMIN_KEY`, manages menu/orders/team from the same React dashboard.
+3. **WhatsApp** messages arrive at Evolution GO, which forwards verified webhooks to the Go bot API. The bot sends order notifications, OTPs, and campaign messages back through Evolution GO.
+4. **Go bot API** is the single backend. All shared state — SSE fan-out, phone locks, rate-limit counters, broadcast queue — lives in PostgreSQL via `LISTEN/NOTIFY`, so replicas need no sticky sessions.
+5. **Campaign runner** schedules and sends bulk WhatsApp campaigns through the bot API, with per-recipient progress tracking.
+6. **PgBouncer** sits in front of Postgres so bot replicas can scale without exhausting connections.
+
+All cross-replica coordination is database-driven — no Redis, no extra cache service, no vendor lock-in.
 
 ### Quick Start
 
