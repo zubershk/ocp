@@ -6,7 +6,7 @@
 
 [![CI](https://github.com/zubershk/ocp/actions/workflows/ci.yml/badge.svg)](https://github.com/zubershk/ocp/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/zubershk/ocp)](https://github.com/zubershk/ocp/releases)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE)
 [![Contributors](https://img.shields.io/github/contributors/zubershk/ocp)](https://github.com/zubershk/ocp/graphs/contributors)
 [![Stars](https://img.shields.io/github/stars/zubershk/ocp?style=social)](https://github.com/zubershk/ocp/stargazers)
 [![Docker](https://img.shields.io/badge/Docker-ready-blue.svg)](docker-compose.yml)
@@ -20,7 +20,7 @@
 
 OCP is a full-stack food ordering platform with WhatsApp integration, real-time
 order management, a production-ready admin dashboard, a POS terminal and a
-WhatsApp marketing campaign runner. It is MIT-licensed and designed to be
+WhatsApp marketing campaign runner. It is AGPL-3.0-licensed and designed to be
 self-hosted by small food businesses that want an online presence without
 paying third-party marketplace commissions.
 
@@ -1214,4 +1214,4 @@ link in [.github/FUNDING.yml](.github/FUNDING.yml).
 
 ## License
 
-MIT — see [LICENSE](LICENSE) for details.
+AGPL-3.0 - see [LICENSE](LICENSE) for details.
