@@ -33,45 +33,109 @@ paying third-party marketplace commissions.
 
 ```mermaid
 flowchart TD
-  subgraph Client["Client Layer"]
-    C[Customer PWA / Web]:::client
-    A[Admin / POS]:::client
-    W[WhatsApp Business]:::client
-  end
 
-  subgraph Frontend["Frontend (Vercel / nginx)"]
-    F[React storefront + admin dashboard]:::frontend
-  end
+subgraph group_customer["Customer ordering"]
+  node_storefront["Web storefront"]
+  node_cart_checkout["Cart and checkout<br/>[Checkout.tsx]"]
+  node_order_tracking["Order tracking<br/>[Order.tsx]"]
+  node_review_browse["Reviews and ratings<br/>[Reviews.tsx]"]
+end
 
-  subgraph API["API Layer"]
-    B[Go bot API (Gin)]:::api
-  end
+subgraph group_restaurant["Restaurant operations"]
+  node_bot_api["Ordering API<br/>[main.go]"]
+  node_order_handlers["Order lifecycle"]
+  node_menu_services["Menu and catalog<br/>[menu_service.go]"]
+  node_review_service["Review moderation<br/>[review_handler.go]"]
+  node_admin["Admin dashboard<br/>[Admin.tsx]"]
+  node_pos["POS terminal<br/>[POS.tsx]"]
+  node_admin_api["Admin handlers<br/>[admin_handler.go]"]
+  node_realtime["Realtime order events<br/>[realtime.go]"]
+  node_postgres[("PostgreSQL<br/>[database.go]")]
+end
 
-  subgraph Infra["Infrastructure"]
-    P[(PostgreSQL 16)]:::db
-    E[Evolution GO gateway]:::infra
-    X[Campaign runner]:::infra
-    N[(PgBouncer / pooler)]:::db
-  end
+subgraph group_messaging["WhatsApp gateway"]
+  node_conversation["WhatsApp ordering"]
+  node_evolution_api["Evolution API<br/>[routes.go]"]
+  node_instance_service["WhatsApp instances"]
+  node_message_service["Message delivery<br/>[send_service.go]"]
+  node_manager_ui["Gateway manager<br/>[App.tsx]"]
+end
 
-  C -->|HTTPS / WSS (SSE)| F
-  A -->|HTTPS| F
-  F -->|/api/* (REST + SSE)| B
-  W -->|webhook (HMAC-SHA256)| B
-  B -->|LISTEN/NOTIFY + SSE fan-out| P
-  B -->|advisory phone locks + rate limits| P
-  B -->|tenant resolution| P
-  B -->|outbound WhatsApp messages| E
-  E -->|WhatsApp API| W
-  X -->|/admin/* campaigns| B
-  B -.->|connection pooling| N
-  N -.-> P
+subgraph group_campaigns["Campaign management"]
+  node_campaign_ui["Campaign console<br/>[App.jsx]"]
+  node_campaign_server["Campaign service<br/>[index.js]"]
+  node_campaign_stats["Delivery statistics"]
+  node_campaign_ui_components["Campaign UI components<br/>[ui.jsx]"]
+  node_image_policy["Image policy<br/>[imagePolicy.js]"]
+end
 
-  classDef client fill:#e1f5fe,stroke:#01579b,stroke-width:2px
-  classDef frontend fill:#fff3e0,stroke:#e65100,stroke-width:2px
-  classDef api fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px
-  classDef db fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
-  classDef infra fill:#eceff1,stroke:#37474f,stroke-width:2px
+node_customer(("Customer / PWA"))
+node_whatsapp(("WhatsApp"))
+
+node_customer -->|"browses"| node_storefront
+node_storefront -->|"places orders"| node_cart_checkout
+node_cart_checkout -->|"submits orders"| node_bot_api
+node_bot_api -->|"manages orders"| node_order_handlers
+node_order_handlers -->|"persists orders"| node_postgres
+node_storefront -->|"browses menu"| node_menu_services
+node_order_tracking -->|"tracks via SSE"| node_realtime
+node_realtime -->|"pushes updates"| node_customer
+node_storefront -->|"views reviews"| node_review_browse
+node_review_browse -->|"loads ratings"| node_review_service
+node_review_service -->|"reads and writes"| node_postgres
+node_admin -->|"manages restaurant"| node_admin_api
+node_pos -->|"operates orders"| node_admin_api
+node_admin_api -->|"updates lifecycle"| node_order_handlers
+node_admin_api -->|"stores settings"| node_postgres
+node_whatsapp -->|"sends webhooks"| node_bot_api
+node_bot_api -->|"handles conversations"| node_conversation
+node_conversation -->|"sends messages"| node_evolution_api
+node_evolution_api -->|"manages instances"| node_instance_service
+node_evolution_api -->|"routes sends"| node_message_service
+node_message_service -->|"delivers messages"| node_whatsapp
+node_manager_ui -.->|"manages gateway"| node_evolution_api
+node_campaign_ui -.->|"manages campaigns"| node_campaign_server
+node_campaign_ui -->|"renders metrics"| node_campaign_stats
+node_campaign_ui -->|"renders interface"| node_campaign_ui_components
+node_campaign_server -->|"uses image rules"| node_image_policy
+node_campaign_server -->|"requests broadcasts"| node_bot_api
+
+click node_storefront "https://github.com/zubershk/ocp/tree/master/frontend/src/pages"
+click node_cart_checkout "https://github.com/zubershk/ocp/blob/master/frontend/src/pages/Checkout.tsx"
+click node_order_tracking "https://github.com/zubershk/ocp/blob/master/frontend/src/pages/Order.tsx"
+click node_review_browse "https://github.com/zubershk/ocp/blob/master/frontend/src/pages/Reviews.tsx"
+click node_bot_api "https://github.com/zubershk/ocp/blob/master/bot/main.go"
+click node_order_handlers "https://github.com/zubershk/ocp/tree/master/bot/handlers"
+click node_menu_services "https://github.com/zubershk/ocp/blob/master/bot/services/menu_service.go"
+click node_review_service "https://github.com/zubershk/ocp/blob/master/bot/handlers/review_handler.go"
+click node_admin "https://github.com/zubershk/ocp/blob/master/frontend/src/pages/Admin.tsx"
+click node_pos "https://github.com/zubershk/ocp/blob/master/frontend/src/pages/POS.tsx"
+click node_admin_api "https://github.com/zubershk/ocp/blob/master/bot/admin/admin_handler.go"
+click node_realtime "https://github.com/zubershk/ocp/blob/master/bot/services/realtime.go"
+click node_postgres "https://github.com/zubershk/ocp/blob/master/bot/database/database.go"
+click node_conversation "https://github.com/zubershk/ocp/blob/master/bot/services/conversation_engine.go"
+click node_evolution_api "https://github.com/zubershk/ocp/blob/master/evolution-go/pkg/routes/routes.go"
+click node_instance_service "https://github.com/zubershk/ocp/blob/master/evolution-go/pkg/instance/service/instance_service.go"
+click node_message_service "https://github.com/zubershk/ocp/blob/master/evolution-go/pkg/sendMessage/service/send_service.go"
+click node_manager_ui "https://github.com/zubershk/ocp/blob/master/evolution-go/evolution-go-manager/src/App.tsx"
+click node_campaign_ui "https://github.com/zubershk/ocp/blob/master/campaign-runner/src/App.jsx"
+click node_campaign_server "https://github.com/zubershk/ocp/blob/master/campaign-runner/server/index.js"
+click node_campaign_stats "https://github.com/zubershk/ocp/blob/master/campaign-runner/src/components/statistics-with-status.jsx"
+click node_campaign_ui_components "https://github.com/zubershk/ocp/blob/master/campaign-runner/src/components/ui.jsx"
+click node_image_policy "https://github.com/zubershk/ocp/blob/master/campaign-runner/server/imagePolicy.js"
+
+classDef toneNeutral fill:#f8fafc,stroke:#334155,stroke-width:1.5px,color:#0f172a
+classDef toneBlue fill:#dbeafe,stroke:#2563eb,stroke-width:1.5px,color:#172554
+classDef toneAmber fill:#fef3c7,stroke:#d97706,stroke-width:1.5px,color:#78350f
+classDef toneMint fill:#dcfce7,stroke:#16a34a,stroke-width:1.5px,color:#14532d
+classDef toneRose fill:#ffe4e6,stroke:#e11d48,stroke-width:1.5px,color:#881337
+classDef toneIndigo fill:#e0e7ff,stroke:#4f46e5,stroke-width:1.5px,color:#312e81
+classDef toneTeal fill:#ccfbf1,stroke:#0f766e,stroke-width:1.5px,color:#134e4a
+class node_storefront,node_cart_checkout,node_order_tracking,node_review_browse toneBlue
+class node_bot_api,node_order_handlers,node_menu_services,node_review_service,node_admin,node_pos,node_admin_api,node_realtime,node_postgres toneAmber
+class node_conversation,node_evolution_api,node_instance_service,node_message_service,node_manager_ui toneMint
+class node_campaign_ui,node_campaign_server,node_campaign_stats,node_campaign_ui_components,node_image_policy toneRose
+class node_customer,node_whatsapp toneIndigo
 ```
 
 **Data flow:**
