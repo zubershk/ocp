@@ -12,7 +12,7 @@
 [![Docker](https://img.shields.io/badge/Docker-ready-blue.svg)](docker-compose.yml)
 [![Load test](https://img.shields.io/badge/load%20test-13.7k%20RPS-brightgreen.svg)](docs/LOAD_TEST.md)
 
-**[Quick Start](#quick-start)** · **[Deployment](#deploy-to-cloud)** · **[Screenshots](#customer-site-pages)** · **[Contributing](#contributing)** · **[Sponsor](#sponsor)**
+**[Quick Start](#quick-start)** · **[Deployment](#deploy-to-cloud)** · **[Screenshots](#customer-site-pages)** · **[Contributing](#contributing)**
 
 ![OCP storefront home page showing categories and popular items](docs/screenshots/storefront-home.png)
 
@@ -1205,12 +1205,6 @@ recorded in [CHANGELOG.md](CHANGELOG.md).
 ₹), payment gateways, outbound webhooks, a versioned public API, hosted demo,
 and the self-serve onboarding flow. Pick an area, open an issue to discuss, then
 send a PR. We are happy to mentor first-time contributors.
-
-## Sponsor
-
-If OCP saves your business money or you want to support maintenance, sponsor the
-project via the GitHub **Sponsor** button on the repository, or add your own
-link in [.github/FUNDING.yml](.github/FUNDING.yml).
 
 ## License
 
